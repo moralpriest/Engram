@@ -3483,9 +3483,13 @@ func toggleXSWD(endpoint string) {
 			cyberdeck.WS.toggle.Refresh()
 			go func() {
 				time.Sleep(time.Second * 2)
-				cyberdeck.WS.toggle.Text = "Turn On"
-				cyberdeck.WS.toggle.Refresh()
-				cyberdeck.WS.toggle.Enable()
+				fyne.Do(func() {
+					fyne.Do(func() {
+						cyberdeck.WS.toggle.Text = "Turn On"
+						cyberdeck.WS.toggle.Refresh()
+						cyberdeck.WS.toggle.Enable()
+					})
+				})
 			}()
 
 			return
@@ -3794,9 +3798,13 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	)
 
 	if a.Driver().Device().IsMobile() {
-		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been received"})
+		fyne.Do(func() {
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been received"})
+		})
 	} else {
-		session.Window.RequestFocus()
+		fyne.Do(func() {
+			session.Window.RequestFocus()
+		})
 	}
 
 	// Wait for user input or socket close
@@ -3912,8 +3920,6 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	// EPOCH is not online or permissioned so Deny request
 	if strings.HasSuffix(method, "EPOCH") && !epoch.IsActive() {
-		return
-	} else if method == "AttemptEPOCHWithAddr" && !cyberdeck.EPOCH.allowWithAddress {
 		return
 	}
 
@@ -4142,9 +4148,11 @@ func refreshXSWDList() {
 		cyberdeck.WS.apps = cyberdeck.WS.server.GetApplications()
 		sort.Slice(cyberdeck.WS.apps, func(i, j int) bool { return cyberdeck.WS.apps[i].Name < cyberdeck.WS.apps[j].Name })
 		if cyberdeck.WS.list != nil {
-			cyberdeck.WS.list.UnselectAll()
-			cyberdeck.WS.list.FocusLost()
-			cyberdeck.WS.list.Refresh()
+			fyne.Do(func() {
+				cyberdeck.WS.list.UnselectAll()
+				cyberdeck.WS.list.FocusLost()
+				cyberdeck.WS.list.Refresh()
+			})
 		}
 	}
 }
@@ -4524,7 +4532,7 @@ func stopEPOCH() {
 
 	epoch.StopGetWork()
 	cyberdeck.EPOCH.enabled = false
-	cyberdeck.EPOCH.allowWithAddress = false
+	//cyberdeck.EPOCH.allowWithAddress = false
 }
 
 // Check if value exists within a string array/slice
