@@ -3550,7 +3550,6 @@ func layoutAssetExplorer() fyne.CanvasObject {
 				entrySCID.Enable()
 				results.Text = "  Loading previous scan history..."
 				results.Color = colors.Yellow
-
 				results.Refresh()
 			})
 
@@ -3609,9 +3608,6 @@ func layoutAssetExplorer() fyne.CanvasObject {
 			}
 		}
 
-		results.Text = fmt.Sprintf("  Search History:  %d", found)
-		results.Color = colors.Green
-
 		listData.Set(assetData)
 
 		listBox.OnSelected = func(id widget.ListItemID) {
@@ -3641,6 +3637,8 @@ func layoutAssetExplorer() fyne.CanvasObject {
 		}
 
 		fyne.Do(func() {
+			results.Text = fmt.Sprintf("  Search History:  %d", found)
+			results.Color = colors.Green
 			results.Refresh()
 			listBox.Refresh()
 		})
@@ -3857,7 +3855,9 @@ func layoutMyAssets() fyne.CanvasObject {
 
 			results.Text = "  Gathering an index of smart contracts... "
 			results.Color = colors.Yellow
-			results.Refresh()
+			fyne.Do(func() {
+				results.Refresh()
+			})
 
 			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
 				results.Text = fmt.Sprintf("  Gnomon is syncing... [%d / %d]", gnomon.Index.LastIndexedHeight, int64(engram.Disk.Get_Daemon_Height()))
@@ -4094,8 +4094,8 @@ func layoutMyAssets() fyne.CanvasObject {
 				labelLastScan.Text = fmt.Sprintf("  %s", timeNow)
 				labelLastScan.Color = colors.Green
 
-				listData.Set(assetData)
 				fyne.Do(func() {
+					listData.Set(assetData)
 					btnRescan.Enable()
 
 					results.Refresh()
@@ -4126,9 +4126,8 @@ func layoutMyAssets() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				labelLastScan.Refresh()
+				listData.Set(assetData)
 			})
-
-			listData.Set(assetData)
 
 			listBox.OnSelected = func(id widget.ListItemID) {
 				split := strings.Split(assetData[id], ";;;")
@@ -4151,15 +4150,16 @@ func layoutMyAssets() fyne.CanvasObject {
 					listBox.UnselectAll()
 				*/
 
-				listBox.UnselectAll()
-				session.LastDomain = session.Window.Content()
-				session.Window.SetContent(layoutTransition())
-				session.Window.SetContent(layoutAssetManager(split[4]))
+				fyne.Do(func() {
+					listBox.UnselectAll()
+					session.LastDomain = session.Window.Content()
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutAssetManager(split[4]))
+				})
 			}
 
 			fyne.Do(func() {
 				listBox.Refresh()
-
 				btnRescan.Enable()
 			})
 		}
@@ -4410,11 +4410,15 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			go func() {
 				exists, err := checkUsername(s, -1)
 				if err != nil && exists == "" {
-					btnSend.Disable()
-					entryAddress.SetValidationError(errors.New("invalid username or address"))
+					fyne.Do(func() {
+						btnSend.Disable()
+						entryAddress.SetValidationError(errors.New("invalid username or address"))
+					})
 				} else {
-					entryAddress.SetValidationError(nil)
-					btnSend.Enable()
+					fyne.Do(func() {
+						entryAddress.SetValidationError(nil)
+						btnSend.Enable()
+					})
 				}
 			}()
 		} else {
@@ -4507,20 +4511,25 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					entryAddress.Text = ""
-					entryAddress.Refresh()
-					entryAmount.Text = ""
-					entryAmount.Refresh()
-					btnSend.Text = "Transaction Failed..."
-					btnSend.Disable()
-					btnSend.Refresh()
+					fyne.Do(func() {
+						entryAddress.Text = ""
+						entryAddress.Refresh()
+						entryAmount.Text = ""
+						entryAmount.Refresh()
+						btnSend.Text = "Transaction Failed..."
+						btnSend.Disable()
+						btnSend.Refresh()
+					})
+
 					return
 				}
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
 					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Refresh()
+					})
 				}
 
 				bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(hash, -1, engram.Disk.GetAddress().String())
@@ -4530,24 +4539,31 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 						logger.Errorf("[Asset] Error storing new asset balance for: %s\n", hash)
 					}
 					balance.Text = "  " + globals.FormatMoney(bal)
-					balance.Refresh()
+
+					fyne.Do(func() {
+						balance.Refresh()
+					})
 				}
 
 				if bal != zerobal {
-					btnSend.Text = "Send Asset"
-					btnSend.Enable()
-					btnSend.Refresh()
-					entryAddress.Text = ""
-					entryAddress.Enable()
-					entryAddress.Refresh()
-					entryAmount.Text = ""
-					entryAmount.Enable()
-					entryAmount.Refresh()
-					selectRingSize.Enable()
+					fyne.Do(func() {
+						btnSend.Text = "Send Asset"
+						btnSend.Enable()
+						btnSend.Refresh()
+						entryAddress.Text = ""
+						entryAddress.Enable()
+						entryAddress.Refresh()
+						entryAmount.Text = ""
+						entryAmount.Enable()
+						entryAmount.Refresh()
+						selectRingSize.Enable()
+					})
 				} else {
-					btnSend.Text = "You do not own this asset"
-					btnSend.Disable()
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Text = "You do not own this asset"
+						btnSend.Disable()
+						btnSend.Refresh()
+					})
 				}
 			}()
 		}
@@ -5402,9 +5418,11 @@ func layoutTransfers() fyne.CanvasObject {
 					}
 
 					go func() {
-						btnClear.Disable()
-						btnSend.Text = "Confirming..."
-						btnSend.Refresh()
+						fyne.Do(func() {
+							btnClear.Disable()
+							btnSend.Text = "Confirming..."
+							btnSend.Refresh()
+						})
 
 						walletapi.WaitNewHeightBlock()
 						sHeight := walletapi.Get_Daemon_Height()
@@ -5414,24 +5432,30 @@ func layoutTransfers() fyne.CanvasObject {
 							_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
 							if result.TXID == txid.String() {
-								btnSend.Text = "Transfer Successful!"
-								btnSend.Refresh()
+								fyne.Do(func() {
+									btnSend.Text = "Transfer Successful!"
+									btnSend.Refresh()
+								})
 
 								break
 							}
 
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-								btnSend.Text = "Transfer failed..."
-								btnSend.Disable()
-								btnSend.Refresh()
+								fyne.Do(func() {
+									btnSend.Text = "Transfer failed..."
+									btnSend.Disable()
+									btnSend.Refresh()
+								})
 								break
 							}
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-								btnSend.Refresh()
+								fyne.Do(func() {
+									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+									btnSend.Refresh()
+								})
 							}
 
 							time.Sleep(time.Second * 1)
@@ -5439,14 +5463,18 @@ func layoutTransfers() fyne.CanvasObject {
 					}()
 
 					pendingList = pendingList[:0]
-					data.Reload()
-					btnSend.Disable()
-					btnClear.Disable()
+					fyne.Do(func() {
+						data.Reload()
+						btnSend.Disable()
+						btnClear.Disable()
+					})
 				}
 			} else {
-				btnSubmit.Text = "Invalid Password..."
-				btnSubmit.Disable()
-				btnSubmit.Refresh()
+				fyne.Do(func() {
+					btnSubmit.Text = "Invalid Password..."
+					btnSubmit.Disable()
+					btnSubmit.Refresh()
+				})
 			}
 		}
 
@@ -6975,22 +7003,30 @@ func layoutPM() fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					btnSend.Text = "Failed to send message..."
-					btnSend.Disable()
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Text = "Failed to send message..."
+						btnSend.Disable()
+						btnSend.Refresh()
+					})
+
 					break
 				}
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+						btnSend.Refresh()
+					})
 				}
 
 				// If success, reload page w/ latest content. Otherwise retain the Failure message for UX relay
 				if success {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutPM())
+					fyne.Do(func() {
+						session.Window.SetContent(layoutTransition())
+						session.Window.SetContent(layoutPM())
+					})
+
 					break
 				} else {
 					time.Sleep(time.Second * 1)
@@ -7330,11 +7366,13 @@ func layoutCyberdeck() fyne.CanvasObject {
 			cyberdeck.WS.portText.Disable()
 			deckChoice.Disable()
 			if cyberdeck.EPOCH.enabled {
-				if cyberdeck.EPOCH.allowWithAddress {
-					// If address is defined by dApp, GetWork will be started and stopped upon each WS call
-					logger.Printf("[EPOCH] dApp addresses are enabled\n")
-					return
-				}
+				/*
+					if cyberdeck.EPOCH.allowWithAddress {
+						// If address is defined by dApp, GetWork will be started and stopped upon each WS call
+						logger.Printf("[EPOCH] dApp addresses are enabled\n")
+						return
+					}
+				*/
 
 				err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
 				if err != nil {
@@ -7433,8 +7471,11 @@ func layoutCyberdeck() fyne.CanvasObject {
 		},
 		func(li widget.ListItemID, co fyne.CanvasObject) {
 			app := cyberdeck.WS.apps[li]
-			co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
-			//co.(*fyne.Container).Objects[1].(*widget.Label).SetText(app.Id)
+
+			fyne.Do(func() {
+				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
+				//co.(*fyne.Container).Objects[1].(*widget.Label).SetText(app.Id)
+			})
 		},
 	)
 
@@ -8094,14 +8135,19 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		wEpochAddress.Disable()
 	}
 
-	wEpochAddress.OnChanged = func(s string) {
-		if s == "dApp Chooses" {
-			cyberdeck.EPOCH.allowWithAddress = true
-			return
-		}
+	/*
+		wEpochAddress.OnChanged = func(s string) {
+			if s == "dApp Chooses" {
+				cyberdeck.EPOCH.allowWithAddress = true
+				return
+			}
 
-		cyberdeck.EPOCH.allowWithAddress = false
-	}
+			cyberdeck.EPOCH.allowWithAddress = false
+		}
+	*/
+
+	cyberdeck.EPOCH.enabled = true
+	cyberdeck.EPOCH.allowWithAddress = true
 
 	spacerEpoch := canvas.NewRectangle(color.Transparent)
 	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
@@ -8364,10 +8410,12 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			go func() {
 				stored, _ := getPermissions()
 				for _, obj := range formItems.Objects {
-					name := obj.(*fyne.Container).Objects[0].(*widget.RichText).String()
-					obj.(*fyne.Container).Objects[1].(*widget.Select).SetSelected(stored[name].String())
-					obj.(*fyne.Container).Objects[1].(*widget.Select).Enable()
-					obj.(*fyne.Container).Objects[1].(*widget.Select).OnChanged = onChanged(name)
+					fyne.Do(func() {
+						name := obj.(*fyne.Container).Objects[0].(*widget.RichText).String()
+						obj.(*fyne.Container).Objects[1].(*widget.Select).SetSelected(stored[name].String())
+						obj.(*fyne.Container).Objects[1].(*widget.Select).Enable()
+						obj.(*fyne.Container).Objects[1].(*widget.Select).OnChanged = onChanged(name)
+					})
 				}
 			}()
 		}
@@ -8474,18 +8522,20 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							wSpacer,
 							labelEpoch,
 							rectSpacer,
-							container.NewBorder(
-								nil,
-								nil,
-								widget.NewRichTextFromMarkdown("### Preference"),
-								wEpoch,
-							),
-							container.NewBorder(
-								nil,
-								nil,
-								widget.NewRichTextFromMarkdown("### Reward Address"),
-								wEpochAddress,
-							),
+							/*
+								container.NewBorder(
+									nil,
+									nil,
+									widget.NewRichTextFromMarkdown("### Preference"),
+									wEpoch,
+								),
+								container.NewBorder(
+									nil,
+									nil,
+									widget.NewRichTextFromMarkdown("### Reward Address"),
+									wEpochAddress,
+								),
+							*/
 							container.NewBorder(
 								nil,
 								nil,
@@ -8676,8 +8726,11 @@ func layoutIdentity() fyne.CanvasObject {
 					logger.Errorf("[Username] %s\n", err)
 				} else {
 					go func() {
-						entryReg.Text = ""
-						entryReg.Refresh()
+						fyne.Do(func() {
+							entryReg.Text = ""
+							entryReg.Refresh()
+						})
+
 						walletapi.WaitNewHeightBlock()
 						sHeight := walletapi.Get_Daemon_Height()
 
@@ -8687,8 +8740,12 @@ func layoutIdentity() fyne.CanvasObject {
 								usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 								if err != nil {
 									logger.Errorf("[Username] Error querying usernames: %s\n", err)
-									btnReg.Text = "Error querying usernames"
-									btnReg.Refresh()
+
+									fyne.Do(func() {
+										btnReg.Text = "Error querying usernames"
+										btnReg.Refresh()
+									})
+
 									return
 								}
 
@@ -8696,25 +8753,34 @@ func layoutIdentity() fyne.CanvasObject {
 									if usernames[u] == session.NewUser {
 										logger.Printf("[Username] Successfully registered username: %s\n", session.NewUser)
 										_ = tx
-										btnReg.Text = "Registration successful!"
-										btnReg.Refresh()
-										session.NewUser = ""
-										session.Window.SetContent(layoutIdentity())
+
+										fyne.Do(func() {
+											btnReg.Text = "Registration successful!"
+											btnReg.Refresh()
+											session.NewUser = ""
+											session.Window.SetContent(layoutIdentity())
+										})
+
 										return
 									}
 								}
 
 								// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 								if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-									btnReg.Text = "Unable to register..."
-									btnReg.Refresh()
+									fyne.Do(func() {
+										btnReg.Text = "Unable to register..."
+										btnReg.Refresh()
+									})
+
 									break
 								}
 
 								// If daemon height has incremented, print retry counters into button space
 								if walletapi.Get_Daemon_Height()-sHeight > 0 {
-									btnReg.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-									btnReg.Refresh()
+									fyne.Do(func() {
+										btnReg.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+										btnReg.Refresh()
+									})
 								}
 							} else {
 								break
@@ -9058,9 +9124,12 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 							if err != nil {
 								logger.Errorf("[Username] Error querying usernames: %s\n", err)
-								btnSend.Text = "Error querying usernames"
-								btnSend.Refresh()
-								btnSetPrimary.Enable()
+								fyne.Do(func() {
+									btnSend.Text = "Error querying usernames"
+									btnSend.Refresh()
+									btnSetPrimary.Enable()
+								})
+
 								return
 							}
 
@@ -9072,25 +9141,33 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 							if !found {
 								logger.Printf("[TransferOwnership] %s was successfully transferred to: %s\n", username, address)
-								session.Window.SetContent(layoutTransition())
-								session.Window.SetContent(layoutIdentity())
-								removeOverlays()
+								fyne.Do(func() {
+									session.Window.SetContent(layoutTransition())
+									session.Window.SetContent(layoutIdentity())
+									removeOverlays()
+								})
+
 								break
 							}
 
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
 								logger.Errorf("[TransferOwnership] %s was unsuccessful in transferring to: %s\n", username, address)
-								btnSend.Text = "Unable to transfer..."
-								btnSend.Refresh()
-								btnSetPrimary.Enable()
+								fyne.Do(func() {
+									btnSend.Text = "Unable to transfer..."
+									btnSend.Refresh()
+									btnSetPrimary.Enable()
+								})
+
 								break
 							}
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-								btnSend.Refresh()
+								fyne.Do(func() {
+									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+									btnSend.Refresh()
+								})
 							}
 						} else {
 							break
@@ -9231,8 +9308,10 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 
 	go func() {
 		for engram.Disk != nil {
-			hashes.Text = fmt.Sprintf("%d", session.RegHashes)
-			hashes.Refresh()
+			fyne.Do(func() {
+				hashes.Text = fmt.Sprintf("%d", session.RegHashes)
+				hashes.Refresh()
+			})
 		}
 	}()
 
@@ -9573,7 +9652,10 @@ func layoutHistory() fyne.CanvasObject {
 						} else {
 							label.Text = result.TXID
 						}
-						label.Refresh()
+
+						fyne.Do(func() {
+							label.Refresh()
+						})
 
 						overlay := session.Window.Canvas().Overlays()
 						overlay.Add(
@@ -11790,9 +11872,12 @@ func layoutAccount() fyne.CanvasObject {
 							dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
 								if err != nil {
 									logger.Errorf("[Engram] File dialog: %s\n", err)
-									errorText.Text = "could not export wallet file"
-									errorText.Color = colors.Red
-									errorText.Refresh()
+									fyne.Do(func() {
+										errorText.Text = "could not export wallet file"
+										errorText.Color = colors.Red
+										errorText.Refresh()
+									})
+
 									return
 								}
 
@@ -11803,24 +11888,32 @@ func layoutAccount() fyne.CanvasObject {
 								data, err := os.ReadFile(session.Path)
 								if err != nil {
 									logger.Errorf("[Engram] Reading wallet file %s: %s\n", session.Path, err)
-									errorText.Text = "error reading wallet file"
-									errorText.Color = colors.Red
-									errorText.Refresh()
+									fyne.Do(func() {
+										errorText.Text = "error reading wallet file"
+										errorText.Color = colors.Red
+										errorText.Refresh()
+									})
+
 									return
 								}
 
 								_, err = writeToURI(data, uri)
 								if err != nil {
 									logger.Errorf("[Engram] Exporting %s: %s\n", session.Path, err)
-									errorText.Text = "error exporting wallet file"
-									errorText.Color = colors.Red
-									errorText.Refresh()
+									fyne.Do(func() {
+										errorText.Text = "error exporting wallet file"
+										errorText.Color = colors.Red
+										errorText.Refresh()
+									})
+
 									return
 								}
 
-								errorText.Text = "exported wallet file successfully"
-								errorText.Color = colors.Green
-								errorText.Refresh()
+								fyne.Do(func() {
+									errorText.Text = "exported wallet file successfully"
+									errorText.Color = colors.Green
+									errorText.Refresh()
+								})
 
 							}, session.Window)
 
@@ -11834,11 +11927,13 @@ func layoutAccount() fyne.CanvasObject {
 								}
 							}
 
-							dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
-							dialogFileSave.SetView(dialog.ListView)
-							dialogFileSave.SetFileName(filepath.Base(session.Path))
-							dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
-							dialogFileSave.Show()
+							fyne.Do(func() {
+								dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
+								dialogFileSave.SetView(dialog.ListView)
+								dialogFileSave.SetFileName(filepath.Base(session.Path))
+								dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+								dialogFileSave.Show()
+							})
 						}()
 					}
 				},
@@ -12123,21 +12218,16 @@ func layoutRecovery() fyne.CanvasObject {
 		a.Clipboard().SetContent(engram.Disk.GetSeed())
 	}
 
-	layout := container.NewBorder(
-		container.NewHBox(
-			layout.NewSpacer(),
-			container.NewVBox(
-				header,
-				scrollBox,
-			),
-			layout.NewSpacer(),
+	layout := container.NewStack(
+		&iframe{},
+		container.NewVBox(
+			header,
+			scrollBox,
+			footer,
 		),
-		footer,
-		nil,
-		nil,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRecoveryHex() fyne.CanvasObject {
@@ -12280,21 +12370,16 @@ func layoutRecoveryHex() fyne.CanvasObject {
 		a.Clipboard().SetContent(public)
 	}
 
-	layout := container.NewBorder(
-		container.NewHBox(
-			layout.NewSpacer(),
-			container.NewVBox(
-				header,
-				scrollBox,
-			),
-			layout.NewSpacer(),
+	layout := container.NewStack(
+		&iframe{},
+		container.NewVBox(
+			header,
+			scrollBox,
+			footer,
 		),
-		footer,
-		nil,
-		nil,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutFrame() fyne.CanvasObject {
@@ -12484,9 +12569,12 @@ func layoutFileManager() fyne.CanvasObject {
 				dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
 					if err != nil {
 						logger.Errorf("[Engram] Save file dialog: %s\n", err)
-						errorText.Text = "could not open signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						fyne.Do(func() {
+							errorText.Text = "could not open signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
+
 						return
 					}
 
@@ -12497,18 +12585,24 @@ func layoutFileManager() fyne.CanvasObject {
 					filedata, err := readFromURI(uc)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
-						errorText.Text = "could not read file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						fyne.Do(func() {
+							errorText.Text = "could not read file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
+
 						return
 					}
 
 					_, err = writeToURI(engram.Disk.SignData(filedata), uri)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
-						errorText.Text = "could not write signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						fyne.Do(func() {
+							errorText.Text = "could not write signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
+
 						return
 					}
 
@@ -12520,17 +12614,19 @@ func layoutFileManager() fyne.CanvasObject {
 
 					logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
 
-					errorText.Text = "signed file successfully"
-					errorText.Color = colors.Green
-					errorText.Refresh()
+					fyne.Do(func() {
+						errorText.Text = "signed file successfully"
+						errorText.Color = colors.Green
+						errorText.Refresh()
 
-					signedResults = append(signedResults, outputFile)
-					signedData.Set(signedResults)
-					signedList.Refresh()
+						signedResults = append(signedResults, outputFile)
+						signedData.Set(signedResults)
+						signedList.Refresh()
 
-					signedLen := len(signedResults)
-					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
-					labelResults.Refresh()
+						signedLen := len(signedResults)
+						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+						labelResults.Refresh()
+					})
 
 				}, session.Window)
 
@@ -12544,12 +12640,14 @@ func layoutFileManager() fyne.CanvasObject {
 					}
 				}
 
-				dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
-				dialogFileSign.SetView(dialog.ListView)
-				dialogFileSign.SetFileName(outputFileName)
-				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
-				dialogFileSign.SetConfirmText("Save Sign")
-				dialogFileSign.Show()
+				fyne.Do(func() {
+					dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
+					dialogFileSign.SetView(dialog.ListView)
+					dialogFileSign.SetFileName(outputFileName)
+					dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+					dialogFileSign.SetConfirmText("Save Sign")
+					dialogFileSign.Show()
+				})
 			}()
 		} else {
 			fileName := uc.URI().Name()
@@ -13347,11 +13445,13 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 				}
 
 				go func() {
-					removeOverlays()
-					capture := session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filepath.Base(filename), ".bas"), string(filedata)))
-					session.LastDomain = capture
+					fyne.Do(func() {
+						removeOverlays()
+						capture := session.Window.Content()
+						session.Window.SetContent(layoutTransition())
+						session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filepath.Base(filename), ".bas"), string(filedata)))
+						session.LastDomain = capture
+					})
 				}()
 			}
 		}
@@ -16238,7 +16338,9 @@ func layoutTELA() fyne.CanvasObject {
 							sort.Strings(historyResults)
 							history = historyResults
 							historyData.Set(history)
-							historyList.Refresh()
+							fyne.Do(func() {
+								historyList.Refresh()
+							})
 
 							results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
 							results.Color = colors.Green
@@ -16694,9 +16796,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
 						if err != nil {
 							logger.Errorf("[Engram] Open TELA link: %s\n", err)
-							errorText.Text = "error could not open TELA"
-							errorText.Color = colors.Red
-							errorText.Refresh()
+							fyne.Do(func() {
+								errorText.Text = "error could not open TELA"
+								errorText.Color = colors.Red
+								errorText.Refresh()
+							})
+
 							return
 						}
 
@@ -16707,33 +16812,41 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						link, err := serveTELAUpdates(index.SCID)
 						if err != nil {
 							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-							errorText.Text = telaErrorToString(err)
-							errorText.Color = colors.Red
-							errorText.Refresh()
+							fyne.Do(func() {
+								errorText.Text = telaErrorToString(err)
+								errorText.Color = colors.Red
+								errorText.Refresh()
+							})
 							return
 						}
 
 						url, err := url.Parse(link)
 						if err != nil {
 							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-							errorText.Text = "error could parse URL"
-							errorText.Color = colors.Red
-							errorText.Refresh()
+							fyne.Do(func() {
+								errorText.Text = "error could parse URL"
+								errorText.Color = colors.Red
+								errorText.Refresh()
+							})
 						} else {
 							err = fyne.CurrentApp().OpenURL(url)
 							if err != nil {
-								errorText.Text = "error could not open browser"
-								errorText.Color = colors.Red
-								errorText.Refresh()
+								fyne.Do(func() {
+									errorText.Text = "error could not open browser"
+									errorText.Color = colors.Red
+									errorText.Refresh()
+								})
 							}
 						}
 
-						textStatus.Text = "   Online"
-						textStatus.Color = colors.Green
-						textStatus.Refresh()
-						btnServer.Text = "Shutdown Application"
-						btnServer.Refresh()
-						linkOpenInBrowser.Show()
+						fyne.Do(func() {
+							textStatus.Text = "   Online"
+							textStatus.Color = colors.Green
+							textStatus.Refresh()
+							btnServer.Text = "Shutdown Application"
+							btnServer.Refresh()
+							linkOpenInBrowser.Show()
+						})
 
 						err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
 						if err != nil {
