@@ -8110,32 +8110,32 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	wEpochAddress := widget.NewSelect([]string{"My Address", "dApp Chooses"}, nil)
 
-	if cyberdeck.EPOCH.enabled {
-		wEpoch.SetSelectedIndex(1)
-	} else {
-		wEpoch.SetSelectedIndex(0)
-		wEpochAddress.Disable()
-	}
-
-	if cyberdeck.EPOCH.allowWithAddress {
-		wEpochAddress.SetSelectedIndex(1)
-	} else {
-		wEpochAddress.SetSelectedIndex(0)
-	}
-
-	wEpoch.OnChanged = func(s string) {
-		if s == xswd.Allow.String() {
-			cyberdeck.EPOCH.enabled = true
-			wEpochAddress.Enable()
-			return
+	/*
+		if cyberdeck.EPOCH.enabled {
+			wEpoch.SetSelectedIndex(1)
+		} else {
+			wEpoch.SetSelectedIndex(0)
+			wEpochAddress.Disable()
 		}
 
-		cyberdeck.EPOCH.enabled = false
-		wEpochAddress.SetSelectedIndex(0)
-		wEpochAddress.Disable()
-	}
+		if cyberdeck.EPOCH.allowWithAddress {
+			wEpochAddress.SetSelectedIndex(1)
+		} else {
+			wEpochAddress.SetSelectedIndex(0)
+		}
 
-	/*
+		wEpoch.OnChanged = func(s string) {
+			if s == xswd.Allow.String() {
+				cyberdeck.EPOCH.enabled = true
+				wEpochAddress.Enable()
+				return
+			}
+
+			cyberdeck.EPOCH.enabled = false
+			wEpochAddress.SetSelectedIndex(0)
+			wEpochAddress.Disable()
+		}
+
 		wEpochAddress.OnChanged = func(s string) {
 			if s == "dApp Chooses" {
 				cyberdeck.EPOCH.allowWithAddress = true
@@ -8145,9 +8145,6 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			cyberdeck.EPOCH.allowWithAddress = false
 		}
 	*/
-
-	cyberdeck.EPOCH.enabled = true
-	cyberdeck.EPOCH.allowWithAddress = true
 
 	spacerEpoch := canvas.NewRectangle(color.Transparent)
 	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
