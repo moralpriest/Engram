@@ -159,7 +159,7 @@ func layoutMain() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	linkCreate := widget.NewHyperlinkWithStyle("Create a new account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkCreate := widget.NewHyperlinkWithStyle("Create New Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCreate.OnTapped = func() {
 		session.Domain = "app.create"
 		session.LastDomain = session.Window.Content()
@@ -168,7 +168,7 @@ func layoutMain() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	linkRecover := widget.NewHyperlinkWithStyle("Recover an existing account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRecover := widget.NewHyperlinkWithStyle("Recover Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkRecover.OnTapped = func() {
 		session.Domain = "app.restore"
 		session.LastDomain = session.Window.Content()
@@ -1819,7 +1819,6 @@ func layoutRestore() fyne.CanvasObject {
 	session.Password = ""
 	session.PasswordConfirm = ""
 
-
 	scrollBox := container.NewVScroll(nil)
 
 	errorText := canvas.NewText(" ", colors.Green)
@@ -2004,7 +2003,6 @@ func layoutRestore() fyne.CanvasObject {
 
 	grid := container.NewVBox()
 	grid.Objects = nil
-
 
 	seedEntry := NewMobileEntry()
 	seedEntry.SetPlaceHolder("Recovery Phrase (25 words)")
@@ -2444,7 +2442,7 @@ func layoutRestore() fyne.CanvasObject {
 				return
 			}
 
-				words := strings.TrimSpace(seedEntry.Text)
+			words := strings.TrimSpace(seedEntry.Text)
 
 			language, _, err = mnemonics.Words_To_Key(words)
 			if err != nil {
