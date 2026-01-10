@@ -1819,7 +1819,6 @@ func layoutRestore() fyne.CanvasObject {
 	session.Password = ""
 	session.PasswordConfirm = ""
 
-	var seed [25]string
 
 	scrollBox := container.NewVScroll(nil)
 
@@ -2006,742 +2005,73 @@ func layoutRestore() fyne.CanvasObject {
 	grid := container.NewVBox()
 	grid.Objects = nil
 
-	word1 := NewMobileEntry()
-	word1.PlaceHolder = "Seed Word 1"
-	word1.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
+
+	seedEntry := NewMobileEntry()
+	seedEntry.SetPlaceHolder("Recovery Phrase (25 words)")
+	seedEntry.MultiLine = true
+	seedEntry.Wrapping = fyne.TextWrapWord
+	seedEntry.SetMinRowsVisible(6)
+
+	btnPasteSeed := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), nil)
+	btnPasteSeed.OnTapped = func() {
+		clipboardText := a.Clipboard().Content()
+		if clipboardText != "" {
+			seedEntry.SetText(clipboardText)
 		}
-		seed[0] = s
-		word1.Text = s
-		return nil
-	}
-	word1.OnFocusGained = func() {
-		offset := word1.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
 	}
 
-	word2 := NewMobileEntry()
-	word2.PlaceHolder = "Seed Word 2"
-	word2.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[1] = s
-		word2.Text = s
+	seedInfo := canvas.NewText(" ", colors.Green)
+	seedInfo.TextSize = 12
+	seedInfo.Alignment = fyne.TextAlignCenter
 
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
+	seedEntry.Validator = func(s string) (err error) {
+		errorText.Text = ""
+		errorText.Color = colors.Red
+		errorText.Refresh()
+		seedInfo.Text = ""
+		seedInfo.Refresh()
+
+		s = strings.TrimSpace(s)
+		if s == "" {
+			btnCreate.Disable()
+			return nil
+		}
+
+		words := strings.Fields(s)
+		wordCount := len(words)
+
+		if wordCount != 24 && wordCount != 25 {
+			btnCreate.Disable()
+			err = errors.New("seed must contain exactly 24 or 25 words")
+			errorText.Text = fmt.Sprintf("%d words detected, expected 24 or 25", wordCount)
+			errorText.Refresh()
+			return err
+		}
+
+		invalidWords := []string{}
+		for _, word := range words {
+			if !checkSeedWord(word) {
+				invalidWords = append(invalidWords, word)
 			}
 		}
 
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word2.OnFocusGained = func() {
-		offset := word2.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word3 := NewMobileEntry()
-	word3.PlaceHolder = "Seed Word 3"
-	word3.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
+		if len(invalidWords) > 0 {
 			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[2] = s
-		word3.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
+			err = errors.New("invalid seed words detected")
+			if len(invalidWords) <= 3 {
+				errorText.Text = fmt.Sprintf("Invalid words: %s", strings.Join(invalidWords, ", "))
+			} else {
+				errorText.Text = fmt.Sprintf("%d invalid words detected, starting with: %s...", len(invalidWords), strings.Join(invalidWords[:3], ", "))
 			}
+			errorText.Refresh()
+			return err
 		}
 
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
+		seedInfo.Text = fmt.Sprintf("%d valid words", wordCount)
+		seedInfo.Color = colors.Green
+		seedInfo.Refresh()
+		btnCreate.Enable()
 		return nil
-	}
-	word3.OnFocusGained = func() {
-		offset := word3.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word4 := NewMobileEntry()
-	word4.PlaceHolder = "Seed Word 4"
-	word4.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[3] = s
-		word4.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word4.OnFocusGained = func() {
-		offset := word4.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word5 := NewMobileEntry()
-	word5.PlaceHolder = "Seed Word 5"
-	word5.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[4] = s
-		word5.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word5.OnFocusGained = func() {
-		offset := word5.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word6 := NewMobileEntry()
-	word6.PlaceHolder = "Seed Word 6"
-	word6.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[5] = s
-		word6.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word6.OnFocusGained = func() {
-		offset := word6.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word7 := NewMobileEntry()
-	word7.PlaceHolder = "Seed Word 7"
-	word7.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[6] = s
-		word7.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word7.OnFocusGained = func() {
-		offset := word7.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word8 := NewMobileEntry()
-	word8.PlaceHolder = "Seed Word 8"
-	word8.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[7] = s
-		word8.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word8.OnFocusGained = func() {
-		offset := word8.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word9 := NewMobileEntry()
-	word9.PlaceHolder = "Seed Word 9"
-	word9.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[8] = s
-		word9.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word9.OnFocusGained = func() {
-		offset := word9.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word10 := NewMobileEntry()
-	word10.PlaceHolder = "Seed Word 10"
-	word10.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[9] = s
-		word10.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word10.OnFocusGained = func() {
-		offset := word10.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word11 := NewMobileEntry()
-	word11.PlaceHolder = "Seed Word 11"
-	word11.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[10] = s
-		word11.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word11.OnFocusGained = func() {
-		offset := word11.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word12 := NewMobileEntry()
-	word12.PlaceHolder = "Seed Word 12"
-	word12.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[11] = s
-		word12.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word12.OnFocusGained = func() {
-		offset := word12.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word13 := NewMobileEntry()
-	word13.PlaceHolder = "Seed Word 13"
-	word13.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[12] = s
-		word13.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word13.OnFocusGained = func() {
-		offset := word13.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word14 := NewMobileEntry()
-	word14.PlaceHolder = "Seed Word 14"
-	word14.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[13] = s
-		word14.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word14.OnFocusGained = func() {
-		offset := word14.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word15 := NewMobileEntry()
-	word15.PlaceHolder = "Seed Word 15"
-	word15.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[14] = s
-		word15.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word15.OnFocusGained = func() {
-		offset := word15.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word16 := NewMobileEntry()
-	word16.PlaceHolder = "Seed Word 16"
-	word16.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[15] = s
-		word16.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word16.OnFocusGained = func() {
-		offset := word16.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word17 := NewMobileEntry()
-	word17.PlaceHolder = "Seed Word 17"
-	word17.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[16] = s
-		word17.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word17.OnFocusGained = func() {
-		offset := word17.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word18 := NewMobileEntry()
-	word18.PlaceHolder = "Seed Word 18"
-	word18.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[17] = s
-		word18.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word18.OnFocusGained = func() {
-		offset := word18.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word19 := NewMobileEntry()
-	word19.PlaceHolder = "Seed Word 19"
-	word19.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[18] = s
-		word19.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word19.OnFocusGained = func() {
-		offset := word19.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word20 := NewMobileEntry()
-	word20.PlaceHolder = "Seed Word 20"
-	word20.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[19] = s
-		word20.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word20.OnFocusGained = func() {
-		offset := word20.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word21 := NewMobileEntry()
-	word21.PlaceHolder = "Seed Word 21"
-	word21.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[20] = s
-		word21.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word21.OnFocusGained = func() {
-		offset := word21.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word22 := NewMobileEntry()
-	word22.PlaceHolder = "Seed Word 22"
-	word22.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[21] = s
-		word22.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word22.OnFocusGained = func() {
-		offset := word22.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word23 := NewMobileEntry()
-	word23.PlaceHolder = "Seed Word 23"
-	word23.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[22] = s
-		word23.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word23.OnFocusGained = func() {
-		offset := word23.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word24 := NewMobileEntry()
-	word24.PlaceHolder = "Seed Word 24"
-	word24.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[23] = s
-		word24.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word24.OnFocusGained = func() {
-		offset := word24.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word25 := NewMobileEntry()
-	word25.PlaceHolder = "Seed Word 25"
-	word25.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[24] = s
-		word25.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word25.OnFocusGained = func() {
-		offset := word25.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
 	}
 
 	hexEntry := widget.NewEntry()
@@ -2777,56 +2107,17 @@ func layoutRestore() fyne.CanvasObject {
 		errorText,
 	)
 
-	wordsForm := container.NewVBox(
-		word1,
+	seedForm := container.NewVBox(
 		rectSpacer,
-		word2,
+		seedEntry,
 		rectSpacer,
-		word3,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnPasteSeed,
+			layout.NewSpacer(),
+		),
 		rectSpacer,
-		word4,
-		rectSpacer,
-		word5,
-		rectSpacer,
-		word6,
-		rectSpacer,
-		word7,
-		rectSpacer,
-		word8,
-		rectSpacer,
-		word9,
-		rectSpacer,
-		word10,
-		rectSpacer,
-		word11,
-		rectSpacer,
-		word12,
-		rectSpacer,
-		word13,
-		rectSpacer,
-		word14,
-		rectSpacer,
-		word15,
-		rectSpacer,
-		word16,
-		rectSpacer,
-		word17,
-		rectSpacer,
-		word18,
-		rectSpacer,
-		word19,
-		rectSpacer,
-		word20,
-		rectSpacer,
-		word21,
-		rectSpacer,
-		word22,
-		rectSpacer,
-		word23,
-		rectSpacer,
-		word24,
-		rectSpacer,
-		word25,
+		seedInfo,
 		rectSpacer,
 		errorText,
 		rectSpacer,
@@ -2842,7 +2133,7 @@ func layoutRestore() fyne.CanvasObject {
 		wPasswordConfirm,
 		rectSpacer,
 		rectSpacer,
-		wordsForm,
+		seedForm,
 	)
 
 	importFileText := canvas.NewText(" ", colors.Green)
@@ -2882,7 +2173,7 @@ func layoutRestore() fyne.CanvasObject {
 		case "Recovery Words":
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
-			recoveryForm.Objects[8] = wordsForm
+			recoveryForm.Objects[8] = seedForm
 		case "Import File":
 			btnCreate.Disable()
 			importFileText.Text = ""
@@ -3153,11 +2444,7 @@ func layoutRestore() fyne.CanvasObject {
 				return
 			}
 
-			var words string
-
-			for i := 0; i < 25; i++ {
-				words += seed[i] + " "
-			}
+				words := strings.TrimSpace(seedEntry.Text)
 
 			language, _, err = mnemonics.Words_To_Key(words)
 			if err != nil {
