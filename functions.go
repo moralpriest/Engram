@@ -511,7 +511,11 @@ func setNetwork(network string) (err error) {
 func getDaemon() (r string) {
 	result, err := GetValue("settings", []byte("endpoint"))
 	if err != nil {
-		r = DEFAULT_REMOTE_DAEMON
+		if checkLocalNode() {
+			r = "127.0.0.1:10102"
+		} else {
+			r = DEFAULT_REMOTE_DAEMON
+		}
 		setDaemon(r)
 		session.Daemon = r
 		globals.Arguments["--daemon-address"] = r
@@ -522,6 +526,24 @@ func getDaemon() (r string) {
 	session.Daemon = r
 	globals.Arguments["--daemon-address"] = r
 	return
+}
+
+func checkLocalNode() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:10102", 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+func testNodeConnection(address string) bool {
+	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
 }
 
 // Set the daemon endpoint setting to the local Graviton tree
