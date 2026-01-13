@@ -5360,10 +5360,17 @@ func layoutSettings() fyne.CanvasObject {
 
 			rowIcon := widget.NewIcon(iconResource)
 
+			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				nodeData = append(nodeData[:i], nodeData[i+1:]...)
+				updateNodeContainer()
+			})
+			removeBtn.Importance = widget.MediumImportance
+
 			row := container.NewHBox(
 				widget.NewLabel(item.Address),
 				layout.NewSpacer(),
 				rowIcon,
+				removeBtn,
 			)
 
 			tapBtn := widget.NewButton("", func() {
@@ -5404,6 +5411,61 @@ func layoutSettings() fyne.CanvasObject {
 		}
 	}
 	updateNodeContainer()
+
+	entryCustomNode := widget.NewEntry()
+	entryCustomNode.PlaceHolder = "Custom node"
+
+	entryBg := canvas.NewRectangle(color.Transparent)
+	entryBg.SetMinSize(fyne.NewSize(ui.Width*0.9, 35))
+	entryCustomNodeContainer := container.NewStack(entryBg, entryCustomNode)
+
+	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
+		if nodeAddress != "" {
+			// Clear status of all existing nodes
+			for i := range nodeData {
+				nodeData[i].Status = "unknown"
+			}
+
+			nodeData = append(nodeData, NodeItem{
+				Address: nodeAddress,
+				Status:  "connected",
+			})
+			setDaemon(nodeAddress)
+
+			entryCustomNode.Text = ""
+			entryCustomNode.Refresh()
+			updateNodeContainer()
+		}
+	})
+	btnAddNode.Importance = widget.MediumImportance
+	btnAddNode.Disable()
+
+	var debounceTimer *time.Timer
+
+	entryCustomNode.OnChanged = func(s string) {
+		s = strings.TrimSpace(s)
+
+		if debounceTimer != nil {
+			debounceTimer.Stop()
+		}
+
+		// Validate characters inline (no validator, no validation icon)
+		if s == "" || !regexp.MustCompile(`^[a-zA-Z0-9.:-]+$`).MatchString(s) {
+			btnAddNode.Disable()
+			return
+		}
+
+		debounceTimer = time.AfterFunc(500*time.Millisecond, func() {
+			fyne.Do(func() {
+				if testNodeConnection(s) {
+					btnAddNode.Enable()
+				} else {
+					btnAddNode.Disable()
+				}
+			})
+		})
+	}
 
 	labelScan := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	labelScan.Wrapping = fyne.TextWrapWord
@@ -5578,6 +5640,12 @@ func layoutSettings() fyne.CanvasObject {
 		widget.NewLabel(""),
 		labelNode,
 		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			entryCustomNodeContainer,
+			layout.NewSpacer(),
+			btnAddNode,
+		),
 		rectSpacer,
 		nodeContainer,
 		rectSpacer,
