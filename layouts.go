@@ -5253,7 +5253,7 @@ func layoutSettings() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	heading := canvas.NewText("My Settings", colors.Green)
+	heading := canvas.NewText("Settings", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
