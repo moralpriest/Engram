@@ -5362,6 +5362,24 @@ func layoutSettings() fyne.CanvasObject {
 
 			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
 				nodeData = append(nodeData[:i], nodeData[i+1:]...)
+
+				if item.Status == "connected" && len(nodeData) > 0 {
+					newIndex := i - 1
+					if newIndex < 0 {
+						newIndex = 0
+					}
+					nodeData[newIndex].Status = "connected"
+					setDaemon(nodeData[newIndex].Address)
+					entryAddress.Text = nodeData[newIndex].Address
+					entryAddress.Refresh()
+
+					for j := range nodeData {
+						if j != newIndex {
+							nodeData[j].Status = "unknown"
+						}
+					}
+				}
+
 				updateNodeContainer()
 			})
 			removeBtn.Importance = widget.MediumImportance
