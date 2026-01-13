@@ -5320,27 +5320,90 @@ func layoutSettings() fyne.CanvasObject {
 	entryAddress.SetText(getDaemon())
 	entryAddress.Refresh()
 
-	selectNodes := widget.NewSelect(nil, nil)
-	selectNodes.PlaceHolder = "Select Public Node ..."
-	switch session.Network {
-	case NETWORK_TESTNET:
-		selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-	case NETWORK_SIMULATOR:
-		selectNodes.Options = []string{"127.0.0.1:20000"}
-		selectNodes.PlaceHolder = "Select Simulator Node ..."
-	default:
-		selectNodes.Options = []string{"node.derofoundation.org:11012", "community-pools.mysrv.cloud:10102", "127.0.0.1:10102"}
+	type NodeItem struct {
+		Address string
+		Status  string
 	}
-	selectNodes.OnChanged = func(s string) {
-		if s != "" {
-			err := setDaemon(s)
-			if err == nil {
-				entryAddress.Text = s
-				entryAddress.Refresh()
+
+	mainnetNodes := []NodeItem{
+		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
+		{Address: "127.0.0.1:10102", Status: "unknown"},
+	}
+	testnetNodes := []NodeItem{
+		{Address: "testnetexplorer.derofoundation.org:40402", Status: "unknown"},
+		{Address: "127.0.0.1:40402", Status: "unknown"},
+	}
+	simulatorNodes := []NodeItem{
+		{Address: "127.0.0.1:20000", Status: "unknown"},
+	}
+
+	nodeData := mainnetNodes
+
+	nodeContainer := container.NewVBox()
+
+	var updateNodeContainer func()
+
+	updateNodeContainer = func() {
+		nodeContainer.Objects = nil
+
+		for i := range nodeData {
+			item := &nodeData[i]
+
+			var iconResource fyne.Resource
+			switch item.Status {
+			case "connected":
+				iconResource = theme.ConfirmIcon()
+			case "failed":
+				iconResource = theme.CancelIcon()
 			}
-			selectNodes.ClearSelected()
+
+			rowIcon := widget.NewIcon(iconResource)
+
+			row := container.NewHBox(
+				widget.NewLabel(item.Address),
+				layout.NewSpacer(),
+				rowIcon,
+			)
+
+			tapBtn := widget.NewButton("", func() {
+				if testNodeConnection(item.Address) {
+					item.Status = "connected"
+					setDaemon(item.Address)
+					entryAddress.Text = item.Address
+					entryAddress.Refresh()
+
+					for j := range nodeData {
+						if j != i {
+							nodeData[j].Status = "unknown"
+						}
+					}
+				} else {
+					item.Status = "failed"
+				}
+				updateNodeContainer()
+			})
+			tapBtn.Importance = widget.LowImportance
+			tapBtn.Alignment = widget.ButtonAlignLeading
+			tapBtn.Text = ""
+
+			clickableRow := container.NewMax(
+				tapBtn,
+				row,
+			)
+
+			nodeContainer.Add(clickableRow)
+		}
+		nodeContainer.Refresh()
+	}
+
+	currentDaemon := getDaemon()
+	for i := range nodeData {
+		if nodeData[i].Address == currentDaemon {
+			nodeData[i].Status = "connected"
 		}
 	}
+	updateNodeContainer()
 
 	labelScan := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	labelScan.Wrapping = fyne.TextWrapWord
@@ -5375,22 +5438,26 @@ func layoutSettings() fyne.CanvasObject {
 	radioNetwork.OnChanged = func(s string) {
 		if s == NETWORK_TESTNET {
 			setNetwork(s)
-			selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
+			nodeData = testnetNodes
 		} else if s == NETWORK_SIMULATOR {
 			setNetwork(s)
-			selectNodes.Options = []string{"127.0.0.1:20000"}
-			selectNodes.PlaceHolder = "Select Simulator Node ..."
+			nodeData = simulatorNodes
 		} else {
 			setNetwork(NETWORK_MAINNET)
-			selectNodes.Options = []string{"node.derofoundation.org:11012", "community-pools.mysrv.cloud:10102", "127.0.0.1:10102"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
+			nodeData = mainnetNodes
 		}
 
-		// Change globals.Config mainnet/testnet to match network
+		for i := range nodeData {
+			if nodeData[i].Address == getDaemon() {
+				nodeData[i].Status = "connected"
+			} else {
+				nodeData[i].Status = "unknown"
+			}
+		}
+
 		globals.InitNetwork()
 
-		selectNodes.Refresh()
+		updateNodeContainer()
 	}
 
 	net, _ := GetValue("settings", []byte("network"))
@@ -5512,10 +5579,7 @@ func layoutSettings() fyne.CanvasObject {
 		labelNode,
 		rectSpacer,
 		rectSpacer,
-		selectNodes,
-		rectSpacer,
-		entryAddress,
-		rectSpacer,
+		nodeContainer,
 		rectSpacer,
 		labelScan,
 		rectSpacer,
