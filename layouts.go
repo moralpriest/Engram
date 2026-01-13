@@ -5329,7 +5329,7 @@ func layoutSettings() fyne.CanvasObject {
 		selectNodes.Options = []string{"127.0.0.1:20000"}
 		selectNodes.PlaceHolder = "Select Simulator Node ..."
 	default:
-		selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
+		selectNodes.Options = []string{"node.derofoundation.org:11012", "community-pools.mysrv.cloud:10102", "127.0.0.1:10102"}
 	}
 	selectNodes.OnChanged = func(s string) {
 		if s != "" {
@@ -5383,7 +5383,7 @@ func layoutSettings() fyne.CanvasObject {
 			selectNodes.PlaceHolder = "Select Simulator Node ..."
 		} else {
 			setNetwork(NETWORK_MAINNET)
-			selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
+			selectNodes.Options = []string{"node.derofoundation.org:11012", "community-pools.mysrv.cloud:10102", "127.0.0.1:10102"}
 			selectNodes.PlaceHolder = "Select Public Node ..."
 		}
 
