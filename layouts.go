@@ -5496,7 +5496,7 @@ func layoutSettings() fyne.CanvasObject {
 
 	radioNetwork := widget.NewRadioGroup([]string{NETWORK_MAINNET, NETWORK_TESTNET, NETWORK_SIMULATOR}, nil)
 	radioNetwork.Required = true
-	radioNetwork.Horizontal = false
+	radioNetwork.Horizontal = true
 	radioNetwork.OnChanged = func(s string) {
 		if s == NETWORK_TESTNET {
 			setNetwork(s)
