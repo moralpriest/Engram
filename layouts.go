@@ -5245,11 +5245,8 @@ func layoutTransition() fyne.CanvasObject {
 
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 10))
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
-	frame := &iframe{}
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
@@ -5401,11 +5398,13 @@ func layoutSettings() fyne.CanvasObject {
 				removeBtn.Disable()
 			}
 
-			row := container.NewHBox(
-				widget.NewLabel(item.Address),
-				layout.NewSpacer(),
-				rowIcon,
-				removeBtn,
+			addressLabel := widget.NewLabel(item.Address)
+			addressLabel.Truncation = fyne.TextTruncateEllipsis
+
+			row := container.NewBorder(
+				nil, nil, nil,
+				container.NewHBox(rowIcon, removeBtn),
+				addressLabel,
 			)
 
 			tapBtn := widget.NewButton("", func() {
@@ -5417,6 +5416,10 @@ func layoutSettings() fyne.CanvasObject {
 						if j != i {
 							nodeData[j].Status = "unknown"
 						}
+					}
+
+					if data, err := json.Marshal(nodeData); err == nil {
+						StoreValue("settings", []byte(getNodesKey()), data)
 					}
 				} else {
 					item.Status = "failed"
@@ -5445,8 +5448,19 @@ func layoutSettings() fyne.CanvasObject {
 	}
 	updateNodeContainer()
 
+	getNodePlaceholder := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "hostname:40402"
+		case NETWORK_SIMULATOR:
+			return "hostname:20000"
+		default:
+			return "hostname:10102"
+		}
+	}
+
 	entryCustomNode := widget.NewEntry()
-	entryCustomNode.PlaceHolder = "Custom node"
+	entryCustomNode.PlaceHolder = getNodePlaceholder(currentNetwork)
 
 	showNodeError := func(err error) {
 		entryCustomNode.Validator = func(s string) error {
@@ -5465,7 +5479,16 @@ func layoutSettings() fyne.CanvasObject {
 
 	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
+		nodeAddress = strings.ReplaceAll(nodeAddress, " ", "")
 		if nodeAddress != "" {
+			// Check for duplicate
+			for _, node := range nodeData {
+				if node.Address == nodeAddress {
+					showNodeError(errors.New("node already exists"))
+					return
+				}
+			}
+
 			if testNodeConnectionTimeout(nodeAddress, 500*time.Millisecond) {
 				clearNodeError()
 
@@ -5564,6 +5587,9 @@ func layoutSettings() fyne.CanvasObject {
 
 		globals.InitNetwork()
 
+		entryCustomNode.PlaceHolder = getNodePlaceholder(s)
+		clearNodeError()
+
 		updateNodeContainer()
 	}
 
@@ -5590,21 +5616,21 @@ func layoutSettings() fyne.CanvasObject {
 
 	entryUser.OnChanged = func(s string) {
 		cyberdeck.RPC.user = s
+		StoreValue("settings", []byte("rpc_user"), []byte(s))
 	}
 
 	entryPass.OnChanged = func(s string) {
 		cyberdeck.RPC.pass = s
+		StoreValue("settings", []byte("rpc_pass"), []byte(s))
 	}
 
 	checkGnomon := widget.NewCheck("Enable Gnomon", nil)
 	checkGnomon.OnChanged = func(b bool) {
 		if b {
 			StoreValue("settings", []byte("gnomon"), []byte("1"))
-			checkGnomon.Checked = true
 			gnomon.Active = 1
 		} else {
 			StoreValue("settings", []byte("gnomon"), []byte("0"))
-			checkGnomon.Checked = false
 			gnomon.Active = 0
 		}
 	}
@@ -5634,38 +5660,61 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	btnRestore.OnTapped = func() {
-		setNetwork(NETWORK_MAINNET)
-		setDaemon(DEFAULT_REMOTE_DAEMON)
-		setAuthMode("true")
-		setGnomon("1")
+		dialog.ShowCustomConfirm("Restore Defaults", "Yes", "No", widget.NewLabel("Are you sure you want to restore all settings to their default values?"), func(confirmed bool) {
+			if !confirmed {
+				return
+			}
 
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutSettings())
-		removeOverlays()
+			setNetwork(NETWORK_MAINNET)
+			setDaemon(DEFAULT_REMOTE_DAEMON)
+			setAuthMode("true")
+			setGnomon("1")
+
+			// Clear saved nodes for all networks
+			StoreValue("settings", []byte("mainnet_nodes"), []byte{})
+			StoreValue("settings", []byte("testnet_nodes"), []byte{})
+			StoreValue("settings", []byte("simulator_nodes"), []byte{})
+
+			// Clear RPC credentials
+			StoreValue("settings", []byte("rpc_user"), []byte{})
+			StoreValue("settings", []byte("rpc_pass"), []byte{})
+			cyberdeck.RPC.user = ""
+			cyberdeck.RPC.pass = ""
+
+			resizeWindow(ui.MaxWidth, ui.MaxHeight)
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutSettings())
+			removeOverlays()
+		}, session.Window)
 	}
 
 	statusText := canvas.NewText("", colors.Account)
 	statusText.TextSize = 12
 
 	btnDelete.OnTapped = func() {
-		err := cleanGnomonData()
-		if err != nil {
-			if parseError, ok := err.(*os.PathError); !ok {
-				err = fmt.Errorf("error clearing local %s data", session.Network)
-			} else {
-				err = parseError.Err
+		dialog.ShowCustomConfirm("Clear Local Data", "Yes", "No", widget.NewLabel(fmt.Sprintf("Are you sure you want to delete all local %s data? This cannot be undone.", strings.ToLower(session.Network))), func(confirmed bool) {
+			if !confirmed {
+				return
 			}
 
-			statusText.Color = colors.Red
-			statusText.Text = err.Error()
-			statusText.Refresh()
-			return
-		}
+			err := cleanGnomonData()
+			if err != nil {
+				if parseError, ok := err.(*os.PathError); !ok {
+					err = fmt.Errorf("error clearing local %s data", session.Network)
+				} else {
+					err = parseError.Err
+				}
 
-		statusText.Color = colors.Green
-		statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
-		statusText.Refresh()
+				statusText.Color = colors.Red
+				statusText.Text = err.Error()
+				statusText.Refresh()
+				return
+			}
+
+			statusText.Color = colors.Green
+			statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
+			statusText.Refresh()
+		}, session.Window)
 	}
 
 	formSettings := container.NewVBox(
@@ -5753,12 +5802,7 @@ func layoutSettings() fyne.CanvasObject {
 		nil,
 	)
 
-	layout := container.NewStack(
-		frame,
-		c,
-	)
-
-	return NewVScroll(layout)
+	return NewVScroll(c)
 }
 
 func layoutMessages() fyne.CanvasObject {

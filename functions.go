@@ -270,6 +270,7 @@ func initSettings() {
 	getMode()
 	getDaemon()
 	getGnomon()
+	getRPCCredentials()
 	if a.Driver().Device().IsMobile() {
 		err := tela.SetShardPath(filepath.Join(AppPath(), filepath.Dir(shards.GetPath())))
 		if err != nil {
@@ -698,6 +699,16 @@ func setGnomon(s string) (err error) {
 		gnomon.Active = 0
 	}
 	return
+}
+
+// Get the RPC credentials from local Graviton tree
+func getRPCCredentials() {
+	if user, err := GetValue("settings", []byte("rpc_user")); err == nil && len(user) > 0 {
+		cyberdeck.RPC.user = string(user)
+	}
+	if pass, err := GetValue("settings", []byte("rpc_pass")); err == nil && len(pass) > 0 {
+		cyberdeck.RPC.pass = string(pass)
+	}
 }
 
 /*
