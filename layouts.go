@@ -5283,43 +5283,6 @@ func layoutSettings() fyne.CanvasObject {
 	btnRestore := widget.NewButton("Restore Defaults", nil)
 	btnDelete := widget.NewButton("Clear Local Data", nil)
 
-	entryAddress := widget.NewEntry()
-	entryAddress.Validator = func(s string) (err error) {
-		/*
-			_, err := net.ResolveTCPAddr("tcp", s)
-		*/
-		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
-		test := regexp.MustCompile(regex)
-
-		// Trim off http, https, wss, ws to validate regex on 'actual' uri for connection. If none match, s is just s as normal
-		var ssplit string
-		if strings.HasPrefix(s, "https") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "https://")
-		} else if strings.HasPrefix(s, "http") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "http://")
-		} else if strings.HasPrefix(s, "wss") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "wss://")
-		} else if strings.HasPrefix(s, "ws") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "ws://")
-		} else {
-			// s is s
-			ssplit = s
-		}
-
-		if test.MatchString(ssplit) {
-			entryAddress.SetValidationError(nil)
-			setDaemon(s)
-		} else {
-			err = errors.New("invalid host name")
-			entryAddress.SetValidationError(err)
-		}
-
-		return
-	}
-	entryAddress.PlaceHolder = "0.0.0.0:10102"
-	entryAddress.SetText(getDaemon())
-	entryAddress.Refresh()
-
 	type NodeItem struct {
 		Address string
 		Status  string
@@ -5338,7 +5301,45 @@ func layoutSettings() fyne.CanvasObject {
 		{Address: "127.0.0.1:20000", Status: "unknown"},
 	}
 
-	nodeData := mainnetNodes
+	getNodesKey := func() string {
+		switch session.Network {
+		case NETWORK_TESTNET:
+			return "testnet_nodes"
+		case NETWORK_SIMULATOR:
+			return "simulator_nodes"
+		default:
+			return "mainnet_nodes"
+		}
+	}
+
+	loadNodesForNetwork := func(network string) []NodeItem {
+		var nodesKey string
+		var defaultNodes []NodeItem
+
+		switch network {
+		case NETWORK_TESTNET:
+			nodesKey = "testnet_nodes"
+			defaultNodes = testnetNodes
+		case NETWORK_SIMULATOR:
+			nodesKey = "simulator_nodes"
+			defaultNodes = simulatorNodes
+		default:
+			nodesKey = "mainnet_nodes"
+			defaultNodes = mainnetNodes
+		}
+
+		if data, err := GetValue("settings", []byte(nodesKey)); err == nil && len(data) > 0 {
+			var savedNodes []NodeItem
+			if err := json.Unmarshal(data, &savedNodes); err == nil && len(savedNodes) > 0 {
+				return savedNodes
+			}
+		}
+
+		return defaultNodes
+	}
+
+	currentNetwork := getNetwork()
+	nodeData := loadNodesForNetwork(currentNetwork)
 
 	nodeContainer := container.NewVBox()
 
@@ -5348,6 +5349,7 @@ func layoutSettings() fyne.CanvasObject {
 		nodeContainer.Objects = nil
 
 		for i := range nodeData {
+			i := i // capture loop variable
 			item := &nodeData[i]
 
 			var iconResource fyne.Resource
@@ -5370,14 +5372,16 @@ func layoutSettings() fyne.CanvasObject {
 					}
 					nodeData[newIndex].Status = "connected"
 					setDaemon(nodeData[newIndex].Address)
-					entryAddress.Text = nodeData[newIndex].Address
-					entryAddress.Refresh()
 
 					for j := range nodeData {
 						if j != newIndex {
 							nodeData[j].Status = "unknown"
 						}
 					}
+				}
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey()), data)
 				}
 
 				updateNodeContainer()
@@ -5395,8 +5399,6 @@ func layoutSettings() fyne.CanvasObject {
 				if testNodeConnection(item.Address) {
 					item.Status = "connected"
 					setDaemon(item.Address)
-					entryAddress.Text = item.Address
-					entryAddress.Refresh()
 
 					for j := range nodeData {
 						if j != i {
@@ -5433,77 +5435,89 @@ func layoutSettings() fyne.CanvasObject {
 	entryCustomNode := widget.NewEntry()
 	entryCustomNode.PlaceHolder = "Custom node"
 
-	entryBg := canvas.NewRectangle(color.Transparent)
-	entryBg.SetMinSize(fyne.NewSize(ui.Width*0.9, 35))
-	entryCustomNodeContainer := container.NewStack(entryBg, entryCustomNode)
+	showNodeError := func(err error) {
+		entryCustomNode.Validator = func(s string) error {
+			return err
+		}
+		entryCustomNode.SetValidationError(err)
+		entryCustomNode.FocusGained()
+		entryCustomNode.FocusLost()
+	}
+
+	clearNodeError := func() {
+		entryCustomNode.Validator = nil
+		entryCustomNode.SetValidationError(nil)
+		entryCustomNode.Refresh()
+	}
 
 	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
 		if nodeAddress != "" {
-			// Clear status of all existing nodes
-			for i := range nodeData {
-				nodeData[i].Status = "unknown"
+			if testNodeConnectionTimeout(nodeAddress, 500*time.Millisecond) {
+				clearNodeError()
+
+				for i := range nodeData {
+					nodeData[i].Status = "unknown"
+				}
+
+				nodeData = append(nodeData, NodeItem{
+					Address: nodeAddress,
+					Status:  "connected",
+				})
+				setDaemon(nodeAddress)
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey()), data)
+				}
+
+				entryCustomNode.Text = ""
+				entryCustomNode.Refresh()
+				updateNodeContainer()
+			} else {
+				showNodeError(errors.New("node unreachable"))
 			}
-
-			nodeData = append(nodeData, NodeItem{
-				Address: nodeAddress,
-				Status:  "connected",
-			})
-			setDaemon(nodeAddress)
-
-			entryCustomNode.Text = ""
-			entryCustomNode.Refresh()
-			updateNodeContainer()
 		}
 	})
 	btnAddNode.Importance = widget.MediumImportance
 	btnAddNode.Disable()
 
-	var debounceTimer *time.Timer
-
 	entryCustomNode.OnChanged = func(s string) {
+		clearNodeError()
 		s = strings.TrimSpace(s)
-
-		if debounceTimer != nil {
-			debounceTimer.Stop()
-		}
-
-		// Validate characters inline (no validator, no validation icon)
-		if s == "" || !regexp.MustCompile(`^[a-zA-Z0-9.:-]+$`).MatchString(s) {
+		if s != "" {
+			btnAddNode.Enable()
+		} else {
 			btnAddNode.Disable()
-			return
 		}
-
-		debounceTimer = time.AfterFunc(500*time.Millisecond, func() {
-			fyne.Do(func() {
-				if testNodeConnection(s) {
-					btnAddNode.Enable()
-				} else {
-					btnAddNode.Disable()
-				}
-			})
-		})
 	}
+
+	entrySection := container.NewBorder(nil, nil, nil, btnAddNode, entryCustomNode)
+	entryWrapper := container.NewStack(
+		canvas.NewRectangle(color.Transparent),
+		entrySection,
+	)
+	entryWrapper.Resize(fyne.NewSize(ui.Width*0.9, 35))
 
 	labelScan := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	labelScan.Wrapping = fyne.TextWrapWord
 
 	entryScan := widget.NewEntry()
 	entryScan.PlaceHolder = "# of Latest Blocks (Optional)"
-	entryScan.Validator = func(s string) (err error) {
+	entryScan.Validator = func(s string) error {
+		if s == "" {
+			session.TrackRecentBlocks = 0
+			return nil
+		}
 		blocks, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			entryScan.SetValidationError(err)
-		} else {
-			entryScan.SetValidationError(nil)
-			if blocks > 0 {
-				session.TrackRecentBlocks = blocks
-			} else {
-				session.TrackRecentBlocks = 0
-			}
+			return err
 		}
-
-		return
+		if blocks > 0 {
+			session.TrackRecentBlocks = blocks
+		} else {
+			session.TrackRecentBlocks = 0
+		}
+		return nil
 	}
 
 	if session.TrackRecentBlocks > 0 {
@@ -5518,14 +5532,14 @@ func layoutSettings() fyne.CanvasObject {
 	radioNetwork.OnChanged = func(s string) {
 		if s == NETWORK_TESTNET {
 			setNetwork(s)
-			nodeData = testnetNodes
 		} else if s == NETWORK_SIMULATOR {
 			setNetwork(s)
-			nodeData = simulatorNodes
 		} else {
 			setNetwork(NETWORK_MAINNET)
-			nodeData = mainnetNodes
+			s = NETWORK_MAINNET
 		}
+
+		nodeData = loadNodesForNetwork(s)
 
 		for i := range nodeData {
 			if nodeData[i].Address == getDaemon() {
@@ -5597,16 +5611,6 @@ func layoutSettings() fyne.CanvasObject {
 
 	labelBack := widget.NewHyperlinkWithStyle("Return to Login", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	labelBack.OnTapped = func() {
-		network := radioNetwork.Selected
-		if network == NETWORK_TESTNET {
-			setNetwork(network)
-		} else if network == NETWORK_SIMULATOR {
-			setNetwork(network)
-		} else {
-			setNetwork(NETWORK_MAINNET)
-		}
-		setDaemon(entryAddress.Text)
-
 		initSettings()
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
@@ -5659,11 +5663,7 @@ func layoutSettings() fyne.CanvasObject {
 		labelNode,
 		rectSpacer,
 		rectSpacer,
-		container.NewHBox(
-			entryCustomNodeContainer,
-			layout.NewSpacer(),
-			btnAddNode,
-		),
+		entryWrapper,
 		rectSpacer,
 		nodeContainer,
 		rectSpacer,

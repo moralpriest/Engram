@@ -546,7 +546,16 @@ func testNodeConnection(address string) bool {
 	return true
 }
 
-// Set the daemon endpoint setting to the local Graviton tree
+func testNodeConnectionTimeout(address string, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+// Set the daemon endpoint setting to local Graviton tree
 func setDaemon(s string) (err error) {
 	StoreValue("settings", []byte("endpoint"), []byte(s))
 	globals.Arguments["--daemon-address"] = s
