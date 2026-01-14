@@ -5363,12 +5363,22 @@ func layoutSettings() fyne.CanvasObject {
 			rowIcon := widget.NewIcon(iconResource)
 
 			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				if len(nodeData) <= 1 {
+					return
+				}
+
+				removedAddress := item.Address
+				wasConnected := item.Status == "connected" || getDaemon() == removedAddress
+
 				nodeData = append(nodeData[:i], nodeData[i+1:]...)
 
-				if item.Status == "connected" && len(nodeData) > 0 {
+				if wasConnected {
 					newIndex := i - 1
 					if newIndex < 0 {
 						newIndex = 0
+					}
+					if newIndex >= len(nodeData) {
+						newIndex = len(nodeData) - 1
 					}
 					nodeData[newIndex].Status = "connected"
 					setDaemon(nodeData[newIndex].Address)
@@ -5387,6 +5397,9 @@ func layoutSettings() fyne.CanvasObject {
 				updateNodeContainer()
 			})
 			removeBtn.Importance = widget.MediumImportance
+			if len(nodeData) <= 1 {
+				removeBtn.Disable()
+			}
 
 			row := container.NewHBox(
 				widget.NewLabel(item.Address),
