@@ -1819,11 +1819,22 @@ func layoutRestore() fyne.CanvasObject {
 	session.Password = ""
 	session.PasswordConfirm = ""
 
+	// Cache network result to avoid repeated calls
+	cachedNetwork := getNetwork()
+
+	// Debouncer for account name validation (300ms)
+	accountDebouncer := NewDebouncer(300 * time.Millisecond)
+
 	scrollBox := container.NewVScroll(nil)
 
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = 12
 	errorText.Alignment = fyne.TextAlignCenter
+
+	// Password strength indicator
+	strengthText := canvas.NewText(" ", colors.Gray)
+	strengthText.TextSize = 11
+	strengthText.Alignment = fyne.TextAlignCenter
 
 	btnCreate := widget.NewButton("Recover", nil)
 	btnCreate.Disable()
@@ -1852,16 +1863,25 @@ func layoutRestore() fyne.CanvasObject {
 	wPassword.Password = true
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 		session.Password = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
+		// Update password strength indicator
+		if len(s) > 0 {
+			strength := getPasswordStrength(s)
+			strengthText.Text = getPasswordStrengthText(strength)
+			strengthText.Color = getPasswordStrengthColor(strength)
+			strengthText.Refresh()
+		} else {
+			clearFormText(strengthText)
+		}
 
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 	}
 	wPassword.SetPlaceHolder("Password")
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
@@ -1878,27 +1898,238 @@ func layoutRestore() fyne.CanvasObject {
 	wPasswordConfirm.Password = true
 	wPasswordConfirm.OnChanged = func(s string) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 		session.PasswordConfirm = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
-
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 	}
 	wPasswordConfirm.SetPlaceHolder("Confirm Password")
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
-	recoveryType := widget.NewSelect([]string{"Recovery Words", "Secret Hex Key", "Import File"}, nil)
-	recoveryType.PlaceHolder = "(Recovery Type)"
-	recoveryType.SetSelectedIndex(0)
-	recoveryType.OnChanged = func(s string) {
-		errorText.Text = ""
-		errorText.Refresh()
+	// Card selection for recovery type
+	selectedRecoveryType := 0 // 0=Words, 1=Hex, 2=Import
+
+	// Card backgrounds for selection state
+	cardBgWords := canvas.NewRectangle(colors.Green)
+	cardBgHex := canvas.NewRectangle(colors.Gray)
+	cardBgImport := canvas.NewRectangle(colors.Gray)
+
+	cardBgWords.CornerRadius = 12
+	cardBgHex.CornerRadius = 12
+	cardBgImport.CornerRadius = 12
+
+	// Card labels
+	lblWords := canvas.NewText("Words", colors.DarkMatter)
+	lblWords.TextSize = 14
+	lblWords.Alignment = fyne.TextAlignCenter
+	lblWords.TextStyle = fyne.TextStyle{Bold: true}
+
+	lblHex := canvas.NewText("Hex Key", color.White)
+	lblHex.TextSize = 14
+	lblHex.Alignment = fyne.TextAlignCenter
+	lblHex.TextStyle = fyne.TextStyle{Bold: true}
+
+	lblImport := canvas.NewText("Import", color.White)
+	lblImport.TextSize = 14
+	lblImport.Alignment = fyne.TextAlignCenter
+	lblImport.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Card descriptions
+	descWords := canvas.NewText("25 words", colors.DarkMatter)
+	descWords.TextSize = 11
+	descWords.Alignment = fyne.TextAlignCenter
+
+	descHex := canvas.NewText("64 chars", color.White)
+	descHex.TextSize = 11
+	descHex.Alignment = fyne.TextAlignCenter
+
+	descImport := canvas.NewText(".db file", color.White)
+	descImport.TextSize = 11
+	descImport.Alignment = fyne.TextAlignCenter
+
+	// Card icons - larger size
+	iconWords := canvas.NewImageFromResource(theme.DocumentIcon())
+	iconWords.SetMinSize(fyne.NewSize(32, 32))
+	iconWords.FillMode = canvas.ImageFillContain
+
+	iconHex := canvas.NewImageFromResource(theme.VisibilityOffIcon())
+	iconHex.SetMinSize(fyne.NewSize(32, 32))
+	iconHex.FillMode = canvas.ImageFillContain
+
+	iconImport := canvas.NewImageFromResource(theme.FolderOpenIcon())
+	iconImport.SetMinSize(fyne.NewSize(32, 32))
+	iconImport.FillMode = canvas.ImageFillContain
+
+	// Card dimensions determined by padded content
+
+	// Animate card selection with color pulse
+	animateCardPulse := func(card *canvas.Rectangle, finalColor color.Color) {
+		// Start with bright highlight color
+		highlightColor := color.RGBA{R: 150, G: 255, B: 150, A: 255}
+		card.FillColor = highlightColor
+		card.Refresh()
+
+		// Animate to final color
+		anim := fyne.NewAnimation(150*time.Millisecond, func(progress float32) {
+			// Interpolate from highlight to final
+			hr, hg, hb, _ := highlightColor.RGBA()
+			fr, fg, fb, _ := finalColor.RGBA()
+			r := uint8((float32(hr>>8) * (1 - progress)) + (float32(fr>>8) * progress))
+			g := uint8((float32(hg>>8) * (1 - progress)) + (float32(fg>>8) * progress))
+			b := uint8((float32(hb>>8) * (1 - progress)) + (float32(fb>>8) * progress))
+			card.FillColor = color.RGBA{R: r, G: g, B: b, A: 255}
+			card.Refresh()
+		})
+		anim.Start()
 	}
+
+	// Function to update card styles based on selection
+	updateRecoveryTypeCards := func() {
+		// Reset all to unselected
+		cardBgWords.FillColor = colors.Gray
+		cardBgHex.FillColor = colors.Gray
+		cardBgImport.FillColor = colors.Gray
+		lblWords.Color = color.White
+		lblHex.Color = color.White
+		lblImport.Color = color.White
+		descWords.Color = color.White
+		descHex.Color = color.White
+		descImport.Color = color.White
+
+		// Highlight selected with animation
+		switch selectedRecoveryType {
+		case 0:
+			animateCardPulse(cardBgWords, colors.Green)
+			lblWords.Color = colors.DarkMatter
+			descWords.Color = colors.DarkMatter
+		case 1:
+			animateCardPulse(cardBgHex, colors.Green)
+			lblHex.Color = colors.DarkMatter
+			descHex.Color = colors.DarkMatter
+		case 2:
+			animateCardPulse(cardBgImport, colors.Green)
+			lblImport.Color = colors.DarkMatter
+			descImport.Color = colors.DarkMatter
+		}
+
+		cardBgWords.Refresh()
+		cardBgHex.Refresh()
+		cardBgImport.Refresh()
+		lblWords.Refresh()
+		lblHex.Refresh()
+		lblImport.Refresh()
+		descWords.Refresh()
+		descHex.Refresh()
+		descImport.Refresh()
+	}
+
+	// Handler function for recovery type change (defined later after form is created)
+	var onRecoveryTypeChanged func(int)
+
+	// Create tappable card buttons
+	btnCardWords := widget.NewButton("", func() {
+		if selectedRecoveryType != 0 {
+			selectedRecoveryType = 0
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(0)
+			}
+		}
+	})
+	btnCardWords.Importance = widget.LowImportance
+
+	btnCardHex := widget.NewButton("", func() {
+		if selectedRecoveryType != 1 {
+			selectedRecoveryType = 1
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(1)
+			}
+		}
+	})
+	btnCardHex.Importance = widget.LowImportance
+
+	btnCardImport := widget.NewButton("", func() {
+		if selectedRecoveryType != 2 {
+			selectedRecoveryType = 2
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(2)
+			}
+		}
+	})
+	btnCardImport.Importance = widget.LowImportance
+
+	// Small spacer for card internal padding
+	cardSpacer := func() fyne.CanvasObject {
+		r := canvas.NewRectangle(color.Transparent)
+		r.SetMinSize(fyne.NewSize(1, 4))
+		return r
+	}
+
+	// Create card containers with background, icon, label, and invisible button overlay
+	cardWords := container.NewStack(
+		cardBgWords,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconWords),
+				cardSpacer(),
+				container.NewCenter(lblWords),
+				container.NewCenter(descWords),
+			),
+		),
+		btnCardWords,
+	)
+
+	cardHex := container.NewStack(
+		cardBgHex,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconHex),
+				cardSpacer(),
+				container.NewCenter(lblHex),
+				container.NewCenter(descHex),
+			),
+		),
+		btnCardHex,
+	)
+
+	cardImport := container.NewStack(
+		cardBgImport,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconImport),
+				cardSpacer(),
+				container.NewCenter(lblImport),
+				container.NewCenter(descImport),
+			),
+		),
+		btnCardImport,
+	)
+
+	// Spacer between cards
+	cardGap := canvas.NewRectangle(color.Transparent)
+	cardGap.SetMinSize(fyne.NewSize(8, 1))
+	cardGap2 := canvas.NewRectangle(color.Transparent)
+	cardGap2.SetMinSize(fyne.NewSize(8, 1))
+
+	recoveryTypeControl := container.NewHBox(
+		layout.NewSpacer(),
+		cardWords,
+		cardGap,
+		cardHex,
+		cardGap2,
+		cardImport,
+		layout.NewSpacer(),
+	)
 
 	wAccount := NewMobileEntry()
 	wAccount.OnFocusGained = func() {
@@ -1911,8 +2142,7 @@ func layoutRestore() fyne.CanvasObject {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
 		session.Window.Canvas().Focus(wAccount)
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 	}
 	wLanguage.PlaceHolder = "(Select Language)"
 	wLanguage.Hide()
@@ -1921,59 +2151,91 @@ func layoutRestore() fyne.CanvasObject {
 	wAccount.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	wAccount.Validator = func(s string) (err error) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 
-		if len(s) > 25 {
+		if len(s) > MaxAccountNameLength {
 			err = errors.New("account name is too long")
 			wAccount.SetText(session.Name)
 			wAccount.Refresh()
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+			showFormError(errorText, err.Error())
 			return
 		}
 
-		err = checkDir()
-		if err != nil {
-			session.LastDomain = session.Window.Content()
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutAlert(2))
-			return
-		}
-
-		switch getNetwork() {
-		case NETWORK_TESTNET:
-			session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + s + ".db"
-		case NETWORK_SIMULATOR:
-			session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + s + ".db"
-		default:
-			session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + s + ".db"
-		}
+		// Update session name immediately for form validation
 		session.Name = s
 
-		if findAccount() {
-			err = errors.New("account name already exists")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
-		}
-
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
-
+		// Update button state based on form validity
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 
 		if s != "" {
-			recoveryType.Disable()
+			btnCardWords.Disable()
+			btnCardHex.Disable()
+			btnCardImport.Disable()
 		} else {
-			recoveryType.Enable()
+			btnCardWords.Enable()
+			btnCardHex.Enable()
+			btnCardImport.Enable()
 		}
 
+		// Debounce filesystem operations to avoid excessive I/O on each keystroke
+		accountDebouncer.Debounce(func() {
+			if s == "" {
+				return
+			}
+
+			err = checkDir()
+			if err != nil {
+				fyne.Do(func() {
+					session.LastDomain = session.Window.Content()
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutAlert(2))
+				})
+				return
+			}
+
+			switch cachedNetwork {
+			case NETWORK_TESTNET:
+				session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + s + ".db"
+			case NETWORK_SIMULATOR:
+				session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + s + ".db"
+			default:
+				session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + s + ".db"
+			}
+
+			if findAccount() {
+				fyne.Do(func() {
+					showFormError(errorText, "account name already exists")
+					btnCreate.Disable()
+					btnCreate.Refresh()
+				})
+			}
+		})
+
 		return nil
+	}
+
+	// Enter key handlers for form submission
+	wPassword.OnSubmitted = func(s string) {
+		session.Window.Canvas().Focus(wPasswordConfirm)
+	}
+	wPasswordConfirm.OnSubmitted = func(s string) {
+		if !btnCreate.Disabled() {
+			btnCreate.OnTapped()
+		} else if session.Name == "" {
+			session.Window.Canvas().Focus(wAccount)
+		}
+	}
+	wAccount.OnSubmitted = func(s string) {
+		if !btnCreate.Disabled() {
+			btnCreate.OnTapped()
+		} else {
+			session.Window.Canvas().Focus(wPassword)
+		}
 	}
 
 	wSpacer := widget.NewLabel(" ")
@@ -1981,6 +2243,16 @@ func layoutRestore() fyne.CanvasObject {
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Network indicator
+	networkName := strings.ToUpper(cachedNetwork)
+	networkColor := colors.Green
+	if cachedNetwork != NETWORK_MAINNET {
+		networkColor = colors.Yellow
+	}
+	networkIndicator := canvas.NewText(networkName, networkColor)
+	networkIndicator.TextSize = 12
+	networkIndicator.Alignment = fyne.TextAlignCenter
 
 	heading2 := canvas.NewText("Success", colors.Green)
 	heading2.TextSize = 22
@@ -2009,6 +2281,18 @@ func layoutRestore() fyne.CanvasObject {
 	seedEntry.MultiLine = true
 	seedEntry.Wrapping = fyne.TextWrapWord
 	seedEntry.SetMinRowsVisible(6)
+	seedEntry.Password = false
+
+	btnToggleSeed := widget.NewButtonWithIcon("", theme.VisibilityIcon(), nil)
+	btnToggleSeed.OnTapped = func() {
+		seedEntry.Password = !seedEntry.Password
+		if seedEntry.Password {
+			btnToggleSeed.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnToggleSeed.SetIcon(theme.VisibilityIcon())
+		}
+		seedEntry.Refresh()
+	}
 
 	btnPasteSeed := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), nil)
 	btnPasteSeed.OnTapped = func() {
@@ -2018,16 +2302,33 @@ func layoutRestore() fyne.CanvasObject {
 		}
 	}
 
-	seedInfo := canvas.NewText(" ", colors.Green)
-	seedInfo.TextSize = 12
+	seedInfo := canvas.NewText(" ", colors.Gray)
+	seedInfo.TextSize = 11
 	seedInfo.Alignment = fyne.TextAlignCenter
 
-	seedEntry.Validator = func(s string) (err error) {
-		errorText.Text = ""
-		errorText.Color = colors.Red
-		errorText.Refresh()
-		seedInfo.Text = ""
+	// Show word count as user types
+	seedEntry.OnChanged = func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			seedInfo.Text = " "
+			seedInfo.Color = colors.Gray
+		} else {
+			wordCount := len(strings.Fields(s))
+			seedInfo.Text = fmt.Sprintf("%d/25 words", wordCount)
+			if wordCount == 24 || wordCount == 25 {
+				seedInfo.Color = colors.Green
+			} else if wordCount > 25 {
+				seedInfo.Color = colors.Red
+			} else {
+				seedInfo.Color = colors.Gray
+			}
+		}
 		seedInfo.Refresh()
+		seedEntry.Validate()
+	}
+
+	seedEntry.Validator = func(s string) (err error) {
+		clearFormText(errorText)
 
 		s = strings.TrimSpace(s)
 		if s == "" {
@@ -2038,12 +2339,9 @@ func layoutRestore() fyne.CanvasObject {
 		words := strings.Fields(s)
 		wordCount := len(words)
 
-		if wordCount != 24 && wordCount != 25 {
+		if wordCount != SeedWordCount24 && wordCount != SeedWordCount25 {
 			btnCreate.Disable()
-			err = errors.New("seed must contain exactly 24 or 25 words")
-			errorText.Text = fmt.Sprintf("%d words detected, expected 24 or 25", wordCount)
-			errorText.Refresh()
-			return err
+			return nil // OnChanged handles the count display
 		}
 
 		invalidWords := []string{}
@@ -2057,50 +2355,80 @@ func layoutRestore() fyne.CanvasObject {
 			btnCreate.Disable()
 			err = errors.New("invalid seed words detected")
 			if len(invalidWords) <= 3 {
-				errorText.Text = fmt.Sprintf("Invalid words: %s", strings.Join(invalidWords, ", "))
+				showFormError(errorText, fmt.Sprintf("Invalid: %s", strings.Join(invalidWords, ", ")))
 			} else {
-				errorText.Text = fmt.Sprintf("%d invalid words detected, starting with: %s...", len(invalidWords), strings.Join(invalidWords[:3], ", "))
+				showFormError(errorText, fmt.Sprintf("%d invalid words", len(invalidWords)))
 			}
-			errorText.Refresh()
 			return err
 		}
 
-		seedInfo.Text = fmt.Sprintf("%d valid words", wordCount)
-		seedInfo.Color = colors.Green
-		seedInfo.Refresh()
 		btnCreate.Enable()
 		return nil
 	}
 
-	hexEntry := widget.NewEntry()
+	hexEntry := NewMobileEntry()
 	hexEntry.SetPlaceHolder("Secret Key (64 character hex)")
+	hexEntry.MultiLine = true
+	hexEntry.Wrapping = fyne.TextWrapWord
+	hexEntry.SetMinRowsVisible(2)
+	hexEntry.Password = true
 	hexEntry.Validator = func(s string) (err error) {
-		_, err = hex.DecodeString(s)
-		if len(s) > 64 || err != nil {
-			err = errors.New("invalid hex key")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+		clearFormText(errorText)
+
+		if s == "" {
 			btnCreate.Disable()
-
-			return
+			return nil
 		}
 
-		errorText.Text = ""
-		errorText.Refresh()
-		if s != "" {
-			btnCreate.Enable()
+		_, err = hex.DecodeString(s)
+		if err != nil {
+			showFormError(errorText, "invalid hex characters")
+			btnCreate.Disable()
+			return err
 		}
 
-		return
+		if len(s) != HexKeyLength {
+			showFormError(errorText, fmt.Sprintf("key must be exactly %d characters (%d entered)", HexKeyLength, len(s)))
+			btnCreate.Disable()
+			return errors.New("invalid key length")
+		}
+
+		btnCreate.Enable()
+		return nil
+	}
+
+	btnToggleHex := widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), nil)
+	btnToggleHex.OnTapped = func() {
+		hexEntry.Password = !hexEntry.Password
+		if hexEntry.Password {
+			btnToggleHex.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnToggleHex.SetIcon(theme.VisibilityIcon())
+		}
+		hexEntry.Refresh()
+	}
+
+	btnPasteHex := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), nil)
+	btnPasteHex.OnTapped = func() {
+		clipboardText := a.Clipboard().Content()
+		if clipboardText != "" {
+			hexEntry.SetText(strings.TrimSpace(clipboardText))
+		}
 	}
 
 	hexSpacer := canvas.NewRectangle(color.Transparent)
-	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, 91))
+	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, 60))
 
 	hexForm := container.NewVBox(
 		rectSpacer,
 		hexEntry,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnToggleHex,
+			btnPasteHex,
+			layout.NewSpacer(),
+		),
 		hexSpacer,
 		errorText,
 	)
@@ -2111,6 +2439,7 @@ func layoutRestore() fyne.CanvasObject {
 		rectSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
+			btnToggleSeed,
 			btnPasteSeed,
 			layout.NewSpacer(),
 		),
@@ -2125,9 +2454,9 @@ func layoutRestore() fyne.CanvasObject {
 	recoveryForm := container.NewVBox(
 		wLanguage,
 		rectSpacer,
-		rectSpacer,
 		wAccount,
 		wPassword,
+		strengthText,
 		wPasswordConfirm,
 		rectSpacer,
 		rectSpacer,
@@ -2138,165 +2467,165 @@ func layoutRestore() fyne.CanvasObject {
 	importFileText.TextSize = 12
 	importFileText.Alignment = fyne.TextAlignCenter
 
+	// Button to open file picker for import
+	btnSelectFile := widget.NewButtonWithIcon("Select Wallet File", theme.FolderOpenIcon(), nil)
+	btnSelectFile.OnTapped = func() {
+		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] File dialog: %s\n", err)
+				showFormError(errorText, "could not import wallet file")
+				return
+			}
+
+			if uri == nil {
+				return // Canceled
+			}
+
+			fileName := uri.URI().String()
+			if uri.URI().MimeType() != "text/plain" {
+				logger.Errorf("[Engram] Cannot import file %s\n", fileName)
+				showFormError(errorText, "cannot import file")
+				return
+			}
+
+			if a.Driver().Device().IsMobile() {
+				fileName = uri.URI().Name()
+			} else {
+				fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
+			}
+
+			if !strings.HasSuffix(fileName, ".db") {
+				logger.Errorf("[Engram] Engram requires .db wallet file\n")
+				showFormError(errorText, "invalid wallet file (must be .db)")
+				return
+			}
+
+			filedata, err := readFromURI(uri)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
+				showFormError(errorText, "cannot read file data")
+				return
+			}
+
+			filePath := ""
+			switch cachedNetwork {
+			case NETWORK_TESTNET:
+				filePath = filepath.Join(AppPath(), "testnet", fileName)
+			case NETWORK_SIMULATOR:
+				filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
+			default:
+				filePath = filepath.Join(AppPath(), "mainnet", fileName)
+			}
+
+			if _, err = os.Stat(filePath); !os.IsNotExist(err) {
+				logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
+				showFormError(errorText, "wallet file already exists")
+				return
+			}
+
+			err = os.WriteFile(filePath, filedata, 0600)
+			if err != nil {
+				logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
+
+			showFormSuccess(errorText, "Wallet imported! Return to login to access your account.")
+
+			if len(fileName) > MaxDisplayFileLen {
+				fileName = fileName[0:MaxDisplayFileLen] + "..."
+			}
+
+			showFormSuccess(importFileText, fileName)
+
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogFileImport.SetLocation(uri)
+			}
+		}
+
+		dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
+		dialogFileImport.SetView(dialog.ListView)
+		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogFileImport.Show()
+	}
+
 	importFileForm := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
-		errorText,
+		container.NewCenter(btnSelectFile),
 		rectSpacer,
 		rectSpacer,
 		importFileText,
 		rectSpacer,
+		errorText,
 		rectSpacer,
 	)
 
 	form := container.NewHBox(
 		layout.NewSpacer(),
 		container.NewVBox(
-			recoveryType,
+			recoveryTypeControl,
 			rectSpacer,
 			recoveryForm,
 		),
 		layout.NewSpacer(),
 	)
 
-	recoveryType.OnChanged = func(s string) {
-		errorText.Text = ""
-		errorText.Refresh()
+	onRecoveryTypeChanged = func(typeIndex int) {
+		clearFormText(errorText)
 
-		switch s {
-		case "Secret Hex Key":
-			wLanguage.Show()
+		switch typeIndex {
+		case 1: // Hex Key
+			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
 			recoveryForm.Objects[8] = hexForm
-		case "Recovery Words":
+			session.Window.Canvas().Focus(hexEntry)
+		case 0: // Recovery Words
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
 			recoveryForm.Objects[8] = seedForm
-		case "Import File":
+			session.Window.Canvas().Focus(seedEntry)
+		case 2: // Import File
 			btnCreate.Disable()
-			importFileText.Text = ""
-			importFileText.Refresh()
+			clearFormText(importFileText)
+			clearFormText(errorText)
 			form.Objects[1].(*fyne.Container).Objects[2] = importFileForm
-			dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
-				if err != nil {
-					logger.Errorf("[Engram] File dialog: %s\n", err)
-					errorText.Text = "could not import wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				if uri == nil {
-					return // Canceled
-				}
-
-				fileName := uri.URI().String()
-				if uri.URI().MimeType() != "text/plain" {
-					logger.Errorf("[Engram] Cannot import file %s\n", fileName)
-					errorText.Text = "cannot import file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				if a.Driver().Device().IsMobile() {
-					fileName = uri.URI().Name()
-				} else {
-					fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
-				}
-
-				if !strings.HasSuffix(fileName, ".db") {
-					logger.Errorf("[Engram] Engram requires .db wallet file\n")
-					errorText.Text = "invalid wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				filedata, err := readFromURI(uri)
-				if err != nil {
-					logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
-					errorText.Text = "cannot read file data"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				filePath := ""
-				switch session.Network {
-				case NETWORK_TESTNET:
-					filePath = filepath.Join(AppPath(), "testnet", fileName)
-				case NETWORK_SIMULATOR:
-					filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
-				default:
-					filePath = filepath.Join(AppPath(), "mainnet", fileName)
-				}
-
-				if _, err = os.Stat(filePath); !os.IsNotExist(err) {
-					logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
-					errorText.Text = "wallet file already exists"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				err = os.WriteFile(filePath, filedata, 0600)
-				if err != nil {
-					logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
-					errorText.Text = "error importing wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				errorText.Text = fmt.Sprintf("%s wallet file imported successfully", strings.ToLower(session.Network))
-				errorText.Color = colors.Green
-				errorText.Refresh()
-
-				if len(fileName) > 50 {
-					fileName = fileName[0:50] + "..."
-				}
-
-				importFileText.Text = fileName
-				importFileText.Color = colors.Green
-				importFileText.Refresh()
-
-			}, session.Window)
-
-			if !a.Driver().Device().IsMobile() {
-				// Open file browser in current directory
-				uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
-				if err == nil {
-					dialogFileImport.SetLocation(uri)
-				} else {
-					logger.Errorf("[Engram] Could not open current directory %s\n", err)
-				}
-			}
-
-			dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
-			dialogFileImport.SetView(dialog.ListView)
-			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
-			dialogFileImport.Show()
 		}
 	}
 
-	body := widget.NewLabel("Your account has been successfully recovered. ")
+	body := widget.NewLabel("Your account has been successfully recovered.")
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
+
+	// QR code placeholder for success screen
+	successQR := canvas.NewImageFromImage(nil)
+	successQR.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	successQR.FillMode = canvas.ImageFillContain
+
+	// Address text for success screen
+	successAddress := widget.NewLabel("")
+	successAddress.Wrapping = fyne.TextWrapBreak
+	successAddress.Alignment = fyne.TextAlignCenter
+	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
 	formSuccess := container.NewHBox(
 		layout.NewSpacer(),
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
 			heading2,
 			rectSpacer,
 			body,
 			rectSpacer,
+			container.NewCenter(successQR),
+			rectSpacer,
+			successAddress,
 			rectSpacer,
 			container.NewCenter(grid),
-			rectSpacer,
 			rectSpacer,
 			btnCopyAddress,
 			rectSpacer,
@@ -2330,140 +2659,92 @@ func layoutRestore() fyne.CanvasObject {
 		var err error
 
 		if findAccount() {
-			err = errors.New("account name already exists")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+			showFormError(errorText, "account name already exists")
 			return
-		} else {
-			errorText.Text = ""
-			errorText.Refresh()
 		}
-
-		getNetwork()
+		clearFormText(errorText)
 
 		var language string
 		var temp *walletapi.Wallet_Disk
 
-		if recoveryType.SelectedIndex() == 1 {
+		if selectedRecoveryType == 1 {
+			// Hex key recovery
 			if wAccount.Text == "" {
-				err = errors.New("enter account name")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
-				return
-			}
-
-			if wLanguage.SelectedIndex() < 0 {
-				err = errors.New("select seed language")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
-				go func() {
-					wLanguage.FocusGained()
-					time.Sleep(time.Second)
-					wLanguage.FocusLost()
-				}()
+				showFormError(errorText, "enter account name")
 				return
 			}
 
 			if wPassword.Text == "" {
-				err = errors.New("enter and confirm a password")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter and confirm a password")
 				return
 			}
 
 			if session.Password != session.PasswordConfirm {
-				err = errors.New("passwords do not match")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "passwords do not match")
 				return
 			}
 
 			if hexEntry.Text == "" {
-				err = errors.New("enter a valid hex key")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter a valid hex key")
 				return
 			}
 
-			if len(hexEntry.Text) > 64 {
-				err = errors.New("key must be less than 65 chars")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+			if len(hexEntry.Text) != HexKeyLength {
+				showFormError(errorText, fmt.Sprintf("key must be exactly %d characters", HexKeyLength))
 				return
 			}
 
 			hexKey, err := hex.DecodeString(hexEntry.Text)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "invalid hex characters")
 				return
 			}
 
 			temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 
-			language = wLanguage.Selected
+			// Default to English for hex key recovery
+			language = "English"
 
 		} else {
+			// Seed phrase recovery
 			if wAccount.Text == "" {
-				err = errors.New("enter account name")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter account name")
 				return
 			}
 
 			if wPassword.Text == "" {
-				err = errors.New("enter and confirm a password")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter and confirm a password")
 				return
 			}
 
 			if session.Password != session.PasswordConfirm {
-				err = errors.New("passwords do not match")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "passwords do not match")
 				return
 			}
 
 			words := strings.TrimSpace(seedEntry.Text)
 
+			// Auto-detect language from seed words
 			language, _, err = mnemonics.Words_To_Key(words)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 
 			temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 		}
 
 		engram.Disk = temp
 
-		if session.Network == NETWORK_MAINNET {
+		if cachedNetwork == NETWORK_MAINNET {
 			engram.Disk.SetNetwork(true)
 		} else {
 			engram.Disk.SetNetwork(false)
@@ -2472,6 +2753,18 @@ func layoutRestore() fyne.CanvasObject {
 		engram.Disk.SetSeedLanguage(language)
 
 		address := engram.Disk.GetAddress().String()
+
+		// Generate QR code for success screen
+		qr, err := qrcode.New(address, qrcode.Highest)
+		if err == nil {
+			qr.BackgroundColor = colors.DarkMatter
+			qr.ForegroundColor = colors.Green
+			successQR.Image = qr.Image(int(ui.Width * 0.45))
+			successQR.Refresh()
+		}
+
+		// Show address text
+		successAddress.SetText(address)
 
 		btnCopyAddress.OnTapped = func() {
 			a.Clipboard().SetContent(address)
@@ -2486,6 +2779,14 @@ func layoutRestore() fyne.CanvasObject {
 		session.Path = ""
 		session.Name = ""
 		tx = Transfers{}
+
+		// Clear sensitive data from form fields
+		wPassword.SetText("")
+		wPasswordConfirm.SetText("")
+		seedEntry.SetText("")
+		hexEntry.SetText("")
+		session.Password = ""
+		session.PasswordConfirm = ""
 
 		btnCreate.Hide()
 		form.Hide()
@@ -2502,7 +2803,7 @@ func layoutRestore() fyne.CanvasObject {
 		rectSpacer,
 		rectSpacer,
 		heading,
-		rectSpacer,
+		networkIndicator,
 		rectSpacer,
 	)
 
