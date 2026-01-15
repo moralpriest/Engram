@@ -270,6 +270,7 @@ func initSettings() {
 	getMode()
 	getDaemon()
 	getGnomon()
+	getRPCCredentials()
 	if a.Driver().Device().IsMobile() {
 		err := tela.SetShardPath(filepath.Join(AppPath(), filepath.Dir(shards.GetPath())))
 		if err != nil {
@@ -511,7 +512,11 @@ func setNetwork(network string) (err error) {
 func getDaemon() (r string) {
 	result, err := GetValue("settings", []byte("endpoint"))
 	if err != nil {
-		r = DEFAULT_REMOTE_DAEMON
+		if checkLocalNode() {
+			r = "127.0.0.1:10102"
+		} else {
+			r = DEFAULT_REMOTE_DAEMON
+		}
 		setDaemon(r)
 		session.Daemon = r
 		globals.Arguments["--daemon-address"] = r
@@ -524,7 +529,34 @@ func getDaemon() (r string) {
 	return
 }
 
-// Set the daemon endpoint setting to the local Graviton tree
+func checkLocalNode() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:10102", 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+func testNodeConnection(address string) bool {
+	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+func testNodeConnectionTimeout(address string, timeout time.Duration) bool {
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+// Set the daemon endpoint setting to local Graviton tree
 func setDaemon(s string) (err error) {
 	StoreValue("settings", []byte("endpoint"), []byte(s))
 	globals.Arguments["--daemon-address"] = s
@@ -667,6 +699,16 @@ func setGnomon(s string) (err error) {
 		gnomon.Active = 0
 	}
 	return
+}
+
+// Get the RPC credentials from local Graviton tree
+func getRPCCredentials() {
+	if user, err := GetValue("settings", []byte("rpc_user")); err == nil && len(user) > 0 {
+		cyberdeck.RPC.user = string(user)
+	}
+	if pass, err := GetValue("settings", []byte("rpc_pass")); err == nil && len(pass) > 0 {
+		cyberdeck.RPC.pass = string(pass)
+	}
 }
 
 /*
