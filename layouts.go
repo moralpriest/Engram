@@ -5245,15 +5245,12 @@ func layoutTransition() fyne.CanvasObject {
 
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 10))
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
-	frame := &iframe{}
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	heading := canvas.NewText("My Settings", colors.Green)
+	heading := canvas.NewText("Settings", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -5283,84 +5280,278 @@ func layoutSettings() fyne.CanvasObject {
 	btnRestore := widget.NewButton("Restore Defaults", nil)
 	btnDelete := widget.NewButton("Clear Local Data", nil)
 
-	entryAddress := widget.NewEntry()
-	entryAddress.Validator = func(s string) (err error) {
-		/*
-			_, err := net.ResolveTCPAddr("tcp", s)
-		*/
-		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
-		test := regexp.MustCompile(regex)
-
-		// Trim off http, https, wss, ws to validate regex on 'actual' uri for connection. If none match, s is just s as normal
-		var ssplit string
-		if strings.HasPrefix(s, "https") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "https://")
-		} else if strings.HasPrefix(s, "http") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "http://")
-		} else if strings.HasPrefix(s, "wss") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "wss://")
-		} else if strings.HasPrefix(s, "ws") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "ws://")
-		} else {
-			// s is s
-			ssplit = s
-		}
-
-		if test.MatchString(ssplit) {
-			entryAddress.SetValidationError(nil)
-			setDaemon(s)
-		} else {
-			err = errors.New("invalid host name")
-			entryAddress.SetValidationError(err)
-		}
-
-		return
+	type NodeItem struct {
+		Address string
+		Status  string
 	}
-	entryAddress.PlaceHolder = "0.0.0.0:10102"
-	entryAddress.SetText(getDaemon())
-	entryAddress.Refresh()
 
-	selectNodes := widget.NewSelect(nil, nil)
-	selectNodes.PlaceHolder = "Select Public Node ..."
-	switch session.Network {
-	case NETWORK_TESTNET:
-		selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-	case NETWORK_SIMULATOR:
-		selectNodes.Options = []string{"127.0.0.1:20000"}
-		selectNodes.PlaceHolder = "Select Simulator Node ..."
-	default:
-		selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
+	mainnetNodes := []NodeItem{
+		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
+		{Address: "127.0.0.1:10102", Status: "unknown"},
 	}
-	selectNodes.OnChanged = func(s string) {
-		if s != "" {
-			err := setDaemon(s)
-			if err == nil {
-				entryAddress.Text = s
-				entryAddress.Refresh()
+	testnetNodes := []NodeItem{
+		{Address: "testnetexplorer.derofoundation.org:40402", Status: "unknown"},
+		{Address: "127.0.0.1:40402", Status: "unknown"},
+	}
+	simulatorNodes := []NodeItem{
+		{Address: "127.0.0.1:20000", Status: "unknown"},
+	}
+
+	getNodesKey := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "testnet_nodes"
+		case NETWORK_SIMULATOR:
+			return "simulator_nodes"
+		default:
+			return "mainnet_nodes"
+		}
+	}
+
+	getDefaultNodes := func(network string) []NodeItem {
+		switch network {
+		case NETWORK_TESTNET:
+			return testnetNodes
+		case NETWORK_SIMULATOR:
+			return simulatorNodes
+		default:
+			return mainnetNodes
+		}
+	}
+
+	loadNodesForNetwork := func(network string) []NodeItem {
+		nodesKey := getNodesKey(network)
+		if data, err := GetValue("settings", []byte(nodesKey)); err == nil && len(data) > 0 {
+			var savedNodes []NodeItem
+			if err := json.Unmarshal(data, &savedNodes); err == nil && len(savedNodes) > 0 {
+				return savedNodes
 			}
-			selectNodes.ClearSelected()
+		}
+		return getDefaultNodes(network)
+	}
+
+	currentNetwork := getNetwork()
+	nodeData := loadNodesForNetwork(currentNetwork)
+
+	nodeContainer := container.NewVBox()
+
+	var updateNodeContainer func()
+
+	updateNodeContainer = func() {
+		nodeContainer.Objects = nil
+
+		for i := range nodeData {
+			i := i // capture loop variable
+			item := &nodeData[i]
+
+			var iconResource fyne.Resource
+			switch item.Status {
+			case "connected":
+				iconResource = theme.ConfirmIcon()
+			case "failed":
+				iconResource = theme.CancelIcon()
+			}
+
+			rowIcon := widget.NewIcon(iconResource)
+
+			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				if len(nodeData) <= 1 {
+					return
+				}
+
+				removedAddress := item.Address
+				wasConnected := item.Status == "connected" || getDaemon() == removedAddress
+
+				nodeData = append(nodeData[:i], nodeData[i+1:]...)
+
+				if wasConnected {
+					newIndex := i - 1
+					if newIndex < 0 {
+						newIndex = 0
+					}
+					if newIndex >= len(nodeData) {
+						newIndex = len(nodeData) - 1
+					}
+					nodeData[newIndex].Status = "connected"
+					setDaemon(nodeData[newIndex].Address)
+
+					for j := range nodeData {
+						if j != newIndex {
+							nodeData[j].Status = "unknown"
+						}
+					}
+				}
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				updateNodeContainer()
+			})
+			removeBtn.Importance = widget.MediumImportance
+			if len(nodeData) <= 1 {
+				removeBtn.Disable()
+			}
+
+			addressLabel := widget.NewLabel(item.Address)
+			addressLabel.Truncation = fyne.TextTruncateEllipsis
+
+			row := container.NewBorder(
+				nil, nil, nil,
+				container.NewHBox(rowIcon, removeBtn),
+				addressLabel,
+			)
+
+			tapBtn := widget.NewButton("", func() {
+				if testNodeConnection(item.Address) {
+					item.Status = "connected"
+					setDaemon(item.Address)
+
+					for j := range nodeData {
+						if j != i {
+							nodeData[j].Status = "unknown"
+						}
+					}
+
+					if data, err := json.Marshal(nodeData); err == nil {
+						StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+					}
+				} else {
+					item.Status = "failed"
+				}
+				updateNodeContainer()
+			})
+			tapBtn.Importance = widget.LowImportance
+			tapBtn.Alignment = widget.ButtonAlignLeading
+			tapBtn.Text = ""
+
+			clickableRow := container.NewMax(
+				tapBtn,
+				row,
+			)
+
+			nodeContainer.Add(clickableRow)
+		}
+		nodeContainer.Refresh()
+	}
+
+	currentDaemon := getDaemon()
+	for i := range nodeData {
+		if nodeData[i].Address == currentDaemon {
+			nodeData[i].Status = "connected"
 		}
 	}
+	updateNodeContainer()
+
+	getNodePlaceholder := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "hostname:40402"
+		case NETWORK_SIMULATOR:
+			return "hostname:20000"
+		default:
+			return "hostname:10102"
+		}
+	}
+
+	entryCustomNode := widget.NewEntry()
+	entryCustomNode.PlaceHolder = getNodePlaceholder(currentNetwork)
+
+	showNodeError := func(err error) {
+		entryCustomNode.Validator = func(s string) error {
+			return err
+		}
+		entryCustomNode.SetValidationError(err)
+		entryCustomNode.FocusGained()
+		entryCustomNode.FocusLost()
+	}
+
+	clearNodeError := func() {
+		entryCustomNode.Validator = nil
+		entryCustomNode.SetValidationError(nil)
+		entryCustomNode.Refresh()
+	}
+
+	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
+		nodeAddress = strings.ReplaceAll(nodeAddress, " ", "")
+		if nodeAddress != "" {
+			// Check for duplicate
+			for _, node := range nodeData {
+				if node.Address == nodeAddress {
+					showNodeError(errors.New("node already exists"))
+					return
+				}
+			}
+
+			if testNodeConnectionTimeout(nodeAddress, 500*time.Millisecond) {
+				clearNodeError()
+
+				for i := range nodeData {
+					nodeData[i].Status = "unknown"
+				}
+
+				nodeData = append(nodeData, NodeItem{
+					Address: nodeAddress,
+					Status:  "connected",
+				})
+				setDaemon(nodeAddress)
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				entryCustomNode.Text = ""
+				entryCustomNode.Refresh()
+				updateNodeContainer()
+			} else {
+				showNodeError(errors.New("node unreachable"))
+			}
+		}
+	})
+	btnAddNode.Importance = widget.MediumImportance
+	btnAddNode.Disable()
+
+	entryCustomNode.OnChanged = func(s string) {
+		clearNodeError()
+		s = strings.TrimSpace(s)
+		if s != "" {
+			btnAddNode.Enable()
+		} else {
+			btnAddNode.Disable()
+		}
+	}
+
+	entrySection := container.NewBorder(nil, nil, nil, btnAddNode, entryCustomNode)
+	entryWrapper := container.NewStack(
+		canvas.NewRectangle(color.Transparent),
+		entrySection,
+	)
+	entryWrapper.Resize(fyne.NewSize(ui.Width*0.9, 35))
 
 	labelScan := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	labelScan.Wrapping = fyne.TextWrapWord
 
 	entryScan := widget.NewEntry()
 	entryScan.PlaceHolder = "# of Latest Blocks (Optional)"
-	entryScan.Validator = func(s string) (err error) {
-		blocks, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			entryScan.SetValidationError(err)
-		} else {
-			entryScan.SetValidationError(nil)
-			if blocks > 0 {
-				session.TrackRecentBlocks = blocks
-			} else {
-				session.TrackRecentBlocks = 0
-			}
+	entryScan.Validator = func(s string) error {
+		if s == "" {
+			return nil
 		}
-
-		return
+		_, err := strconv.ParseInt(s, 10, 64)
+		return err
+	}
+	entryScan.OnChanged = func(s string) {
+		if s == "" {
+			session.TrackRecentBlocks = 0
+			return
+		}
+		if blocks, err := strconv.ParseInt(s, 10, 64); err == nil && blocks > 0 {
+			session.TrackRecentBlocks = blocks
+		} else {
+			session.TrackRecentBlocks = 0
+		}
 	}
 
 	if session.TrackRecentBlocks > 0 {
@@ -5371,39 +5562,38 @@ func layoutSettings() fyne.CanvasObject {
 
 	radioNetwork := widget.NewRadioGroup([]string{NETWORK_MAINNET, NETWORK_TESTNET, NETWORK_SIMULATOR}, nil)
 	radioNetwork.Required = true
-	radioNetwork.Horizontal = false
+	radioNetwork.Horizontal = true
 	radioNetwork.OnChanged = func(s string) {
-		if s == NETWORK_TESTNET {
-			setNetwork(s)
-			selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
-		} else if s == NETWORK_SIMULATOR {
-			setNetwork(s)
-			selectNodes.Options = []string{"127.0.0.1:20000"}
-			selectNodes.PlaceHolder = "Select Simulator Node ..."
-		} else {
-			setNetwork(NETWORK_MAINNET)
-			selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
+		if s != NETWORK_TESTNET && s != NETWORK_SIMULATOR {
+			s = NETWORK_MAINNET
+		}
+		setNetwork(s)
+
+		nodeData = loadNodesForNetwork(s)
+
+		for i := range nodeData {
+			if nodeData[i].Address == getDaemon() {
+				nodeData[i].Status = "connected"
+			} else {
+				nodeData[i].Status = "unknown"
+			}
 		}
 
-		// Change globals.Config mainnet/testnet to match network
 		globals.InitNetwork()
 
-		selectNodes.Refresh()
+		entryCustomNode.PlaceHolder = getNodePlaceholder(s)
+		clearNodeError()
+
+		updateNodeContainer()
 	}
 
 	net, _ := GetValue("settings", []byte("network"))
-
-	if string(net) == NETWORK_TESTNET {
-		radioNetwork.SetSelected(NETWORK_TESTNET)
-	} else if string(net) == NETWORK_SIMULATOR {
-		radioNetwork.SetSelected(NETWORK_SIMULATOR)
-	} else {
+	switch string(net) {
+	case NETWORK_TESTNET, NETWORK_SIMULATOR:
+		radioNetwork.SetSelected(string(net))
+	default:
 		radioNetwork.SetSelected(NETWORK_MAINNET)
 	}
-
-	radioNetwork.Refresh()
 
 	entryUser := widget.NewEntry()
 	entryUser.PlaceHolder = "Username"
@@ -5416,50 +5606,39 @@ func layoutSettings() fyne.CanvasObject {
 
 	entryUser.OnChanged = func(s string) {
 		cyberdeck.RPC.user = s
+		StoreValue("settings", []byte("rpc_user"), []byte(s))
 	}
 
 	entryPass.OnChanged = func(s string) {
 		cyberdeck.RPC.pass = s
+		StoreValue("settings", []byte("rpc_pass"), []byte(s))
 	}
 
 	checkGnomon := widget.NewCheck("Enable Gnomon", nil)
 	checkGnomon.OnChanged = func(b bool) {
 		if b {
 			StoreValue("settings", []byte("gnomon"), []byte("1"))
-			checkGnomon.Checked = true
 			gnomon.Active = 1
 		} else {
 			StoreValue("settings", []byte("gnomon"), []byte("0"))
-			checkGnomon.Checked = false
 			gnomon.Active = 0
 		}
 	}
 
 	gmn, err := GetValue("settings", []byte("gnomon"))
-	if err != nil {
+	if err != nil || string(gmn) == "1" {
 		gnomon.Active = 1
-		StoreValue("settings", []byte("gnomon"), []byte("1"))
 		checkGnomon.Checked = true
-	}
-
-	if string(gmn) == "1" {
-		checkGnomon.Checked = true
+		if err != nil {
+			StoreValue("settings", []byte("gnomon"), []byte("1"))
+		}
 	} else {
+		gnomon.Active = 0
 		checkGnomon.Checked = false
 	}
 
 	labelBack := widget.NewHyperlinkWithStyle("Return to Login", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	labelBack.OnTapped = func() {
-		network := radioNetwork.Selected
-		if network == NETWORK_TESTNET {
-			setNetwork(network)
-		} else if network == NETWORK_SIMULATOR {
-			setNetwork(network)
-		} else {
-			setNetwork(NETWORK_MAINNET)
-		}
-		setDaemon(entryAddress.Text)
-
 		initSettings()
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
@@ -5470,38 +5649,65 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	btnRestore.OnTapped = func() {
-		setNetwork(NETWORK_MAINNET)
-		setDaemon(DEFAULT_REMOTE_DAEMON)
-		setAuthMode("true")
-		setGnomon("1")
+		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
+		restoreLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
+			if confirmed {
+				return
+			}
 
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutSettings())
-		removeOverlays()
+			setNetwork(NETWORK_MAINNET)
+			setDaemon(DEFAULT_REMOTE_DAEMON)
+			setAuthMode("true")
+			setGnomon("1")
+
+			// Clear saved nodes for all networks
+			StoreValue("settings", []byte("mainnet_nodes"), []byte{})
+			StoreValue("settings", []byte("testnet_nodes"), []byte{})
+			StoreValue("settings", []byte("simulator_nodes"), []byte{})
+
+			// Regenerate RPC credentials
+			cyberdeck.RPC.user = newRPCUsername()
+			cyberdeck.RPC.pass = newRPCPassword()
+			StoreValue("settings", []byte("rpc_user"), []byte(cyberdeck.RPC.user))
+			StoreValue("settings", []byte("rpc_pass"), []byte(cyberdeck.RPC.pass))
+
+			resizeWindow(ui.MaxWidth, ui.MaxHeight)
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutSettings())
+			removeOverlays()
+		}, session.Window)
 	}
 
 	statusText := canvas.NewText("", colors.Account)
 	statusText.TextSize = 12
 
 	btnDelete.OnTapped = func() {
-		err := cleanGnomonData()
-		if err != nil {
-			if parseError, ok := err.(*os.PathError); !ok {
-				err = fmt.Errorf("error clearing local %s data", session.Network)
-			} else {
-				err = parseError.Err
+		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
+		clearLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
+			if confirmed {
+				return
 			}
 
-			statusText.Color = colors.Red
-			statusText.Text = err.Error()
-			statusText.Refresh()
-			return
-		}
+			err := cleanGnomonData()
+			if err != nil {
+				if parseError, ok := err.(*os.PathError); !ok {
+					err = fmt.Errorf("error clearing local %s data", session.Network)
+				} else {
+					err = parseError.Err
+				}
 
-		statusText.Color = colors.Green
-		statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
-		statusText.Refresh()
+				statusText.Color = colors.Red
+				statusText.Text = err.Error()
+				statusText.Refresh()
+				return
+			}
+
+			statusText.Color = colors.Green
+			statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
+			statusText.Refresh()
+		}, session.Window)
 	}
 
 	formSettings := container.NewVBox(
@@ -5512,10 +5718,9 @@ func layoutSettings() fyne.CanvasObject {
 		labelNode,
 		rectSpacer,
 		rectSpacer,
-		selectNodes,
+		entryWrapper,
 		rectSpacer,
-		entryAddress,
-		rectSpacer,
+		nodeContainer,
 		rectSpacer,
 		labelScan,
 		rectSpacer,
@@ -5590,12 +5795,7 @@ func layoutSettings() fyne.CanvasObject {
 		nil,
 	)
 
-	layout := container.NewStack(
-		frame,
-		c,
-	)
-
-	return NewVScroll(layout)
+	return NewVScroll(c)
 }
 
 func layoutMessages() fyne.CanvasObject {
