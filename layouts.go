@@ -5298,8 +5298,8 @@ func layoutSettings() fyne.CanvasObject {
 		{Address: "127.0.0.1:20000", Status: "unknown"},
 	}
 
-	getNodesKey := func() string {
-		switch session.Network {
+	getNodesKey := func(network string) string {
+		switch network {
 		case NETWORK_TESTNET:
 			return "testnet_nodes"
 		case NETWORK_SIMULATOR:
@@ -5309,30 +5309,26 @@ func layoutSettings() fyne.CanvasObject {
 		}
 	}
 
-	loadNodesForNetwork := func(network string) []NodeItem {
-		var nodesKey string
-		var defaultNodes []NodeItem
-
+	getDefaultNodes := func(network string) []NodeItem {
 		switch network {
 		case NETWORK_TESTNET:
-			nodesKey = "testnet_nodes"
-			defaultNodes = testnetNodes
+			return testnetNodes
 		case NETWORK_SIMULATOR:
-			nodesKey = "simulator_nodes"
-			defaultNodes = simulatorNodes
+			return simulatorNodes
 		default:
-			nodesKey = "mainnet_nodes"
-			defaultNodes = mainnetNodes
+			return mainnetNodes
 		}
+	}
 
+	loadNodesForNetwork := func(network string) []NodeItem {
+		nodesKey := getNodesKey(network)
 		if data, err := GetValue("settings", []byte(nodesKey)); err == nil && len(data) > 0 {
 			var savedNodes []NodeItem
 			if err := json.Unmarshal(data, &savedNodes); err == nil && len(savedNodes) > 0 {
 				return savedNodes
 			}
 		}
-
-		return defaultNodes
+		return getDefaultNodes(network)
 	}
 
 	currentNetwork := getNetwork()
@@ -5388,7 +5384,7 @@ func layoutSettings() fyne.CanvasObject {
 				}
 
 				if data, err := json.Marshal(nodeData); err == nil {
-					StoreValue("settings", []byte(getNodesKey()), data)
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
 				}
 
 				updateNodeContainer()
@@ -5419,7 +5415,7 @@ func layoutSettings() fyne.CanvasObject {
 					}
 
 					if data, err := json.Marshal(nodeData); err == nil {
-						StoreValue("settings", []byte(getNodesKey()), data)
+						StoreValue("settings", []byte(getNodesKey(session.Network)), data)
 					}
 				} else {
 					item.Status = "failed"
@@ -5503,7 +5499,7 @@ func layoutSettings() fyne.CanvasObject {
 				setDaemon(nodeAddress)
 
 				if data, err := json.Marshal(nodeData); err == nil {
-					StoreValue("settings", []byte(getNodesKey()), data)
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
 				}
 
 				entryCustomNode.Text = ""
@@ -5541,19 +5537,21 @@ func layoutSettings() fyne.CanvasObject {
 	entryScan.PlaceHolder = "# of Latest Blocks (Optional)"
 	entryScan.Validator = func(s string) error {
 		if s == "" {
-			session.TrackRecentBlocks = 0
 			return nil
 		}
-		blocks, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return err
+		_, err := strconv.ParseInt(s, 10, 64)
+		return err
+	}
+	entryScan.OnChanged = func(s string) {
+		if s == "" {
+			session.TrackRecentBlocks = 0
+			return
 		}
-		if blocks > 0 {
+		if blocks, err := strconv.ParseInt(s, 10, 64); err == nil && blocks > 0 {
 			session.TrackRecentBlocks = blocks
 		} else {
 			session.TrackRecentBlocks = 0
 		}
-		return nil
 	}
 
 	if session.TrackRecentBlocks > 0 {
@@ -5566,14 +5564,10 @@ func layoutSettings() fyne.CanvasObject {
 	radioNetwork.Required = true
 	radioNetwork.Horizontal = true
 	radioNetwork.OnChanged = func(s string) {
-		if s == NETWORK_TESTNET {
-			setNetwork(s)
-		} else if s == NETWORK_SIMULATOR {
-			setNetwork(s)
-		} else {
-			setNetwork(NETWORK_MAINNET)
+		if s != NETWORK_TESTNET && s != NETWORK_SIMULATOR {
 			s = NETWORK_MAINNET
 		}
+		setNetwork(s)
 
 		nodeData = loadNodesForNetwork(s)
 
@@ -5594,16 +5588,12 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	net, _ := GetValue("settings", []byte("network"))
-
-	if string(net) == NETWORK_TESTNET {
-		radioNetwork.SetSelected(NETWORK_TESTNET)
-	} else if string(net) == NETWORK_SIMULATOR {
-		radioNetwork.SetSelected(NETWORK_SIMULATOR)
-	} else {
+	switch string(net) {
+	case NETWORK_TESTNET, NETWORK_SIMULATOR:
+		radioNetwork.SetSelected(string(net))
+	default:
 		radioNetwork.SetSelected(NETWORK_MAINNET)
 	}
-
-	radioNetwork.Refresh()
 
 	entryUser := widget.NewEntry()
 	entryUser.PlaceHolder = "Username"
@@ -5636,15 +5626,14 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	gmn, err := GetValue("settings", []byte("gnomon"))
-	if err != nil {
+	if err != nil || string(gmn) == "1" {
 		gnomon.Active = 1
-		StoreValue("settings", []byte("gnomon"), []byte("1"))
 		checkGnomon.Checked = true
-	}
-
-	if string(gmn) == "1" {
-		checkGnomon.Checked = true
+		if err != nil {
+			StoreValue("settings", []byte("gnomon"), []byte("1"))
+		}
 	} else {
+		gnomon.Active = 0
 		checkGnomon.Checked = false
 	}
 
@@ -5660,8 +5649,10 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	btnRestore.OnTapped = func() {
-		dialog.ShowCustomConfirm("Restore Defaults", "Yes", "No", widget.NewLabel("Are you sure you want to restore all settings to their default values?"), func(confirmed bool) {
-			if !confirmed {
+		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
+		restoreLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
+			if confirmed {
 				return
 			}
 
@@ -5675,11 +5666,11 @@ func layoutSettings() fyne.CanvasObject {
 			StoreValue("settings", []byte("testnet_nodes"), []byte{})
 			StoreValue("settings", []byte("simulator_nodes"), []byte{})
 
-			// Clear RPC credentials
-			StoreValue("settings", []byte("rpc_user"), []byte{})
-			StoreValue("settings", []byte("rpc_pass"), []byte{})
-			cyberdeck.RPC.user = ""
-			cyberdeck.RPC.pass = ""
+			// Regenerate RPC credentials
+			cyberdeck.RPC.user = newRPCUsername()
+			cyberdeck.RPC.pass = newRPCPassword()
+			StoreValue("settings", []byte("rpc_user"), []byte(cyberdeck.RPC.user))
+			StoreValue("settings", []byte("rpc_pass"), []byte(cyberdeck.RPC.pass))
 
 			resizeWindow(ui.MaxWidth, ui.MaxHeight)
 			session.Window.SetContent(layoutTransition())
@@ -5692,8 +5683,10 @@ func layoutSettings() fyne.CanvasObject {
 	statusText.TextSize = 12
 
 	btnDelete.OnTapped = func() {
-		dialog.ShowCustomConfirm("Clear Local Data", "Yes", "No", widget.NewLabel(fmt.Sprintf("Are you sure you want to delete all local %s data? This cannot be undone.", strings.ToLower(session.Network))), func(confirmed bool) {
-			if !confirmed {
+		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
+		clearLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
+			if confirmed {
 				return
 			}
 
