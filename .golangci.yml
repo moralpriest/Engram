@@ -1,17 +1,15 @@
 # golangci-lint configuration for Engram
 # https://golangci-lint.run/usage/configuration/
 
-version: "2"
-
 run:
   timeout: 5m
   build-tags:
     - migrated_fynedo
 
 output:
-  formats:
-    text:
-      path: stdout
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
 
 linters:
   enable:
