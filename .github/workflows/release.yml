@@ -154,7 +154,7 @@ jobs:
 
       - name: Build Linux amd64
         env:
-          GOFLAGS: -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
           fyne package -os linux -name Engram -appVersion ${{ needs.verify.outputs.version }} \
             -icon Icon.png -tags migrated_fynedo
@@ -194,7 +194,7 @@ jobs:
 
       - name: Build Windows amd64
         env:
-          GOFLAGS: -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
           fyne package -os windows -name Engram -appVersion ${{ needs.verify.outputs.version }} `
             -icon Icon.png -tags migrated_fynedo
@@ -234,7 +234,7 @@ jobs:
 
       - name: Build macOS amd64
         env:
-          GOFLAGS: -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
           fyne package -os darwin -name Engram -appVersion ${{ needs.verify.outputs.version }} \
             -icon Icon.png -tags migrated_fynedo
@@ -288,7 +288,7 @@ jobs:
 
       - name: Build Android
         env:
-          GOFLAGS: -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
           fyne package -os android/arm64 -name Engram -appVersion ${{ needs.verify.outputs.version }} \
             -appID com.engram.wallet -icon Icon.png -tags migrated_fynedo

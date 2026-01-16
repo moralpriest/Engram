@@ -96,7 +96,7 @@ jobs:
         shell: bash
 
       - name: Build
-        run: go build -v -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
+        run: go build -v -trimpath -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
 
       - name: Verify binary
         run: |
