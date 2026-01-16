@@ -8,10 +8,6 @@ run:
   timeout: 5m
   build-tags:
     - migrated_fynedo
-  exclude-dirs:
-    - vendor
-  exclude-files:
-    - "bundled.*\\.go$"
 
 output:
   formats:
