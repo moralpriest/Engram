@@ -10,9 +10,8 @@ run:
 
 output:
   formats:
-    colored-line-number: {}
-  print-issued-lines: true
-  print-linter-name: true
+    text:
+      path: stdout
 
 linters:
   enable:
