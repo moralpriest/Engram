@@ -78,13 +78,35 @@ fyne package -name Engram -os android/arm64 -appID com.engram.wallet -icon ./Ico
 
 ## CI/CD
 
-This project uses GitHub Actions for continuous integration:
+This project uses GitHub Actions with supply chain security hardening:
 
-- **CI** - Runs on every push/PR: build verification, tests, and linting
-- **Security** - Static analysis with gosec, govulncheck, and Semgrep
-- **Release** - Automated builds for Linux, Windows, macOS, and Android with Sigstore signing
+**Workflows:**
 
-All release artifacts include SHA256 checksums and can be verified with [Cosign](https://www.sigstore.dev/).
+- **CI** - Build verification, tests, and linting on every push/PR
+- **Security** - Static analysis (gosec, govulncheck, CodeQL, Semgrep, Trivy)
+- **Release** - Multi-platform builds with cryptographic signing
+- **Scorecard** - Weekly [OpenSSF Scorecard](https://securityscorecards.dev/) analysis
+
+**Security Features:**
+
+- **SHA-pinned Actions** - All GitHub Actions are pinned to commit SHAs instead of version tags to prevent supply chain attacks via tag hijacking
+- **SLSA Level 3 Provenance** - Cryptographic attestations proving where and how binaries were built
+- **Sigstore Cosign** - Keyless signing of all release artifacts
+- **Harden-Runner** - Network egress monitoring during CI builds
+- **Reproducible Builds** - Deterministic builds with `-trimpath` flag
+- **SBOM** - Software Bill of Materials included with releases
+
+**Verify Downloads:**
+
+```bash
+# Verify with Cosign
+cosign verify-blob engram-*.tar.xz \
+  --bundle engram-*.tar.xz.bundle \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+
+# Verify with GitHub CLI
+gh attestation verify engram-*.tar.xz --owner DEROFDN
+```
 
 ## Contributing
 
