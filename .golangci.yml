@@ -8,6 +8,10 @@ run:
   timeout: 5m
   build-tags:
     - migrated_fynedo
+  exclude-dirs:
+    - vendor
+  exclude-files:
+    - "bundled.*\\.go$"
 
 output:
   formats:
@@ -19,23 +23,14 @@ output:
 linters:
   default: none
   enable:
-    # Default linters
     - gosimple
     - govet
     - ineffassign
     - unused
-
-    # Code quality
     - misspell
-
-    # Security (gosec run separately in security workflow)
     - bodyclose
-
-    # Bug detection
     - nilerr
     - nilnil
-
-    # Style
     - revive
 
   settings:
@@ -85,21 +80,3 @@ linters:
 issues:
   max-issues-per-linter: 50
   max-same-issues: 3
-  exclude-dirs:
-    - vendor
-  exclude-files:
-    - "bundled.*\\.go$"
-  exclude-rules:
-    - path: bundled.*\.go$
-      linters:
-        - all
-
-    - path: main\.go$
-      linters:
-        - forbidigo
-
-    - path: _test\.go$
-      linters:
-        - gosec
-        - dupl
-        - errcheck
