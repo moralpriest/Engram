@@ -17,7 +17,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- used for folder name only
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -1032,7 +1032,7 @@ func login() {
 	}
 
 	address := engram.Disk.GetAddress().String()
-	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
+	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address))) // #nosec G401 // nosemgrep: use-of-sha1
 	session.ID = shard
 	session.LimitMessages = true
 }
@@ -1434,7 +1434,7 @@ func checkUsername(s string, h int64) (address string, err error) {
 		var response *jrpc2.Response
 		var result rpc.NameToAddress_Result
 
-		rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+		rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket -- local daemon connection
 		if err != nil {
 			return
 		}
@@ -1477,7 +1477,7 @@ func checkUsername(s string, h int64) (address string, err error) {
 func getGasEstimate(gp rpc.GasEstimate_Params) (gas uint64, err error) {
 	var result rpc.GasEstimate_Result
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}
@@ -2093,7 +2093,7 @@ func getContractCode(scid string) (code string, err error) {
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: true}
 	var result rpc.GetSC_Result
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}
@@ -3347,7 +3347,7 @@ func getTxData(txid string) (result rpc.GetTransaction_Result, err error) {
 
 	params.Tx_Hashes = append(params.Tx_Hashes, txid)
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}

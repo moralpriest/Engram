@@ -1,0 +1,127 @@
+# golangci-lint configuration for Engram
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  build-tags:
+    - migrated_fynedo
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  enable:
+    # Default linters
+    - gosimple
+    - govet
+    - ineffassign
+    # staticcheck disabled - deprecated API warnings in existing code
+    - unused
+
+    # Formatters disabled - existing formatting inconsistencies
+    # Run `goimports -w .` on codebase to enable these
+
+    # Code quality
+    - misspell
+    # unconvert disabled - pre-existing violations
+    # goconst disabled - pre-existing violations
+    # dupl disabled - pre-existing duplicate code
+
+    # Security (gosec run separately in security workflow)
+    - bodyclose
+
+    # Bug detection
+    - nilerr
+    - nilnil
+
+    # Style
+    - revive
+    # whitespace disabled - pre-existing newline issues
+
+  disable:
+    # Disabled due to pre-existing violations
+    - errcheck    # ~40 violations - enable after cleanup
+    - goconst     # ~10 violations - enable after cleanup
+    - unconvert   # ~3 violations - enable after cleanup
+    - staticcheck # deprecated API warnings - enable after cleanup
+    - gofmt       # formatting inconsistencies - run gofmt on codebase first
+    - goimports   # formatting inconsistencies - run goimports -w . first
+    - whitespace  # newline issues - enable after cleanup
+    - dupl        # duplicate code - enable after cleanup
+    # Too strict for existing codebase
+    - wsl
+    - gocyclo
+    - funlen
+    - lll
+    - gocognit
+    - nestif
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
+
+  misspell:
+    locale: US
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+        disabled: true
+      - name: increment-decrement
+        disabled: true  # Too many x += 1 patterns
+      - name: var-naming
+        disabled: true
+      - name: package-comments
+        disabled: true
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+        disabled: true  # Common pattern in codebase
+      - name: indent-error-flow
+        disabled: true  # Too many existing violations
+      - name: errorf
+      - name: empty-block
+        disabled: true  # Intentional empty blocks exist
+      - name: superfluous-else
+        disabled: true  # Too many existing violations
+      - name: unused-parameter
+        disabled: true
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+issues:
+  exclude-dirs:
+    - vendor
+  exclude-files:
+    - "bundled.*\\.go$"
+  max-issues-per-linter: 50
+  max-same-issues: 3
+
+  exclude-rules:
+    - path: bundled.*\.go$
+      linters:
+        - all
+
+    - path: main\.go$
+      linters:
+        - forbidigo
+
+    - path: _test\.go$
+      linters:
+        - gosec
+        - dupl
+        - errcheck

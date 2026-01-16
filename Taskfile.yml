@@ -1,0 +1,216 @@
+# Taskfile for Engram development
+# Install: go install github.com/go-task/task/v3/cmd/task@latest
+# Usage: task <command>
+# https://taskfile.dev/
+
+version: "3"
+
+vars:
+  APP_NAME: Engram
+  APP_ID: com.engram.wallet
+  VERSION:
+    sh: git describe --tags --always 2>/dev/null | sed 's/^v//' || echo "0.0.0-dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_TAGS: migrated_fynedo
+  BINARY: engram
+  LDFLAGS: -X main.versionString={{.VERSION}}
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # ==================== Development ====================
+
+  build:
+    desc: Build the application
+    cmds:
+      - go build -v -tags {{.BUILD_TAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
+    sources:
+      - "*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - bin/{{.BINARY}}
+
+  run:
+    desc: Build and run the application
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY}}
+
+  test:
+    desc: Run tests with race detector
+    cmds:
+      - go test -v -race -tags {{.BUILD_TAGS}} -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    generates:
+      - coverage.out
+      - coverage.html
+
+  lint:
+    desc: Run linters
+    cmds:
+      - golangci-lint run --timeout=5m
+
+  lint-fix:
+    desc: Run linters and fix issues
+    cmds:
+      - golangci-lint run --fix --timeout=5m
+
+  fmt:
+    desc: Format code
+    cmds:
+      - gofmt -w -s $(find . -name '*.go' -not -name 'bundled*')
+      - goimports -w $(find . -name '*.go' -not -name 'bundled*')
+
+  tidy:
+    desc: Tidy go modules
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  # ==================== Security ====================
+
+  security:
+    desc: Run all security checks
+    cmds:
+      - task: govulncheck
+      - task: gosec
+      - task: gitleaks
+
+  govulncheck:
+    desc: Check for known vulnerabilities
+    cmds:
+      - govulncheck -tags {{.BUILD_TAGS}} ./...
+
+  gosec:
+    desc: Run Go security scanner
+    cmds:
+      - gosec -tags {{.BUILD_TAGS}} ./...
+
+  gitleaks:
+    desc: Scan for secrets
+    cmds:
+      - gitleaks detect --source . --verbose
+
+  # ==================== Packaging ====================
+
+  package-linux:
+    desc: Package for Linux
+    env:
+      GOFLAGS: -ldflags={{.LDFLAGS}}
+    cmds:
+      - fyne package -os linux -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - mv {{.APP_NAME}}.tar.xz dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
+    generates:
+      - dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
+
+  package-windows:
+    desc: Package for Windows
+    env:
+      GOFLAGS: -ldflags={{.LDFLAGS}}
+    cmds:
+      - fyne package -os windows -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - mv {{.APP_NAME}}.exe dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
+    generates:
+      - dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
+
+  package-macos:
+    desc: Package for macOS
+    env:
+      GOFLAGS: -ldflags={{.LDFLAGS}}
+    cmds:
+      - fyne package -os darwin -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
+    generates:
+      - dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz
+
+  package-android:
+    desc: Package for Android
+    env:
+      GOFLAGS: -ldflags={{.LDFLAGS}}
+    cmds:
+      - fyne package -os android/arm64 -name {{.APP_NAME}} -appVersion {{.VERSION}} -appID {{.APP_ID}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
+    generates:
+      - dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
+
+  package-all:
+    desc: Package for all platforms (requires cross-compilation setup)
+    deps: [clean-dist]
+    cmds:
+      - mkdir -p dist
+      - task: package-linux
+
+  # ==================== CI/CD Helpers ====================
+
+  check:
+    desc: Run all checks (format, lint, security, test)
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: security
+      - task: test
+
+  ci:
+    desc: Run CI pipeline locally
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: build
+      - task: test
+
+  changelog:
+    desc: Generate changelog
+    cmds:
+      - git-cliff -o CHANGELOG.md
+
+  # ==================== Cleanup ====================
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - rm -f coverage.out coverage.html
+      - rm -f {{.BINARY}} {{.BINARY}}.exe
+      - rm -f *.apk *.tar.xz *.tar.gz
+      - rm -rf {{.APP_NAME}}.app
+
+  clean-dist:
+    desc: Clean distribution artifacts
+    cmds:
+      - rm -rf dist/
+
+  clean-all:
+    desc: Clean all artifacts
+    deps: [clean, clean-dist]
+
+  # ==================== Setup ====================
+
+  setup:
+    desc: Install development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - go install github.com/securego/gosec/v2/cmd/gosec@latest
+      - go install fyne.io/fyne/v2/cmd/fyne@latest
+      - go install github.com/orhun/git-cliff@latest
+      - echo "Install gitleaks from https://github.com/gitleaks/gitleaks/releases"
+      - 'echo "Install pre-commit: pip install pre-commit"'
+
+  setup-hooks:
+    desc: Install git hooks
+    cmds:
+      - pre-commit install
+      - pre-commit install --hook-type commit-msg
+
+  version:
+    desc: Show version information
+    cmds:
+      - echo "App Version:" {{.VERSION}}
+      - go version
+      - golangci-lint --version || true
+      - fyne version || true

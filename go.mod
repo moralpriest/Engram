@@ -1,6 +1,6 @@
 module github.com/DEROFDN/engram
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.23.1
 

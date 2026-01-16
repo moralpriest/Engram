@@ -1,6 +1,54 @@
+# IDE
 *.idea
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+bin/
+vendor/
+
+# Build artifacts
+engram
+engram.exe
 *.apk
+*.tar.xz
+*.tar.gz
+*.dmg
+*.app/
+dist/
+
+# Fyne
+Engram.exe
+Engram.app/
+Engram.tar.xz
+
+# Test & Coverage
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# Database & Data
 *.db
 datashards*
 mainnet*
 testnet*
+
+# Security scan results
+semgrep-results.json
+trivy-results.sarif
+sbom.spdx.json
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Secrets (should never be committed)
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+.task/
