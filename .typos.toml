@@ -1,0 +1,34 @@
+# Typos configuration for Engram
+# https://github.com/crate-ci/typos
+
+[files]
+extend-exclude = [
+    "bundled*.go",
+    "go.sum",
+    "*.apk",
+    "*.exe",
+    "vendor/",
+]
+
+[default]
+locale = "en-us"
+
+[default.extend-words]
+# Project-specific words that are not typos
+dero = "dero"
+DERO = "DERO"
+Gnomon = "Gnomon"
+gnomon = "gnomon"
+xswd = "xswd"
+XSWD = "XSWD"
+tela = "tela"
+scid = "scid"
+SCID = "SCID"
+ringsize = "ringsize"
+decompile = "decompile"
+
+[default.extend-identifiers]
+# Identifiers (variable names, etc.) that are not typos
+
+[type.go]
+extend-words = {}

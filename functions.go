@@ -17,12 +17,13 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- used for folder name only
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -269,7 +270,7 @@ func initSettings() {
 	getNetwork()
 	getMode()
 	getDaemon()
-	getGnomon()
+	_, _ = getGnomon()
 	getRPCCredentials()
 	if a.Driver().Device().IsMobile() {
 		err := tela.SetShardPath(filepath.Join(AppPath(), filepath.Dir(shards.GetPath())))
@@ -278,7 +279,10 @@ func initSettings() {
 			return
 		}
 
-		os.RemoveAll(tela.GetPath())
+		err = os.RemoveAll(tela.GetPath())
+		if err != nil {
+			logger.Errorf("[Engram] Remove TELA shard: %s\n", err)
+		}
 	}
 }
 
@@ -373,7 +377,11 @@ func StartPulse() {
 								if gnomon.Index.Status == "indexed" {
 									status.Gnomon.FillColor = colors.Green
 								} else {
-									if uint64(gnomon.Index.LastIndexedHeight) < session.WalletHeight-15 {
+									walletHeight := int64(math.MaxInt64)
+									if session.WalletHeight <= uint64(math.MaxInt64) {
+										walletHeight = int64(session.WalletHeight)
+									}
+									if gnomon.Index.LastIndexedHeight < walletHeight-15 {
 										status.Gnomon.FillColor = colors.Red
 									} else {
 										status.Gnomon.FillColor = color.Transparent
@@ -409,7 +417,7 @@ func StartPulse() {
 							status.Cyberdeck.FillColor = colors.Gray
 							status.Gnomon.FillColor = colors.Gray
 							status.EPOCH.FillColor = colors.Gray
-							logger.Printf("[Network] Offline › Last Height: " + strconv.FormatUint(session.WalletHeight, 10) + " / " + strconv.FormatUint(session.DaemonHeight, 10) + "\n")
+							logger.Printf("[Network] Offline › Last Height: %d / %d\n", session.WalletHeight, session.DaemonHeight)
 						}
 
 						// Check for updates and send appropriate notifications
@@ -459,7 +467,7 @@ func getNetwork() (network string) {
 		session.Network = network
 		globals.Arguments["--testnet"] = false
 		globals.Arguments["--simulator"] = false
-		setNetwork(network)
+		_ = setNetwork(network)
 		return
 	} else {
 		if string(result) == NETWORK_TESTNET {
@@ -503,7 +511,7 @@ func setNetwork(network string) (err error) {
 
 	session.Network = s
 
-	StoreValue("settings", []byte("network"), []byte(s))
+	_ = StoreValue("settings", []byte("network"), []byte(s))
 
 	return
 }
@@ -517,7 +525,7 @@ func getDaemon() (r string) {
 		} else {
 			r = DEFAULT_REMOTE_DAEMON
 		}
-		setDaemon(r)
+		_ = setDaemon(r)
 		session.Daemon = r
 		globals.Arguments["--daemon-address"] = r
 		return
@@ -558,7 +566,7 @@ func testNodeConnectionTimeout(address string, timeout time.Duration) bool {
 
 // Set the daemon endpoint setting to local Graviton tree
 func setDaemon(s string) (err error) {
-	StoreValue("settings", []byte("endpoint"), []byte(s))
+	_ = StoreValue("settings", []byte("endpoint"), []byte(s))
 	globals.Arguments["--daemon-address"] = s
 	session.Daemon = s
 	return
@@ -670,7 +678,7 @@ func getGnomon() (r string, err error) {
 		if gnomon.Index != nil {
 			gnomon.Index.Endpoint = getDaemon()
 		}
-		StoreValue("settings", []byte("gnomon"), []byte("1"))
+		_ = StoreValue("settings", []byte("gnomon"), []byte("1"))
 	}
 
 	if string(v) == "1" {
@@ -735,9 +743,9 @@ func getAuthMode() (result string, err error) {
 // Get the auth_mode settings from local Graviton tree
 func setAuthMode(s string) {
 	if s == "true" {
-		StoreValue("settings", []byte("auth_mode"), []byte("true"))
+		_ = StoreValue("settings", []byte("auth_mode"), []byte("true"))
 	} else {
-		StoreValue("settings", []byte("auth_mode"), []byte("false"))
+		_ = StoreValue("settings", []byte("auth_mode"), []byte("false"))
 	}
 }
 
@@ -760,7 +768,7 @@ func closeWallet() {
 		logger.Printf("[Engram] Shutting down wallet services...\n")
 		stopEPOCH()
 		engram.Disk.SetOfflineMode()
-		engram.Disk.Save_Wallet()
+		_ = engram.Disk.Save_Wallet()
 
 		globals.Exit_In_Progress = true
 		engram.Disk.Close_Encrypted_Wallet()
@@ -796,13 +804,13 @@ func closeWallet() {
 		tela.ShutdownTELA()
 
 		if rpc_client.WS != nil {
-			rpc_client.WS.Close()
+			_ = rpc_client.WS.Close()
 			rpc_client.WS = nil
 			logger.Printf("[Engram] Websocket client closed.\n")
 		}
 
 		if rpc_client.RPC != nil {
-			rpc_client.RPC.Close()
+			_ = rpc_client.RPC.Close()
 			rpc_client.RPC = nil
 			logger.Printf("[Engram] RPC client closed.\n")
 		}
@@ -1032,7 +1040,7 @@ func login() {
 	}
 
 	address := engram.Disk.GetAddress().String()
-	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
+	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address))) // #nosec G401 // nosemgrep: use-of-sha1
 	session.ID = shard
 	session.LimitMessages = true
 }
@@ -1434,7 +1442,7 @@ func checkUsername(s string, h int64) (address string, err error) {
 		var response *jrpc2.Response
 		var result rpc.NameToAddress_Result
 
-		rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+		rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket -- local daemon connection
 		if err != nil {
 			return
 		}
@@ -1449,8 +1457,8 @@ func checkUsername(s string, h int64) (address string, err error) {
 			address = ""
 			response, err = rpc_client.RPC.Call(context.Background(), "DERO.NameToAddress", params)
 
-			rpc_client.WS.Close()
-			rpc_client.RPC.Close()
+			_ = rpc_client.WS.Close()
+			_ = rpc_client.RPC.Close()
 
 			if err != nil {
 				return
@@ -1477,7 +1485,7 @@ func checkUsername(s string, h int64) (address string, err error) {
 func getGasEstimate(gp rpc.GasEstimate_Params) (gas uint64, err error) {
 	var result rpc.GasEstimate_Result
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}
@@ -1773,7 +1781,20 @@ func sendMessage(m string, s string, r string) (txid crypto.Hash, err error) {
 		return
 	}
 
-	fees := ((uint64(engram.Disk.GetRingSize()) + 1) * config.FEE_PER_KB) / 4
+	ringSize := engram.Disk.GetRingSize()
+	if ringSize < 0 {
+		ringSize = 0
+	}
+	if ringSize > int(math.MaxInt64-1) {
+		ringSize = int(math.MaxInt64 - 1)
+	}
+	var ringSizeUint uint64
+	if ringSize < 0 {
+		ringSizeUint = 0
+	} else {
+		ringSizeUint = uint64(ringSize)
+	}
+	fees := ((ringSizeUint + 1) * config.FEE_PER_KB) / 4
 
 	logger.Printf("[Message] Calculated Fees: %d\n", fees)
 
@@ -1824,6 +1845,11 @@ func getMessagesFromUser(s string, h uint64) (result []rpc.Entry) {
 		if tx.Incoming {
 			if tx.Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
 				height := int64(tx.Height)
+				if tx.Height > math.MaxInt64 {
+					height = math.MaxInt64
+				} else {
+					height = int64(tx.Height)
+				}
 				check2, err := checkUsername(tx.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string), height)
 				if err != nil {
 					username2 = false
@@ -1884,7 +1910,12 @@ func getMessages(h uint64) (result []string) {
 				if messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) == "" {
 
 				} else {
-					height := int64(messages[m].Height)
+					var height int64
+					if messages[m].Height <= uint64(math.MaxInt64) {
+						height = int64(messages[m].Height) // #nosec G115
+					} else {
+						height = math.MaxInt64
+					}
 					sender, _ := checkUsername(messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string), height)
 					if sender == "" {
 						addr, err := globals.ParseValidateAddress(messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string))
@@ -2093,7 +2124,7 @@ func getContractCode(scid string) (code string, err error) {
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: true}
 	var result rpc.GetSC_Result
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}
@@ -2637,6 +2668,15 @@ func rateTELAOverlay(name, scid string) {
 		}
 
 		rating := (category * 10) + detail
+		if rating < 0 {
+			rating = 0
+		}
+		var ratingUint uint64
+		if rating < 0 {
+			ratingUint = 0
+		} else {
+			ratingUint = uint64(rating)
+		}
 
 		verificationOverlay(
 			true,
@@ -2653,7 +2693,7 @@ func rateTELAOverlay(name, scid string) {
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
 
-				txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
+				txid, err := tela.Rate(engram.Disk, scid, ratingUint)
 				if err != nil {
 					logger.Errorf("[Engram] Rate TX: %s\n", err)
 					return
@@ -3010,7 +3050,7 @@ func getContractHeader(scid crypto.Hash) (name string, desc string, icon string,
 	if headerData == nil {
 		addIndex := make(map[string]*structures.FastSyncImport)
 		addIndex[scid.String()] = &structures.FastSyncImport{}
-		gnomon.Index.AddSCIDToIndex(addIndex, false, true)
+		_ = gnomon.Index.AddSCIDToIndex(addIndex, false, true)
 		switch gnomon.Index.DBType {
 		case "gravdb":
 			headerData = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(scid.String())
@@ -3067,7 +3107,7 @@ func getContractHeader(scid crypto.Hash) (name string, desc string, icon string,
 		if headerData == nil {
 			addIndex := make(map[string]*structures.FastSyncImport)
 			addIndex[structures.MAINNET_GNOMON_SCID] = &structures.FastSyncImport{}
-			gnomon.Index.AddSCIDToIndex(addIndex, false, true)
+			_ = gnomon.Index.AddSCIDToIndex(addIndex, false, true)
 			switch gnomon.Index.DBType {
 			case "gravdb":
 				headerData = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(structures.MAINNET_GNOMON_SCID)
@@ -3309,7 +3349,7 @@ func cleanGnomonData() error {
 	}
 
 	for _, d := range dir {
-		os.RemoveAll(filepath.Join([]string{path, d.Name()}...))
+		_ = os.RemoveAll(filepath.Join([]string{path, d.Name()}...))
 		logger.Printf("[Gnomon] Local Gnomon data has been purged successfully\n")
 	}
 
@@ -3330,7 +3370,7 @@ func cleanWalletData() (err error) {
 	}
 
 	for _, d := range dir {
-		os.RemoveAll(filepath.Join([]string{path, d.Name()}...))
+		_ = os.RemoveAll(filepath.Join([]string{path, d.Name()}...))
 		logger.Printf("[Engram] Local datashard data has been purged successfully\n")
 	}
 
@@ -3347,7 +3387,7 @@ func getTxData(txid string) (result rpc.GetTransaction_Result, err error) {
 
 	params.Tx_Hashes = append(params.Tx_Hashes, txid)
 
-	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	rpc_client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil) // nosemgrep: detect-insecure-websocket
 	if err != nil {
 		return
 	}
@@ -3360,8 +3400,8 @@ func getTxData(txid string) (result rpc.GetTransaction_Result, err error) {
 		return
 	}
 
-	rpc_client.WS.Close()
-	rpc_client.RPC.Close()
+	_ = rpc_client.WS.Close()
+	_ = rpc_client.RPC.Close()
 
 	if result.Status != "OK" {
 		logger.Errorf("[Engram] getTxData TXID: %s (Failed: %s)\n", txid, result.Status)
@@ -4587,6 +4627,7 @@ func scidExist(s []string, str string) bool {
 
 	return false
 }
+
 // Recovery form constants
 const (
 	MaxAccountNameLength = 25

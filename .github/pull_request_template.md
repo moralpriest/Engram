@@ -3,7 +3,8 @@
 **Please include a summary of the changes and the related issue or feature.**
 
 **NOTE**: The merge process is as follows:
-- Your pull request should be directed to `dev` branch. 
+
+- Your pull request should be directed to `dev` branch.
 - When it will be merged in `dev`, we will compile and merge within `dev` and then push into `main` for final release.
 
 Fixes # (issue)
@@ -17,26 +18,26 @@ Fixes # (issue)
 - [ ] (Major) Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] This change requires a documentation update
 
-## Which part is impacted ?
+## Which part is impacted?
 
-  - [ ] UI/UX
-  - [ ] Dashboard
-  - [ ] History
-  - [ ] Send
-  - [ ] Module: Identity
-  - [ ] Module: My Account
-  - [ ] Module: Messages
-  - [ ] Module: Transfers
-  - [ ] Module: Asset Explorer
-  - [ ] Module: Services
-  - [ ] Module: Cyberdeck
-  - [ ] Module: File Manager
-  - [ ] Module: Contract Builder
-  - [ ] Module: Datapad
-  - [ ] Module: TELA
-  - [ ] Misc (documentation, etc...)
+- [ ] UI/UX
+- [ ] Dashboard
+- [ ] History
+- [ ] Send
+- [ ] Module: Identity
+- [ ] Module: My Account
+- [ ] Module: Messages
+- [ ] Module: Transfers
+- [ ] Module: Asset Explorer
+- [ ] Module: Services
+- [ ] Module: Cyberdeck
+- [ ] Module: File Manager
+- [ ] Module: Contract Builder
+- [ ] Module: Datapad
+- [ ] Module: TELA
+- [ ] Misc (documentation, etc...)
 
-## Checklist:
+## Checklist
 
 - [ ] I have performed a self-review of my code
 - [ ] I have commented my code (if applicable)

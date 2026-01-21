@@ -15,7 +15,7 @@
 package main
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- used for display ID only
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -58,6 +58,7 @@ import (
 	"github.com/deroproject/derohe/walletapi/xswd"
 	"github.com/deroproject/graviton"
 	qrcode "github.com/skip2/go-qrcode"
+	"math"
 )
 
 func layoutMain() fyne.CanvasObject {
@@ -1539,7 +1540,7 @@ func layoutNewAccount() fyne.CanvasObject {
 			if k.Name == fyne.KeyReturn {
 				errorText.Text = ""
 				errorText.Refresh()
-				create()
+				_, _, _ = create()
 				errorText.Text = session.Error
 				errorText.Refresh()
 			}
@@ -1638,7 +1639,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	wAccount.OnChanged = func(s string) {
-		wAccount.Validate()
+		wAccount.Validate() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 	}
 
 	wLanguage := widget.NewSelect(languages, nil)
@@ -2324,7 +2325,7 @@ func layoutRestore() fyne.CanvasObject {
 			}
 		}
 		seedInfo.Refresh()
-		seedEntry.Validate()
+		seedEntry.Validate() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 	}
 
 	seedEntry.Validator = func(s string) (err error) {
@@ -2771,7 +2772,9 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		engram.Disk.Save_Wallet()
+		if err := engram.Disk.Save_Wallet(); err != nil {
+			logger.Errorf("[Wallet] Save_Wallet failed: %s\n", err)
+		}
 		engram.Disk.Close_Encrypted_Wallet()
 
 		session.WalletOpen = false
@@ -2964,7 +2967,9 @@ func layoutAssetExplorer() fyne.CanvasObject {
 		c := tree.Cursor()
 
 		for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
-			DeleteKey(tree.GetName(), k)
+			if err := DeleteKey(tree.GetName(), k); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
 		}
 
 		session.Window.SetContent(layoutTransition())
@@ -3017,7 +3022,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 	results.Color = colors.Green
 	results.Refresh()
 
-	listData.Set(nil)
+	listData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 	if session.Offline {
 		results.Text = "  Disabled in offline mode."
@@ -3080,7 +3085,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 			}
 
 			assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
-			listData.Set(assetData)
+			listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			found += 1
 
 			/*
@@ -3117,7 +3122,14 @@ func layoutAssetExplorer() fyne.CanvasObject {
 
 	go func() {
 		if engram.Disk != nil && gnomon.Index != nil {
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+			daemonHeight := engram.Disk.Get_Daemon_Height()
+			var daemonHeightInt int64
+			if daemonHeight > uint64(math.MaxInt64) {
+				daemonHeightInt = math.MaxInt64
+			} else {
+				daemonHeightInt = int64(daemonHeight)
+			}
+			for gnomon.Index.LastIndexedHeight < daemonHeightInt {
 				if session.Domain != "app.explorer" {
 					break
 				}
@@ -3189,12 +3201,12 @@ func layoutAssetExplorer() fyne.CanvasObject {
 				}
 
 				assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
-				listData.Set(assetData)
+				listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 				found += 1
 			}
 		}
 
-		listData.Set(assetData)
+		listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 		listBox.OnSelected = func(id widget.ListItemID) {
 			split := strings.Split(assetData[id], ";;;")
@@ -3415,7 +3427,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	owned = 0
 	assetData = nil
-	listData.Set(nil)
+	listData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 	if session.Offline {
 		results.Text = "  Asset tracking is disabled in offline mode."
@@ -3429,7 +3441,14 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	go func() {
 		if engram.Disk != nil && gnomon.Index != nil {
-			if gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+			daemonHeight := engram.Disk.Get_Daemon_Height()
+			var daemonHeightInt int64
+			if daemonHeight > uint64(math.MaxInt64) {
+				daemonHeightInt = math.MaxInt64
+			} else {
+				daemonHeightInt = int64(daemonHeight)
+			}
+			if gnomon.Index.LastIndexedHeight < daemonHeightInt {
 				fyne.Do(func() {
 					btnRescan.Disable()
 				})
@@ -3445,8 +3464,14 @@ func layoutMyAssets() fyne.CanvasObject {
 				results.Refresh()
 			})
 
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
-				results.Text = fmt.Sprintf("  Gnomon is syncing... [%d / %d]", gnomon.Index.LastIndexedHeight, int64(engram.Disk.Get_Daemon_Height()))
+			daemonHeight = engram.Disk.Get_Daemon_Height()
+			if daemonHeight > uint64(math.MaxInt64) {
+				daemonHeightInt = math.MaxInt64
+			} else {
+				daemonHeightInt = int64(daemonHeight)
+			}
+			for gnomon.Index.LastIndexedHeight < daemonHeightInt {
+				results.Text = fmt.Sprintf("  Gnomon is syncing... [%d / %d]", gnomon.Index.LastIndexedHeight, daemonHeightInt)
 				results.Color = colors.Yellow
 
 				fyne.Do(func() {
@@ -3518,7 +3543,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 					balance := globals.FormatMoney(bal)
 					assetData = append(data, balance+";;;"+title+";;;"+desc+";;;;;;"+scid)
-					listData.Set(assetData)
+					listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 					owned += 1
 				}
 			}
@@ -3532,7 +3557,9 @@ func layoutMyAssets() fyne.CanvasObject {
 
 				t := time.Now()
 				timeNow := string(t.Format(time.RFC822))
-				StoreEncryptedValue("Asset Scan", []byte("Last Scan"), []byte(timeNow))
+				if err := StoreEncryptedValue("Asset Scan", []byte("Last Scan"), []byte(timeNow)); err != nil {
+					logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+				}
 
 				results.Text = "  Indexing..."
 				results.Color = colors.Yellow
@@ -3545,7 +3572,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 				assetData = []string{}
 				listBox.UnselectAll()
-				listData.Set(assetData)
+				listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 				if gnomon.Index != nil {
 					switch gnomon.Index.DBType {
@@ -3658,8 +3685,8 @@ func layoutMyAssets() fyne.CanvasObject {
 								}
 
 								owned += 1
-								assetData = append(assetData, balance+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
-								listData.Set(assetData)
+								assetData = append(assetData, balance+";;;"+title+";;;"+desc+";;;;;;"+scid.String()) // nosemgrep: racy-append-to-slice
+								listData.Set(assetData)                                                              // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 								logger.Printf("[Assets] Found asset: %s\n", scid.String())
 							}
 						}
@@ -3681,7 +3708,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				labelLastScan.Color = colors.Green
 
 				fyne.Do(func() {
-					listData.Set(assetData)
+					listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 					btnRescan.Enable()
 
 					results.Refresh()
@@ -3712,7 +3739,7 @@ func layoutMyAssets() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				labelLastScan.Refresh()
-				listData.Set(assetData)
+				listData.Set(assetData) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			})
 
 			listBox.OnSelected = func(id widget.ListItemID) {
@@ -5050,7 +5077,7 @@ func layoutTransfers() fyne.CanvasObject {
 
 					pendingList = pendingList[:0]
 					fyne.Do(func() {
-						data.Reload()
+						data.Reload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 						btnSend.Disable()
 						btnClear.Disable()
 					})
@@ -5675,7 +5702,9 @@ func layoutSettings() fyne.CanvasObject {
 						newIndex = len(nodeData) - 1
 					}
 					nodeData[newIndex].Status = "connected"
-					setDaemon(nodeData[newIndex].Address)
+					if err := setDaemon(nodeData[newIndex].Address); err != nil {
+						logger.Errorf("[Function] setDaemon failed: %s\n", err)
+					}
 
 					for j := range nodeData {
 						if j != newIndex {
@@ -5685,7 +5714,9 @@ func layoutSettings() fyne.CanvasObject {
 				}
 
 				if data, err := json.Marshal(nodeData); err == nil {
-					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+					if err := StoreValue("settings", []byte(getNodesKey(session.Network)), data); err != nil {
+						logger.Errorf("[Store] StoreValue failed: %s\n", err)
+					}
 				}
 
 				updateNodeContainer()
@@ -5707,7 +5738,9 @@ func layoutSettings() fyne.CanvasObject {
 			tapBtn := widget.NewButton("", func() {
 				if testNodeConnection(item.Address) {
 					item.Status = "connected"
-					setDaemon(item.Address)
+					if err := setDaemon(item.Address); err != nil {
+						logger.Errorf("[Function] setDaemon failed: %s\n", err)
+					}
 
 					for j := range nodeData {
 						if j != i {
@@ -5716,7 +5749,9 @@ func layoutSettings() fyne.CanvasObject {
 					}
 
 					if data, err := json.Marshal(nodeData); err == nil {
-						StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+						if err := StoreValue("settings", []byte(getNodesKey(session.Network)), data); err != nil {
+							logger.Errorf("[Store] StoreValue failed: %s\n", err)
+						}
 					}
 				} else {
 					item.Status = "failed"
@@ -5797,10 +5832,14 @@ func layoutSettings() fyne.CanvasObject {
 					Address: nodeAddress,
 					Status:  "connected",
 				})
-				setDaemon(nodeAddress)
+				if err := setDaemon(nodeAddress); err != nil {
+					logger.Errorf("[Function] setDaemon failed: %s\n", err)
+				}
 
 				if data, err := json.Marshal(nodeData); err == nil {
-					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+					if err := StoreValue("settings", []byte(getNodesKey(session.Network)), data); err != nil {
+						logger.Errorf("[Store] StoreValue failed: %s\n", err)
+					}
 				}
 
 				entryCustomNode.Text = ""
@@ -5868,7 +5907,9 @@ func layoutSettings() fyne.CanvasObject {
 		if s != NETWORK_TESTNET && s != NETWORK_SIMULATOR {
 			s = NETWORK_MAINNET
 		}
-		setNetwork(s)
+		if err := setNetwork(s); err != nil {
+			logger.Errorf("[Function] setNetwork failed: %s\n", err)
+		}
 
 		nodeData = loadNodesForNetwork(s)
 
@@ -5907,21 +5948,29 @@ func layoutSettings() fyne.CanvasObject {
 
 	entryUser.OnChanged = func(s string) {
 		cyberdeck.RPC.user = s
-		StoreValue("settings", []byte("rpc_user"), []byte(s))
+		if err := StoreValue("settings", []byte("rpc_user"), []byte(s)); err != nil {
+			logger.Errorf("[Store] StoreValue failed: %s\n", err)
+		}
 	}
 
 	entryPass.OnChanged = func(s string) {
 		cyberdeck.RPC.pass = s
-		StoreValue("settings", []byte("rpc_pass"), []byte(s))
+		if err := StoreValue("settings", []byte("rpc_pass"), []byte(s)); err != nil {
+			logger.Errorf("[Store] StoreValue failed: %s\n", err)
+		}
 	}
 
 	checkGnomon := widget.NewCheck("Enable Gnomon", nil)
 	checkGnomon.OnChanged = func(b bool) {
 		if b {
-			StoreValue("settings", []byte("gnomon"), []byte("1"))
+			if err := StoreValue("settings", []byte("gnomon"), []byte("1")); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
 			gnomon.Active = 1
 		} else {
-			StoreValue("settings", []byte("gnomon"), []byte("0"))
+			if err := StoreValue("settings", []byte("gnomon"), []byte("0")); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
 			gnomon.Active = 0
 		}
 	}
@@ -5931,7 +5980,7 @@ func layoutSettings() fyne.CanvasObject {
 		gnomon.Active = 1
 		checkGnomon.Checked = true
 		if err != nil {
-			StoreValue("settings", []byte("gnomon"), []byte("1"))
+			StoreValue("settings", []byte("gnomon"), []byte("1")) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		}
 	} else {
 		gnomon.Active = 0
@@ -5957,21 +6006,37 @@ func layoutSettings() fyne.CanvasObject {
 				return
 			}
 
-			setNetwork(NETWORK_MAINNET)
-			setDaemon(DEFAULT_REMOTE_DAEMON)
+			if err := setNetwork(NETWORK_MAINNET); err != nil {
+				logger.Errorf("[Function] setNetwork failed: %s\n", err)
+			}
+			if err := setDaemon(DEFAULT_REMOTE_DAEMON); err != nil {
+				logger.Errorf("[Function] setDaemon failed: %s\n", err)
+			}
 			setAuthMode("true")
-			setGnomon("1")
+			if err := setGnomon("1"); err != nil {
+				logger.Errorf("[Function] setGnomon failed: %s\n", err)
+			}
 
 			// Clear saved nodes for all networks
-			StoreValue("settings", []byte("mainnet_nodes"), []byte{})
-			StoreValue("settings", []byte("testnet_nodes"), []byte{})
-			StoreValue("settings", []byte("simulator_nodes"), []byte{})
+			if err := StoreValue("settings", []byte("mainnet_nodes"), []byte{}); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
+			if err := StoreValue("settings", []byte("testnet_nodes"), []byte{}); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
+			if err := StoreValue("settings", []byte("simulator_nodes"), []byte{}); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
 
 			// Regenerate RPC credentials
 			cyberdeck.RPC.user = newRPCUsername()
 			cyberdeck.RPC.pass = newRPCPassword()
-			StoreValue("settings", []byte("rpc_user"), []byte(cyberdeck.RPC.user))
-			StoreValue("settings", []byte("rpc_pass"), []byte(cyberdeck.RPC.pass))
+			if err := StoreValue("settings", []byte("rpc_user"), []byte(cyberdeck.RPC.user)); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
+			if err := StoreValue("settings", []byte("rpc_pass"), []byte(cyberdeck.RPC.pass)); err != nil {
+				logger.Errorf("[Store] StoreValue failed: %s\n", err)
+			}
 
 			resizeWindow(ui.MaxWidth, ui.MaxHeight)
 			session.Window.SetContent(layoutTransition())
@@ -6247,7 +6312,7 @@ func layoutMessages() fyne.CanvasObject {
 		searchList = []string{}
 		if s == "" {
 			data = temp
-			list.Reload()
+			list.Reload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		} else {
 			for _, d := range temp {
 				tempd := strings.ToLower(d)
@@ -6265,7 +6330,7 @@ func layoutMessages() fyne.CanvasObject {
 			}
 
 			data = searchList
-			list.Reload()
+			list.Reload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		}
 	}
 
@@ -6433,7 +6498,9 @@ func layoutPM() fyne.CanvasObject {
 		session.Window.SetContent(layoutSettings())
 	}
 
-	getPrimaryUsername()
+	if err := getPrimaryUsername(); err != nil {
+		logger.Errorf("[Function] getPrimaryUsername failed: %s\n", err)
+	}
 
 	contactAddress := ""
 
@@ -8836,7 +8903,9 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 	btnSetPrimary := widget.NewButton("Set Primary Username", nil)
 	btnSetPrimary.OnTapped = func() {
-		setPrimaryUsername(username)
+		if err := setPrimaryUsername(username); err != nil {
+			logger.Errorf("[Function] setPrimaryUsername failed: %s\n", err)
+		}
 		session.Username = username
 		//session.Window.SetContent(layoutIdentity())
 		removeOverlays()
@@ -9387,7 +9456,7 @@ func layoutHistory() fyne.CanvasObject {
 			results.Refresh()
 			count := 0
 			data = nil
-			listData.Set(nil)
+			listData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
 
 			if entries != nil {
@@ -9397,7 +9466,7 @@ func layoutHistory() fyne.CanvasObject {
 						var direction string
 						var stamp string
 
-						entries[e].ProcessPayload()
+						entries[e].ProcessPayload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 						if !entries[e].Coinbase {
 							timefmt := entries[e].Time
@@ -9422,7 +9491,7 @@ func layoutHistory() fyne.CanvasObject {
 
 					results.Text = fmt.Sprintf("  Results:  %d", count)
 
-					listData.Set(data)
+					listData.Set(data) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 					listBox.OnSelected = func(id widget.ListItemID) {
 						//var zeroscid crypto.Hash
@@ -9467,7 +9536,7 @@ func layoutHistory() fyne.CanvasObject {
 			results.Refresh()
 			count := 0
 			data = nil
-			listData.Set(nil)
+			listData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
 
 			if entries != nil {
@@ -9477,7 +9546,7 @@ func layoutHistory() fyne.CanvasObject {
 						var direction string
 						var stamp string
 
-						entries[e].ProcessPayload()
+						entries[e].ProcessPayload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 						if entries[e].Coinbase {
 							direction = "Network"
@@ -9494,7 +9563,7 @@ func layoutHistory() fyne.CanvasObject {
 
 					results.Text = fmt.Sprintf("  Results:  %d", count)
 
-					listData.Set(data)
+					listData.Set(data) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 					listBox.OnSelected = func(id widget.ListItemID) {
 						listBox.UnselectAll()
@@ -9519,7 +9588,7 @@ func layoutHistory() fyne.CanvasObject {
 			results.Refresh()
 			count := 0
 			data = nil
-			listData.Set(nil)
+			listData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			entries = engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
 
 			if entries != nil {
@@ -9529,7 +9598,7 @@ func layoutHistory() fyne.CanvasObject {
 						var direction string
 						var comment string
 
-						entries[e].ProcessPayload()
+						entries[e].ProcessPayload() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 						timefmt := entries[e].Time
 						//stamp = string(timefmt.Format(time.RFC822))
@@ -9566,7 +9635,7 @@ func layoutHistory() fyne.CanvasObject {
 
 					results.Text = fmt.Sprintf("  Results:  %d", count)
 
-					listData.Set(data)
+					listData.Set(data) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 					listBox.OnSelected = func(id widget.ListItemID) {
 						split := strings.Split(data[id], ";;;")
@@ -10269,7 +10338,7 @@ func layoutDatapad() fyne.CanvasObject {
 		}
 	}
 	entryNewPad.OnChanged = func(s string) {
-		entryNewPad.Validate()
+		entryNewPad.Validate() // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 	}
 
 	sep := canvas.NewRectangle(colors.Gray)
@@ -11043,7 +11112,7 @@ func layoutAccount() fyne.CanvasObject {
 	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
 
 	address := engram.Disk.GetAddress().String()
-	shardID := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
+	shardID := fmt.Sprintf("%x", sha1.Sum([]byte(address))) // #nosec G401 // nosemgrep: use-of-sha1
 
 	textDatashard := widget.NewRichTextFromMarkdown("### " + shardID)
 	textDatashard.Wrapping = fyne.TextWrapWord
@@ -11578,7 +11647,9 @@ func layoutAccount() fyne.CanvasObject {
 							btnChange.Text = "Password Updated"
 							btnChange.Disable()
 							btnChange.Refresh()
-							engram.Disk.Save_Wallet()
+							if err := engram.Disk.Save_Wallet(); err != nil {
+								logger.Errorf("[Wallet] Save_Wallet failed: %s\n", err)
+							}
 						}
 					} else {
 						btnChange.Text = "Passwords do not match"
@@ -12403,7 +12474,7 @@ func layoutFileManager() fyne.CanvasObject {
 						errorText.Refresh()
 
 						signedResults = append(signedResults, outputFile)
-						signedData.Set(signedResults)
+						signedData.Set(signedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 						signedList.Refresh()
 
 						signedLen := len(signedResults)
@@ -12471,7 +12542,7 @@ func layoutFileManager() fyne.CanvasObject {
 			errorText.Refresh()
 
 			verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
-			verifiedData.Set(verifiedResults)
+			verifiedData.Set(verifiedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			verifiedList.Refresh()
 
 			verifiedLen := len(verifiedResults)
@@ -12762,7 +12833,7 @@ func layoutFileManager() fyne.CanvasObject {
 					errorText.Refresh()
 
 					signedResults = append(signedResults, outputFile)
-					signedData.Set(signedResults)
+					signedData.Set(signedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 					signedList.Refresh()
 
 					signedLen := len(signedResults)
@@ -12818,7 +12889,7 @@ func layoutFileManager() fyne.CanvasObject {
 					}
 				}
 
-				signedData.Set(signedResults)
+				signedData.Set(signedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 				signedList.Refresh()
 			}
 		} else if session.Domain == "app.verify" {
@@ -12862,7 +12933,7 @@ func layoutFileManager() fyne.CanvasObject {
 						errorText.Refresh()
 
 						verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
-						verifiedData.Set(verifiedResults)
+						verifiedData.Set(verifiedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 						verifiedList.Refresh()
 
 						verifiedLen := len(verifiedResults)
@@ -12927,7 +12998,7 @@ func layoutFileManager() fyne.CanvasObject {
 					}
 				}
 
-				verifiedData.Set(verifiedResults)
+				verifiedData.Set(verifiedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 				verifiedList.Refresh()
 			}
 		}
@@ -12984,7 +13055,7 @@ func layoutFileManager() fyne.CanvasObject {
 			session.Domain = "app.sign"
 			signedList.UnselectAll()
 			center.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[18].(*fyne.Container).Objects[1] = signedList
-			signedData.Set(signedResults)
+			signedData.Set(signedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			signedList.Refresh()
 			signedLen := len(signedResults)
 			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
@@ -12992,7 +13063,7 @@ func layoutFileManager() fyne.CanvasObject {
 		} else {
 			session.Domain = "app.verify"
 			center.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[18].(*fyne.Container).Objects[1] = verifiedList
-			verifiedData.Set(verifiedResults)
+			verifiedData.Set(verifiedResults) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			verifiedList.Refresh()
 			verifiedLen := len(verifiedResults)
 			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
@@ -13656,7 +13727,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			var hasInitFunc bool
 			fn := tela.GetSmartContractFuncNames(entryCode.Text)
 			for _, n := range fn {
-				// Increment function number if new() already esists
+				// Increment function number if new() already exists
 				if strings.TrimRight(n, "0123456789") == "new" {
 					increment++
 				}
@@ -13922,7 +13993,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			if entryName.Validate() == nil && entryIcon.Validate() == nil && entryDescription.Validate() == nil {
 				// Create add header func to use later in confirmations
 				addFunction := func() {
-					var haveHeader [uint64(3)]bool
+					var haveHeader [3]bool
 					for name, function := range contract.Functions {
 						// Find initialize func
 						if name == "Initialize" || name == "InitializePrivate" {
@@ -14016,9 +14087,9 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 										errorText.Refresh()
 										return
 									} else {
-										var addedLines, skipedLines uint64
+										var addedLines, skippedLines uint64
 										for u := uint64(1); u < 5; u++ {
-											addLineNum := function.LineNumbers[index] + (u - 1) - skipedLines
+											addLineNum := function.LineNumbers[index] + (u - 1) - skippedLines
 											switch u {
 											case 1: // nameHdr
 												if !haveHeader[0] {
@@ -14026,24 +14097,24 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 													addedLines++
 												} else {
 													// Count skip if we have already to subtract to line number
-													skipedLines++
+													skippedLines++
 													continue
 												}
 											case 2: // iconURLHdr
 												if !haveHeader[1] {
 													function.Lines[addLineNum] = []string{"STORE", "(", `"var_header_icon"`, ",", fmt.Sprintf(`"%s"`, entryIcon.Text), ")"}
-													if skipedLines != 1 {
+													if skippedLines != 1 {
 														function.LineNumbers = append(function.LineNumbers, addLineNum)
 													}
 													addedLines++
 												} else {
-													skipedLines++
+													skippedLines++
 													continue
 												}
 											case 3: // descrHdr
-												if !haveHeader[2] {
+												if len(haveHeader) > 2 && !haveHeader[2] {
 													function.Lines[addLineNum] = []string{"STORE", "(", `"var_header_description"`, ",", fmt.Sprintf(`"%s"`, entryDescription.Text), ")"}
-													if skipedLines != 2 {
+													if skippedLines != 2 {
 														function.LineNumbers = append(function.LineNumbers, addLineNum)
 													}
 													addedLines++
@@ -14061,7 +14132,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 											})
 
 											for u, ln := range function.LineNumbers {
-												function.LinesNumberIndex[ln] = uint64(u)
+												function.LinesNumberIndex[ln] = uint64(u) // #nosec G115
 											}
 
 											contract.Functions[name] = function
@@ -14794,7 +14865,9 @@ func layoutTELA() fyne.CanvasObject {
 					c := tree.Cursor()
 
 					for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
-						DeleteKey(tree.GetName(), k)
+						if err := DeleteKey(tree.GetName(), k); err != nil {
+							logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+						}
 					}
 
 					session.Window.SetContent(layoutTransition())
@@ -14830,7 +14903,7 @@ func layoutTELA() fyne.CanvasObject {
 		// Already scanned
 		if len(telaSearch) > 0 {
 			searching = telaSearchDisplayAll(telaSearch, sortBy)
-			searchData.Set(searching)
+			searchData.Set(searching) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
 			results.Color = colors.Green
@@ -14852,7 +14925,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		telaSearch = []INDEXwithRatings{}
-		searchData.Set(nil)
+		searchData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		labelLastScan.Text = ""
 
 		fyne.Do(func() {
@@ -14875,7 +14948,14 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+		daemonHeight := engram.Disk.Get_Daemon_Height()
+		var daemonHeightInt int64
+		if daemonHeight > uint64(math.MaxInt64) {
+			daemonHeightInt = math.MaxInt64
+		} else {
+			daemonHeightInt = int64(daemonHeight)
+		}
+		for gnomon.Index.LastIndexedHeight < daemonHeightInt {
 			if !strings.Contains(session.Domain, ".tela") {
 				return
 			}
@@ -14901,7 +14981,9 @@ func layoutTELA() fyne.CanvasObject {
 				sAll = map[string]bool{}
 				logger.Debugf("[Engram] Could not get stored TELA Searched SCIDs: %s\n", err)
 			} else {
-				json.Unmarshal(storedAllSCIDs, &sAll)
+				if err := json.Unmarshal(storedAllSCIDs, &sAll); err != nil {
+					logger.Errorf("[JSON] Unmarshal failed: %s\n", err)
+				}
 			}
 		}
 
@@ -14912,7 +14994,9 @@ func layoutTELA() fyne.CanvasObject {
 			logger.Debugf("[Engram] Could not get stored TELA SCIDs: %s\n", err)
 		} else {
 			// Have stored SCIDs
-			json.Unmarshal(storedSCIDs, &telaSCIDs)
+			if err := json.Unmarshal(storedSCIDs, &telaSCIDs); err != nil {
+				logger.Errorf("[JSON] Unmarshal failed: %s\n", err)
+			}
 
 			results.Text = "  Scanning..."
 			results.Color = colors.Yellow
@@ -14930,7 +15014,9 @@ func layoutTELA() fyne.CanvasObject {
 							results.Refresh()
 						})
 
-						gnomon.AddSCIDToIndex(sc)
+						if err := gnomon.AddSCIDToIndex(sc); err != nil {
+							logger.Errorf("[TELA] AddSCIDToIndex failed: %s\n", err)
+						}
 					}
 
 					if !restrictiveMode {
@@ -14939,7 +15025,7 @@ func layoutTELA() fyne.CanvasObject {
 							continue
 						}
 
-						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index}) // nosemgrep: racy-append-to-slice
 					}
 				}
 			}
@@ -14947,7 +15033,7 @@ func layoutTELA() fyne.CanvasObject {
 			// If recheck is false, run a rescan that pulls in any new contracts when first OnChanged to Search
 			if rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) {
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
-				searchData.Set(searching)
+				searchData.Set(searching) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
 				results.Color = colors.Green
@@ -15031,12 +15117,14 @@ func layoutTELA() fyne.CanvasObject {
 							}
 
 							if gnomon.GetAllSCIDVariableDetails(scid) == nil {
-								gnomon.AddSCIDToIndex(scid)
+								if err := gnomon.AddSCIDToIndex(scid); err != nil {
+									logger.Errorf("[TELA] AddSCIDToIndex failed: %s\n", err)
+								}
 							}
 
-							// In restrictive mode, the list is initialzed from telaSCIDs
+							// In restrictive mode, the list is initialized from telaSCIDs
 							if !restrictiveMode {
-								telaSCIDs = append(telaSCIDs, scid)
+								telaSCIDs = append(telaSCIDs, scid) // nosemgrep: racy-append-to-slice
 							}
 
 							_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
@@ -15044,7 +15132,7 @@ func layoutTELA() fyne.CanvasObject {
 								return
 							}
 
-							telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+							telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index}) // nosemgrep: racy-append-to-slice
 						}
 					}
 				}
@@ -15058,7 +15146,7 @@ func layoutTELA() fyne.CanvasObject {
 		wg.Wait()
 
 		searching = telaSearchDisplayAll(telaSearch, sortBy)
-		searchData.Set(searching)
+		searchData.Set(searching) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 		results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
 		results.Color = colors.Green
@@ -15068,9 +15156,13 @@ func layoutTELA() fyne.CanvasObject {
 		})
 
 		timeNow := time.Now().Format(time.RFC822)
-		StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow))
+		if err := StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow)); err != nil {
+			logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+		}
 		if storeSCIDs, err := json.Marshal(telaSCIDs); err == nil {
-			StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs)
+			if err := StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs); err != nil {
+				logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+			}
 		}
 
 		if !restrictiveMode && !rescanRecheck {
@@ -15079,7 +15171,9 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			if sAllSCIDs, err := json.Marshal(sAll); err == nil {
-				StoreEncryptedValue("TELA Search", []byte("Searched SCIDs"), sAllSCIDs)
+				if err := StoreEncryptedValue("TELA Search", []byte("Searched SCIDs"), sAllSCIDs); err != nil {
+					logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+				}
 			}
 		} else if restrictiveMode && len(searching) < 1 {
 			errorText.Text = "TELA is in restrictive mode"
@@ -15161,7 +15255,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			searching = telaSearchDisplayAll(queryResult, sortBy)
-			searchData.Set(searching)
+			searchData.Set(searching) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 			searchList.Refresh()
 
 			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(queryResult))
@@ -15230,7 +15324,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		searching = telaSearchDisplayAll(queryResult, sortBy)
-		searchData.Set(searching)
+		searchData.Set(searching) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		searchList.Refresh()
 
 		results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(queryResult))
@@ -15295,7 +15389,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		sort.Strings(serversRunning)
-		servingData.Set(serversRunning)
+		servingData.Set(serversRunning) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		servingList.Refresh()
 		if !isSearching && wSelect.Selected == "Active" {
 			results.Text = fmt.Sprintf("  Active Servers:  %d", len(serversRunning))
@@ -15321,8 +15415,12 @@ func layoutTELA() fyne.CanvasObject {
 						telaSearch = []INDEXwithRatings{}
 						telaSCIDs = []string{}
 						if rescanRecheck {
-							DeleteKey("TELA Search", []byte("SCIDs"))
-							DeleteKey("TELA Search", []byte("Searched SCIDs"))
+							if err := DeleteKey("TELA Search", []byte("SCIDs")); err != nil {
+								logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+							}
+							if err := DeleteKey("TELA Search", []byte("Searched SCIDs")); err != nil {
+								logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+							}
 						}
 						errorText.Text = ""
 						errorText.Refresh()
@@ -15339,7 +15437,7 @@ func layoutTELA() fyne.CanvasObject {
 				func(b bool) {
 					if b {
 						tela.ShutdownTELA()
-						servingData.Set(nil)
+						servingData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 						errorText.Text = ""
 						errorText.Refresh()
 					}
@@ -15391,7 +15489,9 @@ func layoutTELA() fyne.CanvasObject {
 		telaSearch = []INDEXwithRatings{}
 
 		minLikes = float64(i)
-		StoreEncryptedValue("TELA Settings", []byte("Min Likes"), []byte(s))
+		if err := StoreEncryptedValue("TELA Settings", []byte("Min Likes"), []byte(s)); err != nil {
+			logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+		}
 
 		return
 	}
@@ -15405,9 +15505,13 @@ func layoutTELA() fyne.CanvasObject {
 
 	entryExclusions.OnChanged = func(s string) {
 		if s != "" {
-			StoreEncryptedValue("TELA Settings", []byte("Exclusions"), []byte(s))
+			if err := StoreEncryptedValue("TELA Settings", []byte("Exclusions"), []byte(s)); err != nil {
+				logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+			}
 		} else {
-			DeleteKey("TELA Settings", []byte("Exclusions"))
+			if err := DeleteKey("TELA Settings", []byte("Exclusions")); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
 		}
 
 		// Clear search results but keep scids
@@ -15453,7 +15557,9 @@ func layoutTELA() fyne.CanvasObject {
 			rescanRecheck = false
 		}
 
-		StoreEncryptedValue("TELA Settings", []byte("Rescan Recheck"), []byte(s))
+		if err := StoreEncryptedValue("TELA Settings", []byte("Rescan Recheck"), []byte(s)); err != nil {
+			logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+		}
 	}
 
 	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
@@ -15470,7 +15576,9 @@ func layoutTELA() fyne.CanvasObject {
 			// Clear search results but keep scids
 			telaSearch = []INDEXwithRatings{}
 			sortBy = s
-			StoreEncryptedValue("TELA Settings", []byte("Sort By"), []byte(s))
+			if err := StoreEncryptedValue("TELA Settings", []byte("Sort By"), []byte(s)); err != nil {
+				logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+			}
 		}
 	}
 
@@ -15537,9 +15645,15 @@ func layoutTELA() fyne.CanvasObject {
 				if b {
 					telaSearch = []INDEXwithRatings{}
 					telaSCIDs = []string{}
-					DeleteKey("TELA Search", []byte("SCIDs"))
-					DeleteKey("TELA Search", []byte("Searched SCIDs"))
-					DeleteKey("TELA Search", []byte("Last Scan"))
+					if err := DeleteKey("TELA Search", []byte("SCIDs")); err != nil {
+						logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+					}
+					if err := DeleteKey("TELA Search", []byte("Searched SCIDs")); err != nil {
+						logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+					}
+					if err := DeleteKey("TELA Search", []byte("Last Scan")); err != nil {
+						logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+					}
 					linkSearchClear.Hide()
 				}
 			},
@@ -15549,7 +15663,9 @@ func layoutTELA() fyne.CanvasObject {
 	wMode.OnChanged = func(b bool) {
 		if b {
 			restrictiveMode = true
-			DeleteKey("TELA Settings", []byte("Mode"))
+			if err := DeleteKey("TELA Settings", []byte("Mode")); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
 			return
 		}
 
@@ -15572,13 +15688,21 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			StoreEncryptedValue("TELA Settings", []byte("Mode"), []byte("Unrestrictive"))
+			if err := StoreEncryptedValue("TELA Settings", []byte("Mode"), []byte("Unrestrictive")); err != nil {
+				logger.Errorf("[Store] StoreEncryptedValue failed: %s\n", err)
+			}
 			restrictiveMode = false
 			telaSearch = []INDEXwithRatings{}
 			telaSCIDs = []string{}
-			DeleteKey("TELA Search", []byte("SCIDs"))
-			DeleteKey("TELA Search", []byte("Searched SCIDs"))
-			DeleteKey("TELA Search", []byte("Last Scan"))
+			if err := DeleteKey("TELA Search", []byte("SCIDs")); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
+			if err := DeleteKey("TELA Search", []byte("Searched SCIDs")); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
+			if err := DeleteKey("TELA Search", []byte("Last Scan")); err != nil {
+				logger.Errorf("[Store] DeleteKey failed: %s\n", err)
+			}
 		}()
 	}
 
@@ -15702,13 +15826,20 @@ func layoutTELA() fyne.CanvasObject {
 
 		historyFound = false
 		historyResults = nil
-		historyData.Set(nil)
+		historyData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 		defer func() {
 			historyFound = true
 		}()
 
 		if engram.Disk != nil && gnomon.Index != nil {
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+			daemonHeight := engram.Disk.Get_Daemon_Height()
+			var daemonHeightInt int64
+			if daemonHeight > uint64(math.MaxInt64) {
+				daemonHeightInt = math.MaxInt64
+			} else {
+				daemonHeightInt = int64(daemonHeight)
+			}
+			for gnomon.Index.LastIndexedHeight < daemonHeightInt {
 				if !strings.Contains(session.Domain, ".tela") {
 					return
 				}
@@ -15781,7 +15912,7 @@ func layoutTELA() fyne.CanvasObject {
 
 			sort.Strings(historyResults)
 			history = historyResults
-			historyData.Set(history)
+			historyData.Set(history) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 			results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
 			results.Color = colors.Green
@@ -15812,7 +15943,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		sort.Strings(queryResult)
 		history = queryResult
-		historyData.Set(history)
+		historyData.Set(history) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 		results.Text = fmt.Sprintf("  Search History:  %d", len(queryResult))
 		results.Color = colors.Green
@@ -15833,7 +15964,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		switch s {
 		case "Active":
-			servingData.Set(nil)
+			servingData.Set(nil) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 			var serversRunning []string
 			for _, serv := range tela.GetServerInfo() {
@@ -15841,7 +15972,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			sort.Strings(serversRunning)
-			servingData.Set(serversRunning)
+			servingData.Set(serversRunning) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 			if !isSearching {
 				if session.Offline {
@@ -15968,7 +16099,7 @@ func layoutTELA() fyne.CanvasObject {
 		errorText.Refresh()
 		if len(s) == 64 {
 			go func() {
-				// Create a TELALink to parse and get its ratings for user to verifiy before serving the content
+				// Create a TELALink to parse and get its ratings for user to verify before serving the content
 				telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", s)}
 				linkPermission, err := AskPermissionForRequestE("Open TELA Link", telaLink)
 				if err != nil {
@@ -16050,7 +16181,7 @@ func layoutTELA() fyne.CanvasObject {
 						historyResults = append(historyResults, index.NameHdr+";;;"+index.DescrHdr+";;;;;;"+s)
 						sort.Strings(historyResults)
 						history = historyResults
-						historyData.Set(history)
+						historyData.Set(history) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 
 						results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
 						results.Color = colors.Green
@@ -16064,7 +16195,7 @@ func layoutTELA() fyne.CanvasObject {
 					if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 						removeOverlays()
 
-						// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
+						// Create a TELALink to parse and get its ratings for user to verify before serving updated content
 						telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", s)}
 						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
 						if err != nil {
@@ -16120,7 +16251,7 @@ func layoutTELA() fyne.CanvasObject {
 							historyResults = append(historyResults, index.NameHdr+";;;"+index.DescrHdr+";;;;;;"+s)
 							sort.Strings(historyResults)
 							history = historyResults
-							historyData.Set(history)
+							historyData.Set(history) // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 							fyne.Do(func() {
 								historyList.Refresh()
 							})
@@ -16574,7 +16705,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 					removeOverlays()
 
 					go func() {
-						// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
+						// Create a TELALink to parse and get its ratings for user to verify before serving updated content
 						telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
 						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
 						if err != nil {

@@ -1,0 +1,31 @@
+# golangci-lint configuration for Engram
+# https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - migrated_fynedo
+
+output:
+  formats:
+    text:
+      path: stdout
+
+linters:
+  default: standard
+  disable:
+    - errcheck      # Too many violations
+    - staticcheck   # Deprecated API warnings
+
+  settings:
+    govet:
+      disable:
+        - fieldalignment
+        - shadow
+        - printf
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 3

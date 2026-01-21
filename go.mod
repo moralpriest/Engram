@@ -1,8 +1,6 @@
 module github.com/DEROFDN/engram
 
-go 1.23.0
-
-toolchain go1.23.1
+go 1.24.0
 
 require (
 	fyne.io/fyne/v2 v2.6.2

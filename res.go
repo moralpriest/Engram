@@ -121,19 +121,19 @@ func findAccount() (result bool) {
 }
 
 func checkDir() (err error) {
-	err = os.MkdirAll(filepath.Join(AppPath(), "mainnet"), os.ModePerm)
+	err = os.MkdirAll(filepath.Join(AppPath(), "mainnet"), 0750)
 	if err != nil {
 		return
 	}
-	err = os.MkdirAll(filepath.Join(AppPath(), "testnet"), os.ModePerm)
+	err = os.MkdirAll(filepath.Join(AppPath(), "testnet"), 0750)
 	if err != nil {
 		return
 	}
-	err = os.MkdirAll(filepath.Join(AppPath(), "testnet_simulator"), os.ModePerm)
+	err = os.MkdirAll(filepath.Join(AppPath(), "testnet_simulator"), 0750)
 	if err != nil {
 		return
 	}
-	err = os.MkdirAll(filepath.Join(AppPath(), "datashards"), os.ModePerm)
+	err = os.MkdirAll(filepath.Join(AppPath(), "datashards"), 0750)
 	if err != nil {
 		return
 	}
