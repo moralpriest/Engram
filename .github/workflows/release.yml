@@ -26,6 +26,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      fyne_version: ${{ steps.version.outputs.fyne_version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
     steps:
       - name: Harden Runner
