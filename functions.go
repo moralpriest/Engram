@@ -1844,7 +1844,7 @@ func getMessagesFromUser(s string, h uint64) (result []rpc.Entry) {
 
 		if tx.Incoming {
 			if tx.Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				height := int64(tx.Height)
+				var height int64
 				if tx.Height > math.MaxInt64 {
 					height = math.MaxInt64
 				} else {

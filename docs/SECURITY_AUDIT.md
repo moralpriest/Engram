@@ -14,29 +14,36 @@
 ## Issue Categories
 
 ### G104 - Errors Unhandled (CWE-703)
+
 - **Original count**: 124
 - **Fixed with error handling**: 25
 - **Documented as acceptable**: 99
 
 ### G115 - Integer Overflow (CWE-190)
+
 - **Original count**: 6
 - **Fixed with bounds checking**: 6
 
 ### G602 - Slice Index Out of Range (CWE-118)
+
 - **Original count**: 1
 - **Fixed with bounds check**: 1
 
 ## Fix Categories
 
 ### Storage Functions
+
 Fixed with error logging (`[Store]` prefix):
+
 - `DeleteKey()`
 - `StoreValue()`
 - `StoreEncryptedValue()`
 - `json.Unmarshal()`
 
 ### Custom Functions
+
 Fixed with error logging:
+
 - `setNetwork()` - `[Function]` prefix
 - `setDaemon()` - `[Function]` prefix
 - `setGnomon()` - `[Function]` prefix
@@ -47,13 +54,16 @@ Fixed with error logging:
 - `create()` - return values captured
 
 ### UI Methods (Documented Acceptable)
+
 Fyne data binding methods return errors for API completeness only. No meaningful error handling is possible:
+
 - `Set()` - 39 instances
 - `Validate()` - 3 instances
 - `Reload()` - 3 instances
 - `ProcessPayload()` - 3 instances
 
 Each includes comment:
+
 ```go
 // #nosec G104 // G104 acceptable - Fyne data binding methods return err for API completeness only
 ```
@@ -77,7 +87,7 @@ Each includes comment:
 
 ## Testing
 
-See [TESTING.md](TESTING.md) for security testing instructions.
+See [TESTING.md](../TESTING.md) for security testing instructions.
 
 ## References
 

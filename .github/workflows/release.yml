@@ -52,6 +52,10 @@ jobs:
           VERSION="${TAG#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+          # Extract Fyne-compatible version (x.y.z only, no suffixes)
+          FYNE_VERSION=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          echo "fyne_version=$FYNE_VERSION" >> $GITHUB_OUTPUT
+
           # Check if prerelease
           if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
@@ -60,6 +64,7 @@ jobs:
           fi
 
           echo "Version: $VERSION"
+          echo "Fyne version: $FYNE_VERSION"
 
       - name: Validate semantic version
         run: |
@@ -122,7 +127,7 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os linux -name Engram -appVersion ${{ needs.verify.outputs.version }} \
+          fyne package -os linux -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
             -icon Icon.png -tags migrated_fynedo
           mv Engram.tar.xz engram-${{ needs.verify.outputs.version }}-linux-amd64.tar.xz
 
@@ -162,7 +167,7 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os windows -name Engram -appVersion ${{ needs.verify.outputs.version }} `
+          fyne package -os windows -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} `
             -icon Icon.png -tags migrated_fynedo
           Rename-Item -Path "Engram.exe" -NewName "engram-${{ needs.verify.outputs.version }}-windows-amd64.exe"
 
@@ -202,7 +207,7 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os darwin -name Engram -appVersion ${{ needs.verify.outputs.version }} \
+          fyne package -os darwin -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
             -icon Icon.png -tags migrated_fynedo
           tar -czvf engram-${{ needs.verify.outputs.version }}-macos-amd64.tar.gz Engram.app
 
@@ -256,7 +261,7 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os android/arm64 -name Engram -appVersion ${{ needs.verify.outputs.version }} \
+          fyne package -os android/arm64 -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
             -appID com.engram.wallet -icon Icon.png -tags migrated_fynedo
           mv Engram.apk engram-${{ needs.verify.outputs.version }}-android-arm64.apk
 
