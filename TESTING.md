@@ -33,7 +33,7 @@ All security checks are automated in the CI/CD pipeline via GitHub Actions:
 - **Semgrep**: Fast static analysis with custom rules
 - **Trivy**: Container and filesystem vulnerability scanning
 
-See [`.github/workflows/security.yml`](../.github/workflows/security.yml) for the complete security workflow configuration.
+See [`.github/workflows/security.yml`](.github/workflows/security.yml) for the complete security workflow configuration.
 
 ## Unit Testing
 
@@ -68,4 +68,4 @@ The project includes fuzz testing that runs weekly:
 go test -fuzz=FuzzTarget -fuzztime=60s -tags migrated_fynedo ./...
 ```
 
-See [`.github/workflows/fuzz.yml`](../.github/workflows/fuzz.yml) for automated fuzz testing configuration.
+See [`.github/workflows/fuzz.yml`](.github/workflows/fuzz.yml) for automated fuzz testing configuration.
