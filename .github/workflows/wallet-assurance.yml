@@ -92,13 +92,19 @@ jobs:
 
       - name: Check for insecure crypto patterns
         run: |
+          set -euo pipefail
           echo "Checking for cryptographic hygiene issues..."
+          
+          FAILED=0
           
           # Check for math/rand usage in crypto contexts (should use crypto/rand)
           echo "Checking for math/rand in sensitive code paths..."
-          if grep -r "math/rand" --include="*.go" . | grep -v "_test.go" | grep -v "vendor/" | head -20; then
+          MATCHES=$(grep -r "math/rand" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | head -20 || true)
+          if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: math/rand found in non-test code. Ensure it's not used for cryptographic purposes."
             echo "For cryptographic randomness, use crypto/rand instead."
+            echo "$MATCHES"
+            FAILED=1
           else
             echo "✅ No math/rand usage found in production code"
           fi
@@ -106,10 +112,12 @@ jobs:
           # Check for weak hash algorithms (MD5, SHA1 without #nosec)
           echo ""
           echo "Checking for weak hash usage..."
-          if grep -r "md5\|sha1" --include="*.go" . | grep -v "_test.go" | grep -v "vendor/" | grep -v "#nosec" | grep -v "// nosec" | head -20; then
+          MATCHES=$(grep -rE "md5|sha1" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "#nosec" | grep -v "// nosec" | head -20 || true)
+          if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: Potentially weak hash algorithms found without suppression comments."
             echo "Review these usages and add #nosec comments with justification if appropriate."
-            exit 1
+            echo "$MATCHES"
+            FAILED=1
           else
             echo "✅ All weak hash usages are properly documented with #nosec"
           fi
@@ -117,14 +125,20 @@ jobs:
           # Check for hardcoded keys or secrets patterns
           echo ""
           echo "Checking for potential hardcoded secrets..."
-          if grep -riE "(password|secret|key|token|api_key)\s*[=:]\s*[\"'][^\"']{8,}[\"']" --include="*.go" . | grep -v "_test.go" | grep -v "vendor/" | grep -v "// " | head -10; then
+          MATCHES=$(grep -riE "(password|secret|key|token|api_key)\s*[=:]\s*[^\"']{8,}" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "// " | head -10 || true)
+          if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: Potential hardcoded secrets found. Review manually."
-            exit 1
+            echo "$MATCHES"
+            FAILED=1
           else
             echo "✅ No obvious hardcoded secrets detected"
           fi
           
           echo ""
+          if [ $FAILED -eq 1 ]; then
+            echo "❌ Cryptographic hygiene check failed"
+            exit 1
+          fi
           echo "✅ Cryptographic hygiene check complete"
 
   integration-test:
