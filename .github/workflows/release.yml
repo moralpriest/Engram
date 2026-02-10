@@ -90,9 +90,38 @@ jobs:
     outputs:
       changelog: ${{ steps.changelog.outputs.changelog }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
       - name: Generate changelog
         id: changelog
-        run: echo "changelog=Release v0.6.2" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+          fi
+          
+          # Write changelog to file first
+          cat > /tmp/changelog.md << 'CHANGELOG_EOF'
+          ## What's Changed
+
+          ${COMMITS}
+
+          ## Security
+
+          This release includes signed artifacts and SBOM. See verification instructions below.
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}
+          CHANGELOG_EOF
+          
+          # Read and output
+          echo "changelog=$(cat /tmp/changelog.md)" >> $GITHUB_OUTPUT
 
   build-linux:
     name: Build Linux
@@ -248,7 +277,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b9474de0dd1f7c30b89d5 # v3.2.2
 
       - name: Install Android NDK
         run: |

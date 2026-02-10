@@ -129,17 +129,59 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev
 
-      - name: Run tests
+      - name: Check for test files
+        id: check-tests
         run: |
-          go test -v -race -coverprofile=coverage.out -tags migrated_fynedo ./... || echo "No tests found"
+          TEST_FILES=$(find . -name "*_test.go" -not -path "./vendor/*" | head -1)
+          if [ -z "$TEST_FILES" ]; then
+            echo "has_tests=false" >> $GITHUB_OUTPUT
+            echo "No test files found in repository"
+          else
+            echo "has_tests=true" >> $GITHUB_OUTPUT
+            echo "Found test files:"
+            find . -name "*_test.go" -not -path "./vendor/*"
+          fi
+
+      - name: Run tests
+        if: steps.check-tests.outputs.has_tests == 'true'
+        run: |
+          go test -v -race -coverprofile=coverage.out -tags migrated_fynedo ./...
+
+      - name: Check coverage threshold
+        if: steps.check-tests.outputs.has_tests == 'true'
+        run: |
+          if [ -f coverage.out ]; then
+            COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+            echo "Total coverage: $COVERAGE%"
+            THRESHOLD=5.0
+            if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+              echo "ERROR: Coverage $COVERAGE% is below threshold of $THRESHOLD%"
+              exit 1
+            fi
+            echo "Coverage check passed"
+          else
+            echo "ERROR: No coverage report generated"
+            exit 1
+          fi
 
       - name: Upload coverage
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        if: always()
+        if: always() && steps.check-tests.outputs.has_tests == 'true'
         with:
           name: coverage
           path: coverage.out
           retention-days: 30
+
+      - name: Report test status
+        if: steps.check-tests.outputs.has_tests == 'false'
+        run: |
+          echo "WARNING: No test files found. This is a critical gap for a cryptocurrency wallet."
+          echo "Consider adding unit tests for:"
+          echo "  - Key generation and storage"
+          echo "  - Transaction signing"
+          echo "  - Encryption/decryption"
+          echo "  - Input validation"
+          exit 1
 
   verify-commits:
     name: Verify Signed Commits

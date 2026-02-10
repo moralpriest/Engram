@@ -1,0 +1,30 @@
+# CODEOWNERS for Engram
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback - require review from code owners
+* @moralpriest
+
+# CI/CD workflows - critical for security
+/.github/workflows/ @moralpriest
+/.github/workflows/security.yml @moralpriest
+/.github/workflows/release.yml @moralpriest
+
+# Security policies and documentation
+/SECURITY.md @moralpriest
+/docs/SECURITY_AUDIT.md @moralpriest
+
+# Dependency management
+/go.mod @moralpriest
+/go.sum @moralpriest
+/.github/dependabot.yml @moralpriest
+
+# Build and release scripts
+*.sh @moralpriest
+Makefile @moralpriest
+
+# Cryptographic code
+/crypto*.go @moralpriest
+*wallet*.go @moralpriest
+*key*.go @moralpriest
+*encrypt*.go @moralpriest
+*sign*.go @moralpriest

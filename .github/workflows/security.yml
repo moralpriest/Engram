@@ -43,7 +43,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-    continue-on-error: true # Informational - reports upstream vulnerabilities
+    # BLOCKING: This check must pass. If it fails due to upstream Go vulnerabilities,
+    # update GO_VERSION in workflow to latest stable release
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -65,7 +66,7 @@ jobs:
           cache: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
         run: govulncheck -tags migrated_fynedo ./...
@@ -77,7 +78,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    continue-on-error: true # Informational - may report false positives
+    # BLOCKING: Security issues must be fixed or explicitly suppressed with #nosec
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
@@ -100,7 +101,7 @@ jobs:
 
       - name: Install and run Gosec
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.2
           gosec -exclude=G104,G115,G602 -exclude-dir=vendor -tags migrated_fynedo ./...
 
   codeql:
@@ -152,9 +153,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    continue-on-error: true # Informational - may report false positives
+    # BLOCKING: Static analysis findings must be addressed
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep:1.97.0
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -194,6 +195,7 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
+          exit-code: "1"
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
@@ -207,7 +209,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-    continue-on-error: true # Informational
+    # BLOCKING: New dependencies must be reviewed for security and license compliance
     if: github.event_name == 'pull_request'
     steps:
       - name: Harden Runner
