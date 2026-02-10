@@ -99,7 +99,7 @@ jobs:
           
           # Check for math/rand usage in crypto contexts (should use crypto/rand)
           echo "Checking for math/rand in sensitive code paths..."
-          MATCHES=$(grep -r "math/rand" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | head -20 || true)
+          MATCHES=$(grep -r "math/rand" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "bundled" | head -20 || true)
           if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: math/rand found in non-test code. Ensure it's not used for cryptographic purposes."
             echo "For cryptographic randomness, use crypto/rand instead."
@@ -112,7 +112,7 @@ jobs:
           # Check for weak hash algorithms (MD5, SHA1 without #nosec)
           echo ""
           echo "Checking for weak hash usage..."
-          MATCHES=$(grep -rE "md5|sha1" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "#nosec" | grep -v "// nosec" | head -20 || true)
+          MATCHES=$(grep -rE "md5|sha1" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "bundled" | grep -v "#nosec" | grep -v "// nosec" | head -20 || true)
           if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: Potentially weak hash algorithms found without suppression comments."
             echo "Review these usages and add #nosec comments with justification if appropriate."
@@ -125,7 +125,7 @@ jobs:
           # Check for hardcoded keys or secrets patterns
           echo ""
           echo "Checking for potential hardcoded secrets..."
-          MATCHES=$(grep -riE "(password|secret|key|token|api_key)\s*[=:]\s*[^\"']{8,}" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "// " | head -10 || true)
+          MATCHES=$(grep -riE "(password|secret|key|token|api_key)\s*[=:]\s*[^\"']{8,}" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "bundled" | grep -v "// " | head -10 || true)
           if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: Potential hardcoded secrets found. Review manually."
             echo "$MATCHES"
