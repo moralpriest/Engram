@@ -8,6 +8,7 @@ extend-exclude = [
     "*.apk",
     "*.exe",
     "vendor/",
+    ".trivyignore",
 ]
 
 [default]
@@ -26,6 +27,10 @@ scid = "scid"
 SCID = "SCID"
 ringsize = "ringsize"
 decompile = "decompile"
+# Binary/encoded data fragments that are not typos
+ba = "ba"
+dbe = "dbe"
+daa = "daa"
 
 [default.extend-identifiers]
 # Identifiers (variable names, etc.) that are not typos
