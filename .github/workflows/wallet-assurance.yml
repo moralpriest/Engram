@@ -125,7 +125,9 @@ jobs:
           # Check for hardcoded keys or secrets patterns
           echo ""
           echo "Checking for potential hardcoded secrets..."
-          MATCHES=$(grep -riE "(password|secret|key|token|api_key)\s*[=:]\s*[^\"']{8,}" --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "bundled" | grep -v "// " | head -10 || true)
+          # Only check for actual hardcoded string literals, not variable names
+          # Pattern: variable = "hardcoded_string_with_8+_chars"
+          MATCHES=$(grep -rE '\b(password|secret|key|token|api_key)\s*=\s*"[^"]{8,}"' --include="*.go" . 2>/dev/null | grep -v "_test.go" | grep -v "vendor/" | grep -v "bundled" | head -10 || true)
           if [ -n "$MATCHES" ]; then
             echo "⚠️ WARNING: Potential hardcoded secrets found. Review manually."
             echo "$MATCHES"
