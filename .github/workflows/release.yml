@@ -107,21 +107,21 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
           fi
           
-          # Write changelog to file first
-          cat > /tmp/changelog.md << 'CHANGELOG_EOF'
-          ## What's Changed
-
-          ${COMMITS}
-
-          ## Security
-
-          This release includes signed artifacts and SBOM. See verification instructions below.
-
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}
-          CHANGELOG_EOF
+          # Build changelog with proper variable expansion
+          echo "## What's Changed" > /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "$COMMITS" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "## Security" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
           
-          # Read and output
-          echo "changelog=$(cat /tmp/changelog.md)" >> $GITHUB_OUTPUT
+          # Output for use in release
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/changelog.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
   build-linux:
     name: Build Linux
@@ -277,7 +277,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b9474de0dd1f7c30b89d5 # v3.2.2
+        uses: android-actions/setup-android@v3
 
       - name: Install Android NDK
         run: |
