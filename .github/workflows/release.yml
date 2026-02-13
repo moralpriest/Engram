@@ -365,7 +365,7 @@ jobs:
           output-file: release/sbom.spdx.json
 
       - name: Upload signed artifacts
-        uses: actions/upload-artifact@6f51ac03b93561f10f2f5355f5d0c4c5e0b1d2a3 # v4.4.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: signed-release
           path: release/*
