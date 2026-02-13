@@ -407,7 +407,7 @@ jobs:
               echo "Verifying $file..."
               cosign verify-blob "$file" \
                 --bundle "${file}.bundle" \
-                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/v${{ github.ref_name }}" \
+                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
                 --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
               if [ $? -ne 0 ]; then
                 echo "ERROR: Signature verification failed for $file"
