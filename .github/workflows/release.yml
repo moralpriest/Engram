@@ -102,21 +102,103 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+            ALL_COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges)
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+            ALL_COMMITS=$(git log --pretty=format:"%s (%h)" --no-merges ${PREV_TAG}..HEAD)
           fi
           
-          # Build changelog with proper variable expansion
-          echo "## What's Changed" > /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "$COMMITS" >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "## Security" >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
+          # Categorize commits by conventional commit type
+          FEATS=$(echo "$ALL_COMMITS" | grep "^feat:" | sed 's/^feat:/-/' || true)
+          FIXES=$(echo "$ALL_COMMITS" | grep "^fix:" | sed 's/^fix:/-/' || true)
+          DOCS=$(echo "$ALL_COMMITS" | grep "^docs:" | sed 's/^docs:/-/' || true)
+          REFACTORS=$(echo "$ALL_COMMITS" | grep "^refactor:" | sed 's/^refactor:/-/' || true)
+          PERFS=$(echo "$ALL_COMMITS" | grep "^perf:" | sed 's/^perf:/-/' || true)
+          TESTS=$(echo "$ALL_COMMITS" | grep "^test:" | sed 's/^test:/-/' || true)
+          BUILDS=$(echo "$ALL_COMMITS" | grep "^build:" | sed 's/^build:/-/' || true)
+          CIS=$(echo "$ALL_COMMITS" | grep "^ci:" | sed 's/^ci:/-/' || true)
+          CHORES=$(echo "$ALL_COMMITS" | grep "^chore:" | sed 's/^chore:/-/' || true)
+          STYLES=$(echo "$ALL_COMMITS" | grep "^style:" | sed 's/^style:/-/' || true)
+          REVERTS=$(echo "$ALL_COMMITS" | grep "^revert:" | sed 's/^revert:/-/' || true)
+          OTHER=$(echo "$ALL_COMMITS" | grep -v "^feat:\|^fix:\|^docs:\|^refactor:\|^perf:\|^test:\|^build:\|^ci:\|^chore:\|^style:\|^revert:" | sed 's/^/- /' || true)
+          
+          # Build categorized changelog
+          {
+            echo "## What's Changed"
+            echo ""
+            
+            if [ -n "$FEATS" ]; then
+              echo "### ✨ Features"
+              echo "$FEATS"
+              echo ""
+            fi
+            
+            if [ -n "$FIXES" ]; then
+              echo "### 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+            
+            if [ -n "$DOCS" ]; then
+              echo "### 📚 Documentation"
+              echo "$DOCS"
+              echo ""
+            fi
+            
+            if [ -n "$PERFS" ]; then
+              echo "### ⚡ Performance"
+              echo "$PERFS"
+              echo ""
+            fi
+            
+            if [ -n "$REFACTORS" ]; then
+              echo "### 🔨 Refactoring"
+              echo "$REFACTORS"
+              echo ""
+            fi
+            
+            if [ -n "$TESTS" ]; then
+              echo "### 🧪 Tests"
+              echo "$TESTS"
+              echo ""
+            fi
+            
+            if [ -n "$BUILDS" ] || [ -n "$CIS" ]; then
+              echo "### 📦 Build & CI"
+              echo "$BUILDS"
+              echo "$CIS"
+              echo ""
+            fi
+            
+            if [ -n "$STYLES" ]; then
+              echo "### 💄 Style"
+              echo "$STYLES"
+              echo ""
+            fi
+            
+            if [ -n "$CHORES" ]; then
+              echo "### 🔧 Chores"
+              echo "$CHORES"
+              echo ""
+            fi
+            
+            if [ -n "$REVERTS" ]; then
+              echo "### ⏪ Reverts"
+              echo "$REVERTS"
+              echo ""
+            fi
+            
+            if [ -n "$OTHER" ]; then
+              echo "### 📝 Other Changes"
+              echo "$OTHER"
+              echo ""
+            fi
+            
+            echo "## Security"
+            echo ""
+            echo "This release includes signed artifacts and SBOM. See verification instructions below."
+            echo ""
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}"
+          } > /tmp/changelog.md
           
           # Output for use in release
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -302,10 +384,50 @@ jobs:
           path: engram-*.apk
           retention-days: 5
 
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    needs: verify
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+
+      - name: Build iOS (unsigned)
+        env:
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+        run: |
+          fyne package -os ios -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
+            -appID com.engram.wallet -icon Icon.png -tags migrated_fynedo
+          zip -r engram-${{ needs.verify.outputs.version }}-ios-unsigned.zip Engram.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: ios-build
+          path: engram-*.zip
+          retention-days: 5
+
   sign-artifacts:
     name: Sign Artifacts
     runs-on: ubuntu-latest
-    needs: [verify, changelog, build-linux, build-windows, build-macos, build-android]
+    needs: [verify, changelog, build-linux, build-windows, build-macos, build-android, build-ios]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -331,7 +453,7 @@ jobs:
         id: collect
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.apk" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.apk" -o -name "*.zip" \) -exec cp {} release/ \;
           ls -la release/
           echo "release-path=release" >> $GITHUB_OUTPUT
 
@@ -347,7 +469,7 @@ jobs:
       - name: Sign artifacts with Cosign
         run: |
           cd release
-          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+          for file in *.tar.xz *.tar.gz *.exe *.apk *.zip; do
             if [ -f "$file" ]; then
               cosign sign-blob --yes "$file" --bundle "${file}.bundle"
             fi
@@ -402,7 +524,7 @@ jobs:
         run: |
           cd release
           echo "Verifying artifact signatures..."
-          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+          for file in *.tar.xz *.tar.gz *.exe *.apk *.zip; do
             if [ -f "$file" ] && [ -f "${file}.bundle" ]; then
               echo "Verifying $file..."
               cosign verify-blob "$file" \
@@ -424,7 +546,7 @@ jobs:
         run: |
           cd release
           echo "Verifying artifact attestations..."
-          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+          for file in *.tar.xz *.tar.gz *.exe *.apk *.zip; do
             if [ -f "$file" ]; then
               echo "Verifying attestation for $file..."
               gh attestation verify "$file" --owner ${{ github.repository_owner }}
