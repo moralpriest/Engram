@@ -4731,3 +4731,148 @@ func (d *Debouncer) Debounce(fn func()) {
 
 	d.timer = time.AfterFunc(d.duration, fn)
 }
+
+// Recovery form constants
+const (
+	MaxAccountNameLength = 25
+	HexKeyLength         = 64
+	SeedWordCount24      = 24
+	SeedWordCount25      = 25
+	MaxDisplayFileLen    = 50
+)
+
+// showFormError displays an error message on a canvas.Text element
+func showFormError(text *canvas.Text, msg string) {
+	text.Text = msg
+	text.Color = colors.Red
+	text.Refresh()
+}
+
+// showFormSuccess displays a success message on a canvas.Text element
+func showFormSuccess(text *canvas.Text, msg string) {
+	text.Text = msg
+	text.Color = colors.Green
+	text.Refresh()
+}
+
+// clearFormText clears a canvas.Text element
+func clearFormText(text *canvas.Text) {
+	text.Text = ""
+	text.Refresh()
+}
+
+// validateRecoveryForm checks if the recovery form has valid account name and matching passwords
+func validateRecoveryForm(name, password, passwordConfirm string) bool {
+	return len(password) > 0 && password == passwordConfirm && name != ""
+}
+
+// PasswordStrength represents the strength level of a password
+type PasswordStrength int
+
+const (
+	PasswordWeak PasswordStrength = iota
+	PasswordFair
+	PasswordGood
+	PasswordStrong
+)
+
+// getPasswordStrength evaluates password strength based on length and character variety
+func getPasswordStrength(password string) PasswordStrength {
+	if len(password) == 0 {
+		return PasswordWeak
+	}
+
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, c := range password {
+		switch {
+		case unicode.IsUpper(c):
+			hasUpper = true
+		case unicode.IsLower(c):
+			hasLower = true
+		case unicode.IsDigit(c):
+			hasDigit = true
+		case unicode.IsPunct(c) || unicode.IsSymbol(c):
+			hasSpecial = true
+		}
+	}
+
+	score := 0
+	if len(password) >= 8 {
+		score++
+	}
+	if len(password) >= 12 {
+		score++
+	}
+	if hasUpper && hasLower {
+		score++
+	}
+	if hasDigit {
+		score++
+	}
+	if hasSpecial {
+		score++
+	}
+
+	switch {
+	case score >= 4:
+		return PasswordStrong
+	case score >= 3:
+		return PasswordGood
+	case score >= 2:
+		return PasswordFair
+	default:
+		return PasswordWeak
+	}
+}
+
+// getPasswordStrengthText returns a human-readable description of password strength
+func getPasswordStrengthText(strength PasswordStrength) string {
+	switch strength {
+	case PasswordStrong:
+		return "Strong"
+	case PasswordGood:
+		return "Good"
+	case PasswordFair:
+		return "Fair"
+	default:
+		return "Weak"
+	}
+}
+
+// getPasswordStrengthColor returns the color associated with password strength
+func getPasswordStrengthColor(strength PasswordStrength) color.Color {
+	switch strength {
+	case PasswordStrong:
+		return colors.Green
+	case PasswordGood:
+		return colors.Green
+	case PasswordFair:
+		return colors.Yellow
+	default:
+		return colors.Red
+	}
+}
+
+// Debouncer provides debounced function execution
+type Debouncer struct {
+	mu       sync.Mutex
+	timer    *time.Timer
+	duration time.Duration
+}
+
+// NewDebouncer creates a new Debouncer with the specified duration
+func NewDebouncer(duration time.Duration) *Debouncer {
+	return &Debouncer{duration: duration}
+}
+
+// Debounce executes the function after the debounce duration, canceling any pending execution
+func (d *Debouncer) Debounce(fn func()) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.timer != nil {
+		d.timer.Stop()
+	}
+
+	d.timer = time.AfterFunc(d.duration, fn)
+}
