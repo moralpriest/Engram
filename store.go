@@ -16,7 +16,7 @@
 package main
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- used for folder name only
 	"errors"
 	"fmt"
 	"os"
@@ -81,7 +81,7 @@ func GetShard() (result string, err error) {
 		return
 	} else {
 		address := engram.Disk.GetAddress().String()
-		result = filepath.Join(AppPath(), "datashards", fmt.Sprintf("%x", sha1.Sum([]byte(address))))
+		result = filepath.Join(AppPath(), "datashards", fmt.Sprintf("%x", sha1.Sum([]byte(address)))) // #nosec G401 // nosemgrep: use-of-sha1
 		return
 	}
 }
