@@ -57,8 +57,10 @@ const (
 	NETWORK_SIMULATOR                = "Simulator"
 )
 
-// Globals
-var version = semver.MustParse("0.6.2")
+// Version info - injected at build time via ldflags
+// Build with: go build -ldflags "-X main.versionString=1.0.0"
+var versionString = "0.6.2"
+var version semver.Version
 var a fyne.App
 var engram Engram
 var session Session
@@ -77,6 +79,13 @@ var nav Navigation
 var ui UI
 
 func main() {
+	// Parse version from ldflags-injected string
+	var err error
+	version, err = semver.Parse(versionString)
+	if err != nil {
+		version = semver.MustParse("0.0.0-dev")
+	}
+
 	// Initialize application
 	a = app.NewWithID("Engram")
 	a.Settings().SetTheme(themes.main)
