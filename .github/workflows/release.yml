@@ -389,6 +389,7 @@ jobs:
     runs-on: macos-latest
     needs: verify
     timeout-minutes: 30
+    continue-on-error: true
     permissions:
       contents: read
     steps:
