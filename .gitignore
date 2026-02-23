@@ -4,3 +4,12 @@
 datashards*
 mainnet*
 testnet*
+
+# Build artifacts
+bin/
+dist/
+.task/
+
+# Test artifacts
+coverage.out
+coverage.html
