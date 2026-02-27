@@ -409,7 +409,7 @@ func StartPulse() {
 							status.Cyberdeck.FillColor = colors.Gray
 							status.Gnomon.FillColor = colors.Gray
 							status.EPOCH.FillColor = colors.Gray
-							logger.Printf("[Network] Offline › Last Height: " + strconv.FormatUint(session.WalletHeight, 10) + " / " + strconv.FormatUint(session.DaemonHeight, 10) + "\n")
+							logger.Printf("[Network] Offline › Last Height: %d / %d\n", session.WalletHeight, session.DaemonHeight)
 						}
 
 						// Check for updates and send appropriate notifications
@@ -4587,6 +4587,7 @@ func scidExist(s []string, str string) bool {
 
 	return false
 }
+
 // Recovery form constants
 const (
 	MaxAccountNameLength = 25
