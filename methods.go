@@ -128,6 +128,10 @@ func HandleTELALinks(ctx context.Context, p TELALink_Params) (result TELALink_Re
 				return
 			}
 
+			if len(args) >= 2 {
+				pushTELANavigation(args[1])
+			}
+
 			err = fyne.CurrentApp().OpenURL(url)
 			if err != nil {
 				err = fmt.Errorf("could not open tela link: %s", err)
