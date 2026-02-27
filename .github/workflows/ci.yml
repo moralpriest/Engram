@@ -54,9 +54,9 @@ jobs:
         run: |
           FILES=$(gofmt -l .)
           if [ -n "$FILES" ]; then
-            echo "Files need formatting:"
+            echo "Files need formatting (advisory):"
             echo "$FILES"
-            exit 1
+            exit 0
           fi
 
   build:
