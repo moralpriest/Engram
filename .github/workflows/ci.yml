@@ -45,12 +45,10 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
-      - name: Run golangci-lint
-        continue-on-error: true
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v6.5.0
-        with:
-          version: latest
-          args: --timeout=5m
+      - name: Run golangci-lint (advisory)
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+          golangci-lint run --timeout=5m || true
 
       - name: Check formatting
         run: |
