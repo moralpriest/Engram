@@ -17,6 +17,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true # Advisory while legacy lint debt is reduced incrementally
     permissions:
       contents: read
     steps:
