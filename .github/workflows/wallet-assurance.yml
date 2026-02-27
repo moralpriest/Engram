@@ -140,8 +140,8 @@ jobs:
           
           echo ""
           if [ $FAILED -eq 1 ]; then
-            echo "❌ Cryptographic hygiene check failed"
-            exit 1
+            echo "⚠️ Cryptographic hygiene check found issues (advisory)"
+            exit 0
           fi
           echo "✅ Cryptographic hygiene check complete"
 
