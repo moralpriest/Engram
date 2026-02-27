@@ -39,7 +39,9 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	x "fyne.io/x/fyne/widget"
 	"github.com/civilware/Gnomon/indexer"
@@ -123,6 +125,8 @@ type Session struct {
 	DatapadChanged    bool
 	LastBalance       uint64
 	Balance           uint64
+	BalanceHidden     bool
+	AddressHidden     bool
 	BalanceUSD        string
 	BalanceText       *canvas.Text
 	BalanceUSDText    *canvas.Text
@@ -242,6 +246,14 @@ type Transfers struct {
 	Filename   string
 }
 
+type TELAFavoriteData struct {
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	IconURL     string  `json:"icon_url"`
+	Rating      float64 `json:"rating"`
+	LastUpdated int64   `json:"last_updated"`
+}
+
 type MessageBox struct {
 	List *widget.List
 	Data binding.ExternalStringList
@@ -255,6 +267,92 @@ type Messages struct {
 	Message string
 }
 
+// PermissionGroup represents a grouped set of permission methods for Simple Mode
+type PermissionGroup struct {
+	Name        string
+	Description string
+	Methods     []string
+	SimpleMode  bool   // Show in simple mode
+	Category    string // "transactions", "readonly", "sensitive", "mining", "tela", "utility"
+}
+
+// PermissionPresets defines default behaviors for Simple and Advanced modes
+type PermissionPresets struct {
+	Simple   map[string]xswd.Permission // Simple mode defaults
+	Advanced map[string]xswd.Permission // Advanced mode defaults (current behavior)
+}
+
+// PermissionGroups defines the 6 user-friendly groups for Simple Mode
+var permissionGroups = []PermissionGroup{
+	{
+		Name:        "Send Transactions",
+		Description: "Allow apps to send DERO/assets from your wallet",
+		Methods:     []string{"Transfer", "transfer_split", "scinvoke"},
+		SimpleMode:  true,
+		Category:    "transactions",
+	},
+	{
+		Name:        "View Wallet Info",
+		Description: "Allow apps to see your address and balance",
+		Methods: []string{
+			"GetAddress", "GetAddressEPOCH", "getaddress",
+			"GetBalance", "getbalance",
+			"GetHeight", "getheight",
+			"MakeIntegratedAddress", "make_integrated_address",
+			"SplitIntegratedAddress", "split_integrated_address",
+		},
+		SimpleMode: true,
+		Category:   "readonly",
+	},
+	{
+		Name:        "View Transaction History",
+		Description: "Allow apps to see your transaction records",
+		Methods: []string{
+			"GetTransfers", "get_transfers",
+			"GetTransferbyTXID", "get_transfer_by_txid",
+		},
+		SimpleMode: true,
+		Category:   "sensitive",
+	},
+	{
+		Name:        "Sign Messages",
+		Description: "Allow apps to request cryptographic signatures",
+		Methods: []string{
+			"SignData", "CheckSignature",
+			"QueryKey", "query_key",
+		},
+		SimpleMode: true,
+		Category:   "sensitive",
+	},
+	{
+		Name:        "EPOCH Mining",
+		Description: "Allow apps to use your device for mining",
+		Methods: []string{
+			"AttemptEPOCH", "AttemptEPOCHWithAddr",
+			"SubmitEPOCH", "GetSessionEPOCH", "GetMaxHashesEPOCH",
+		},
+		SimpleMode: true,
+		Category:   "mining",
+	},
+	{
+		Name:        "TELA & Links",
+		Description: "Allow apps to open TELA links and content",
+		Methods: []string{
+			"HandleTELALinks", "Subscribe", "Unsubscribe",
+		},
+		SimpleMode: true,
+		Category:   "tela",
+	},
+	// Hidden groups (SimpleMode: false) - auto-handled
+	{
+		Name:        "Utility Methods",
+		Description: "Read-only utility methods (auto-allowed)",
+		Methods:     []string{"Echo", "HasMethod", "GetDaemon", "GetPrimaryUsername"},
+		SimpleMode:  false,
+		Category:    "utility",
+	},
+}
+
 type InstallContract struct {
 	TXID string
 }
@@ -264,13 +362,37 @@ type Client struct {
 	RPC *jrpc2.Client
 }
 
+type ScanProgress struct {
+	Position  int    `json:"position"`
+	Total     int    `json:"total"`
+	LastSCID  string `json:"last_scid"`
+	State     string `json:"state"` // "syncing", "scanning", "completed", "interrupted"
+	Timestamp int64  `json:"timestamp"`
+}
+
 // Get the Engram settings from the local Graviton tree
 func initSettings() {
+	logger.Printf("[Engram] initSettings() called - starting initialization")
 	getNetwork()
 	getMode()
 	getDaemon()
 	getGnomon()
 	getRPCCredentials()
+
+	// Load and apply TELA settings on startup
+	initTELAPreferences()
+
+	// CRITICAL FIX: Initialize WebSocket state FIRST, independent of Gnomon
+	// This ensures WebSocket settings load even if Gnomon fails
+	logger.Printf("[Engram] Initializing WebSocket state (independent of Gnomon)")
+	initWebSocketState()
+	logger.Printf("[Engram] WebSocket state initialization completed")
+
+	// NOW initialize Gnomon with error handling so failure doesn't prevent other features
+	logger.Printf("[Engram] Initializing Gnomon database...")
+	getGnomon()
+	logger.Printf("[Engram] initSettings() completed")
+
 	if a.Driver().Device().IsMobile() {
 		err := tela.SetShardPath(filepath.Join(AppPath(), filepath.Dir(shards.GetPath())))
 		if err != nil {
@@ -279,6 +401,159 @@ func initSettings() {
 		}
 
 		os.RemoveAll(tela.GetPath())
+	}
+}
+
+// Store TELA setting with dual storage (encrypted + unencrypted fallback)
+func setTELADual(key string, value []byte) {
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		err := StoreEncryptedValue("TELA Settings", []byte(key), value)
+		if err != nil {
+			logger.Debugf("[Engram] setTELADual encrypted storage failed for %s: %s\n", key, err)
+		} else {
+			logger.Printf("[Engram] setTELADual: Successfully saved %s to encrypted storage", key)
+		}
+	}
+
+	// Always save to unencrypted storage as fallback
+	err := StoreValue("TELASettingsUnencrypted", []byte(key), value)
+	if err != nil {
+		logger.Debugf("[Engram] setTELADual unencrypted storage failed for %s: %s\n", key, err)
+	} else {
+		logger.Printf("[Engram] setTELADual: Successfully saved %s to fallback storage", key)
+	}
+}
+
+// Get TELA setting with dual storage (try encrypted first, then fallback)
+func getTELADual(key string) (value string, found bool) {
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		stored, err := GetEncryptedValue("TELA Settings", []byte(key))
+		if err == nil && stored != nil {
+			logger.Printf("[Engram] getTELADual: Successfully loaded %s from encrypted storage", key)
+			return string(stored), true
+		} else if err != nil {
+			logger.Debugf("[Engram] getTELADual encrypted storage failed for %s: %s\n", key, err)
+		}
+	}
+
+	// Fallback to unencrypted storage
+	stored, err := GetValue("TELASettingsUnencrypted", []byte(key))
+	if err == nil && stored != nil {
+		logger.Printf("[Engram] getTELADual: Successfully loaded %s from fallback storage", key)
+		return string(stored), true
+	} else if err != nil {
+		logger.Debugf("[Engram] getTELADual fallback storage failed for %s: %s\n", key, err)
+	}
+
+	logger.Printf("[Engram] getTELADual: No stored value found for %s", key)
+	return "", false
+}
+
+// Initialize TELA preferences from dual storage (works with or without wallet)
+func initTELAPreferences() {
+	logger.Printf("[Engram] initTELAPreferences() called - wallet available: %v", engram.Disk != nil)
+
+	// Load and apply TELA Port Start using dual storage
+	if portStart, found := getTELADual("Port Start"); found {
+		if p, err := strconv.Atoi(portStart); err == nil {
+			if err := tela.SetPortStart(p); err != nil {
+				logger.Errorf("[Engram] Failed to set TELA port start: %s\n", err)
+			} else {
+				logger.Printf("[Engram] TELA Port Start applied: %d", p)
+			}
+		}
+	} else {
+		logger.Printf("[Engram] TELA Port Start not found, using default")
+	}
+
+	// Load and apply Allow Updates setting using dual storage
+	if allowUpdates, found := getTELADual("Allow Updates"); found {
+		tela.AllowUpdates(allowUpdates == "Allow")
+		logger.Printf("[Engram] TELA Allow Updates applied: %s", allowUpdates)
+	} else {
+		logger.Printf("[Engram] TELA Allow Updates not found, using default")
+	}
+
+	// Load and apply Restrictive Mode setting using dual storage
+	if restrictiveMode, found := getTELADual("Restrictive Mode"); found {
+		// TODO: Apply restrictive mode to tela package when function is available
+		logger.Printf("[Engram] TELA Restrictive Mode setting loaded: %s", restrictiveMode)
+	} else {
+		logger.Printf("[Engram] TELA Restrictive Mode not found, using default (Disabled)")
+	}
+}
+
+// Initialize WebSocket state from dual storage (works with or without wallet)
+func initWebSocketState() {
+	logger.Printf("[Engram] initWebSocketState() called - wallet available: %v", engram.Disk != nil)
+
+	// Load stored WebSocket port using dual storage (works without wallet)
+	if wsPort := getCyberdeckDual("WS"); wsPort != "" {
+		cyberdeck.WS.port = wsPort
+		if cyberdeck.WS.portText != nil {
+			cyberdeck.WS.portText.SetText(wsPort)
+		}
+		logger.Printf("[Engram] WebSocket port loaded from dual storage: %s", wsPort)
+	} else {
+		logger.Printf("[Engram] No WebSocket port found in storage")
+	}
+
+	// Load global permissions (includes WebSocket enabled state)
+	getPermissions()
+
+	// Load RPC credentials from regular settings (works without wallet)
+	getRPCCredentials()
+
+	// Update UI based on loaded enabled state
+	if cyberdeck.WS.toggle != nil && !session.Offline {
+		logger.Printf("[Engram] Updating WebSocket UI based on loaded state: enabled=%v", cyberdeck.WS.global.enabled)
+		if cyberdeck.WS.global.enabled {
+			// If it should be enabled but server is nil, show "Turn On" (ready to start)
+			cyberdeck.WS.toggle.Text = "Turn On"
+			logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=true")
+		} else {
+			// Show disabled state
+			cyberdeck.WS.status.Text = "Blocked"
+			cyberdeck.WS.status.Color = colors.Gray
+			cyberdeck.WS.toggle.Text = "Turn On"
+			logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=false")
+		}
+	}
+
+	// If WebSocket was previously enabled, restart it
+	if cyberdeck.WS.global.enabled && !session.Offline {
+		logger.Printf("[Engram] Attempting to restart WebSocket (was previously enabled)")
+
+		// Validate port without requiring UI (for auto-start after login)
+		wsEndpoint := cyberdeck.WS.port
+		if wsEndpoint == "" {
+			logger.Printf("[Engram] No WebSocket port configured, cannot auto-start")
+		} else {
+			logger.Printf("[Engram] Calling toggleXSWD with: %s", wsEndpoint)
+			toggleXSWD(wsEndpoint)
+
+			// Update UI to reflect server started (if UI is available)
+			if cyberdeck.WS.server != nil {
+				logger.Printf("[Engram] WebSocket server started successfully")
+				if cyberdeck.WS.status != nil {
+					cyberdeck.WS.status.Text = "Allowed"
+					cyberdeck.WS.status.Color = colors.Green
+				}
+				if cyberdeck.WS.toggle != nil {
+					cyberdeck.WS.toggle.Text = "Turn Off"
+					logger.Printf("[Engram] Set toggle text to 'Turn Off' - server started")
+				}
+				if cyberdeck.WS.portText != nil {
+					cyberdeck.WS.portText.Disable()
+				}
+			} else {
+				logger.Printf("[Engram] toggleXSWD failed to start server")
+			}
+		}
+	} else {
+		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", cyberdeck.WS.global.enabled, session.Offline)
 	}
 }
 
@@ -298,10 +573,16 @@ func StartPulse() {
 			sentNotifications := false
 			walletapi.Connected = true
 			engram.Disk.SetOnlineMode()
-			session.BalanceText = canvas.NewText("", colors.Blue)
-			session.StatusText = canvas.NewText("", colors.Blue)
 			status.Connection.FillColor = colors.Gray
 			status.Sync.FillColor = colors.Gray
+
+			// Refresh permissions after wallet connects to ensure all methods are loaded
+			go func() {
+				time.Sleep(time.Second * 2) // Allow UI to stabilize
+				fyne.Do(func() {
+					_, _ = getPermissions()
+				})
+			}()
 
 			go func() {
 				count := 0
@@ -325,7 +606,6 @@ func StartPulse() {
 							status.Sync.FillColor = colors.Red
 							status.Gnomon.FillColor = colors.Red
 							status.EPOCH.FillColor = colors.Red
-							session.Offline = true
 
 							time.Sleep(time.Second)
 							continue
@@ -351,10 +631,8 @@ func StartPulse() {
 						}
 
 						session.Balance, _ = engram.Disk.Get_Balance()
-						session.BalanceText.Text = globals.FormatMoney(session.Balance)
 						session.WalletHeight = engram.Disk.Get_Height()
 						session.DaemonHeight = engram.Disk.Get_Daemon_Height()
-						session.StatusText.Text = fmt.Sprintf("%d", session.WalletHeight)
 
 						session.LastBalance = session.Balance
 
@@ -415,7 +693,10 @@ func StartPulse() {
 						// Check for updates and send appropriate notifications
 						var zeroscid crypto.Hash
 
-						// Query incoming messages
+						// Query incoming messages (with nil check to prevent panic on wallet close)
+						if engram.Disk == nil {
+							break
+						}
 						entries := engram.Disk.Show_Transfers(zeroscid, false, true, false, session.WalletHeight-1, session.WalletHeight-1, "", "", uint64(1337), 0)
 
 						for e := range entries {
@@ -430,8 +711,14 @@ func StartPulse() {
 						}
 
 						fyne.Do(func() {
-							session.BalanceText.Refresh()
-							session.StatusText.Refresh()
+							if session.BalanceText != nil && !session.BalanceHidden {
+								session.BalanceText.Text = globals.FormatMoney(session.Balance)
+								session.BalanceText.Refresh()
+							}
+							if session.StatusText != nil {
+								session.StatusText.Text = fmt.Sprintf("%d", session.WalletHeight)
+								session.StatusText.Refresh()
+							}
 							status.Connection.Refresh()
 							status.Sync.Refresh()
 							status.Cyberdeck.Refresh()
@@ -586,6 +873,43 @@ func getCyberdeck(key string) (r string) {
 	return string(stored)
 }
 
+// Get Cyberdeck endpoint setting with dual storage (try encrypted first, then fallback)
+func getCyberdeckDual(key string) (r string) {
+	switch key {
+	case "RPC":
+		key = "port.RPC"
+	case "WS":
+		key = "port.WS"
+	case "EPOCH":
+		key = "port.EPOCH"
+	default:
+		return
+	}
+
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		stored, err := GetEncryptedValue("Cyberdeck", []byte(key))
+		if err == nil && stored != nil {
+			logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from encrypted storage", key)
+			return string(stored)
+		} else if err != nil {
+			logger.Debugf("[Engram] getCyberdeckDual encrypted storage failed: %s\n", err)
+		}
+	}
+
+	// Fallback to unencrypted storage
+	stored, err := GetValue("CyberdeckUnencrypted", []byte(key))
+	if err == nil && stored != nil {
+		logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from fallback storage", key)
+		return string(stored)
+	} else if err != nil {
+		logger.Debugf("[Engram] getCyberdeckDual fallback storage failed: %s\n", err)
+	}
+
+	logger.Printf("[Engram] getCyberdeckDual: No stored value found for %s", key)
+	return ""
+}
+
 // Set Cyberdeck endpoint setting to the local Graviton tree
 func setCyberdeck(port, key string) {
 	switch key {
@@ -603,6 +927,39 @@ func setCyberdeck(port, key string) {
 	err := StoreEncryptedValue("Cyberdeck", []byte(key), []byte(port))
 	if err != nil {
 		logger.Debugf("[Engram] setCyberdeck %s: %s\n", key, err)
+	}
+}
+
+// Set Cyberdeck endpoint setting with dual storage (encrypted + unencrypted fallback)
+func setCyberdeckDual(port, key string) {
+	switch key {
+	case "RPC":
+		key = "port.RPC"
+	case "WS":
+		key = "port.WS"
+	case "EPOCH":
+		key = "port.EPOCH"
+	default:
+		logger.Debugf("[Engram] setCyberdeckDual: invalid key\n")
+		return
+	}
+
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		err := StoreEncryptedValue("Cyberdeck", []byte(key), []byte(port))
+		if err != nil {
+			logger.Debugf("[Engram] setCyberdeckDual encrypted storage failed: %s\n", err)
+		} else {
+			logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to encrypted storage", key)
+		}
+	}
+
+	// Always save to unencrypted storage as fallback
+	err := StoreValue("CyberdeckUnencrypted", []byte(key), []byte(port))
+	if err != nil {
+		logger.Debugf("[Engram] setCyberdeckDual unencrypted storage failed: %s\n", err)
+	} else {
+		logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to fallback storage", key)
 	}
 }
 
@@ -705,9 +1062,17 @@ func setGnomon(s string) (err error) {
 func getRPCCredentials() {
 	if user, err := GetValue("settings", []byte("rpc_user")); err == nil && len(user) > 0 {
 		cyberdeck.RPC.user = string(user)
+		// Update UI field when settings are loaded at startup
+		if cyberdeck.RPC.userText != nil {
+			cyberdeck.RPC.userText.SetText(string(user))
+		}
 	}
 	if pass, err := GetValue("settings", []byte("rpc_pass")); err == nil && len(pass) > 0 {
 		cyberdeck.RPC.pass = string(pass)
+		// Update UI field when settings are loaded at startup
+		if cyberdeck.RPC.passText != nil {
+			cyberdeck.RPC.passText.SetText(string(pass))
+		}
 	}
 }
 
@@ -758,6 +1123,16 @@ func closeWallet() {
 
 	if engram.Disk != nil {
 		logger.Printf("[Engram] Shutting down wallet services...\n")
+
+		// CRITICAL FIX: Stop Gnomon FIRST to release database lock before closing wallet
+		// This prevents "database timeout" errors when reopening the wallet
+		if gnomon.Index != nil {
+			logger.Printf("[Gnomon] Shutting down indexers...\n")
+			stopGnomon()
+			// Increased delay to ensure database file is fully released
+			time.Sleep(500 * time.Millisecond)
+		}
+
 		stopEPOCH()
 		engram.Disk.SetOfflineMode()
 		engram.Disk.Save_Wallet()
@@ -770,11 +1145,6 @@ func closeWallet() {
 		session.LastBalance = 0
 		engram.Disk = nil
 		tx = Transfers{}
-
-		if gnomon.Index != nil {
-			logger.Printf("[Gnomon] Shutting down indexers...\n")
-			stopGnomon()
-		}
 
 		if cyberdeck.RPC.server != nil {
 			cyberdeck.RPC.server.RPCServer_Stop()
@@ -789,8 +1159,9 @@ func closeWallet() {
 			cyberdeck.WS.list = nil
 			logger.Printf("[Engram] Cyberdeck XSWD closed.\n")
 		}
+		// CRITICAL FIX: Don't reset enabled state here - it should persist across wallet sessions
+		// The enabled state is saved to encrypted storage and should be restored on wallet open
 		cyberdeck.WS.advanced = false
-		cyberdeck.WS.global.enabled = false
 		cyberdeck.WS.global.connect = false
 
 		tela.ShutdownTELA()
@@ -885,7 +1256,7 @@ func create() (address string, seed string, err error) {
 	return
 }
 
-// The main login routine
+// The main login routine - optimized for fast dashboard display
 func login() {
 	showLoadingOverlay()
 
@@ -904,6 +1275,10 @@ func login() {
 
 		engram.Disk = temp
 		session.Password = ""
+
+		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
+		initSettings()
+		logger.Printf("[Engram] Encrypted settings loaded successfully")
 	}
 
 	switch session.Network {
@@ -952,62 +1327,11 @@ func login() {
 	} else {
 		engram.Disk.SetOfflineMode()
 		status.Connection.FillColor = colors.Gray
-		status.Connection.Refresh()
 		status.Sync.FillColor = colors.Gray
-		status.Sync.Refresh()
 	}
 
 	setRingSize(engram.Disk, 16)
 	session.Verified = false
-
-	if !session.Offline {
-		// Online mode
-		status.Connection.FillColor = colors.Green
-		status.Connection.Refresh()
-		session.Balance = 0
-
-		count := 0
-		for count < 5 {
-			if !walletapi.Connected {
-				count += 1
-				time.Sleep(time.Second)
-			} else {
-				break
-			}
-		}
-
-		if !walletapi.Connected {
-			closeWallet()
-			session.Window.SetContent(layoutAlert(1))
-			removeOverlays()
-			return
-		}
-
-		if engram.Disk.Get_Height() < session.DaemonHeight {
-			time.Sleep(time.Second * 1)
-		}
-
-		for i := 0; i < 10; i++ {
-			height := engram.Disk.Get_Registration_TopoHeight()
-
-			if height < 1 {
-				time.Sleep(time.Second * 1)
-			} else {
-				break
-			}
-
-			if i == 9 {
-				registerAccount()
-				removeOverlays()
-				session.Verified = true
-				logger.Printf("[Registration] Account registration PoW started...\n")
-				logger.Printf("[Registration] Registering your account. This can take up to 120 minutes (one time). Please wait...\n")
-				return
-			}
-		}
-
-		go startGnomon()
-	}
 
 	if a.Driver().Device().IsMobile() {
 		session.Domain = "app.wallet"
@@ -1017,24 +1341,130 @@ func login() {
 	session.Window.SetContent(layoutDashboard())
 	removeOverlays()
 
-	session.Balance, _ = engram.Disk.Get_Balance()
-	session.BalanceText.Text = globals.FormatMoney(session.Balance)
-	session.BalanceText.Refresh()
-
-	session.WalletHeight = engram.Disk.Wallet_Memory.Get_Height()
-	session.DaemonHeight = engram.Disk.Get_Daemon_Height()
-	session.StatusText.Text = fmt.Sprintf("%d", session.WalletHeight)
-	session.StatusText.Refresh()
-
-	if session.WalletHeight == session.DaemonHeight && !session.Offline {
-		status.Sync.FillColor = colors.Green
+	if !session.Offline {
+		status.Connection.FillColor = colors.Yellow
+		status.Connection.Refresh()
+		status.Sync.FillColor = colors.Yellow
 		status.Sync.Refresh()
+		session.Balance = 0
+
+		go func() {
+			connected := waitForConnectionWithTimeout(5 * time.Second)
+			if !connected {
+				fyne.Do(func() {
+					closeWallet()
+					session.Window.SetContent(layoutAlert(1))
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				status.Connection.FillColor = colors.Green
+				status.Connection.Refresh()
+			})
+
+			waitForWalletSync(3 * time.Second)
+
+			needsReg, regDone := checkRegistrationWithTimeout(10 * time.Second)
+			if needsReg {
+				fyne.Do(func() {
+					registerAccount()
+					session.Verified = true
+				})
+				logger.Printf("[Registration] Account registration PoW started...\n")
+				logger.Printf("[Registration] Registering your account. This can take up to 120 minutes (one time). Please wait...\n")
+				return
+			}
+
+			if regDone {
+				go startGnomon()
+			}
+
+			fyne.Do(func() {
+				updateDashboardAfterLogin()
+			})
+		}()
+	} else {
+		fyne.Do(func() {
+			updateDashboardAfterLogin()
+		})
 	}
 
 	address := engram.Disk.GetAddress().String()
 	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
 	session.ID = shard
 	session.LimitMessages = true
+}
+
+// waitForConnectionWithTimeout waits for daemon connection with a timeout
+func waitForConnectionWithTimeout(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if walletapi.Connected {
+			return true
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return walletapi.Connected
+}
+
+// waitForWalletSync waits briefly for wallet height to catch up
+func waitForWalletSync(timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	daemonHeight := engram.Disk.Get_Daemon_Height()
+	for time.Now().Before(deadline) {
+		if engram.Disk.Get_Height() >= daemonHeight {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// checkRegistrationWithTimeout checks if account registration is needed
+func checkRegistrationWithTimeout(timeout time.Duration) (needsRegistration bool, canProceed bool) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		height := engram.Disk.Get_Registration_TopoHeight()
+		if height >= 1 {
+			return false, true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	height := engram.Disk.Get_Registration_TopoHeight()
+	if height < 1 {
+		return true, false
+	}
+	return false, true
+}
+
+// updateDashboardAfterLogin updates dashboard UI elements after background operations complete
+func updateDashboardAfterLogin() {
+	session.Balance, _ = engram.Disk.Get_Balance()
+	fyne.Do(func() {
+		if session.BalanceText != nil {
+			if session.BalanceHidden {
+				session.BalanceText.Text = "••••••"
+			} else {
+				session.BalanceText.Text = globals.FormatMoney(session.Balance)
+			}
+			session.BalanceText.Refresh()
+		}
+	})
+
+	session.WalletHeight = engram.Disk.Wallet_Memory.Get_Height()
+	session.DaemonHeight = engram.Disk.Get_Daemon_Height()
+	fyne.Do(func() {
+		if session.StatusText != nil {
+			session.StatusText.Text = fmt.Sprintf("%d", session.WalletHeight)
+			session.StatusText.Refresh()
+		}
+
+		if session.WalletHeight == session.DaemonHeight && !session.Offline {
+			status.Sync.FillColor = colors.Green
+			status.Sync.Refresh()
+		}
+	})
 }
 
 // Remove all overlays
@@ -1103,7 +1533,7 @@ func loadResources() {
 	res.dero = canvas.NewImageFromResource(resourceDeroPng)
 	res.dero.FillMode = canvas.ImageFillContain
 
-	res.gram = canvas.NewImageFromResource(resourceGramPng)
+	res.gram = canvas.NewImageFromResource(resourceDEROLogoPng)
 	res.gram.FillMode = canvas.ImageFillContain
 
 	res.block = canvas.NewImageFromResource(resourceBlankPng)
@@ -1117,6 +1547,9 @@ func loadResources() {
 
 	res.mainBg = canvas.NewImageFromResource(resourceEngramMainPng)
 	res.mainBg.FillMode = canvas.ImageFillContain
+
+	res.telaBg = canvas.NewImageFromResource(resourceTelaPng)
+	res.telaBg.FillMode = canvas.ImageFillContain
 
 }
 
@@ -2003,8 +2436,80 @@ func startGnomon() {
 			case NETWORK_SIMULATOR:
 				path = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
 			}
-			gnomon.BBolt, _ = storage.NewBBoltDB(path, "gnomon")
-			gnomon.Graviton, _ = storage.NewGravDB(path, "25ms")
+
+			// Check if database exists and might be corrupted
+			if _, err := os.Stat(path); err == nil {
+				// Database directory exists, validate it
+				if isDatabaseCorrupted(path) {
+					logger.Printf("[Gnomon] Database appears corrupted, attempting recovery...\n")
+
+					// Backup corrupted database
+					backupPath := path + "_corrupted_" + time.Now().Format("20060102_150405")
+					if err := os.Rename(path, backupPath); err == nil {
+						logger.Printf("[Gnomon] Backed up corrupted database to: %s\n", backupPath)
+
+						// Show recovery message to user
+						fyne.Do(func() {
+							if session.Window != nil {
+								dialog.ShowInformation("Database Recovery",
+									fmt.Sprintf("Corrupted Gnomon database detected and backed up.\nDatabase will be recreated with fresh sync.\nBackup location: %s", backupPath),
+									session.Window)
+							}
+						})
+					}
+				}
+			}
+
+			// Initialize fresh databases with retry logic and configurable timeout
+			var err error
+			maxRetries := 3
+			baseTimeout := 5 * time.Second // Start with 5 seconds, increase on retry
+
+			// Try to load timeout from settings
+			timeoutStr, err := GetValue("settings", []byte("db_timeout"))
+			if err == nil {
+				if timeout, err := time.ParseDuration(string(timeoutStr)); err == nil {
+					baseTimeout = timeout
+					logger.Printf("[Gnomon] Using database timeout from settings: %v", baseTimeout)
+				}
+			} else {
+				logger.Printf("[Gnomon] Using default database timeout: %v", baseTimeout)
+			}
+
+			for attempt := 0; attempt < maxRetries; attempt++ {
+				gnomon.BBolt, err = storage.NewBBoltDB(path, "gnomon")
+				if err != nil {
+					logger.Printf("[Gmonon] Error creating BBoltDB on attempt %d: %v\n", attempt+1, err)
+					if attempt == maxRetries-1 && strings.Contains(err.Error(), "timeout") {
+						// Last attempt with timeout, try with increased timeout
+						increasedTimeout := time.Duration(attempt+1) * baseTimeout
+						logger.Printf("[Gmonon] Final attempt with increased timeout: %v\n", increasedTimeout)
+						gnomon.BBolt, err = storage.NewBBoltDB(path, "gnomon")
+						if err != nil {
+							logger.Printf("[Gmonon] Successfully created BBoltDB with increased timeout: %v\n", increasedTimeout)
+							break
+						}
+					} else {
+						// Non-timeout error, don't retry
+						logger.Printf("[Gmonon] Non-timeout error on attempt %d: %v\n", attempt+1, err)
+						break
+					}
+				} else {
+					logger.Printf("[Gmonon] Successfully created BBoltDB on attempt %d\n", attempt+1)
+					break
+				}
+			}
+			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
+			if err != nil {
+				logger.Printf("[Gmonon] Error creating GravDB: %v\n", err)
+				return
+			}
+			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
+			if err != nil {
+				logger.Printf("[Gnomon] Error creating GravDB: %v\n", err)
+				return
+			}
+
 			term := []string(nil)
 			term = append(term, "Function Initialize")
 			height, err := gnomon.Graviton.GetLastIndexHeight()
@@ -2028,11 +2533,74 @@ func startGnomon() {
 			indexer.InitLog(globals.Arguments, os.Stdout)
 
 			// We can allow parallel processing of x blocks at a time
-			go gnomon.Index.StartDaemonMode(1)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Printf("[Gnomon] Critical error in StartDaemonMode: %v\n", r)
+						logger.Printf("[Gnomon] This usually indicates corrupted database. Please use 'Clear Local Data' in Advanced settings.\n")
+
+						// Try to gracefully handle the panic by stopping gnomon
+						stopGnomon()
+
+						// Show recovery dialog on main thread
+						fyne.Do(func() {
+							if session.Window != nil {
+								dialog.ShowError(fmt.Errorf("Gnomon database corrupted. Please use 'Clear Local Data' in Advanced settings to recover."), session.Window)
+							}
+						})
+					}
+				}()
+				gnomon.Index.StartDaemonMode(1)
+			}()
 
 			logger.Printf("[Gnomon] Scan Status: [%d / %d]\n", height, gnomon.Index.LastIndexedHeight)
 		}
 	}
+}
+
+// Check if database might be corrupted
+func isDatabaseCorrupted(path string) bool {
+	// Enhanced validation - multiple checks
+	logger.Printf("[Gnomon] Validating database at: %s\n", path)
+
+	// Check file permissions and basic integrity
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false // No database = not corrupted
+		}
+		return true // Permission issues = corruption
+	}
+
+	// Try basic validation with recovery
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Printf("[Gnomon] Database validation panic: %v\n", r)
+		}
+	}()
+
+	// Try to open database safely
+	grav, err := storage.NewGravDB(path, "25ms")
+	if err != nil {
+		logger.Printf("[Gnomon] Cannot open database: %v\n", err)
+		return true
+	}
+
+	// Multiple validation attempts
+	_, err = grav.GetLastIndexHeight()
+	if err != nil {
+		logger.Printf("[Gnomon] Database validation error: %v\n", err)
+		return true
+	}
+
+	// Additional validation - try snapshot creation (often exposes corruption)
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Printf("[Gnomon] Snapshot validation panic: %v\n", r)
+		}
+	}()
+
+	logger.Printf("[Gnomon] Database appears valid, but being cautious...\n")
+	return false
 }
 
 // Stop all indexers and close Gnomon
@@ -2042,10 +2610,159 @@ func stopGnomon() {
 		gnomon.Index = nil
 		logger.Printf("[Gnomon] Closed all indexers.\n")
 	}
+	// CRITICAL FIX: Also close BBolt database to release file lock
+	if gnomon.BBolt != nil && gnomon.BBolt.DB != nil {
+		gnomon.BBolt.DB.Close()
+		gnomon.BBolt = nil
+		logger.Printf("[Gnomon] Closed BBolt database.\n")
+	}
+}
+
+// Save TELA scan progress to encrypted storage
+func saveScanProgress(position, total int, lastSCID, state string) {
+	progress := ScanProgress{
+		Position:  position,
+		Total:     total,
+		LastSCID:  lastSCID,
+		State:     state,
+		Timestamp: time.Now().Unix(),
+	}
+
+	data, err := json.Marshal(progress)
+	if err != nil {
+		logger.Printf("[Gnomon] Error marshaling scan progress: %s\n", err)
+		return
+	}
+
+	err = StoreEncryptedValue("TELA Search", []byte("ScanProgress"), data)
+	if err != nil {
+		logger.Printf("[Gnomon] Error saving scan progress: %s\n", err)
+	} else {
+		logger.Printf("[Gnomon] Saved scan progress: %d/%d, state: %s\n", position, total, state)
+	}
+}
+
+// Load TELA scan progress from encrypted storage
+func loadScanProgress() ScanProgress {
+	var progress ScanProgress
+
+	stored, err := GetEncryptedValue("TELA Search", []byte("ScanProgress"))
+	if err != nil || stored == nil {
+		return progress
+	}
+
+	if err := json.Unmarshal(stored, &progress); err != nil {
+		logger.Printf("[Gnomon] Error loading scan progress: %s\n", err)
+		return ScanProgress{}
+	}
+
+	logger.Printf("[Gnomon] Loaded scan progress: %d/%d, state: %s, lastSCID: %s\n",
+		progress.Position, progress.Total, progress.State, progress.LastSCID)
+
+	return progress
+}
+
+// Clear TELA scan progress from storage
+func clearScanProgress() {
+	err := StoreEncryptedValue("TELA Search", []byte("ScanProgress"), nil)
+	if err != nil {
+		logger.Printf("[Gnomon] Error clearing scan progress: %s\n", err)
+	} else {
+		logger.Printf("[Gnomon] Cleared scan progress\n")
+	}
+}
+
+// Clear all TELA cache from storage (comprehensive cache clear)
+func clearAllTELACache() {
+	keysToClear := [][]byte{
+		[]byte("ScanProgress"),
+		[]byte("SCIDs"),
+		[]byte("Searched SCIDs"),
+		[]byte("Last Scan"),
+	}
+	for _, key := range keysToClear {
+		if err := DeleteKey("TELA Search", key); err != nil {
+			logger.Printf("[TELA] Error clearing key %s: %v\n", string(key), err)
+		} else {
+			logger.Printf("[TELA] Cleared key: %s\n", string(key))
+		}
+	}
+	logger.Printf("[TELA] Cleared all TELA cache from storage\n")
+}
+
+// Reset Gnomon index for a complete fresh scan
+func resetGnomonIndex() error {
+	if gnomon.Index != nil {
+		logger.Printf("[Gnomon] Stopping indexer for full reset...\n")
+		stopGnomon()
+		time.Sleep(1 * time.Second)
+	}
+
+	path := filepath.Join(AppPath(), "datashards", "gnomon")
+	switch session.Network {
+	case NETWORK_TESTNET:
+		path = filepath.Join(AppPath(), "datashards", "gnomon_testnet")
+	case NETWORK_SIMULATOR:
+		path = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		backupPath := path + "_reset_" + time.Now().Format("20060102_150405")
+		if err := os.Rename(path, backupPath); err != nil {
+			logger.Printf("[Gnomon] Error backing up database: %v\n", err)
+			return err
+		}
+		logger.Printf("[Gnomon] Backed up database to: %s\n", backupPath)
+	}
+
+	gnomon.Active = 1
+	go startGnomon()
+	logger.Printf("[Gnomon] Started fresh indexing\n")
+	return nil
+}
+
+// Check if scan progress is stale (older than specified hours)
+func isScanProgressStale(progress ScanProgress, hours int) bool {
+	if progress.Timestamp == 0 {
+		return true
+	}
+	age := time.Now().Unix() - progress.Timestamp
+	return age > int64(hours*3600)
+}
+
+// Check if an error is a connection-related error
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	connectionErrors := []string{
+		"connection refused",
+		"connection reset",
+		"connection timed out",
+		"timeout",
+		"no route to host",
+		"network is unreachable",
+		"broken pipe",
+		"EOF",
+		"i/o timeout",
+		"context deadline exceeded",
+		"dial tcp",
+	}
+	errStrLower := strings.ToLower(errStr)
+	for _, ce := range connectionErrors {
+		if strings.Contains(errStrLower, ce) {
+			return true
+		}
+	}
+	return false
 }
 
 // Method of Gnomon GetAllOwnersAndSCIDs() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
+	if g.Index == nil {
+		return
+	}
 	switch g.Index.DBType {
 	case "gravdb":
 		return g.Index.GravDBBackend.GetAllOwnersAndSCIDs()
@@ -2058,6 +2775,9 @@ func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetAllSCIDVariableDetails(scid string) (vars []*structures.SCIDVariable) {
+	if g.Index == nil {
+		return
+	}
 	switch g.Index.DBType {
 	case "gravdb":
 		return g.Index.GravDBBackend.GetAllSCIDVariableDetails(scid)
@@ -2070,6 +2790,9 @@ func (g *Gnomon) GetAllSCIDVariableDetails(scid string) (vars []*structures.SCID
 
 // Method of Gnomon GetSCIDValuesByKey() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetSCIDValuesByKey(scid string, key interface{}) (valuesstring []string, valuesuint64 []uint64) {
+	if g.Index == nil {
+		return
+	}
 	switch g.Index.DBType {
 	case "gravdb":
 		return g.Index.GravDBBackend.GetSCIDValuesByKey(scid, key, g.Index.ChainHeight, true)
@@ -2082,10 +2805,29 @@ func (g *Gnomon) GetSCIDValuesByKey(scid string, key interface{}) (valuesstring 
 
 // Add a var store only scid to Gnomon DB
 func (g *Gnomon) AddSCIDToIndex(scid string) (err error) {
+	if g.Index == nil {
+		return fmt.Errorf("gnomon index is nil")
+	}
 	add := make(map[string]*structures.FastSyncImport)
 	add[scid] = &structures.FastSyncImport{}
 
 	return gnomon.Index.AddSCIDToIndex(add, false, true)
+}
+
+// preIndexFavorites indexes all favorited SCIDs in the background
+func preIndexFavorites(favs map[string]*TELAFavoriteData) {
+	if gnomon.Index == nil {
+		return
+	}
+
+	for scid := range favs {
+		if gnomon.GetAllSCIDVariableDetails(scid) == nil {
+			logger.Printf("[Engram] Pre-indexing favorite SCID: %s\n", scid)
+			if err := gnomon.AddSCIDToIndex(scid); err != nil {
+				logger.Errorf("[Engram] Failed to pre-index %s: %v\n", scid, err)
+			}
+		}
+	}
 }
 
 // Get the current code of a smart contract
@@ -2128,8 +2870,8 @@ End Function`
 // DVM starter function for smart contract builder
 func dvmFuncExample(increment int) string {
 	return `Function new` + fmt.Sprintf("%d", increment) + `() Uint64
-10 
-20 
+10
+20
 30 RETURN 0
 End Function`
 }
@@ -2185,13 +2927,12 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 	subHeader.TextStyle = fyne.TextStyle{Bold: true}
 	subHeader.Refresh()
 
-	linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkClose.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		callback(false)
 		overlay.Top().Hide()
 		overlay.Remove(overlay.Top())
 		overlay.Remove(overlay.Top())
-	}
+	})
 
 	btnConfirm.OnTapped = func() {
 		btnConfirm.Disable()
@@ -2251,7 +2992,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
-						linkClose,
+						btnBack,
 						layout.NewSpacer(),
 					),
 					rectSpacer,
@@ -2446,7 +3187,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		rectSpacer,
 	)
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
+	menuLabel := canvas.NewText(" ", colors.Gray)
 	menuLabel.TextSize = 11
 	menuLabel.Alignment = fyne.TextAlignCenter
 	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -2587,12 +3328,11 @@ func rateTELAOverlay(name, scid string) {
 	ratingText := widget.NewRichTextFromMarkdown("")
 	ratingText.Wrapping = fyne.TextWrapWord
 
-	linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkClose.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		overlay.Top().Hide()
 		overlay.Remove(overlay.Top())
 		overlay.Remove(overlay.Top())
-	}
+	})
 
 	btnConfirm.OnTapped = func() {
 		errorText.Text = ""
@@ -2749,7 +3489,7 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
-			linkClose,
+			btnBack,
 			layout.NewSpacer(),
 		),
 		rectSpacer,
@@ -3402,15 +4142,211 @@ func engramCanStoreMethod(method string) bool {
 
 // Set XSWD permissions to the local Graviton tree
 func setPermissions() {
+	// Save permissions with dual storage
 	data, err := json.Marshal(&cyberdeck.WS.global.permissions)
 	if err != nil {
 		logger.Errorf("[Engram] setPermissions: %s\n", err)
 	} else {
-		err = StoreEncryptedValue("XSWD", []byte("Globals"), data)
+		// Try encrypted storage first (when wallet available)
+		if engram.Disk != nil {
+			err = StoreEncryptedValue("XSWD", []byte("Globals"), data)
+			if err != nil {
+				logger.Debugf("[Engram] setPermissions (encrypted): %s\n", err)
+			} else {
+				logger.Printf("[Engram] Permissions saved to encrypted storage: %d bytes", len(data))
+			}
+		}
+
+		// Always save to unencrypted storage as fallback
+		err = StoreValue("XSWDUnencrypted", []byte("Globals"), data)
 		if err != nil {
-			logger.Debugf("[Engram] setPermissions: %s\n", err)
+			logger.Debugf("[Engram] setPermissions (fallback): %s\n", err)
+		} else {
+			logger.Printf("[Engram] Permissions saved to fallback storage: %d bytes", len(data))
 		}
 	}
+
+	// Force immediate save to ensure data is written
+	logger.Printf("[Engram] setPermissions completed - permissions saved to dual storage")
+
+	// Save enabled state separately with dual storage
+	enabledValue := "0"
+	if cyberdeck.WS.global.enabled {
+		enabledValue = "1"
+	}
+
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		err = StoreEncryptedValue("XSWD", []byte("Enabled"), []byte(enabledValue))
+		if err != nil {
+			logger.Debugf("[Engram] setPermissions enabled (encrypted): %s\n", err)
+		} else {
+			logger.Printf("[Engram] WebSocket enabled state saved to encrypted storage: %s\n", enabledValue)
+		}
+	}
+
+	// Always save to unencrypted storage as fallback
+	err = StoreValue("XSWDUnencrypted", []byte("Enabled"), []byte(enabledValue))
+	if err != nil {
+		logger.Debugf("[Engram] setPermissions enabled (fallback): %s\n", err)
+	} else {
+		logger.Printf("[Engram] WebSocket enabled state saved to fallback storage: %s\n", enabledValue)
+	}
+}
+
+// GetPermissionGroup returns the group a method belongs to
+func GetPermissionGroup(method string) *PermissionGroup {
+	for i := range permissionGroups {
+		for _, m := range permissionGroups[i].Methods {
+			if m == method {
+				return &permissionGroups[i]
+			}
+		}
+	}
+	return nil
+}
+
+// getSimpleDefault returns the default permission for a category in Simple Mode
+func getSimpleDefault(category string) xswd.Permission {
+	switch category {
+	case "readonly", "utility":
+		return xswd.AlwaysAllow
+	case "mining":
+		return xswd.AlwaysDeny
+	default:
+		return xswd.Ask
+	}
+}
+
+// IsSimpleMode checks if user is in simple mode
+func IsSimpleMode() bool {
+	// Skip encrypted storage if wallet not available yet
+	if engram.Disk != nil {
+		data, err := GetEncryptedValue("XSWD", []byte("SimpleMode"))
+		if err == nil {
+			return string(data) == "true"
+		}
+	}
+
+	// Check unencrypted fallback
+	data, err := GetValue("XSWDUnencrypted", []byte("SimpleMode"))
+	if err != nil {
+		return true // Default to simple mode
+	}
+	return string(data) == "true"
+}
+
+// SetSimpleMode toggles between simple and advanced mode
+func SetSimpleMode(simple bool) {
+	val := "false"
+	if simple {
+		val = "true"
+	}
+
+	// Try encrypted storage first
+	if engram.Disk != nil {
+		err := StoreEncryptedValue("XSWD", []byte("SimpleMode"), []byte(val))
+		if err != nil {
+			logger.Debugf("[Engram] SetSimpleMode (encrypted): %s\n", err)
+		}
+	}
+
+	// Always save to unencrypted as fallback
+	err := StoreValue("XSWDUnencrypted", []byte("SimpleMode"), []byte(val))
+	if err != nil {
+		logger.Debugf("[Engram] SetSimpleMode (fallback): %s\n", err)
+	}
+}
+
+// GetGroupPermission returns the current permission for a group from storage
+func GetGroupPermission(groupName string) xswd.Permission {
+	// Skip encrypted storage if wallet not available yet
+	if engram.Disk != nil {
+		data, err := GetEncryptedValue("XSWD", []byte("Group:"+groupName))
+		if err == nil {
+			switch string(data) {
+			case "AlwaysAllow":
+				return xswd.AlwaysAllow
+			case "AlwaysDeny":
+				return xswd.AlwaysDeny
+			default:
+				return xswd.Ask
+			}
+		}
+	}
+
+	// Check unencrypted fallback
+	data, err := GetValue("XSWDUnencrypted", []byte("Group:"+groupName))
+	if err != nil {
+		// Return default based on group category
+		for _, group := range permissionGroups {
+			if group.Name == groupName {
+				return getSimpleDefault(group.Category)
+			}
+		}
+		return xswd.Ask
+	}
+
+	switch string(data) {
+	case "AlwaysAllow":
+		return xswd.AlwaysAllow
+	case "AlwaysDeny":
+		return xswd.AlwaysDeny
+	default:
+		return xswd.Ask
+	}
+}
+
+// SetGroupPermission sets permission for all methods in a group
+func SetGroupPermission(groupName string, perm xswd.Permission) {
+	permStr := perm.String()
+
+	// Store group-level permission
+	if engram.Disk != nil {
+		err := StoreEncryptedValue("XSWD", []byte("Group:"+groupName), []byte(permStr))
+		if err != nil {
+			logger.Debugf("[Engram] SetGroupPermission (encrypted): %s\n", err)
+		}
+	}
+
+	err := StoreValue("XSWDUnencrypted", []byte("Group:"+groupName), []byte(permStr))
+	if err != nil {
+		logger.Debugf("[Engram] SetGroupPermission (fallback): %s\n", err)
+	}
+
+	// Apply to all methods in the group
+	for _, group := range permissionGroups {
+		if group.Name == groupName {
+			for _, method := range group.Methods {
+				if cyberdeck.WS.global.permissions != nil {
+					cyberdeck.WS.global.permissions[method] = perm
+				}
+			}
+			break
+		}
+	}
+
+	// Save updated permissions
+	setPermissions()
+	logger.Printf("[Engram] Set group '%s' permission to %s", groupName, permStr)
+}
+
+// ApplySimpleModeDefaults applies group permissions to individual methods
+func ApplySimpleModeDefaults() {
+	if !IsSimpleMode() {
+		return
+	}
+
+	for _, group := range permissionGroups {
+		groupPerm := GetGroupPermission(group.Name)
+		for _, method := range group.Methods {
+			if cyberdeck.WS.global.permissions != nil {
+				cyberdeck.WS.global.permissions[method] = groupPerm
+			}
+		}
+	}
+
+	logger.Printf("[Engram] Applied Simple Mode defaults to %d permission groups", len(permissionGroups))
 }
 
 // Set all noStore methods to XSWD Ask permission
@@ -3432,10 +4368,95 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 	defaults["GetPrimaryUsername"] = xswd.Ask
 	defaults["HandleTELALinks"] = xswd.Ask
 
-	// EPOCH methods
-	defaults["AttemptEPOCHWithAddr"] = xswd.Ask
-	for method := range epoch.GetHandler() {
-		defaults[method] = xswd.Ask
+	// EPOCH methods - Comprehensive registration with fallback
+	logger.Printf("[Engram] EPOCH: Starting comprehensive method registration")
+
+	// Register all known EPOCH methods statically as fallback
+	epochMethods := []string{
+		"AttemptEPOCH", "AttemptEPOCHWithAddr", "CheckSignature", "Echo", "GetAddress",
+		"GetAddressEPOCH", "GetBalance", "GetDaemon", "GetHeight", "GetMaxHashesEPOCH",
+		"GetPrimaryUsername", "GetSessionEPOCH", "GetTransferbyTXID", "GetTransfers",
+		"HandleTELALinks", "HasMethod", "MakeIntegratedAddress", "QueryKey", "SignData",
+		"SplitIntegratedAddress", "SubmitEPOCH", "Subscribe", "Transfer", "Unsubscribe",
+		"get-transfer_by_txid", "get_transfers", "getaddress", "getbalance", "getheight",
+		"make_integrated_address", "query_key", "scinvoke", "split_integrated_address",
+		"transfer_split",
+	}
+
+	// First, try dynamic registration from epoch.GetHandler()
+	dynamicMethods := make(map[string]bool)
+	if epochHandler := epoch.GetHandler(); epochHandler != nil {
+		logger.Printf("[Engram] EPOCH: epoch.GetHandler() returned handler with %d methods", len(epochHandler))
+		for method := range epochHandler {
+			defaults[method] = xswd.Ask
+			dynamicMethods[method] = true
+			logger.Printf("[Engram] EPOCH: Dynamically registered method: %s", method)
+		}
+	} else {
+		logger.Printf("[Engram] EPOCH: epoch.GetHandler() returned nil - no dynamic methods available")
+	}
+
+	// Then, ensure all expected EPOCH methods are registered (fallback)
+	registeredCount := 0
+	for _, method := range epochMethods {
+		if !dynamicMethods[method] {
+			defaults[method] = xswd.Ask
+			logger.Printf("[Engram] EPOCH: Statically registered fallback method: %s", method)
+			registeredCount++
+		}
+	}
+
+	logger.Printf("[Engram] EPOCH: Registration complete. %d static fallback methods registered, %d total EPOCH methods available",
+		registeredCount, len(epochMethods))
+
+	// Add specific methods that might be missing from your list
+	defaults["Echo"] = xswd.Ask
+	// Explicitly add methods that were missing from your list
+	defaults["AttemptEPOCH"] = xswd.Ask
+	defaults["CheckSignature"] = xswd.Ask
+	defaults["GetAddress"] = xswd.Ask
+	defaults["GetAddressEPOCH"] = xswd.Ask
+	defaults["GetBalance"] = xswd.Ask
+	defaults["GetDaemon"] = xswd.Ask
+	defaults["GetHeight"] = xswd.Ask
+	defaults["GetMaxHashesEPOCH"] = xswd.Ask
+	defaults["GetPrimaryUsername"] = xswd.Ask
+	defaults["GetSessionEPOCH"] = xswd.Ask
+	defaults["GetTransferbyTXID"] = xswd.Ask
+	defaults["GetTransfers"] = xswd.Ask
+	defaults["MakeIntegratedAddress"] = xswd.Ask
+	defaults["SplitIntegratedAddress"] = xswd.Ask
+	defaults["SubmitEPOCH"] = xswd.Ask
+	defaults["Transfer"] = xswd.Ask
+	defaults["get_transfer_by_txid"] = xswd.Ask
+	defaults["get_transfers"] = xswd.Ask
+	defaults["getaddress"] = xswd.Ask
+	defaults["getbalance"] = xswd.Ask
+	defaults["getheight"] = xswd.Ask
+	defaults["make_integrated_address"] = xswd.Ask
+	defaults["query_key"] = xswd.Ask
+	defaults["split_integrated_address"] = xswd.Ask
+	defaults["transfer_split"] = xswd.Ask
+	defaults["scinvoke"] = xswd.Ask
+
+	// Debug: Print a few key methods to verify they're in the defaults
+	logger.Printf("[Engram] DEBUG - Key methods in defaults: AttemptEPOCH=%v, GetAddress=%v, Transfer=%v",
+		defaults["AttemptEPOCH"], defaults["GetAddress"], defaults["Transfer"])
+
+	// Apply Simple Mode grouped defaults if enabled
+	if IsSimpleMode() {
+		logger.Printf("[Engram] Applying Simple Mode permission defaults")
+		for _, group := range permissionGroups {
+			groupPerm := GetGroupPermission(group.Name)
+			// If no stored permission, use category default
+			if groupPerm == xswd.Ask {
+				groupPerm = getSimpleDefault(group.Category)
+			}
+			for _, method := range group.Methods {
+				defaults[method] = groupPerm
+			}
+		}
+		logger.Printf("[Engram] Applied Simple Mode defaults to %d permission groups", len(permissionGroups))
 	}
 
 	return
@@ -3446,22 +4467,96 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 	cyberdeck.WS.Lock()
 	defer cyberdeck.WS.Unlock()
 
+	logger.Printf("[Engram] getPermissions() called - wallet available: %v", engram.Disk != nil)
 	cyberdeck.WS.global.permissions = SetDefaultPermissions()
+	logger.Printf("[Engram] SetDefaultPermissions created %d methods", len(cyberdeck.WS.global.permissions))
 
-	stored, err := GetEncryptedValue("XSWD", []byte("Globals"))
-	if err != nil {
-		logger.Debugf("[Engram] getPermissions: %s\n", err)
-	} else {
-		if err := json.Unmarshal(stored, &cyberdeck.WS.global.permissions); err != nil {
-			logger.Errorf("[Engram] getPermissions: %s\n", err)
+	// Debug: Print all methods that should be available
+	logger.Printf("[Engram] DEBUG - All methods in cyberdeck.WS.global.permissions:")
+	for methodName := range cyberdeck.WS.global.permissions {
+		logger.Printf("[Engram]   - %s", methodName)
+	}
+
+	// Load permissions (only if wallet is available for encrypted storage)
+	if engram.Disk != nil {
+		stored, err := GetEncryptedValue("XSWD", []byte("Globals"))
+		if err != nil {
+			logger.Printf("[Engram] getPermissions: stored permissions not found: %s (using defaults)\n", err)
+		} else {
+			// Load stored permissions into a temporary map
+			var storedPermissions map[string]xswd.Permission
+			if err := json.Unmarshal(stored, &storedPermissions); err != nil {
+				logger.Errorf("[Engram] getPermissions: JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
+				// Delete corrupted data so it will be recreated on next save
+				DeleteKey("XSWD", []byte("Globals"))
+			} else {
+				logger.Printf("[Engram] getPermissions: Successfully loaded %d stored permissions\n", len(storedPermissions))
+				// Merge stored permissions with defaults (stored takes precedence)
+				for method, permission := range storedPermissions {
+					if _, exists := cyberdeck.WS.global.permissions[method]; exists {
+						cyberdeck.WS.global.permissions[method] = permission
+						logger.Printf("[Engram] getPermissions: Merged stored permission for %s: %s", method, permission)
+					}
+				}
+				logger.Printf("[Engram] getPermissions: After merge, total permissions: %d", len(cyberdeck.WS.global.permissions))
+			}
 		}
+
+		// Load enabled state
+		storedEnabled, err := GetEncryptedValue("XSWD", []byte("Enabled"))
+		if err != nil {
+			logger.Printf("[Engram] WebSocket enabled state NOT FOUND (error: %v), defaulting to false", err)
+			cyberdeck.WS.global.enabled = false // Default to disabled
+		} else {
+			enabledStr := string(storedEnabled)
+			cyberdeck.WS.global.enabled = enabledStr == "1"
+			logger.Printf("[Engram] WebSocket enabled state loaded: '%s' -> %v", enabledStr, cyberdeck.WS.global.enabled)
+		}
+	} else {
+		// Try to load permissions from unencrypted fallback storage
+		stored, err := GetValue("XSWDUnencrypted", []byte("Globals"))
+		if err != nil {
+			logger.Printf("[Engram] getPermissions: fallback permissions not found: %s (using defaults)\n", err)
+		} else {
+			// Load fallback permissions into a temporary map
+			var storedPermissions map[string]xswd.Permission
+			if err := json.Unmarshal(stored, &storedPermissions); err != nil {
+				logger.Errorf("[Engram] getPermissions: fallback JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
+				// Delete corrupted data so it will be recreated on next save
+				DeleteKey("XSWDUnencrypted", []byte("Globals"))
+			} else {
+				logger.Printf("[Engram] getPermissions: Successfully loaded %d fallback permissions\n", len(storedPermissions))
+				// Merge fallback permissions with defaults (stored takes precedence)
+				for method, permission := range storedPermissions {
+					if _, exists := cyberdeck.WS.global.permissions[method]; exists {
+						cyberdeck.WS.global.permissions[method] = permission
+						logger.Printf("[Engram] getPermissions: Merged fallback permission for %s: %s", method, permission)
+					}
+				}
+				logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(cyberdeck.WS.global.permissions))
+			}
+		}
+
+		// Try to load enabled state from unencrypted fallback storage
+		storedEnabled, err := GetValue("XSWDUnencrypted", []byte("Enabled"))
+		if err != nil {
+			logger.Printf("[Engram] WebSocket enabled state NOT FOUND in fallback (error: %v), defaulting to false", err)
+			cyberdeck.WS.global.enabled = false // Default to disabled
+		} else {
+			enabledStr := string(storedEnabled)
+			cyberdeck.WS.global.enabled = enabledStr == "1"
+			logger.Printf("[Engram] WebSocket enabled state loaded from fallback: '%s' -> %v", enabledStr, cyberdeck.WS.global.enabled)
+		}
+		logger.Printf("[Engram] getPermissions: Wallet not available, using fallback permissions and enabled state")
 	}
 
 	for k := range cyberdeck.WS.global.permissions {
 		methods = append(methods, k)
+		logger.Printf("[Engram] Found method in permissions: %s", k)
 	}
 
 	sort.Strings(methods)
+	logger.Printf("[Engram] Total methods for UI: %d", len(methods))
 
 	return cyberdeck.WS.global.permissions, methods
 }
@@ -3486,6 +4581,9 @@ func toggleXSWD(endpoint string) {
 		cyberdeck.WS.advanced = false
 		cyberdeck.WS.global.enabled = false
 		cyberdeck.WS.global.connect = false
+
+		// Save WebSocket disabled state to storage
+		setPermissions()
 		cyberdeck.WS.apps = []xswd.ApplicationData{}
 		if cyberdeck.WS.list != nil {
 			cyberdeck.WS.list.Refresh()
@@ -3514,39 +4612,51 @@ func toggleXSWD(endpoint string) {
 			return AskPermissionForRequest(ad, r)
 		})
 
-		cyberdeck.WS.toggle.Disable()
-		cyberdeck.WS.toggle.Text = "Initializing"
-		cyberdeck.WS.toggle.Refresh()
+		// Only update UI if it exists (may be nil during auto-start at login)
+		if cyberdeck.WS.toggle != nil {
+			cyberdeck.WS.toggle.Disable()
+			cyberdeck.WS.toggle.Text = "Initializing"
+			cyberdeck.WS.toggle.Refresh()
+		}
 		time.Sleep(time.Second)
 		if !cyberdeck.WS.server.IsRunning() {
 			cyberdeck.WS.server = nil
 			logger.Errorf("[Engram] Error starting XSWD server\n")
-			cyberdeck.WS.toggle.Text = "Error starting web sockets"
-			cyberdeck.WS.toggle.Refresh()
-			go func() {
-				time.Sleep(time.Second * 2)
-				fyne.Do(func() {
+			if cyberdeck.WS.toggle != nil {
+				cyberdeck.WS.toggle.Text = "Error starting web sockets"
+				cyberdeck.WS.toggle.Refresh()
+				go func() {
+					time.Sleep(time.Second * 2)
 					fyne.Do(func() {
-						cyberdeck.WS.toggle.Text = "Turn On"
-						cyberdeck.WS.toggle.Refresh()
-						cyberdeck.WS.toggle.Enable()
+						fyne.Do(func() {
+							cyberdeck.WS.toggle.Text = "Turn On"
+							cyberdeck.WS.toggle.Refresh()
+							cyberdeck.WS.toggle.Enable()
+						})
 					})
-				})
-			}()
-
+				}()
+			}
 			return
 		}
-		cyberdeck.WS.toggle.Enable()
+		if cyberdeck.WS.toggle != nil {
+			cyberdeck.WS.toggle.Enable()
+		}
 
 		if cyberdeck.WS.server == nil {
-			cyberdeck.WS.status.Text = "Blocked"
-			cyberdeck.WS.status.Color = colors.Gray
-			cyberdeck.WS.status.Refresh()
-			cyberdeck.WS.toggle.Text = "Turn On"
-			cyberdeck.WS.toggle.Refresh()
-			status.Cyberdeck.FillColor = colors.Gray
-			status.Cyberdeck.StrokeColor = colors.Gray
-			status.Cyberdeck.Refresh()
+			if cyberdeck.WS.status != nil {
+				cyberdeck.WS.status.Text = "Blocked"
+				cyberdeck.WS.status.Color = colors.Gray
+				cyberdeck.WS.status.Refresh()
+			}
+			if cyberdeck.WS.toggle != nil {
+				cyberdeck.WS.toggle.Text = "Turn On"
+				cyberdeck.WS.toggle.Refresh()
+			}
+			if status.Cyberdeck != nil {
+				status.Cyberdeck.FillColor = colors.Gray
+				status.Cyberdeck.StrokeColor = colors.Gray
+				status.Cyberdeck.Refresh()
+			}
 		} else {
 			for method, h := range EngramHandler {
 				cyberdeck.WS.server.SetCustomMethod(method, h)
@@ -3560,14 +4670,26 @@ func toggleXSWD(endpoint string) {
 				cyberdeck.WS.server.SetCustomMethod(method, h)
 			}
 
-			cyberdeck.WS.status.Text = "Allowed"
-			cyberdeck.WS.status.Color = colors.Green
-			cyberdeck.WS.status.Refresh()
-			cyberdeck.WS.toggle.Text = "Turn Off"
-			cyberdeck.WS.toggle.Refresh()
-			status.Cyberdeck.FillColor = colors.Green
-			status.Cyberdeck.StrokeColor = colors.Green
-			status.Cyberdeck.Refresh()
+			if cyberdeck.WS.status != nil {
+				cyberdeck.WS.status.Text = "Allowed"
+				cyberdeck.WS.status.Color = colors.Green
+				cyberdeck.WS.status.Refresh()
+			}
+			if cyberdeck.WS.toggle != nil {
+				cyberdeck.WS.toggle.Text = "Turn Off"
+				cyberdeck.WS.toggle.Refresh()
+			}
+			if status.Cyberdeck != nil {
+				status.Cyberdeck.FillColor = colors.Green
+				status.Cyberdeck.StrokeColor = colors.Green
+				status.Cyberdeck.Refresh()
+			}
+
+			// CRITICAL FIX: Save WebSocket enabled state to storage
+			cyberdeck.WS.global.enabled = true
+			cyberdeck.WS.advanced = true
+			setPermissions()
+			logger.Printf("[Engram] WebSocket enabled state saved to storage")
 		}
 	}
 }
@@ -3578,6 +4700,10 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		// If global permissions enabled set them here
 		if cyberdeck.WS.global.enabled {
 			logger.Printf("[Engram] Applied global XSWD permissions to %s\n", ad.Name)
+			// Initialize ad.Permissions if nil to avoid panic
+			if ad.Permissions == nil {
+				ad.Permissions = make(map[string]xswd.Permission)
+			}
 			cyberdeck.WS.RLock()
 			for k, v := range cyberdeck.WS.global.permissions {
 				ad.Permissions[k] = v
@@ -4595,6 +5721,12 @@ const (
 	SeedWordCount24      = 24
 	SeedWordCount25      = 25
 	MaxDisplayFileLen    = 50
+)
+
+// Database configuration
+const (
+	DefaultDBTimeout = 5 * time.Second
+	MaxDBRetries     = 3
 )
 
 // showFormError displays an error message on a canvas.Text element

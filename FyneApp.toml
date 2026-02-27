@@ -1,2 +1,6 @@
 [Details]
-  Build = 2
+Icon = "Icon.png"
+Name = "Engram"
+ID = "com.derofdn.engram"
+Version = "0.6.2"
+Build = 27

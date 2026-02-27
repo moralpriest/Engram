@@ -16,12 +16,12 @@
 package main
 
 import (
-	"crypto/sha1" // #nosec G505 -- used for folder name only
+	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/deroproject/graviton"
 )
@@ -75,15 +75,14 @@ func GetDir() (result string, err error) {
 }
 
 // Get a datashard's path
+// Get a datashard's path
 func GetShard() (result string, err error) {
-	if engram.Disk == nil {
-		result = filepath.Join(AppPath(), "datashards", "settings")
-		return
-	} else {
-		address := engram.Disk.GetAddress().String()
-		result = filepath.Join(AppPath(), "datashards", fmt.Sprintf("%x", sha1.Sum([]byte(address)))) // #nosec G401 // nosemgrep: use-of-sha1
-		return
-	}
+	// Always use the unified settings shard regardless of wallet state
+	// This fixes the settings persistence issue where settings changed
+	// when a wallet is open were saved to a wallet-specific shard
+	// but read from the unified settings shard on restart
+	result = filepath.Join(AppPath(), "datashards", "settings")
+	return
 }
 
 // Encrypt a key-value and then store it in a Graviton tree
@@ -312,3 +311,124 @@ func DeleteKey(t string, key []byte) (err error) {
 
 	return
 }
+
+
+// TELA Favorites management
+// Favorites are stored per-wallet using the wallet address as key
+
+// AddTELAFavorite adds a SCID to the wallet's favorites with cached metadata
+func AddTELAFavorite(walletAddress, scid, name, description, iconURL string, rating float64) error {
+	if walletAddress == "" || scid == "" {
+		return errors.New("wallet address and SCID required")
+	}
+
+	data := TELAFavoriteData{
+		Name:        name,
+		Description: description,
+		IconURL:     iconURL,
+		Rating:      rating,
+		LastUpdated: time.Now().Unix(),
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	key := []byte("fav_" + walletAddress + "_" + scid)
+	return StoreEncryptedValue("TELA Favorites", key, jsonData)
+}
+
+// RemoveTELAFavorite removes a SCID from the wallet's favorites
+func RemoveTELAFavorite(walletAddress string, scid string) error {
+	if walletAddress == "" || scid == "" {
+		return errors.New("wallet address and SCID required")
+	}
+
+	key := []byte("fav_" + walletAddress + "_" + scid)
+
+	return DeleteKey("TELA Favorites", key)
+}
+
+// IsTELAFavorite checks if a SCID is in the wallet's favorites
+func IsTELAFavorite(walletAddress string, scid string) bool {
+	if walletAddress == "" || scid == "" {
+		return false
+	}
+
+	key := []byte("fav_" + walletAddress + "_" + scid)
+	_, err := GetEncryptedValue("TELA Favorites", key)
+
+	return err == nil
+}
+
+// GetTELAFavoriteData retrieves cached metadata for a favorited SCID
+func GetTELAFavoriteData(walletAddress, scid string) (*TELAFavoriteData, error) {
+	if walletAddress == "" || scid == "" {
+		return nil, errors.New("wallet address and SCID required")
+	}
+
+	key := []byte("fav_" + walletAddress + "_" + scid)
+	data, err := GetEncryptedValue("TELA Favorites", key)
+	if err != nil {
+		return nil, err
+	}
+
+	var favData TELAFavoriteData
+	if err := json.Unmarshal(data, &favData); err != nil {
+		return nil, err
+	}
+
+	return &favData, nil
+}
+
+// GetTELAFavorites returns all favorite SCIDs with their cached data
+func GetTELAFavorites(walletAddress string) (map[string]*TELAFavoriteData, error) {
+	result := make(map[string]*TELAFavoriteData)
+
+	if walletAddress == "" {
+		return result, nil
+	}
+
+	prefix := "fav_" + walletAddress + "_"
+
+	shard, err := GetShard()
+	if err != nil {
+		return result, err
+	}
+
+	store, err := graviton.NewDiskStore(shard)
+	if err != nil {
+		return result, err
+	}
+
+	ss, err := store.LoadSnapshot(0)
+	if err != nil {
+		return result, err
+	}
+
+	tree, err := ss.GetTree("TELA Favorites")
+	if err != nil {
+		return result, err
+	}
+
+	c := tree.Cursor()
+	for k, v, err := c.First(); err == nil; k, v, err = c.Next() {
+		keyStr := string(k)
+		if len(keyStr) > len(prefix) && keyStr[:len(prefix)] == prefix {
+			scid := keyStr[len(prefix):]
+			decrypted, decryptErr := engram.Disk.Decrypt(v)
+			if decryptErr == nil {
+				var favData TELAFavoriteData
+				if jsonErr := json.Unmarshal(decrypted, &favData); jsonErr == nil {
+					result[scid] = &favData
+				} else {
+					result[scid] = &TELAFavoriteData{Name: string(decrypted)}
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+>>>>>>> 1840e8e (feat(ui): comprehensive UI overhaul, mobile optimizations, and TELA enhancements)
