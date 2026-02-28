@@ -431,4 +431,3 @@ func GetTELAFavorites(walletAddress string) (map[string]*TELAFavoriteData, error
 
 	return result, nil
 }
->>>>>>> 1840e8e (feat(ui): comprehensive UI overhaul, mobile optimizations, and TELA enhancements)
