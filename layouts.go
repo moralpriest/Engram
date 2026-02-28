@@ -17107,24 +17107,27 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		allLen := len(all)
-		scanned := resumePosition // Start from resume position if resuming
+		resumeTarget := resumePosition
+		scanned := resumePosition // Progress counter, starts from resume position
 		skipCount := 0
 		workers := make(chan struct{}, runtime.NumCPU())
+		interrupted := false
+		var scanMu sync.Mutex
+		seenSCIDs := make(map[string]bool, len(telaSCIDs))
+		for _, scid := range telaSCIDs {
+			seenSCIDs[scid] = true
+		}
 
 		for sc := range all {
 			// Skip already-processed SCIDs when resuming
-			if scanned > 0 && skipCount < scanned {
+			if resumeTarget > 0 && skipCount < resumeTarget {
 				skipCount++
 				continue
 			}
 
-			workers <- struct{}{}
 			// Check for interrupted conditions
 			if gnomon.Index == nil || !strings.Contains(session.Domain, ".tela") {
-				// Save interrupted state for resume capability
-				if scanned > 0 {
-					saveScanProgress(scanned, allLen, "", "interrupted")
-				}
+				interrupted = true
 				break
 			}
 
@@ -17135,7 +17138,7 @@ func layoutTELA() fyne.CanvasObject {
 				fyne.Do(func() {
 					results.Refresh()
 				})
-				saveScanProgress(scanned, allLen, "", "interrupted")
+				interrupted = true
 				break
 			}
 
@@ -17152,6 +17155,7 @@ func layoutTELA() fyne.CanvasObject {
 				saveScanProgress(scanned, allLen, sc, "scanning")
 			}
 
+			workers <- struct{}{}
 			wg.Add(1)
 			go func(scid string) {
 				defer func() {
@@ -17160,7 +17164,10 @@ func layoutTELA() fyne.CanvasObject {
 				}()
 
 				// Restrictive mode rechecks everytime, if rescan recheck is disabled SCIDs that have already been scanned won't be rechecked for faster list population
-				if !restrictiveMode && !rescanRecheck && (sAll[scid] || scidExist(telaSCIDs, scid)) {
+				scanMu.Lock()
+				alreadySeen := seenSCIDs[scid]
+				scanMu.Unlock()
+				if !restrictiveMode && !rescanRecheck && (sAll[scid] || alreadySeen) {
 					return
 				}
 
@@ -17218,26 +17225,45 @@ func layoutTELA() fyne.CanvasObject {
 						}
 
 						// In restrictive mode, the list is initialzed from telaSCIDs
+						scanMu.Lock()
 						if !restrictiveMode {
-							telaSCIDs = append(telaSCIDs, scid)
+							if !seenSCIDs[scid] {
+								seenSCIDs[scid] = true
+								telaSCIDs = append(telaSCIDs, scid)
+							}
 						}
+						scanMu.Unlock()
 
 						_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
 						if err != nil {
 							return
 						}
 
+						scanMu.Lock()
 						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+						scanMu.Unlock()
 					}
 				}
 			}(sc)
 		}
 
 		if !strings.Contains(session.Domain, ".tela") {
-			return
+			interrupted = true
 		}
 
 		wg.Wait()
+
+		if interrupted {
+			saveScanProgress(scanned, allLen, "", "interrupted")
+			results.Text = "  Scan interrupted"
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+				entrySearch.Enable()
+				entryAddSCID.Enable()
+			})
+			return
+		}
 
 		searching = telaSearchDisplayAll(telaSearch, sortBy)
 		searchData.Set(searching)
@@ -17251,7 +17277,12 @@ func layoutTELA() fyne.CanvasObject {
 
 		timeNow := time.Now().Format(time.RFC822)
 		StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow))
-		saveScanProgress(scanned, allLen, "", "completed")
+		if allLen > 0 && scanned >= allLen {
+			saveScanProgress(scanned, allLen, "", "completed")
+		} else {
+			saveScanProgress(scanned, allLen, "", "interrupted")
+			logger.Printf("[Gnomon] Scan ended before completion: %d/%d\n", scanned, allLen)
+		}
 
 		if storeSCIDs, err := json.Marshal(telaSCIDs); err == nil {
 			StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs)
@@ -17609,25 +17640,43 @@ func layoutTELA() fyne.CanvasObject {
 	}
 	results.Refresh()
 
-	var historyFound = true
 	var historyResults []string
+	var historyMu sync.Mutex
+	var historyLoading bool
 
 	getHistoryResults := func() {
-		if !historyFound {
+		historyMu.Lock()
+		if historyLoading {
+			historyMu.Unlock()
 			return
 		}
+		historyLoading = true
+		historyMu.Unlock()
 
-		historyFound = false
 		historyResults = nil
 		historyData.Set(nil)
 		defer func() {
-			historyFound = true
+			historyMu.Lock()
+			historyLoading = false
+			historyMu.Unlock()
 		}()
 
-		if engram.Disk != nil && gnomon.Index != nil {
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+		disk := engram.Disk
+		idx := gnomon.Index
+		if disk != nil && idx != nil {
+			for {
 				if !strings.Contains(session.Domain, ".tela") {
 					return
+				}
+
+				disk = engram.Disk
+				idx = gnomon.Index
+				if disk == nil || idx == nil {
+					return
+				}
+
+				if idx.LastIndexedHeight >= int64(disk.Get_Daemon_Height()) {
+					break
 				}
 
 				results.Text = "  Gnomon is syncing..."
