@@ -2,7 +2,7 @@ module github.com/DEROFDN/engram
 
 go 1.26
 
-replace go.etcd.io/bbolt => go.etcd.io/bbolt v1.3.12
+replace go.etcd.io/bbolt => go.etcd.io/bbolt v1.4.3
 
 require (
 	fyne.io/fyne/v2 v2.6.2
