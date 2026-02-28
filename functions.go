@@ -2491,35 +2491,28 @@ func startGnomon() {
 
 			for attempt := 0; attempt < maxRetries; attempt++ {
 				gnomon.BBolt, err = storage.NewBBoltDB(path, "gnomon")
-				if err != nil {
-					logger.Printf("[Gmonon] Error creating BBoltDB on attempt %d: %v\n", attempt+1, err)
-					if attempt == maxRetries-1 && strings.Contains(err.Error(), "timeout") {
-						// Last attempt with timeout, try with increased timeout
-						increasedTimeout := time.Duration(attempt+1) * baseTimeout
-						logger.Printf("[Gmonon] Final attempt with increased timeout: %v\n", increasedTimeout)
-						gnomon.BBolt, err = storage.NewBBoltDB(path, "gnomon")
-						if err != nil {
-							logger.Printf("[Gmonon] Successfully created BBoltDB with increased timeout: %v\n", increasedTimeout)
-							break
-						}
-					} else {
-						// Non-timeout error, don't retry
-						logger.Printf("[Gmonon] Non-timeout error on attempt %d: %v\n", attempt+1, err)
-						break
-					}
-				} else {
+				if err == nil {
 					logger.Printf("[Gmonon] Successfully created BBoltDB on attempt %d\n", attempt+1)
 					break
 				}
+
+				logger.Printf("[Gmonon] Error creating BBoltDB on attempt %d: %v\n", attempt+1, err)
+				if !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+					break
+				}
+
+				if attempt < maxRetries-1 {
+					time.Sleep(time.Duration(attempt+1) * baseTimeout)
+				}
 			}
-			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
-			if err != nil {
-				logger.Printf("[Gmonon] Error creating GravDB: %v\n", err)
+
+			if err != nil || gnomon.BBolt == nil {
+				logger.Printf("[Gnomon] Failed to initialize BBoltDB: %v\n", err)
 				return
 			}
 			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
 			if err != nil {
-				logger.Printf("[Gnomon] Error creating GravDB: %v\n", err)
+				logger.Printf("[Gmonon] Error creating GravDB: %v\n", err)
 				return
 			}
 
@@ -2563,7 +2556,7 @@ func startGnomon() {
 						})
 					}
 				}()
-				gnomon.Index.StartDaemonMode(1)
+				gnomon.Index.StartDaemonMode(4)
 			}()
 
 			logger.Printf("[Gnomon] Scan Status: [%d / %d]\n", height, gnomon.Index.LastIndexedHeight)
