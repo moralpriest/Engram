@@ -13,3 +13,7 @@ dist/
 # Test artifacts
 coverage.out
 coverage.html
+
+# IDEs
+.cursor*
+.opencode*

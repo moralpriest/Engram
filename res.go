@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -28,18 +29,21 @@ import (
 )
 
 type Res struct {
-	bg          *canvas.Image
-	bg2         *canvas.Image
-	icon        *canvas.Image
-	load        *canvas.Image
-	loading     *x.AnimatedGif
-	header      *canvas.Image
-	dero        *canvas.Image
-	gram        *canvas.Image
-	block       *canvas.Image
-	red_alert   *canvas.Image
-	green_alert *canvas.Image
-	mainBg      *canvas.Image
+	bg               *canvas.Image
+	bg2              *canvas.Image
+	icon             *canvas.Image
+	load             *canvas.Image
+	loading          *x.AnimatedGif
+	header           *canvas.Image
+	dero             *canvas.Image
+	gram             *canvas.Image
+	block            *canvas.Image
+	red_alert        *canvas.Image
+	green_alert      *canvas.Image
+	mainBg           *canvas.Image
+	telaBg           *canvas.Image
+	cachedTransition *fyne.Container
+	transitionMu     sync.Mutex
 }
 
 // Get app path
