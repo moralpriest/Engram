@@ -1,8 +1,8 @@
 <img src="ss1.png" alt="Engram Enigma" title="Powered by DERO">
 
-# <i>One Wallet. All of DERO.</i>
+# *One Wallet. All of DERO.*
 
-### The Engram smart wallet empowers users to easily and securely manage their money and assets on the DERO blockchain. 
+### The Engram smart wallet empowers users to easily and securely manage their money and assets on the DERO blockchain.
 
 ### Included Features
 - [x]  Privately send and receive money globally

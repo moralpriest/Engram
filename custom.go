@@ -47,6 +47,70 @@ func (e *returnEntry) TypedKey(key *fyne.KeyEvent) {
 	}
 }
 
+// ImageButton is a button that displays an image with proper button styling
+type ImageButton struct {
+	widget.Button
+	image    *canvas.Image
+	imageRes fyne.Resource
+}
+
+func NewImageButton(res fyne.Resource, onTap func()) *ImageButton {
+	btn := &ImageButton{
+		imageRes: res,
+	}
+	btn.OnTapped = onTap
+	btn.Importance = widget.MediumImportance
+	btn.ExtendBaseWidget(btn)
+	return btn
+}
+
+func (b *ImageButton) CreateRenderer() fyne.WidgetRenderer {
+	renderer := b.Button.CreateRenderer()
+	b.image = canvas.NewImageFromResource(b.imageRes)
+	imgWidth := scaleSize(70)
+	imgHeight := scaleSize(35)
+	b.image.SetMinSize(fyne.NewSize(imgWidth, imgHeight))
+	b.image.FillMode = canvas.ImageFillContain
+
+	return &imageButtonRenderer{
+		baseRenderer: renderer,
+		image:        b.image,
+		button:       b,
+	}
+}
+
+type imageButtonRenderer struct {
+	baseRenderer fyne.WidgetRenderer
+	image        *canvas.Image
+	button       *ImageButton
+}
+
+func (r *imageButtonRenderer) Layout(size fyne.Size) {
+	r.baseRenderer.Layout(size)
+	imgWidth := scaleSize(70)
+	imgHeight := scaleSize(35)
+	r.image.Resize(fyne.NewSize(imgWidth, imgHeight))
+	r.image.Move(fyne.NewPos((size.Width-imgWidth)/2, (size.Height-imgHeight)/2))
+}
+
+func (r *imageButtonRenderer) MinSize() fyne.Size {
+	return scalePoint(80, 40)
+}
+
+func (r *imageButtonRenderer) Refresh() {
+	r.baseRenderer.Refresh()
+	r.image.Refresh()
+}
+
+func (r *imageButtonRenderer) Objects() []fyne.CanvasObject {
+	objects := r.baseRenderer.Objects()
+	return append(objects, r.image)
+}
+
+func (r *imageButtonRenderer) Destroy() {
+	r.baseRenderer.Destroy()
+}
+
 var _ fyne.Draggable = (*iframe)(nil)
 
 type iframe struct {
@@ -217,3 +281,52 @@ func NewContextMenuButton(label string, image fyne.Resource, menu *fyne.Menu) *c
 func NewVScroll(content *fyne.Container) *container.Scroll {
 	return container.NewVScroll(container.NewCenter(content, widget.NewLabel("")))
 }
+
+func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
+	btn := widget.NewButtonWithIcon("", icon, onTap)
+	btn.Importance = widget.MediumImportance
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(80, 40))
+	return container.NewStack(sizeEnforcer, btn)
+}
+
+type spacer struct {
+	widget.BaseWidget
+	width  float32
+	height float32
+}
+
+type spacerRenderer struct {
+	spacer *spacer
+}
+
+func NewSpacer(width, height float32) *spacer {
+	s := &spacer{
+		width:  width,
+		height: height,
+	}
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+func (s *spacer) CreateRenderer() fyne.WidgetRenderer {
+	return &spacerRenderer{spacer: s}
+}
+
+func (s *spacer) MinSize() fyne.Size {
+	return fyne.NewSize(s.width, s.height)
+}
+
+func (r *spacerRenderer) Layout(size fyne.Size) {}
+
+func (r *spacerRenderer) MinSize() fyne.Size {
+	return fyne.NewSize(r.spacer.width, r.spacer.height)
+}
+
+func (r *spacerRenderer) Refresh() {}
+
+func (r *spacerRenderer) Objects() []fyne.CanvasObject {
+	return nil
+}
+
+func (r *spacerRenderer) Destroy() {}

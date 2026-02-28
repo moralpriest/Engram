@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 // Copyright 2023-2024 DERO Foundation. All rights reserved.
+=======
+// Copyright 2023-2026 DERO Foundation. All rights reserved.
+>>>>>>> 1840e8e (feat(ui): comprehensive UI overhaul, mobile optimizations, and TELA enhancements)
 // Use of this source code in any form is governed by RESEARCH license.
 // license can be found in the LICENSE file.
 //
@@ -86,10 +90,25 @@ func main() {
 		version = semver.MustParse("0.0.0-dev")
 	}
 
+	// Check for command line flags
+	var safeMode bool
+	args := os.Args
+	for _, arg := range args {
+		if arg == "--safe-mode" || arg == "-s" {
+			safeMode = true
+			fmt.Println("Starting Engram in SAFE MODE - Gnomon disabled")
+			break
+		}
+	}
+
 	// Initialize application
 	a = app.NewWithID("Engram")
 	a.Settings().SetTheme(themes.main)
 
+	if safeMode {
+		// Disable Gnomon in safe mode
+		gnomon.Active = 0
+	}
 	session.Window = a.NewWindow("Engram")
 	session.Window.SetMaster()
 	session.Window.SetCloseIntercept(func() {
@@ -192,10 +211,17 @@ func main() {
 		}
 	})
 
+	// Check wallet count for simplified login
+	var singleWalletName string
+	accounts, err := GetAccounts()
+	if err == nil && len(accounts) == 1 {
+		singleWalletName = accounts[0]
+	}
 	// Check if mobile device
 	if a.Driver().Device().IsMobile() {
 		go walletapi.Initialize_LookupTable(1, 1<<21)
 
+		// Initial placeholder values - layoutFrame will get actual screen dimensions
 		ui.MaxWidth = 3600
 		ui.MaxHeight = 6800
 
@@ -203,8 +229,9 @@ func main() {
 		ui.Height = ui.MaxHeight
 		ui.Padding = ui.MaxWidth * 0.05
 
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutFrame())
+		// Always use layoutFrame on mobile - it gets actual screen dimensions
+		// and handles orientation changes. Pass wallet name for single wallet quick login.
+		session.Window.SetContent(layoutFrameWithWallet(singleWalletName))
 		session.Window.SetFixedSize(true)
 
 		session.Window.ShowAndRun()
@@ -218,9 +245,27 @@ func main() {
 		ui.Padding = ui.MaxWidth * 0.05
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutMain())
+		// Use simplified login for single wallet on desktop too
+		if singleWalletName != "" {
+			session.Window.SetContent(layoutSingleWalletLogin(singleWalletName))
+		} else {
+			session.Window.SetContent(layoutMain())
+		}
 		session.Window.SetFixedSize(true)
 
+		// Window resize check disabled - see comment above for details
+		// go func() {
+		// 	for {
+		// 		time.Sleep(5000 * time.Millisecond)
+		// 		if session.Window == nil {
+		// 			return
+		// 		}
+		// 		currentSize := session.Window.Canvas().Size()
+		// 		if math.Abs(float64(currentSize.Width - ui.MaxWidth)) > 10 {
+		// 			session.Window.Resize(fyne.NewSize(ui.MaxWidth, ui.MaxHeight))
+		// 		}
+		// 	}
+		// }()
 		session.Window.ShowAndRun()
 	}
 }
