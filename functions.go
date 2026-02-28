@@ -1117,6 +1117,19 @@ func resizeWindow(width float32, height float32) {
 	session.Window.Resize(s)
 }
 
+func safeCanvasFocus(obj fyne.Focusable) {
+	if appExiting || session.Window == nil || obj == nil {
+		return
+	}
+
+	fyne.Do(func() {
+		if appExiting || session.Window == nil {
+			return
+		}
+		session.Window.Canvas().Focus(obj)
+	})
+}
+
 // Close the active wallet
 func closeWallet() {
 	showLoadingOverlay()
@@ -3003,7 +3016,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 	)
 
 	if password {
-		session.Window.Canvas().Focus(entryPassword)
+		safeCanvasFocus(entryPassword)
 	}
 }
 

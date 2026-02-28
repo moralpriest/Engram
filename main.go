@@ -77,6 +77,7 @@ var rpc_client Client
 var Connected bool
 var nav Navigation
 var ui UI
+var appExiting bool
 
 func main() {
 	// Parse version from ldflags-injected string
@@ -108,6 +109,7 @@ func main() {
 	session.Window = a.NewWindow("Engram")
 	session.Window.SetMaster()
 	session.Window.SetCloseIntercept(func() {
+		appExiting = true
 		if engram.Disk != nil {
 			closeWallet()
 		}

@@ -280,7 +280,7 @@ func layoutMain() fyne.CanvasObject {
 			btnLogin.Disable()
 		}
 
-		session.Window.Canvas().Focus(wPassword)
+		safeCanvasFocus(wPassword)
 
 		btnLogin.Refresh()
 	}
@@ -295,7 +295,7 @@ func layoutMain() fyne.CanvasObject {
 			wAccount.SetSelected(list[0])
 			// OnChanged will be triggered, which sets path and focuses password
 			// Explicitly focus password field to ensure it gets focus
-			session.Window.Canvas().Focus(wPassword)
+			safeCanvasFocus(wPassword)
 		}
 	}
 
@@ -481,7 +481,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		fyne.Do(func() {
-			session.Window.Canvas().Focus(wPassword)
+			safeCanvasFocus(wPassword)
 		})
 	}()
 
@@ -1251,7 +1251,7 @@ func layoutSend() fyne.CanvasObject {
 			tx.Ringsize = 16
 			wRings.SetSelected(options[3])
 		}
-		session.Window.Canvas().Focus(wReceiver)
+		safeCanvasFocus(wReceiver)
 	}
 
 	btnSend.OnTapped = func() {
@@ -1884,7 +1884,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	wLanguage.OnChanged = func(s string) {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
-		session.Window.Canvas().Focus(wAccount)
+		safeCanvasFocus(wAccount)
 
 		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && !findAccount() && session.Language != -1 {
 			btnCreate.Enable()
@@ -2391,7 +2391,7 @@ func layoutRestore() fyne.CanvasObject {
 	wLanguage.OnChanged = func(s string) {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
-		session.Window.Canvas().Focus(wAccount)
+		safeCanvasFocus(wAccount)
 		clearFormText(errorText)
 	}
 	wLanguage.PlaceHolder = "(Select Language)"
@@ -2471,20 +2471,20 @@ func layoutRestore() fyne.CanvasObject {
 
 	// Enter key handlers for form submission
 	wPassword.OnSubmitted = func(s string) {
-		session.Window.Canvas().Focus(wPasswordConfirm)
+		safeCanvasFocus(wPasswordConfirm)
 	}
 	wPasswordConfirm.OnSubmitted = func(s string) {
 		if !btnCreate.Disabled() {
 			btnCreate.OnTapped()
 		} else if session.Name == "" {
-			session.Window.Canvas().Focus(wAccount)
+			safeCanvasFocus(wAccount)
 		}
 	}
 	wAccount.OnSubmitted = func(s string) {
 		if !btnCreate.Disabled() {
 			btnCreate.OnTapped()
 		} else {
-			session.Window.Canvas().Focus(wPassword)
+			safeCanvasFocus(wPassword)
 		}
 	}
 
@@ -2833,12 +2833,12 @@ func layoutRestore() fyne.CanvasObject {
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
 			recoveryForm.Objects[8] = hexForm
-			session.Window.Canvas().Focus(hexEntry)
+			safeCanvasFocus(hexEntry)
 		case 0: // Recovery Words
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
 			recoveryForm.Objects[8] = seedForm
-			session.Window.Canvas().Focus(seedEntry)
+			safeCanvasFocus(seedEntry)
 		case 2: // Import File
 			btnCreate.Disable()
 			clearFormText(importFileText)
@@ -4960,7 +4960,7 @@ func layoutTransfers() fyne.CanvasObject {
 			),
 		)
 
-		session.Window.Canvas().Focus(entryPassword)
+		safeCanvasFocus(entryPassword)
 	}
 
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
@@ -12323,7 +12323,7 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
-		session.Window.Canvas().Focus(entryPassword)
+		safeCanvasFocus(entryPassword)
 	}
 
 	// Recovery Hex Keys Link
@@ -12430,7 +12430,7 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
-		session.Window.Canvas().Focus(entryPassword)
+		safeCanvasFocus(entryPassword)
 	}
 
 	// Change Password Link
