@@ -346,7 +346,7 @@ func layoutMain() fyne.CanvasObject {
 	copyrightLabel.TextSize = 10
 	copyrightLabel.Alignment = fyne.TextAlignCenter
 
-	versionLabel := canvas.NewText("Engram v0.6.2", colors.Gray)
+	versionLabel := canvas.NewText("Engram v0.6.3", colors.Gray)
 	versionLabel.TextSize = 10
 	versionLabel.Alignment = fyne.TextAlignCenter
 
