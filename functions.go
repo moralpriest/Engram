@@ -152,7 +152,7 @@ type Session struct {
 	TrackRecentBlocks int64
 }
 
-type Cyberdeck struct {
+type RemoteAccess struct {
 	RPC struct {
 		user     string
 		pass     string
@@ -223,7 +223,7 @@ type Status struct {
 	Network    *canvas.Text
 	Connection *canvas.Circle
 	Sync       *canvas.Circle
-	Cyberdeck  *canvas.Circle
+	RemoteAccess  *canvas.Circle
 	Gnomon     *canvas.Circle
 	EPOCH      *canvas.Circle
 }
@@ -964,10 +964,10 @@ func initWebSocketState() {
 	logger.Printf("[Engram] initWebSocketState() called - wallet available: %v", engram.Disk != nil)
 
 	// Load stored WebSocket port using dual storage (works without wallet)
-	if wsPort := getCyberdeckDual("WS"); wsPort != "" {
-		cyberdeck.WS.port = wsPort
-		if cyberdeck.WS.portText != nil {
-			cyberdeck.WS.portText.SetText(wsPort)
+	if wsPort := getRemoteAccessDual("WS"); wsPort != "" {
+		remoteAccess.WS.port = wsPort
+		if remoteAccess.WS.portText != nil {
+			remoteAccess.WS.portText.SetText(wsPort)
 		}
 		logger.Printf("[Engram] WebSocket port loaded from dual storage: %s", wsPort)
 	} else {
@@ -981,27 +981,27 @@ func initWebSocketState() {
 	getRPCCredentials()
 
 	// Update UI based on loaded enabled state
-	if cyberdeck.WS.toggle != nil && !session.Offline {
-		logger.Printf("[Engram] Updating WebSocket UI based on loaded state: enabled=%v", cyberdeck.WS.global.enabled)
-		if cyberdeck.WS.global.enabled {
+	if remoteAccess.WS.toggle != nil && !session.Offline {
+		logger.Printf("[Engram] Updating WebSocket UI based on loaded state: enabled=%v", remoteAccess.WS.global.enabled)
+		if remoteAccess.WS.global.enabled {
 			// If it should be enabled but server is nil, show "Turn On" (ready to start)
-			cyberdeck.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.toggle.Text = "Turn On"
 			logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=true")
 		} else {
 			// Show disabled state
-			cyberdeck.WS.status.Text = "Blocked"
-			cyberdeck.WS.status.Color = colors.Gray
-			cyberdeck.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.toggle.Text = "Turn On"
 			logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=false")
 		}
 	}
 
 	// If WebSocket was previously enabled, restart it
-	if cyberdeck.WS.global.enabled && !session.Offline {
+	if remoteAccess.WS.global.enabled && !session.Offline {
 		logger.Printf("[Engram] Attempting to restart WebSocket (was previously enabled)")
 
 		// Validate port without requiring UI (for auto-start after login)
-		wsEndpoint := cyberdeck.WS.port
+		wsEndpoint := remoteAccess.WS.port
 		if wsEndpoint == "" {
 			logger.Printf("[Engram] No WebSocket port configured, cannot auto-start")
 		} else {
@@ -1009,25 +1009,25 @@ func initWebSocketState() {
 			toggleXSWD(wsEndpoint)
 
 			// Update UI to reflect server started (if UI is available)
-			if cyberdeck.WS.server != nil {
+			if remoteAccess.WS.server != nil {
 				logger.Printf("[Engram] WebSocket server started successfully")
-				if cyberdeck.WS.status != nil {
-					cyberdeck.WS.status.Text = "Allowed"
-					cyberdeck.WS.status.Color = colors.Green
+				if remoteAccess.WS.status != nil {
+					remoteAccess.WS.status.Text = "Allowed"
+					remoteAccess.WS.status.Color = colors.Green
 				}
-				if cyberdeck.WS.toggle != nil {
-					cyberdeck.WS.toggle.Text = "Turn Off"
+				if remoteAccess.WS.toggle != nil {
+					remoteAccess.WS.toggle.Text = "Turn Off"
 					logger.Printf("[Engram] Set toggle text to 'Turn Off' - server started")
 				}
-				if cyberdeck.WS.portText != nil {
-					cyberdeck.WS.portText.Disable()
+				if remoteAccess.WS.portText != nil {
+					remoteAccess.WS.portText.Disable()
 				}
 			} else {
 				logger.Printf("[Engram] toggleXSWD failed to start server")
 			}
 		}
 	} else {
-		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", cyberdeck.WS.global.enabled, session.Offline)
+		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", remoteAccess.WS.global.enabled, session.Offline)
 	}
 }
 
@@ -1149,7 +1149,7 @@ func StartPulse() {
 									status.EPOCH.FillColor = colors.Green
 								}
 							} else {
-								if cyberdeck.EPOCH.err != nil {
+								if remoteAccess.EPOCH.err != nil {
 									status.EPOCH.FillColor = colors.Red
 								} else {
 									status.EPOCH.FillColor = colors.Gray
@@ -1158,7 +1158,7 @@ func StartPulse() {
 						} else {
 							status.Connection.FillColor = colors.Gray
 							status.Sync.FillColor = colors.Gray
-							status.Cyberdeck.FillColor = colors.Gray
+							status.RemoteAccess.FillColor = colors.Gray
 							status.Gnomon.FillColor = colors.Gray
 							status.EPOCH.FillColor = colors.Gray
 							logger.Printf("[Network] Offline › Last Height: %d / %d\n", session.WalletHeight, session.DaemonHeight)
@@ -1195,7 +1195,7 @@ func StartPulse() {
 							}
 							status.Connection.Refresh()
 							status.Sync.Refresh()
-							status.Cyberdeck.Refresh()
+							status.RemoteAccess.Refresh()
 							status.Gnomon.Refresh()
 							status.EPOCH.Refresh()
 						})
@@ -1325,8 +1325,8 @@ func setDaemon(s string) (err error) {
 	return
 }
 
-// Get Cyberdeck endpoint setting from the local Graviton tree
-func getCyberdeck(key string) (r string) {
+// Get Remote Access endpoint setting from the local Graviton tree
+func getRemoteAccess(key string) (r string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -1338,17 +1338,17 @@ func getCyberdeck(key string) (r string) {
 		return
 	}
 
-	stored, err := GetEncryptedValue("Cyberdeck", []byte(key))
+	stored, err := GetEncryptedValue("RemoteAccess", []byte(key))
 	if err != nil {
-		logger.Debugf("[Engram] getCyberdeck %s: %s\n", key, err)
+		logger.Debugf("[Engram] getRemoteAccess %s: %s\n", key, err)
 		return
 	}
 
 	return string(stored)
 }
 
-// Get Cyberdeck endpoint setting with dual storage (try encrypted first, then fallback)
-func getCyberdeckDual(key string) (r string) {
+// Get Remote Access endpoint setting with dual storage (try encrypted first, then fallback)
+func getRemoteAccessDual(key string) (r string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -1362,30 +1362,30 @@ func getCyberdeckDual(key string) (r string) {
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		stored, err := GetEncryptedValue("Cyberdeck", []byte(key))
+		stored, err := GetEncryptedValue("RemoteAccess", []byte(key))
 		if err == nil && stored != nil {
-			logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from encrypted storage", key)
+			logger.Printf("[Engram] getRemoteAccessDual: Successfully loaded %s from encrypted storage", key)
 			return string(stored)
 		} else if err != nil {
-			logger.Debugf("[Engram] getCyberdeckDual encrypted storage failed: %s\n", err)
+			logger.Debugf("[Engram] getRemoteAccessDual encrypted storage failed: %s\n", err)
 		}
 	}
 
 	// Fallback to unencrypted storage
-	stored, err := GetValue("CyberdeckUnencrypted", []byte(key))
+	stored, err := GetValue("RemoteAccessUnencrypted", []byte(key))
 	if err == nil && stored != nil {
-		logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from fallback storage", key)
+		logger.Printf("[Engram] getRemoteAccessDual: Successfully loaded %s from fallback storage", key)
 		return string(stored)
 	} else if err != nil {
-		logger.Debugf("[Engram] getCyberdeckDual fallback storage failed: %s\n", err)
+		logger.Debugf("[Engram] getRemoteAccessDual fallback storage failed: %s\n", err)
 	}
 
-	logger.Printf("[Engram] getCyberdeckDual: No stored value found for %s", key)
+	logger.Printf("[Engram] getRemoteAccessDual: No stored value found for %s", key)
 	return ""
 }
 
-// Set Cyberdeck endpoint setting to the local Graviton tree
-func setCyberdeck(port, key string) {
+// Set Remote Access endpoint setting to the local Graviton tree
+func setRemoteAccess(port, key string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -1394,18 +1394,18 @@ func setCyberdeck(port, key string) {
 	case "EPOCH":
 		key = "port.EPOCH"
 	default:
-		logger.Debugf("[Engram] setCyberdeck: invalid key\n")
+		logger.Debugf("[Engram] setRemoteAccess: invalid key\n")
 		return
 	}
 
-	err := StoreEncryptedValue("Cyberdeck", []byte(key), []byte(port))
+	err := StoreEncryptedValue("RemoteAccess", []byte(key), []byte(port))
 	if err != nil {
-		logger.Debugf("[Engram] setCyberdeck %s: %s\n", key, err)
+		logger.Debugf("[Engram] setRemoteAccess %s: %s\n", key, err)
 	}
 }
 
-// Set Cyberdeck endpoint setting with dual storage (encrypted + unencrypted fallback)
-func setCyberdeckDual(port, key string) {
+// Set Remote Access endpoint setting with dual storage (encrypted + unencrypted fallback)
+func setRemoteAccessDual(port, key string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -1414,26 +1414,26 @@ func setCyberdeckDual(port, key string) {
 	case "EPOCH":
 		key = "port.EPOCH"
 	default:
-		logger.Debugf("[Engram] setCyberdeckDual: invalid key\n")
+		logger.Debugf("[Engram] setRemoteAccessDual: invalid key\n")
 		return
 	}
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err := StoreEncryptedValue("Cyberdeck", []byte(key), []byte(port))
+		err := StoreEncryptedValue("RemoteAccess", []byte(key), []byte(port))
 		if err != nil {
-			logger.Debugf("[Engram] setCyberdeckDual encrypted storage failed: %s\n", err)
+			logger.Debugf("[Engram] setRemoteAccessDual encrypted storage failed: %s\n", err)
 		} else {
-			logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to encrypted storage", key)
+			logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to encrypted storage", key)
 		}
 	}
 
 	// Always save to unencrypted storage as fallback
-	err := StoreValue("CyberdeckUnencrypted", []byte(key), []byte(port))
+	err := StoreValue("RemoteAccessUnencrypted", []byte(key), []byte(port))
 	if err != nil {
-		logger.Debugf("[Engram] setCyberdeckDual unencrypted storage failed: %s\n", err)
+		logger.Debugf("[Engram] setRemoteAccessDual unencrypted storage failed: %s\n", err)
 	} else {
-		logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to fallback storage", key)
+		logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to fallback storage", key)
 	}
 }
 
@@ -1535,17 +1535,17 @@ func setGnomon(s string) (err error) {
 // Get the RPC credentials from local Graviton tree
 func getRPCCredentials() {
 	if user, err := GetValue("settings", []byte("rpc_user")); err == nil && len(user) > 0 {
-		cyberdeck.RPC.user = string(user)
+		remoteAccess.RPC.user = string(user)
 		// Update UI field when settings are loaded at startup
-		if cyberdeck.RPC.userText != nil {
-			cyberdeck.RPC.userText.SetText(string(user))
+		if remoteAccess.RPC.userText != nil {
+			remoteAccess.RPC.userText.SetText(string(user))
 		}
 	}
 	if pass, err := GetValue("settings", []byte("rpc_pass")); err == nil && len(pass) > 0 {
-		cyberdeck.RPC.pass = string(pass)
+		remoteAccess.RPC.pass = string(pass)
 		// Update UI field when settings are loaded at startup
-		if cyberdeck.RPC.passText != nil {
-			cyberdeck.RPC.passText.SetText(string(pass))
+		if remoteAccess.RPC.passText != nil {
+			remoteAccess.RPC.passText.SetText(string(pass))
 		}
 	}
 }
@@ -1555,15 +1555,15 @@ func getAuthMode() (result string, err error) {
 	r, err := GetValue("settings", []byte("auth_mode"))
 	if err != nil {
 		StoreValue("settings", []byte("auth_mode"), []byte("true"))
-		cyberdeck.mode = 1
+		remoteAccess.mode = 1
 		result = "true"
 	} else {
 		result = string(r)
 		if string(result) == "true" {
-			cyberdeck.mode = 1
+			remoteAccess.mode = 1
 			result = "true"
 		} else {
-			cyberdeck.mode = 0
+			remoteAccess.mode = 0
 			result = "false"
 		}
 	}
@@ -1633,23 +1633,23 @@ func closeWallet() {
 		engram.Disk = nil
 		tx = Transfers{}
 
-		if cyberdeck.RPC.server != nil {
-			cyberdeck.RPC.server.RPCServer_Stop()
-			cyberdeck.RPC.server = nil
-			logger.Printf("[Engram] Cyberdeck RPC closed.\n")
+		if remoteAccess.RPC.server != nil {
+			remoteAccess.RPC.server.RPCServer_Stop()
+			remoteAccess.RPC.server = nil
+			logger.Printf("[Engram] Remote Access RPC closed.\n")
 		}
 
-		if cyberdeck.WS.server != nil {
-			cyberdeck.WS.server.Stop()
-			cyberdeck.WS.server = nil
-			cyberdeck.WS.apps = nil
-			cyberdeck.WS.list = nil
-			logger.Printf("[Engram] Cyberdeck XSWD closed.\n")
+		if remoteAccess.WS.server != nil {
+			remoteAccess.WS.server.Stop()
+			remoteAccess.WS.server = nil
+			remoteAccess.WS.apps = nil
+			remoteAccess.WS.list = nil
+			logger.Printf("[Engram] Remote Access XSWD closed.\n")
 		}
 		// CRITICAL FIX: Don't reset enabled state here - it should persist across wallet sessions
 		// The enabled state is saved to encrypted storage and should be restored on wallet open
-		cyberdeck.WS.advanced = false
-		cyberdeck.WS.global.connect = false
+		remoteAccess.WS.advanced = false
+		remoteAccess.WS.global.connect = false
 
 		tela.ShutdownTELA()
 
@@ -1796,16 +1796,16 @@ func login() {
 			engram.Disk.SetTrackRecentBlocks(session.TrackRecentBlocks)
 		}
 
-		if s, err := strconv.Atoi(getCyberdeck("EPOCH")); err == nil {
+		if s, err := strconv.Atoi(getRemoteAccess("EPOCH")); err == nil {
 			if err := epoch.SetPort(s); err != nil {
 				logger.Errorf("[Engram] Setting EPOCH port: %s\n", err)
 			}
 		}
 
-		cyberdeck.EPOCH.total.Hashes = 0
-		cyberdeck.EPOCH.total.MiniBlocks = 0
-		if epochData, err := GetEncryptedValue("Cyberdeck", []byte("EPOCH")); err == nil {
-			if err := json.Unmarshal(epochData, &cyberdeck.EPOCH.total); err != nil {
+		remoteAccess.EPOCH.total.Hashes = 0
+		remoteAccess.EPOCH.total.MiniBlocks = 0
+		if epochData, err := GetEncryptedValue("RemoteAccess", []byte("EPOCH")); err == nil {
+			if err := json.Unmarshal(epochData, &remoteAccess.EPOCH.total); err != nil {
 				logger.Errorf("[Engram] Setting EPOCH total: %s\n", err)
 			}
 		}
@@ -4141,7 +4141,7 @@ func installSC(code string, args []rpc.Argument) (txid string, err error) {
 	return
 }
 
-// Set the Cyberdeck password
+// Set the Remote Access password
 func newRPCPassword() (s string) {
 	r := make([]byte, 20)
 	_, err := rand.Read(r)
@@ -4150,17 +4150,17 @@ func newRPCPassword() (s string) {
 	}
 
 	s = base64.URLEncoding.EncodeToString(r)
-	cyberdeck.RPC.pass = s
+	remoteAccess.RPC.pass = s
 	return
 }
 
-// Set the Cyberdeck username
+// Set the Remote Access username
 func newRPCUsername() (s string) {
 	r, _ := rand.Int(rand.Reader, big.NewInt(1600))
 	w := mnemonics.Key_To_Words(r, "english")
 	l := strings.Split(string(w), " ")
 	s = l[len(l)-2]
-	cyberdeck.RPC.user = s
+	remoteAccess.RPC.user = s
 	return
 }
 
@@ -4171,65 +4171,65 @@ func toggleRPCServer(port string) {
 		return
 	}
 
-	if cyberdeck.RPC.server != nil {
-		cyberdeck.RPC.server.RPCServer_Stop()
-		cyberdeck.RPC.server = nil
-		cyberdeck.RPC.status.Text = "Blocked"
-		cyberdeck.RPC.status.Color = colors.Gray
-		cyberdeck.RPC.status.Refresh()
-		cyberdeck.RPC.toggle.Text = "Turn On"
-		cyberdeck.RPC.toggle.Refresh()
-		status.Cyberdeck.FillColor = colors.Gray
-		status.Cyberdeck.StrokeColor = colors.Gray
-		status.Cyberdeck.Refresh()
-		cyberdeck.RPC.userText.Text = cyberdeck.RPC.user
-		cyberdeck.RPC.passText.Text = cyberdeck.RPC.pass
-		cyberdeck.RPC.userText.Enable()
-		cyberdeck.RPC.passText.Enable()
+	if remoteAccess.RPC.server != nil {
+		remoteAccess.RPC.server.RPCServer_Stop()
+		remoteAccess.RPC.server = nil
+		remoteAccess.RPC.status.Text = "Blocked"
+		remoteAccess.RPC.status.Color = colors.Gray
+		remoteAccess.RPC.status.Refresh()
+		remoteAccess.RPC.toggle.Text = "Turn On"
+		remoteAccess.RPC.toggle.Refresh()
+		status.RemoteAccess.FillColor = colors.Gray
+		status.RemoteAccess.StrokeColor = colors.Gray
+		status.RemoteAccess.Refresh()
+		remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
+		remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
+		remoteAccess.RPC.userText.Enable()
+		remoteAccess.RPC.passText.Enable()
 		logger.Printf("[Engram] RPC server closed\n")
 	} else {
 		logger.Printf("[Engram] Starting RPC server %s\n", port)
 
 		globals.Arguments["--rpc-bind"] = port
 
-		if cyberdeck.RPC.user == "" {
-			cyberdeck.RPC.user = newRPCUsername()
+		if remoteAccess.RPC.user == "" {
+			remoteAccess.RPC.user = newRPCUsername()
 		}
 
-		if cyberdeck.RPC.pass == "" {
-			cyberdeck.RPC.pass = newRPCPassword()
+		if remoteAccess.RPC.pass == "" {
+			remoteAccess.RPC.pass = newRPCPassword()
 		}
 
-		globals.Arguments["--rpc-login"] = cyberdeck.RPC.user + ":" + cyberdeck.RPC.pass
+		globals.Arguments["--rpc-login"] = remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass
 
-		cyberdeck.RPC.server, err = rpcserver.RPCServer_Start(engram.Disk, "Cyberdeck")
+		remoteAccess.RPC.server, err = rpcserver.RPCServer_Start(engram.Disk, "RemoteAccess")
 		if err != nil {
-			cyberdeck.RPC.server = nil
-			cyberdeck.RPC.status.Text = "Blocked"
-			cyberdeck.RPC.status.Color = colors.Gray
-			cyberdeck.RPC.status.Refresh()
-			cyberdeck.RPC.toggle.Text = "Turn On"
-			cyberdeck.RPC.toggle.Refresh()
-			status.Cyberdeck.FillColor = colors.Gray
-			status.Cyberdeck.StrokeColor = colors.Gray
-			status.Cyberdeck.Refresh()
-			cyberdeck.RPC.userText.Text = cyberdeck.RPC.user
-			cyberdeck.RPC.passText.Text = cyberdeck.RPC.pass
-			cyberdeck.RPC.userText.Enable()
-			cyberdeck.RPC.passText.Enable()
+			remoteAccess.RPC.server = nil
+			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.status.Refresh()
+			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.toggle.Refresh()
+			status.RemoteAccess.FillColor = colors.Gray
+			status.RemoteAccess.StrokeColor = colors.Gray
+			status.RemoteAccess.Refresh()
+			remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
+			remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
+			remoteAccess.RPC.userText.Enable()
+			remoteAccess.RPC.passText.Enable()
 		} else {
-			cyberdeck.RPC.status.Text = "Allowed"
-			cyberdeck.RPC.status.Color = colors.Green
-			cyberdeck.RPC.status.Refresh()
-			cyberdeck.RPC.toggle.Text = "Turn Off"
-			cyberdeck.RPC.toggle.Refresh()
-			status.Cyberdeck.FillColor = colors.Green
-			status.Cyberdeck.StrokeColor = colors.Green
-			status.Cyberdeck.Refresh()
-			cyberdeck.RPC.userText.Text = cyberdeck.RPC.user
-			cyberdeck.RPC.passText.Text = cyberdeck.RPC.pass
-			cyberdeck.RPC.userText.Disable()
-			cyberdeck.RPC.passText.Disable()
+			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.status.Refresh()
+			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.toggle.Refresh()
+			status.RemoteAccess.FillColor = colors.Green
+			status.RemoteAccess.StrokeColor = colors.Green
+			status.RemoteAccess.Refresh()
+			remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
+			remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
+			remoteAccess.RPC.userText.Disable()
+			remoteAccess.RPC.passText.Disable()
 		}
 	}
 }
@@ -4641,7 +4641,7 @@ func engramCanStoreMethod(method string) bool {
 // Set XSWD permissions to the local Graviton tree
 func setPermissions() {
 	// Save permissions with dual storage
-	data, err := json.Marshal(&cyberdeck.WS.global.permissions)
+	data, err := json.Marshal(&remoteAccess.WS.global.permissions)
 	if err != nil {
 		logger.Errorf("[Engram] setPermissions: %s\n", err)
 	} else {
@@ -4669,7 +4669,7 @@ func setPermissions() {
 
 	// Save enabled state separately with dual storage
 	enabledValue := "0"
-	if cyberdeck.WS.global.enabled {
+	if remoteAccess.WS.global.enabled {
 		enabledValue = "1"
 	}
 
@@ -4816,8 +4816,8 @@ func SetGroupPermission(groupName string, perm xswd.Permission) {
 	for _, group := range permissionGroups {
 		if group.Name == groupName {
 			for _, method := range group.Methods {
-				if cyberdeck.WS.global.permissions != nil {
-					cyberdeck.WS.global.permissions[method] = perm
+				if remoteAccess.WS.global.permissions != nil {
+					remoteAccess.WS.global.permissions[method] = perm
 				}
 			}
 			break
@@ -4838,8 +4838,8 @@ func ApplySimpleModeDefaults() {
 	for _, group := range permissionGroups {
 		groupPerm := GetGroupPermission(group.Name)
 		for _, method := range group.Methods {
-			if cyberdeck.WS.global.permissions != nil {
-				cyberdeck.WS.global.permissions[method] = groupPerm
+			if remoteAccess.WS.global.permissions != nil {
+				remoteAccess.WS.global.permissions[method] = groupPerm
 			}
 		}
 	}
@@ -4962,16 +4962,16 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 
 // Get XSWD permissions from local Graviton tree and sorted wallet methods
 func getPermissions() (handler map[string]xswd.Permission, methods []string) {
-	cyberdeck.WS.Lock()
-	defer cyberdeck.WS.Unlock()
+	remoteAccess.WS.Lock()
+	defer remoteAccess.WS.Unlock()
 
 	logger.Printf("[Engram] getPermissions() called - wallet available: %v", engram.Disk != nil)
-	cyberdeck.WS.global.permissions = SetDefaultPermissions()
-	logger.Printf("[Engram] SetDefaultPermissions created %d methods", len(cyberdeck.WS.global.permissions))
+	remoteAccess.WS.global.permissions = SetDefaultPermissions()
+	logger.Printf("[Engram] SetDefaultPermissions created %d methods", len(remoteAccess.WS.global.permissions))
 
 	// Debug: Print all methods that should be available
-	logger.Printf("[Engram] DEBUG - All methods in cyberdeck.WS.global.permissions:")
-	for methodName := range cyberdeck.WS.global.permissions {
+	logger.Printf("[Engram] DEBUG - All methods in remoteAccess.WS.global.permissions:")
+	for methodName := range remoteAccess.WS.global.permissions {
 		logger.Printf("[Engram]   - %s", methodName)
 	}
 
@@ -4991,12 +4991,12 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 				logger.Printf("[Engram] getPermissions: Successfully loaded %d stored permissions\n", len(storedPermissions))
 				// Merge stored permissions with defaults (stored takes precedence)
 				for method, permission := range storedPermissions {
-					if _, exists := cyberdeck.WS.global.permissions[method]; exists {
-						cyberdeck.WS.global.permissions[method] = permission
+					if _, exists := remoteAccess.WS.global.permissions[method]; exists {
+						remoteAccess.WS.global.permissions[method] = permission
 						logger.Printf("[Engram] getPermissions: Merged stored permission for %s: %s", method, permission)
 					}
 				}
-				logger.Printf("[Engram] getPermissions: After merge, total permissions: %d", len(cyberdeck.WS.global.permissions))
+				logger.Printf("[Engram] getPermissions: After merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 			}
 		}
 
@@ -5004,11 +5004,11 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 		storedEnabled, err := GetEncryptedValue("XSWD", []byte("Enabled"))
 		if err != nil {
 			logger.Printf("[Engram] WebSocket enabled state NOT FOUND (error: %v), defaulting to false", err)
-			cyberdeck.WS.global.enabled = false // Default to disabled
+			remoteAccess.WS.global.enabled = false // Default to disabled
 		} else {
 			enabledStr := string(storedEnabled)
-			cyberdeck.WS.global.enabled = enabledStr == "1"
-			logger.Printf("[Engram] WebSocket enabled state loaded: '%s' -> %v", enabledStr, cyberdeck.WS.global.enabled)
+			remoteAccess.WS.global.enabled = enabledStr == "1"
+			logger.Printf("[Engram] WebSocket enabled state loaded: '%s' -> %v", enabledStr, remoteAccess.WS.global.enabled)
 		}
 	} else {
 		// Try to load permissions from unencrypted fallback storage
@@ -5026,12 +5026,12 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 				logger.Printf("[Engram] getPermissions: Successfully loaded %d fallback permissions\n", len(storedPermissions))
 				// Merge fallback permissions with defaults (stored takes precedence)
 				for method, permission := range storedPermissions {
-					if _, exists := cyberdeck.WS.global.permissions[method]; exists {
-						cyberdeck.WS.global.permissions[method] = permission
+					if _, exists := remoteAccess.WS.global.permissions[method]; exists {
+						remoteAccess.WS.global.permissions[method] = permission
 						logger.Printf("[Engram] getPermissions: Merged fallback permission for %s: %s", method, permission)
 					}
 				}
-				logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(cyberdeck.WS.global.permissions))
+				logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 			}
 		}
 
@@ -5039,16 +5039,16 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 		storedEnabled, err := GetValue("XSWDUnencrypted", []byte("Enabled"))
 		if err != nil {
 			logger.Printf("[Engram] WebSocket enabled state NOT FOUND in fallback (error: %v), defaulting to false", err)
-			cyberdeck.WS.global.enabled = false // Default to disabled
+			remoteAccess.WS.global.enabled = false // Default to disabled
 		} else {
 			enabledStr := string(storedEnabled)
-			cyberdeck.WS.global.enabled = enabledStr == "1"
-			logger.Printf("[Engram] WebSocket enabled state loaded from fallback: '%s' -> %v", enabledStr, cyberdeck.WS.global.enabled)
+			remoteAccess.WS.global.enabled = enabledStr == "1"
+			logger.Printf("[Engram] WebSocket enabled state loaded from fallback: '%s' -> %v", enabledStr, remoteAccess.WS.global.enabled)
 		}
 		logger.Printf("[Engram] getPermissions: Wallet not available, using fallback permissions and enabled state")
 	}
 
-	for k := range cyberdeck.WS.global.permissions {
+	for k := range remoteAccess.WS.global.permissions {
 		methods = append(methods, k)
 		logger.Printf("[Engram] Found method in permissions: %s", k)
 	}
@@ -5056,7 +5056,7 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 	sort.Strings(methods)
 	logger.Printf("[Engram] Total methods for UI: %d", len(methods))
 
-	return cyberdeck.WS.global.permissions, methods
+	return remoteAccess.WS.global.permissions, methods
 }
 
 // Start a permissioned web socket server to allow decentralized application communication
@@ -5065,26 +5065,26 @@ func toggleXSWD(endpoint string) {
 		return
 	}
 
-	if cyberdeck.WS.server != nil {
-		cyberdeck.WS.server.Stop()
-		cyberdeck.WS.server = nil
-		cyberdeck.WS.status.Text = "Blocked"
-		cyberdeck.WS.status.Color = colors.Gray
-		cyberdeck.WS.status.Refresh()
-		cyberdeck.WS.toggle.Text = "Turn On"
-		cyberdeck.WS.toggle.Refresh()
-		status.Cyberdeck.FillColor = colors.Gray
-		status.Cyberdeck.StrokeColor = colors.Gray
-		status.Cyberdeck.Refresh()
-		cyberdeck.WS.advanced = false
-		cyberdeck.WS.global.enabled = false
-		cyberdeck.WS.global.connect = false
+	if remoteAccess.WS.server != nil {
+		remoteAccess.WS.server.Stop()
+		remoteAccess.WS.server = nil
+		remoteAccess.WS.status.Text = "Blocked"
+		remoteAccess.WS.status.Color = colors.Gray
+		remoteAccess.WS.status.Refresh()
+		remoteAccess.WS.toggle.Text = "Turn On"
+		remoteAccess.WS.toggle.Refresh()
+		status.RemoteAccess.FillColor = colors.Gray
+		status.RemoteAccess.StrokeColor = colors.Gray
+		status.RemoteAccess.Refresh()
+		remoteAccess.WS.advanced = false
+		remoteAccess.WS.global.enabled = false
+		remoteAccess.WS.global.connect = false
 
 		// Save WebSocket disabled state to storage
 		setPermissions()
-		cyberdeck.WS.apps = []xswd.ApplicationData{}
-		if cyberdeck.WS.list != nil {
-			cyberdeck.WS.list.Refresh()
+		remoteAccess.WS.apps = []xswd.ApplicationData{}
+		if remoteAccess.WS.list != nil {
+			remoteAccess.WS.list.Refresh()
 		}
 		logger.Printf("[Engram] XSWD server closed\n")
 	} else {
@@ -5104,88 +5104,88 @@ func toggleXSWD(endpoint string) {
 
 		noStoreMethods := engramNoStoreMethods()
 
-		cyberdeck.WS.server = xswd.NewXSWDServerWithPort(portInt, engram.Disk, false, noStoreMethods, func(ad *xswd.ApplicationData) bool {
+		remoteAccess.WS.server = xswd.NewXSWDServerWithPort(portInt, engram.Disk, false, noStoreMethods, func(ad *xswd.ApplicationData) bool {
 			return XSWDPrompt(ad)
 		}, func(ad *xswd.ApplicationData, r *jrpc2.Request) xswd.Permission {
 			return AskPermissionForRequest(ad, r)
 		})
 
 		// Only update UI if it exists (may be nil during auto-start at login)
-		if cyberdeck.WS.toggle != nil {
-			cyberdeck.WS.toggle.Disable()
-			cyberdeck.WS.toggle.Text = "Initializing"
-			cyberdeck.WS.toggle.Refresh()
+		if remoteAccess.WS.toggle != nil {
+			remoteAccess.WS.toggle.Disable()
+			remoteAccess.WS.toggle.Text = "Initializing"
+			remoteAccess.WS.toggle.Refresh()
 		}
 		time.Sleep(time.Second)
-		if !cyberdeck.WS.server.IsRunning() {
-			cyberdeck.WS.server = nil
+		if !remoteAccess.WS.server.IsRunning() {
+			remoteAccess.WS.server = nil
 			logger.Errorf("[Engram] Error starting XSWD server\n")
-			if cyberdeck.WS.toggle != nil {
-				cyberdeck.WS.toggle.Text = "Error starting web sockets"
-				cyberdeck.WS.toggle.Refresh()
+			if remoteAccess.WS.toggle != nil {
+				remoteAccess.WS.toggle.Text = "Error starting web sockets"
+				remoteAccess.WS.toggle.Refresh()
 				go func() {
 					time.Sleep(time.Second * 2)
 					fyne.Do(func() {
 						fyne.Do(func() {
-							cyberdeck.WS.toggle.Text = "Turn On"
-							cyberdeck.WS.toggle.Refresh()
-							cyberdeck.WS.toggle.Enable()
+							remoteAccess.WS.toggle.Text = "Turn On"
+							remoteAccess.WS.toggle.Refresh()
+							remoteAccess.WS.toggle.Enable()
 						})
 					})
 				}()
 			}
 			return
 		}
-		if cyberdeck.WS.toggle != nil {
-			cyberdeck.WS.toggle.Enable()
+		if remoteAccess.WS.toggle != nil {
+			remoteAccess.WS.toggle.Enable()
 		}
 
-		if cyberdeck.WS.server == nil {
-			if cyberdeck.WS.status != nil {
-				cyberdeck.WS.status.Text = "Blocked"
-				cyberdeck.WS.status.Color = colors.Gray
-				cyberdeck.WS.status.Refresh()
+		if remoteAccess.WS.server == nil {
+			if remoteAccess.WS.status != nil {
+				remoteAccess.WS.status.Text = "Blocked"
+				remoteAccess.WS.status.Color = colors.Gray
+				remoteAccess.WS.status.Refresh()
 			}
-			if cyberdeck.WS.toggle != nil {
-				cyberdeck.WS.toggle.Text = "Turn On"
-				cyberdeck.WS.toggle.Refresh()
+			if remoteAccess.WS.toggle != nil {
+				remoteAccess.WS.toggle.Text = "Turn On"
+				remoteAccess.WS.toggle.Refresh()
 			}
-			if status.Cyberdeck != nil {
-				status.Cyberdeck.FillColor = colors.Gray
-				status.Cyberdeck.StrokeColor = colors.Gray
-				status.Cyberdeck.Refresh()
+			if status.RemoteAccess != nil {
+				status.RemoteAccess.FillColor = colors.Gray
+				status.RemoteAccess.StrokeColor = colors.Gray
+				status.RemoteAccess.Refresh()
 			}
 		} else {
 			for method, h := range EngramHandler {
-				cyberdeck.WS.server.SetCustomMethod(method, h)
+				remoteAccess.WS.server.SetCustomMethod(method, h)
 			}
 
-			cyberdeck.WS.server.SetCustomMethod("HandleTELALinks", handler.New(HandleTELALinks))
+			remoteAccess.WS.server.SetCustomMethod("HandleTELALinks", handler.New(HandleTELALinks))
 
-			cyberdeck.WS.server.SetCustomMethod("AttemptEPOCHWithAddr", handler.New(AttemptEPOCHWithAddr))
+			remoteAccess.WS.server.SetCustomMethod("AttemptEPOCHWithAddr", handler.New(AttemptEPOCHWithAddr))
 
 			for method, h := range epoch.GetHandler() {
-				cyberdeck.WS.server.SetCustomMethod(method, h)
+				remoteAccess.WS.server.SetCustomMethod(method, h)
 			}
 
-			if cyberdeck.WS.status != nil {
-				cyberdeck.WS.status.Text = "Allowed"
-				cyberdeck.WS.status.Color = colors.Green
-				cyberdeck.WS.status.Refresh()
+			if remoteAccess.WS.status != nil {
+				remoteAccess.WS.status.Text = "Allowed"
+				remoteAccess.WS.status.Color = colors.Green
+				remoteAccess.WS.status.Refresh()
 			}
-			if cyberdeck.WS.toggle != nil {
-				cyberdeck.WS.toggle.Text = "Turn Off"
-				cyberdeck.WS.toggle.Refresh()
+			if remoteAccess.WS.toggle != nil {
+				remoteAccess.WS.toggle.Text = "Turn Off"
+				remoteAccess.WS.toggle.Refresh()
 			}
-			if status.Cyberdeck != nil {
-				status.Cyberdeck.FillColor = colors.Green
-				status.Cyberdeck.StrokeColor = colors.Green
-				status.Cyberdeck.Refresh()
+			if status.RemoteAccess != nil {
+				status.RemoteAccess.FillColor = colors.Green
+				status.RemoteAccess.StrokeColor = colors.Green
+				status.RemoteAccess.Refresh()
 			}
 
 			// CRITICAL FIX: Save WebSocket enabled state to storage
-			cyberdeck.WS.global.enabled = true
-			cyberdeck.WS.advanced = true
+			remoteAccess.WS.global.enabled = true
+			remoteAccess.WS.advanced = true
 			setPermissions()
 			logger.Printf("[Engram] WebSocket enabled state saved to storage")
 		}
@@ -5194,23 +5194,23 @@ func toggleXSWD(endpoint string) {
 
 // Prompt when an application submits request to connect to wallet with XSWD
 func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
-	if cyberdeck.WS.advanced {
+	if remoteAccess.WS.advanced {
 		// If global permissions enabled set them here
-		if cyberdeck.WS.global.enabled {
+		if remoteAccess.WS.global.enabled {
 			logger.Printf("[Engram] Applied global XSWD permissions to %s\n", ad.Name)
 			// Initialize ad.Permissions if nil to avoid panic
 			if ad.Permissions == nil {
 				ad.Permissions = make(map[string]xswd.Permission)
 			}
-			cyberdeck.WS.RLock()
-			for k, v := range cyberdeck.WS.global.permissions {
+			remoteAccess.WS.RLock()
+			for k, v := range remoteAccess.WS.global.permissions {
 				ad.Permissions[k] = v
 			}
-			cyberdeck.WS.RUnlock()
+			remoteAccess.WS.RUnlock()
 		}
 
 		// If wallet is set to connect to all requests, connect to app
-		if cyberdeck.WS.global.connect {
+		if remoteAccess.WS.global.connect {
 			logger.Printf("[Engram] Applied automatic XSWD connection to %s\n", ad.Name)
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been approved"})
 			go refreshXSWDList()
@@ -5660,7 +5660,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	// Add AlwaysAllow option if method is !noStore
-	if cyberdeck.WS.server.CanStorePermission(method) {
+	if remoteAccess.WS.server.CanStorePermission(method) {
 		permissions = append(permissions, xswd.AlwaysAllow.String())
 	}
 
@@ -5735,7 +5735,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 			"Remove",
 			func(b bool) {
 				if b {
-					cyberdeck.WS.server.RemoveApplication(ad)
+					remoteAccess.WS.server.RemoveApplication(ad)
 				}
 			},
 		)
@@ -5810,14 +5810,14 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 // Refresh list of connected XSWD apps
 func refreshXSWDList() {
 	time.Sleep(time.Second)
-	if cyberdeck.WS.server != nil {
-		cyberdeck.WS.apps = cyberdeck.WS.server.GetApplications()
-		sort.Slice(cyberdeck.WS.apps, func(i, j int) bool { return cyberdeck.WS.apps[i].Name < cyberdeck.WS.apps[j].Name })
-		if cyberdeck.WS.list != nil {
+	if remoteAccess.WS.server != nil {
+		remoteAccess.WS.apps = remoteAccess.WS.server.GetApplications()
+		sort.Slice(remoteAccess.WS.apps, func(i, j int) bool { return remoteAccess.WS.apps[i].Name < remoteAccess.WS.apps[j].Name })
+		if remoteAccess.WS.list != nil {
 			fyne.Do(func() {
-				cyberdeck.WS.list.UnselectAll()
-				cyberdeck.WS.list.FocusLost()
-				cyberdeck.WS.list.Refresh()
+				remoteAccess.WS.list.UnselectAll()
+				remoteAccess.WS.list.FocusLost()
+				remoteAccess.WS.list.Refresh()
 			})
 		}
 	}
@@ -6149,7 +6149,7 @@ func sessionDomainToString(domain string) string {
 		return "Asset Explorer"
 	case "manager":
 		return "Asset Manager"
-	case "send", "transfers", "messages", "cyberdeck", "Identity", "datapad":
+	case "send", "transfers", "messages", "remoteaccess", "Identity", "datapad":
 		return fmt.Sprintf("%s%s", strings.ToUpper(str[0:1]), str[1:])
 	case "tela", "tela.manager":
 		return "TELA"
@@ -6159,10 +6159,10 @@ func sessionDomainToString(domain string) string {
 		return "File Manager"
 	case "messages.contact":
 		return "Message Contact"
-	case "cyberdeck.manager":
-		return "Cyberdeck Manager"
-	case "cyberdeck.permissions":
-		return "Cyberdeck Settings"
+	case "remoteaccess.manager":
+		return "Remote Access Manager"
+	case "remoteaccess.permissions":
+		return "Remote Access Settings"
 	case "sc.builder":
 		return "Contract Builder"
 	case "sc.editor":
@@ -6176,12 +6176,12 @@ func sessionDomainToString(domain string) string {
 func storeEPOCHTotal(timeout time.Duration) {
 	epochSession, err := epoch.GetSession(timeout)
 	if err == nil {
-		cyberdeck.EPOCH.total.Hashes += epochSession.Hashes
-		cyberdeck.EPOCH.total.MiniBlocks += epochSession.MiniBlocks
+		remoteAccess.EPOCH.total.Hashes += epochSession.Hashes
+		remoteAccess.EPOCH.total.MiniBlocks += epochSession.MiniBlocks
 
 		var eMar []byte
-		if eMar, err = json.Marshal(cyberdeck.EPOCH.total); err == nil {
-			err = StoreEncryptedValue("Cyberdeck", []byte("EPOCH"), eMar)
+		if eMar, err = json.Marshal(remoteAccess.EPOCH.total); err == nil {
+			err = StoreEncryptedValue("RemoteAccess", []byte("EPOCH"), eMar)
 		}
 	}
 
@@ -6192,13 +6192,13 @@ func storeEPOCHTotal(timeout time.Duration) {
 
 // Store account EPOCH session and stop EPOCH
 func stopEPOCH() {
-	if cyberdeck.EPOCH.enabled {
+	if remoteAccess.EPOCH.enabled {
 		storeEPOCHTotal(time.Second * 4)
 	}
 
 	epoch.StopGetWork()
-	cyberdeck.EPOCH.enabled = false
-	//cyberdeck.EPOCH.allowWithAddress = false
+	remoteAccess.EPOCH.enabled = false
+	//remoteAccess.EPOCH.allowWithAddress = false
 }
 
 // Check if value exists within a string array/slice

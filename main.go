@@ -71,7 +71,7 @@ var status Status
 var tx Transfers
 var res Res
 var colors Colors
-var cyberdeck Cyberdeck
+var remoteAccess RemoteAccess
 var themes Theme
 var rpc_client Client
 var Connected bool
@@ -152,10 +152,10 @@ func main() {
 	status.Sync.StrokeColor = colors.Red
 	status.Sync.StrokeWidth = 0
 	status.Sync.Refresh()
-	status.Cyberdeck = canvas.NewCircle(colors.Red)
-	status.Cyberdeck.StrokeColor = colors.Red
-	status.Cyberdeck.StrokeWidth = 0
-	status.Cyberdeck.Refresh()
+	status.RemoteAccess = canvas.NewCircle(colors.Red)
+	status.RemoteAccess.StrokeColor = colors.Red
+	status.RemoteAccess.StrokeWidth = 0
+	status.RemoteAccess.Refresh()
 	status.Gnomon = canvas.NewCircle(colors.Red)
 	status.Gnomon.StrokeColor = colors.Red
 	status.Gnomon.StrokeWidth = 0

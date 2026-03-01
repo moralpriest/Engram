@@ -319,7 +319,7 @@ func layoutMain() fyne.CanvasObject {
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
 
 	status.Connection.FillColor = colors.Gray
-	status.Cyberdeck.FillColor = colors.Gray
+	status.RemoteAccess.FillColor = colors.Gray
 	status.Gnomon.FillColor = colors.Gray
 	status.EPOCH.FillColor = colors.Gray
 	status.Sync.FillColor = colors.Gray
@@ -697,20 +697,20 @@ func layoutDashboard() fyne.CanvasObject {
 	daemonLabel.Alignment = fyne.TextAlignCenter
 	daemonLabel.TextStyle = fyne.TextStyle{Bold: false}
 
-	cyberdeckText := "CYBERDECK"
-	if cyberdeck.WS.server != nil {
-		cyberdeckText = "CYBERDECK (WS)"
-	} else if cyberdeck.RPC.server != nil {
-		cyberdeckText = "CYBERDECK (RPC)"
+	remoteAccessText := "REMOTE ACCESS"
+	if remoteAccess.WS.server != nil {
+		remoteAccessText = "REMOTE ACCESS (WS)"
+	} else if remoteAccess.RPC.server != nil {
+		remoteAccessText = "REMOTE ACCESS (RPC)"
 	} else {
-		status.Cyberdeck.FillColor = colors.Gray
-		status.Cyberdeck.Refresh()
+		status.RemoteAccess.FillColor = colors.Gray
+		status.RemoteAccess.Refresh()
 	}
 
-	cyberdeckLabel := canvas.NewText(cyberdeckText, colors.Gray)
-	cyberdeckLabel.TextSize = 12
-	cyberdeckLabel.Alignment = fyne.TextAlignTrailing
-	cyberdeckLabel.TextStyle = fyne.TextStyle{Bold: false}
+	remoteAccessLabel := canvas.NewText(remoteAccessText, colors.Gray)
+	remoteAccessLabel.TextSize = 12
+	remoteAccessLabel.Alignment = fyne.TextAlignTrailing
+	remoteAccessLabel.TextStyle = fyne.TextStyle{Bold: false}
 
 	gnomonLabel := canvas.NewText("GNOMON", colors.Gray)
 	gnomonLabel.TextSize = 12
@@ -722,7 +722,7 @@ func layoutDashboard() fyne.CanvasObject {
 	epochLabel.Alignment = fyne.TextAlignTrailing
 	epochLabel.TextStyle = fyne.TextStyle{Bold: false}
 	if !epoch.IsActive() {
-		if cyberdeck.EPOCH.err != nil {
+		if remoteAccess.EPOCH.err != nil {
 			status.EPOCH.FillColor = colors.Red
 			status.EPOCH.Refresh()
 		} else {
@@ -882,7 +882,7 @@ func layoutDashboard() fyne.CanvasObject {
 	gnomonDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, gnomonAnimationCanvas, status.Gnomon))
 	epochDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, epochAnimationCanvas, status.EPOCH))
 	telaDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, telaStatus))
-	cyberdeckDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.Cyberdeck))
+	remoteAccessDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.RemoteAccess))
 
 	rectOffset := canvas.NewRectangle(color.Transparent)
 	rectOffset.SetMinSize(fyne.NewSize(81, 1))
@@ -960,10 +960,10 @@ func layoutDashboard() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rectOffset,
-					cyberdeckLabel,
+					remoteAccessLabel,
 				),
 				rectSquare,
-				cyberdeckDot,
+				remoteAccessDot,
 			),
 		),
 	)
@@ -986,7 +986,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 		if k.Name == fyne.KeyRight {
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutCyberdeck())
+			session.Window.SetContent(layoutRemoteAccess())
 			removeOverlays()
 		} else if k.Name == fyne.KeyLeft {
 			session.Window.SetContent(layoutTransition())
@@ -1950,7 +1950,7 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	btnEnter := widget.NewButton("Enter", func() {
 		// Initialize the wallet and transition to dashboard
-		go login()
+		login()
 	})
 
 	formSuccess := container.NewVBox(
@@ -2515,7 +2515,7 @@ func layoutRestore() fyne.CanvasObject {
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
 
 	status.Connection.FillColor = colors.Gray
-	status.Cyberdeck.FillColor = colors.Gray
+	status.RemoteAccess.FillColor = colors.Gray
 	status.Gnomon.FillColor = colors.Gray
 	status.Sync.FillColor = colors.Gray
 
@@ -2860,7 +2860,7 @@ func layoutRestore() fyne.CanvasObject {
 	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
 	btnEnter := widget.NewButton("Enter", func() {
-		go login()
+		login()
 	})
 
 	formSuccess := container.NewHBox(
@@ -5398,8 +5398,8 @@ func layoutSettings() fyne.CanvasObject {
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = 14
 
-	textCyberdeck := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
-	textCyberdeck.Wrapping = fyne.TextWrapWord
+	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
+	textRemoteAccess.Wrapping = fyne.TextWrapWord
 
 	btnRestore := widget.NewButton("Restore Defaults", nil)
 	btnDelete := widget.NewButton("Clear Local Data", nil)
@@ -5727,20 +5727,20 @@ func layoutSettings() fyne.CanvasObject {
 
 	entryUser := widget.NewEntry()
 	entryUser.PlaceHolder = "Username"
-	entryUser.SetText(cyberdeck.RPC.user)
+	entryUser.SetText(remoteAccess.RPC.user)
 
 	entryPass := widget.NewEntry()
 	entryPass.PlaceHolder = "Password"
 	entryPass.Password = true
-	entryPass.SetText(cyberdeck.RPC.pass)
+	entryPass.SetText(remoteAccess.RPC.pass)
 
 	entryUser.OnChanged = func(s string) {
-		cyberdeck.RPC.user = s
+		remoteAccess.RPC.user = s
 		StoreValue("settings", []byte("rpc_user"), []byte(s))
 	}
 
 	entryPass.OnChanged = func(s string) {
-		cyberdeck.RPC.pass = s
+		remoteAccess.RPC.pass = s
 		StoreValue("settings", []byte("rpc_pass"), []byte(s))
 	}
 
@@ -5773,10 +5773,10 @@ func layoutSettings() fyne.CanvasObject {
 			StoreValue("settings", []byte("simulator_nodes"), []byte{})
 
 			// Regenerate RPC credentials
-			cyberdeck.RPC.user = newRPCUsername()
-			cyberdeck.RPC.pass = newRPCPassword()
-			StoreValue("settings", []byte("rpc_user"), []byte(cyberdeck.RPC.user))
-			StoreValue("settings", []byte("rpc_pass"), []byte(cyberdeck.RPC.pass))
+			remoteAccess.RPC.user = newRPCUsername()
+			remoteAccess.RPC.pass = newRPCPassword()
+			StoreValue("settings", []byte("rpc_user"), []byte(remoteAccess.RPC.user))
+			StoreValue("settings", []byte("rpc_pass"), []byte(remoteAccess.RPC.pass))
 
 			resizeWindow(ui.MaxWidth, ui.MaxHeight)
 			session.Window.SetContent(layoutTransition())
@@ -5834,7 +5834,7 @@ func layoutSettings() fyne.CanvasObject {
 		widget.NewLabel(""),
 		labelSecurity,
 		rectSpacer,
-		textCyberdeck,
+		textRemoteAccess,
 		rectSpacer,
 		entryUser,
 		rectSpacer,
@@ -5900,7 +5900,7 @@ func layoutSettings() fyne.CanvasObject {
 }
 
 // layoutAppSettings creates the centralized settings page with 3 tabs:
-// Cyberdeck, TELA, and Advanced
+// Remote Access, TELA, and Advanced
 func layoutAppSettings() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	previousDomain := session.Domain // Save before overwriting
@@ -5922,12 +5922,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 1))
 
-	// Cyberdeck Tab Content
+	// Remote Access Tab Content
 	go refreshXSWDList()
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("C Y B E R D E C K", colors.Gray)
+	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
@@ -5978,14 +5978,14 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	linkColor := colors.Green
 
-	if cyberdeck.RPC.server == nil {
+	if remoteAccess.RPC.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.RPC.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.RPC.status.TextSize = 22
-	cyberdeck.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	serverStatus.TextSize = 12
@@ -5993,191 +5993,191 @@ func layoutAppSettings() fyne.CanvasObject {
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
 
 	linkCenter := container.NewCenter(
-		cyberdeck.RPC.status,
+		remoteAccess.RPC.status,
 	)
 
-	cyberdeck.RPC.userText = widget.NewEntry()
-	cyberdeck.RPC.userText.PlaceHolder = "Username"
-	cyberdeck.RPC.userText.OnChanged = func(s string) {
+	remoteAccess.RPC.userText = widget.NewEntry()
+	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.user = s
+			remoteAccess.RPC.user = s
 		}
 	}
 
-	cyberdeck.RPC.passText = widget.NewEntry()
-	cyberdeck.RPC.passText.Password = true
-	cyberdeck.RPC.passText.PlaceHolder = "Password"
-	cyberdeck.RPC.passText.OnChanged = func(s string) {
+	remoteAccess.RPC.passText = widget.NewEntry()
+	remoteAccess.RPC.passText.Password = true
+	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.pass = s
+			remoteAccess.RPC.pass = s
 		}
 	}
 
-	cyberdeck.RPC.portText = widget.NewEntry()
-	cyberdeck.RPC.portText.PlaceHolder = "0.0.0.0:10103"
-	cyberdeck.RPC.portText.Validator = func(s string) (err error) {
+	remoteAccess.RPC.portText = widget.NewEntry()
+	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
 		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 		test := regexp.MustCompile(regex)
 		if test.MatchString(s) {
-			cyberdeck.RPC.portText.SetValidationError(nil)
+			remoteAccess.RPC.portText.SetValidationError(nil)
 		} else {
 			err = errors.New("invalid host name")
-			cyberdeck.RPC.portText.SetValidationError(err)
+			remoteAccess.RPC.portText.SetValidationError(err)
 		}
 		return
 	}
-	cyberdeck.RPC.portText.SetText(getCyberdeck("RPC"))
+	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
 
 	linkColor = colors.Green
 
-	if cyberdeck.WS.server == nil {
+	if remoteAccess.WS.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.WS.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.WS.status.TextSize = 22
-	cyberdeck.WS.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
 
-	cyberdeck.RPC.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.RPC.toggle.OnTapped = func() {
+	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle.OnTapped = func() {
 		switch session.Network {
 		case NETWORK_TESTNET:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		case NETWORK_SIMULATOR:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		default:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		}
 
-		toggleRPCServer(cyberdeck.RPC.port)
-		if cyberdeck.RPC.server != nil {
-			setCyberdeck(cyberdeck.RPC.port, "RPC")
+		toggleRPCServer(remoteAccess.RPC.port)
+		if remoteAccess.RPC.server != nil {
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
 			deckChoice.Disable()
-			cyberdeck.RPC.portText.Disable()
+			remoteAccess.RPC.portText.Disable()
 		} else {
 			deckChoice.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 	}
 
-	if cyberdeck.WS.portText == nil {
-		cyberdeck.WS.portText = widget.NewEntry()
-		cyberdeck.WS.portText.PlaceHolder = "0.0.0.0:44326"
-		cyberdeck.WS.portText.Validator = func(s string) (err error) {
+	if remoteAccess.WS.portText == nil {
+		remoteAccess.WS.portText = widget.NewEntry()
+		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
 			if test.MatchString(s) {
-				cyberdeck.WS.portText.SetValidationError(nil)
+				remoteAccess.WS.portText.SetValidationError(nil)
 			} else {
 				err = errors.New("invalid host name")
-				cyberdeck.WS.portText.SetValidationError(err)
+				remoteAccess.WS.portText.SetValidationError(err)
 			}
 			return
 		}
 	}
 
-	cyberdeck.WS.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.WS.toggle.OnTapped = func() {
-		if cyberdeck.WS.portText.Validate() != nil {
-			cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-			cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle.OnTapped = func() {
+		if remoteAccess.WS.portText.Validate() != nil {
+			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 		} else {
-			_, err := net.ResolveTCPAddr("tcp", cyberdeck.WS.port)
+			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
 			if err != nil {
-				logger.Errorf("[Cyberdeck] XSWD port: %s\n", err)
-				cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-				cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
+				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 			} else {
-				cyberdeck.WS.port = cyberdeck.WS.portText.Text
+				remoteAccess.WS.port = remoteAccess.WS.portText.Text
 			}
 		}
 
-		cyberdeck.EPOCH.err = nil
-		toggleXSWD(cyberdeck.WS.port)
-		if cyberdeck.WS.server != nil {
-			setCyberdeckDual(cyberdeck.WS.port, "WS") // Use dual storage for consistency
-			cyberdeck.WS.portText.Disable()
+		remoteAccess.EPOCH.err = nil
+		toggleXSWD(remoteAccess.WS.port)
+		if remoteAccess.WS.server != nil {
+			setRemoteAccessDual(remoteAccess.WS.port, "WS") // Use dual storage for consistency
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
-			if cyberdeck.EPOCH.enabled {
+			if remoteAccess.EPOCH.enabled {
 				err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
 				if err != nil {
 					logger.Errorf("[EPOCH] Connecting: %s\n", err)
-					cyberdeck.EPOCH.err = err
+					remoteAccess.EPOCH.err = err
 				} else {
-					cyberdeck.EPOCH.err = nil
-					setCyberdeck(epoch.GetPort(), "EPOCH")
+					remoteAccess.EPOCH.err = nil
+					setRemoteAccess(epoch.GetPort(), "EPOCH")
 				}
 			}
 		} else {
 			stopEPOCH()
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.portText.Enable()
 			deckChoice.Enable()
 		}
 	}
 
 	if session.Offline {
-		cyberdeck.RPC.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.RPC.toggle.Disable()
-		cyberdeck.RPC.portText.Disable()
-		cyberdeck.WS.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.WS.toggle.Disable()
-		cyberdeck.WS.portText.Disable()
+		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Disable()
+		remoteAccess.RPC.portText.Disable()
+		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Disable()
+		remoteAccess.WS.portText.Disable()
 	} else {
-		if cyberdeck.RPC.server != nil {
-			cyberdeck.RPC.status.Text = "Allowed"
-			cyberdeck.RPC.status.Color = colors.Green
-			cyberdeck.RPC.toggle.Text = "Turn Off"
-			cyberdeck.RPC.userText.Disable()
-			cyberdeck.RPC.passText.Disable()
-			cyberdeck.RPC.portText.Disable()
+		if remoteAccess.RPC.server != nil {
+			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.userText.Disable()
+			remoteAccess.RPC.passText.Disable()
+			remoteAccess.RPC.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.RPC.status.Text = "Blocked"
-			cyberdeck.RPC.status.Color = colors.Gray
-			cyberdeck.RPC.toggle.Text = "Turn On"
-			cyberdeck.RPC.userText.Enable()
-			cyberdeck.RPC.passText.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.userText.Enable()
+			remoteAccess.RPC.passText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 
-		if cyberdeck.WS.server != nil {
-			cyberdeck.WS.status.Text = "Allowed"
-			cyberdeck.WS.status.Color = colors.Green
-			cyberdeck.WS.toggle.Text = "Turn Off"
-			cyberdeck.WS.portText.Disable()
+		if remoteAccess.WS.server != nil {
+			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.WS.status.Text = "Blocked"
-			cyberdeck.WS.status.Color = colors.Gray
-			cyberdeck.WS.toggle.Text = "Turn On"
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.portText.Enable()
 		}
 	}
 
-	cyberdeck.RPC.userText.SetText(cyberdeck.RPC.user)
-	cyberdeck.RPC.passText.SetText(cyberdeck.RPC.pass)
+	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
+	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
 
 	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopy.OnTapped = func() {
-		a.Clipboard().SetContent(cyberdeck.RPC.user + ":" + cyberdeck.RPC.pass)
+		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
 	}
 
 	linkPermissions := widget.NewHyperlinkWithStyle("Advanced", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
@@ -6188,9 +6188,9 @@ func layoutAppSettings() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	cyberdeck.WS.list = widget.NewList(
+	remoteAccess.WS.list = widget.NewList(
 		func() int {
-			return len(cyberdeck.WS.apps)
+			return len(remoteAccess.WS.apps)
 		},
 		func() fyne.CanvasObject {
 			return container.NewVBox(
@@ -6198,19 +6198,19 @@ func layoutAppSettings() fyne.CanvasObject {
 			)
 		},
 		func(li widget.ListItemID, co fyne.CanvasObject) {
-			app := cyberdeck.WS.apps[li]
+			app := remoteAccess.WS.apps[li]
 			fyne.Do(func() {
 				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
 			})
 		},
 	)
 
-	cyberdeck.WS.list.OnSelected = func(id widget.ListItemID) {
-		cyberdeck.WS.list.UnselectAll()
-		cyberdeck.WS.list.FocusLost()
+	remoteAccess.WS.list.OnSelected = func(id widget.ListItemID) {
+		remoteAccess.WS.list.UnselectAll()
+		remoteAccess.WS.list.FocusLost()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutXSWDAppManager(&cyberdeck.WS.apps[id]))
+		session.Window.SetContent(layoutXSWDAppManager(&remoteAccess.WS.apps[id]))
 		removeOverlays()
 	}
 
@@ -6233,12 +6233,12 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectWidth90,
 					rectSpacer,
 					container.NewCenter(
-						cyberdeck.WS.status,
+						remoteAccess.WS.status,
 					),
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.WS.toggle,
+					remoteAccess.WS.toggle,
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -6267,7 +6267,7 @@ func layoutAppSettings() fyne.CanvasObject {
 				container.NewCenter(
 					container.NewStack(
 						rect,
-						cyberdeck.WS.list,
+						remoteAccess.WS.list,
 					),
 				),
 			),
@@ -6297,13 +6297,13 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.RPC.toggle,
+					remoteAccess.RPC.toggle,
 					wSpacer,
-					cyberdeck.RPC.portText,
+					remoteAccess.RPC.portText,
 					rectSpacer,
-					cyberdeck.RPC.userText,
+					remoteAccess.RPC.userText,
 					rectSpacer,
-					cyberdeck.RPC.passText,
+					remoteAccess.RPC.passText,
 					wSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -6317,7 +6317,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	deckFeatures := container.NewStack()
-	if cyberdeck.RPC.server != nil {
+	if remoteAccess.RPC.server != nil {
 		deckFeatures.Add(rpcForm)
 		deckChoice.SetSelectedIndex(1)
 	} else {
@@ -6333,7 +6333,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 	}
 
-	cyberdeckContent := container.NewVBox(
+	remoteAccessContent := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
@@ -6725,8 +6725,8 @@ func layoutAppSettings() fyne.CanvasObject {
 		epochSession, _ := epoch.GetSession(time.Second * 4)
 		if s == "Total" {
 			total := epoch.GetSessionEPOCH_Result{
-				Hashes:     cyberdeck.EPOCH.total.Hashes,
-				MiniBlocks: cyberdeck.EPOCH.total.MiniBlocks,
+				Hashes:     remoteAccess.EPOCH.total.Hashes,
+				MiniBlocks: remoteAccess.EPOCH.total.MiniBlocks,
 			}
 
 			if epoch.IsActive() {
@@ -6828,10 +6828,10 @@ func layoutAppSettings() fyne.CanvasObject {
 			setDaemon(DEFAULT_REMOTE_DAEMON)
 			setAuthMode("true")
 			setGnomon("1")
-			cyberdeck.RPC.user = "username"
-			cyberdeck.RPC.pass = "password"
-			cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
-			setCyberdeck(cyberdeck.RPC.port, "RPC")
+			remoteAccess.RPC.user = "username"
+			remoteAccess.RPC.pass = "password"
+			remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
 
 			// Show success notification
 			successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
@@ -7138,7 +7138,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Create the tab container with width constraint
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Cyberdeck", cyberdeckContent),
+		container.NewTabItem("Remote Access", remoteAccessContent),
 		container.NewTabItem("TELA", telaContent),
 		container.NewTabItem("Advanced", advancedContent),
 	)
@@ -7147,7 +7147,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	if previousDomain == "app.tela.settings" {
 		tabs.SelectIndex(1) // TELA tab
 	} else {
-		tabs.SelectIndex(0) // Default to Cyberdeck
+		tabs.SelectIndex(0) // Default to Remote Access
 	}
 
 	// Wrap tabs in a container with fixed width
@@ -8016,14 +8016,14 @@ func layoutPM() fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
-func layoutCyberdeck() fyne.CanvasObject {
-	session.Domain = "app.cyberdeck"
+func layoutRemoteAccess() fyne.CanvasObject {
+	session.Domain = "app.remoteaccess"
 
 	go refreshXSWDList()
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("C Y B E R D E C K", colors.Gray)
+	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
@@ -8087,14 +8087,14 @@ func layoutCyberdeck() fyne.CanvasObject {
 
 	linkColor := colors.Green
 
-	if cyberdeck.RPC.server == nil {
+	if remoteAccess.RPC.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.RPC.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.RPC.status.TextSize = 22
-	cyberdeck.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	serverStatus.TextSize = 12
@@ -8102,146 +8102,146 @@ func layoutCyberdeck() fyne.CanvasObject {
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
 
 	linkCenter := container.NewCenter(
-		cyberdeck.RPC.status,
+		remoteAccess.RPC.status,
 	)
 
-	cyberdeck.RPC.userText = widget.NewEntry()
-	cyberdeck.RPC.userText.PlaceHolder = "Username"
-	cyberdeck.RPC.userText.OnChanged = func(s string) {
+	remoteAccess.RPC.userText = widget.NewEntry()
+	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.user = s
+			remoteAccess.RPC.user = s
 		}
 	}
 
-	cyberdeck.RPC.passText = widget.NewEntry()
-	cyberdeck.RPC.passText.Password = true
-	cyberdeck.RPC.passText.PlaceHolder = "Password"
-	cyberdeck.RPC.passText.OnChanged = func(s string) {
+	remoteAccess.RPC.passText = widget.NewEntry()
+	remoteAccess.RPC.passText.Password = true
+	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.pass = s
+			remoteAccess.RPC.pass = s
 			StoreValue("settings", []byte("rpc_pass"), []byte(s))
 		}
 	}
 
-	cyberdeck.RPC.portText = widget.NewEntry()
-	cyberdeck.RPC.portText.PlaceHolder = "0.0.0.0:10103"
-	cyberdeck.RPC.portText.Validator = func(s string) (err error) {
+	remoteAccess.RPC.portText = widget.NewEntry()
+	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
 		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 		test := regexp.MustCompile(regex)
 		if test.MatchString(s) {
-			cyberdeck.RPC.portText.SetValidationError(nil)
+			remoteAccess.RPC.portText.SetValidationError(nil)
 		} else {
 			err = errors.New("invalid host name")
-			cyberdeck.RPC.portText.SetValidationError(err)
+			remoteAccess.RPC.portText.SetValidationError(err)
 		}
 
 		return
 	}
-	cyberdeck.RPC.portText.SetText(getCyberdeck("RPC"))
+	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
 
 	linkColor = colors.Green
 
-	if cyberdeck.WS.server == nil {
+	if remoteAccess.WS.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.WS.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.WS.status.TextSize = 22
-	cyberdeck.WS.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
 
-	cyberdeck.RPC.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.RPC.toggle.OnTapped = func() {
+	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle.OnTapped = func() {
 		switch session.Network {
 		case NETWORK_TESTNET:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		case NETWORK_SIMULATOR:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		default:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		}
 
-		toggleRPCServer(cyberdeck.RPC.port)
-		if cyberdeck.RPC.server != nil {
-			setCyberdeck(cyberdeck.RPC.port, "RPC")
+		toggleRPCServer(remoteAccess.RPC.port)
+		if remoteAccess.RPC.server != nil {
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
 			deckChoice.Disable()
-			cyberdeck.RPC.portText.Disable()
+			remoteAccess.RPC.portText.Disable()
 		} else {
 			deckChoice.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 	}
 
-	if cyberdeck.WS.portText == nil {
-		cyberdeck.WS.portText = widget.NewEntry()
-		cyberdeck.WS.portText.PlaceHolder = "0.0.0.0:44326"
-		cyberdeck.WS.portText.Validator = func(s string) (err error) {
+	if remoteAccess.WS.portText == nil {
+		remoteAccess.WS.portText = widget.NewEntry()
+		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
 			if test.MatchString(s) {
-				cyberdeck.WS.portText.SetValidationError(nil)
+				remoteAccess.WS.portText.SetValidationError(nil)
 			} else {
 				err = errors.New("invalid host name")
-				cyberdeck.WS.portText.SetValidationError(err)
+				remoteAccess.WS.portText.SetValidationError(err)
 			}
 
 			return
 		}
 
-		cyberdeck.WS.portText.OnChanged = func(s string) {
-			if cyberdeck.WS.portText.Validate() == nil {
-				cyberdeck.WS.port = s
-				setCyberdeckDual(s, "WS") // Use dual storage instead of setCyberdeck()
+		remoteAccess.WS.portText.OnChanged = func(s string) {
+			if remoteAccess.WS.portText.Validate() == nil {
+				remoteAccess.WS.port = s
+				setRemoteAccessDual(s, "WS") // Use dual storage instead of setRemoteAccess()
 
 				// CRITICAL FIX: Save WebSocket enabled state to storage
-				cyberdeck.WS.global.enabled = true
+				remoteAccess.WS.global.enabled = true
 				setPermissions()
 			}
 		}
 	}
 
-	cyberdeck.WS.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.WS.toggle.OnTapped = func() {
-		if cyberdeck.WS.portText.Validate() != nil {
-			cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-			cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle.OnTapped = func() {
+		if remoteAccess.WS.portText.Validate() != nil {
+			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 		} else {
-			_, err := net.ResolveTCPAddr("tcp", cyberdeck.WS.port)
+			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
 			if err != nil {
-				logger.Errorf("[Cyberdeck] XSWD port: %s\n", err)
-				cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-				cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
+				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 			} else {
-				cyberdeck.WS.port = cyberdeck.WS.portText.Text
+				remoteAccess.WS.port = remoteAccess.WS.portText.Text
 			}
 		}
 
-		cyberdeck.EPOCH.err = nil
-		toggleXSWD(cyberdeck.WS.port)
-		if cyberdeck.WS.server != nil {
-			setCyberdeckDual(cyberdeck.WS.port, "WS") // Use dual storage for consistency
-			cyberdeck.WS.portText.Disable()
+		remoteAccess.EPOCH.err = nil
+		toggleXSWD(remoteAccess.WS.port)
+		if remoteAccess.WS.server != nil {
+			setRemoteAccessDual(remoteAccess.WS.port, "WS") // Use dual storage for consistency
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
-			if cyberdeck.EPOCH.enabled {
+			if remoteAccess.EPOCH.enabled {
 				/*
-					if cyberdeck.EPOCH.allowWithAddress {
+					if remoteAccess.EPOCH.allowWithAddress {
 						// If address is defined by dApp, GetWork will be started and stopped upon each WS call
 						logger.Printf("[EPOCH] dApp addresses are enabled\n")
 						return
@@ -8251,69 +8251,69 @@ func layoutCyberdeck() fyne.CanvasObject {
 				err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
 				if err != nil {
 					logger.Errorf("[EPOCH] Connecting: %s\n", err)
-					cyberdeck.EPOCH.err = err
+					remoteAccess.EPOCH.err = err
 				} else {
-					cyberdeck.EPOCH.err = nil
-					setCyberdeck(epoch.GetPort(), "EPOCH")
+					remoteAccess.EPOCH.err = nil
+					setRemoteAccess(epoch.GetPort(), "EPOCH")
 				}
 			}
 		} else {
 			stopEPOCH()
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.portText.Enable()
 			deckChoice.Enable()
 		}
 	}
 
 	if session.Offline {
-		cyberdeck.RPC.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.RPC.toggle.Disable()
-		cyberdeck.RPC.portText.Disable()
-		cyberdeck.WS.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.WS.toggle.Disable()
-		cyberdeck.WS.portText.Disable()
+		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Disable()
+		remoteAccess.RPC.portText.Disable()
+		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Disable()
+		remoteAccess.WS.portText.Disable()
 	} else {
-		if cyberdeck.RPC.server != nil {
-			cyberdeck.RPC.status.Text = "Allowed"
-			cyberdeck.RPC.status.Color = colors.Green
-			cyberdeck.RPC.toggle.Text = "Turn Off"
-			cyberdeck.RPC.userText.Disable()
-			cyberdeck.RPC.passText.Disable()
-			cyberdeck.RPC.portText.Disable()
+		if remoteAccess.RPC.server != nil {
+			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.userText.Disable()
+			remoteAccess.RPC.passText.Disable()
+			remoteAccess.RPC.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.RPC.status.Text = "Blocked"
-			cyberdeck.RPC.status.Color = colors.Gray
-			cyberdeck.RPC.toggle.Text = "Turn On"
-			cyberdeck.RPC.userText.Enable()
-			cyberdeck.RPC.passText.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.userText.Enable()
+			remoteAccess.RPC.passText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 
-		if cyberdeck.WS.server != nil {
-			cyberdeck.WS.status.Text = "Allowed"
-			cyberdeck.WS.status.Color = colors.Green
-			cyberdeck.WS.toggle.Text = "Turn Off"
-			cyberdeck.WS.portText.Disable()
+		if remoteAccess.WS.server != nil {
+			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.WS.status.Text = "Blocked"
-			cyberdeck.WS.status.Color = colors.Gray
-			cyberdeck.WS.toggle.Text = "Turn On"
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.portText.Enable()
 		}
 	}
 
-	cyberdeck.RPC.userText.SetText(cyberdeck.RPC.user)
-	cyberdeck.RPC.passText.SetText(cyberdeck.RPC.pass)
+	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
+	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
 
 	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopy.OnTapped = func() {
-		a.Clipboard().SetContent(cyberdeck.RPC.user + ":" + cyberdeck.RPC.pass)
+		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
 	}
 
 	linkPermissions := widget.NewHyperlinkWithStyle("Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkPermissions.OnTapped = func() {
-		//if cyberdeck.WS.server != nil {
+		//if remoteAccess.WS.server != nil {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutXSWDPermissions())
@@ -8324,7 +8324,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 	/*
 		linkApps := widget.NewHyperlinkWithStyle("View Connections", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 		linkApps.OnTapped = func() {
-			if cyberdeck.WS.server != nil {
+			if remoteAccess.WS.server != nil {
 				session.LastDomain = session.Window.Content()
 				session.Window.SetContent(layoutTransition())
 				session.Window.SetContent(layoutXSWDConnections())
@@ -8333,9 +8333,9 @@ func layoutCyberdeck() fyne.CanvasObject {
 		}
 	*/
 
-	cyberdeck.WS.list = widget.NewList(
+	remoteAccess.WS.list = widget.NewList(
 		func() int {
-			return len(cyberdeck.WS.apps)
+			return len(remoteAccess.WS.apps)
 		},
 		func() fyne.CanvasObject {
 			return container.NewVBox(
@@ -8344,7 +8344,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 			)
 		},
 		func(li widget.ListItemID, co fyne.CanvasObject) {
-			app := cyberdeck.WS.apps[li]
+			app := remoteAccess.WS.apps[li]
 
 			fyne.Do(func() {
 				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
@@ -8353,12 +8353,12 @@ func layoutCyberdeck() fyne.CanvasObject {
 		},
 	)
 
-	cyberdeck.WS.list.OnSelected = func(id widget.ListItemID) {
-		cyberdeck.WS.list.UnselectAll()
-		cyberdeck.WS.list.FocusLost()
+	remoteAccess.WS.list.OnSelected = func(id widget.ListItemID) {
+		remoteAccess.WS.list.UnselectAll()
+		remoteAccess.WS.list.FocusLost()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutXSWDAppManager(&cyberdeck.WS.apps[id]))
+		session.Window.SetContent(layoutXSWDAppManager(&remoteAccess.WS.apps[id]))
 		removeOverlays()
 	}
 
@@ -8381,12 +8381,12 @@ func layoutCyberdeck() fyne.CanvasObject {
 					rectWidth90,
 					rectSpacer,
 					container.NewCenter(
-						cyberdeck.WS.status,
+						remoteAccess.WS.status,
 					),
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.WS.toggle,
+					remoteAccess.WS.toggle,
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -8415,7 +8415,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 				container.NewCenter(
 					container.NewStack(
 						rect,
-						cyberdeck.WS.list,
+						remoteAccess.WS.list,
 					),
 				),
 			),
@@ -8445,13 +8445,13 @@ func layoutCyberdeck() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.RPC.toggle,
+					remoteAccess.RPC.toggle,
 					wSpacer,
-					cyberdeck.RPC.portText,
+					remoteAccess.RPC.portText,
 					rectSpacer,
-					cyberdeck.RPC.userText,
+					remoteAccess.RPC.userText,
 					rectSpacer,
-					cyberdeck.RPC.passText,
+					remoteAccess.RPC.passText,
 					wSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -8465,7 +8465,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 	)
 
 	deckFeatures := container.NewStack()
-	if cyberdeck.RPC.server != nil {
+	if remoteAccess.RPC.server != nil {
 		deckFeatures.Add(rpcForm)
 		deckChoice.SetSelectedIndex(1)
 	} else {
@@ -8555,7 +8555,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 
 // Layout details of an app connected through web socket
 func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
-	session.Domain = "app.cyberdeck.manager"
+	session.Domain = "app.remoteaccess.manager"
 
 	frame := &iframe{}
 
@@ -8772,12 +8772,12 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 
 	btnRemove := widget.NewButton("Remove", nil)
 	btnRemove.OnTapped = func() {
-		if cyberdeck.WS.server != nil && len(cyberdeck.WS.apps) > 0 {
-			cyberdeck.WS.server.RemoveApplication(ad)
+		if remoteAccess.WS.server != nil && len(remoteAccess.WS.apps) > 0 {
+			remoteAccess.WS.server.RemoveApplication(ad)
 			removeOverlays()
 			session.LastDomain = session.Window.Content()
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutCyberdeck())
+			session.Window.SetContent(layoutRemoteAccess())
 		}
 	}
 
@@ -8906,7 +8906,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 
 // Layout XSWD permissions settings
 func layoutXSWDPermissions() fyne.CanvasObject {
-	session.Domain = "app.cyberdeck.permissions"
+	session.Domain = "app.remoteaccess.permissions"
 
 	wSpacer := widget.NewLabel(" ")
 
@@ -8967,14 +8967,14 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	wEpochAddress := widget.NewSelect([]string{"My Address", "dApp Chooses"}, nil)
 
 	/*
-		if cyberdeck.EPOCH.enabled {
+		if remoteAccess.EPOCH.enabled {
 			wEpoch.SetSelectedIndex(1)
 		} else {
 			wEpoch.SetSelectedIndex(0)
 			wEpochAddress.Disable()
 		}
 
-		if cyberdeck.EPOCH.allowWithAddress {
+		if remoteAccess.EPOCH.allowWithAddress {
 			wEpochAddress.SetSelectedIndex(1)
 		} else {
 			wEpochAddress.SetSelectedIndex(0)
@@ -8982,23 +8982,23 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 		wEpoch.OnChanged = func(s string) {
 			if s == xswd.Allow.String() {
-				cyberdeck.EPOCH.enabled = true
+				remoteAccess.EPOCH.enabled = true
 				wEpochAddress.Enable()
 				return
 			}
 
-			cyberdeck.EPOCH.enabled = false
+			remoteAccess.EPOCH.enabled = false
 			wEpochAddress.SetSelectedIndex(0)
 			wEpochAddress.Disable()
 		}
 
 		wEpochAddress.OnChanged = func(s string) {
 			if s == "dApp Chooses" {
-				cyberdeck.EPOCH.allowWithAddress = true
+				remoteAccess.EPOCH.allowWithAddress = true
 				return
 			}
 
-			cyberdeck.EPOCH.allowWithAddress = false
+			remoteAccess.EPOCH.allowWithAddress = false
 		}
 	*/
 
@@ -9055,7 +9055,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		entryEpochWork.Disable()
 		entryEpochHash.Disable()
 		wEpochPower.Disable()
-	} else if cyberdeck.WS.server != nil {
+	} else if remoteAccess.WS.server != nil {
 		wEpoch.Disable()
 		wEpochAddress.Disable()
 		entryEpochWork.Disable()
@@ -9063,11 +9063,11 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		wEpochPower.Disable()
 	}
 
-	if cyberdeck.WS.advanced {
+	if remoteAccess.WS.advanced {
 		wMode.SetChecked(false)
-		if cyberdeck.WS.global.enabled {
+		if remoteAccess.WS.global.enabled {
 			wGlobalPermissions.SetSelectedIndex(1)
-			if cyberdeck.WS.global.connect {
+			if remoteAccess.WS.global.connect {
 				wConnection.SetSelectedIndex(1)
 			} else {
 				wConnection.SetSelectedIndex(0)
@@ -9088,8 +9088,8 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	wMode.OnChanged = func(b bool) {
-		cyberdeck.WS.advanced = !b // inverse as check box is for restrictive mode on/off
-		if cyberdeck.WS.advanced {
+		remoteAccess.WS.advanced = !b // inverse as check box is for restrictive mode on/off
+		if remoteAccess.WS.advanced {
 			wGlobalPermissions.Enable()
 		} else {
 			wGlobalPermissions.SetSelectedIndex(0) // calling this here resets and disables wConnection
@@ -9099,9 +9099,9 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	wConnection.OnChanged = func(s string) {
 		if s == xswd.Allow.String() {
-			cyberdeck.WS.global.connect = true
+			remoteAccess.WS.global.connect = true
 		} else {
-			cyberdeck.WS.global.connect = false
+			remoteAccess.WS.global.connect = false
 		}
 	}
 
@@ -9122,18 +9122,18 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	// onChanged handler for Advanced Mode individual permissions
 	onChanged := func(n string) func(s string) {
 		return func(s string) {
-			cyberdeck.WS.Lock()
-			defer cyberdeck.WS.Unlock()
+			remoteAccess.WS.Lock()
+			defer remoteAccess.WS.Unlock()
 
 			switch s {
 			case xswd.Ask.String():
-				cyberdeck.WS.global.permissions[n] = xswd.Ask
+				remoteAccess.WS.global.permissions[n] = xswd.Ask
 			case xswd.AlwaysAllow.String():
-				cyberdeck.WS.global.permissions[n] = xswd.AlwaysAllow
+				remoteAccess.WS.global.permissions[n] = xswd.AlwaysAllow
 			case xswd.AlwaysDeny.String():
-				cyberdeck.WS.global.permissions[n] = xswd.AlwaysDeny
+				remoteAccess.WS.global.permissions[n] = xswd.AlwaysDeny
 			default:
-				cyberdeck.WS.global.permissions[n] = xswd.Ask
+				remoteAccess.WS.global.permissions[n] = xswd.Ask
 			}
 
 			// Save updated permissions to storage
@@ -9163,7 +9163,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			permSelect.SetSelected(currentPerm.String())
 
 			// Disable if WebSocket is not enabled
-			if !cyberdeck.WS.global.enabled {
+			if !remoteAccess.WS.global.enabled {
 				permSelect.SetSelectedIndex(0)
 				permSelect.Disable()
 			}
@@ -9210,7 +9210,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				permission.SetOptions(noStorePermissions)
 			}
 
-			if cyberdeck.WS.global.enabled {
+			if remoteAccess.WS.global.enabled {
 				permission.SetSelected(stored[n].String())
 				permission.OnChanged = onChanged(n)
 			} else {
@@ -9242,17 +9242,17 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	statusText := "Disabled"
 	statusColor := colors.Gray
-	if cyberdeck.WS.global.enabled {
+	if remoteAccess.WS.global.enabled {
 		statusText = "Enabled"
 		statusColor = colors.Green
 	}
 
-	cyberdeck.WS.global.status = canvas.NewText(statusText, statusColor)
-	cyberdeck.WS.global.status.TextSize = 22
-	cyberdeck.WS.global.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.WS.global.status = canvas.NewText(statusText, statusColor)
+	remoteAccess.WS.global.status.TextSize = 22
+	remoteAccess.WS.global.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnDefaults.OnTapped = func() {
-		if !cyberdeck.WS.global.enabled {
+		if !remoteAccess.WS.global.enabled {
 			return
 		}
 
@@ -9288,9 +9288,9 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				buildSimpleUI()
 			} else {
 				// Restore Advanced Mode defaults
-				cyberdeck.WS.Lock()
-				cyberdeck.WS.global.permissions = SetDefaultPermissions()
-				cyberdeck.WS.Unlock()
+				remoteAccess.WS.Lock()
+				remoteAccess.WS.global.permissions = SetDefaultPermissions()
+				remoteAccess.WS.Unlock()
 				setPermissions()
 				// Rebuild UI
 				buildAdvancedUI()
@@ -9346,10 +9346,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		if s != "Apply" {
 			setPermissions()
 			btnDefaults.Disable()
-			cyberdeck.WS.global.status.Text = "Disabled"
-			cyberdeck.WS.global.status.Color = colors.Gray
-			cyberdeck.WS.global.status.Refresh()
-			cyberdeck.WS.global.enabled = false
+			remoteAccess.WS.global.status.Text = "Disabled"
+			remoteAccess.WS.global.status.Color = colors.Gray
+			remoteAccess.WS.global.status.Refresh()
+			remoteAccess.WS.global.enabled = false
 			wConnection.SetSelectedIndex(0)
 			wConnection.Disable()
 
@@ -9366,10 +9366,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				}
 			}
 		} else {
-			cyberdeck.WS.global.status.Text = "Enabled"
-			cyberdeck.WS.global.status.Color = colors.Green
-			cyberdeck.WS.global.status.Refresh()
-			cyberdeck.WS.global.enabled = true
+			remoteAccess.WS.global.status.Text = "Enabled"
+			remoteAccess.WS.global.status.Color = colors.Green
+			remoteAccess.WS.global.status.Refresh()
+			remoteAccess.WS.global.enabled = true
 			wConnection.Enable()
 			btnDefaults.Enable()
 
@@ -9419,8 +9419,8 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		session.Window.SetContent(layoutAppSettings())
 	})
 
-	// Initialized in layoutCyberdeck()
-	cyberdeck.WS.portText.SetText(getCyberdeck("WS"))
+	// Initialized in layoutRemoteAccess()
+	remoteAccess.WS.portText.SetText(getRemoteAccess("WS"))
 
 	center := container.NewVScroll(
 		container.NewStack(
@@ -9448,7 +9448,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 						rectWidth90,
 						rectSpacer,
 						container.NewCenter(
-							cyberdeck.WS.global.status,
+							remoteAccess.WS.global.status,
 						),
 						rectSpacer,
 						container.NewCenter(
@@ -9469,7 +9469,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 								container.NewCenter(wMode),
 							),
 							rectSpacer,
-							cyberdeck.WS.portText,
+							remoteAccess.WS.portText,
 							rectSpacer,
 							labelConnection,
 							rectSpacer,

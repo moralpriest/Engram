@@ -157,14 +157,14 @@ func (o *iframe) DragEnd() {
 				if session.Domain == "app.wallet" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutIdentity())
-				} else if session.Domain == "app.cyberdeck" {
+				} else if session.Domain == "app.remoteaccess" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
 				}
 			} else if nav.CurX < nav.PosX-30 {
 				if session.Domain == "app.wallet" {
 					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutCyberdeck())
+					session.Window.SetContent(layoutRemoteAccess())
 				} else if session.Domain == "app.Identity" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
