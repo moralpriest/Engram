@@ -741,7 +741,9 @@ func layoutDashboard() fyne.CanvasObject {
 		telaStatus.FillColor = colors.Green
 	}
 
-	animationCanvas := canvas.NewCircle(color.Transparent)
+	syncAnimationCanvas := canvas.NewCircle(color.Transparent)
+	gnomonAnimationCanvas := canvas.NewCircle(color.Transparent)
+	epochAnimationCanvas := canvas.NewCircle(color.Transparent)
 
 	if !session.Offline {
 		if len(session.Daemon) > 30 {
@@ -755,8 +757,12 @@ func layoutDashboard() fyne.CanvasObject {
 			colors.Yellow,
 			2*time.Second,
 			func(c color.Color) {
-				animationCanvas.FillColor = c
-				animationCanvas.Refresh()
+				syncAnimationCanvas.FillColor = c
+				syncAnimationCanvas.Refresh()
+				gnomonAnimationCanvas.FillColor = c
+				gnomonAnimationCanvas.Refresh()
+				epochAnimationCanvas.FillColor = c
+				epochAnimationCanvas.Refresh()
 			})
 
 		animationStatus.RepeatCount = fyne.AnimationRepeatForever
@@ -870,6 +876,14 @@ func layoutDashboard() fyne.CanvasObject {
 	rectSquare := canvas.NewRectangle(color.Transparent)
 	rectSquare.SetMinSize(fyne.NewSize(5, 5))
 
+	statusDotSize := fyne.NewSize(10, 10)
+	connectionDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.Connection))
+	syncDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, syncAnimationCanvas, status.Sync))
+	gnomonDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, gnomonAnimationCanvas, status.Gnomon))
+	epochDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, epochAnimationCanvas, status.EPOCH))
+	telaDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, telaStatus))
+	cyberdeckDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.Cyberdeck))
+
 	rectOffset := canvas.NewRectangle(color.Transparent)
 	rectOffset.SetMinSize(fyne.NewSize(81, 1))
 
@@ -914,10 +928,7 @@ func layoutDashboard() fyne.CanvasObject {
 		rectSpacer,
 		container.NewVBox(
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					status.Connection,
-				),
+				connectionDot,
 				rectSquare,
 				daemonLabel,
 				layout.NewSpacer(),
@@ -926,19 +937,11 @@ func layoutDashboard() fyne.CanvasObject {
 					session.StatusText,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.Sync,
-				),
+				syncDot,
 			),
 			rectOffset,
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.Gnomon,
-				),
+				gnomonDot,
 				rectSquare,
 				gnomonLabel,
 				layout.NewSpacer(),
@@ -947,18 +950,11 @@ func layoutDashboard() fyne.CanvasObject {
 					epochLabel,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.EPOCH,
-				),
+				epochDot,
 			),
 			rectOffset,
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					telaStatus,
-				),
+				telaDot,
 				rectSquare,
 				telaLabel,
 				layout.NewSpacer(),
@@ -967,10 +963,7 @@ func layoutDashboard() fyne.CanvasObject {
 					cyberdeckLabel,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					status.Cyberdeck,
-				),
+				cyberdeckDot,
 			),
 		),
 	)
