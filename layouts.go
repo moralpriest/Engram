@@ -6842,6 +6842,53 @@ func layoutAppSettings() fyne.CanvasObject {
 		}, session.Window)
 	})
 
+	btnExportDebugLog := widget.NewButton("Export Debug Log", func() {
+		debugLogPath := getDebugLogPath()
+		data, err := os.ReadFile(debugLogPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				dialog.ShowInformation("Debug Log", "No debug log file found yet.", session.Window)
+				return
+			}
+
+			logger.Errorf("[Engram] Could not read debug log %s: %s\n", debugLogPath, err)
+			dialog.ShowError(fmt.Errorf("could not read debug log"), session.Window)
+			return
+		}
+
+		dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] File dialog: %s\n", err)
+				dialog.ShowError(fmt.Errorf("could not export debug log"), session.Window)
+				return
+			}
+
+			if uri == nil {
+				return
+			}
+
+			if _, err = writeToURI(data, uri); err != nil {
+				logger.Errorf("[Engram] Exporting debug log %s: %s\n", debugLogPath, err)
+				dialog.ShowError(fmt.Errorf("could not export debug log"), session.Window)
+				return
+			}
+
+			dialog.ShowInformation("Debug Log", "Debug log exported successfully.", session.Window)
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogFileSave.SetLocation(uri)
+			}
+		}
+
+		dialogFileSave.SetView(dialog.ListView)
+		dialogFileSave.SetFileName(debugLogFileName)
+		dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogFileSave.Show()
+	})
+
 	// DATASHARD Section components
 	labelDatashard := canvas.NewText("DATASHARD", colors.Gray)
 	labelDatashard.TextSize = 11
@@ -7135,6 +7182,8 @@ func layoutAppSettings() fyne.CanvasObject {
 		btnClearLocalData,
 		rectSpacer,
 		btnRestoreDefaults,
+		rectSpacer,
+		btnExportDebugLog,
 		rectSpacer,
 	)
 
