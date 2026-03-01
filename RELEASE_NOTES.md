@@ -20,7 +20,7 @@
   - Favorites and scan resiliency improvements, including force-rescan tooling
 
 - **Settings and Configuration**
-  - Centralized TELA + Cyberdeck settings into one settings experience
+  - Centralized TELA + Remote Access settings into one settings experience
   - Added advanced settings support
   - Improved settings persistence behavior
 
@@ -63,7 +63,7 @@
 
 ## UI Fixes (post-PR #5)
 
-- Fixed stretched GNOMON/TELA/CYBERDECK indicator pills by enforcing fixed-size circular dot containers.
+- Fixed stretched GNOMON/TELA/REMOTE ACCESS indicator pills by enforcing fixed-size circular dot containers.
 - Split shared animation canvas into dedicated indicator canvases to avoid rendering artifacts.
 
 ## Notes
