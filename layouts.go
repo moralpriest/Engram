@@ -11529,6 +11529,11 @@ func layoutDatapad() fyne.CanvasObject {
 	entryNewPad.OnChanged = func(s string) {
 		entryNewPad.Validate()
 	}
+	entryNewPad.OnSubmitted = func(_ string) {
+		if entryNewPad.Validate() == nil {
+			btnAdd.OnTapped()
+		}
+	}
 
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
@@ -11560,11 +11565,11 @@ func layoutDatapad() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(10, 4))
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, 350))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, 0))
 
 	var padData []string
 
@@ -11595,6 +11600,14 @@ func layoutDatapad() fyne.CanvasObject {
 		if string(k) != "" {
 			padData = append(padData, string(k))
 		}
+	}
+
+	if len(padData) > 0 {
+		listHeight := float32(len(padData) * 42)
+		if listHeight > 280 {
+			listHeight = 280
+		}
+		rectListBox.SetMinSize(fyne.NewSize(ui.Width, listHeight))
 	}
 
 	padList := binding.BindStringList(&padData)
@@ -11641,21 +11654,16 @@ func layoutDatapad() fyne.CanvasObject {
 
 	shardForm := container.NewVBox(
 		rectSpacer,
-		rectSpacer,
-		rectSpacer,
 		container.NewCenter(container.NewVBox(title, rectSpacer)),
-		rectSpacer,
-		rectSpacer,
-		container.NewStack(
-			rectListBox,
-			padBox,
-		),
 		rectSpacer,
 		entryNewPad,
 		rectSpacer,
 		btnAdd,
 		rectSpacer,
-		rectSpacer,
+		container.NewStack(
+			rectListBox,
+			padBox,
+		),
 		rectSpacer,
 		rectSpacer,
 	)
