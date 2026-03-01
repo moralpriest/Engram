@@ -1,9 +1,9 @@
 # Engram Wallet Settings Consolidation Plan
 
 ## Overview
-This plan outlines the phased implementation of a centralized settings page accessible via a cogwheel icon from all screens. The goal is to consolidate TELA and Cyberdeck settings that are currently scattered across different module tabs into a single, unified settings interface with tabbed navigation.
+This plan outlines the phased implementation of a centralized settings page accessible via a cogwheel icon from all screens. The goal is to consolidate TELA and RemoteAccess settings that are currently scattered across different module tabs into a single, unified settings interface with tabbed navigation.
 
-**Important Note:** Connection settings will remain in the login page (`layoutSettings()`) and are NOT being migrated as part of this plan. Only Cyberdeck, TELA, and Advanced settings will be consolidated into the new centralized settings page.
+**Important Note:** Connection settings will remain in the login page (`layoutSettings()`) and are NOT being migrated as part of this plan. Only RemoteAccess, TELA, and Advanced settings will be consolidated into the new centralized settings page.
 
 ## Current State Analysis
 
@@ -18,7 +18,7 @@ This plan outlines the phased implementation of a centralized settings page acce
    - Accessed from Login page via "Connection Settings" button
    - **REMAINING AS-IS - NOT PART OF THIS MIGRATION**
 
-2. **Cyberdeck Module (layoutCyberdeck)** - `/home/matdero/Projects/Engram/layouts.go:6929`
+2. **RemoteAccess Module (layoutRemoteAccess)** - `/home/matdero/Projects/Engram/layouts.go:6929`
    - RPC Server configuration (port, toggle on/off)
    - WebSocket (XSWD) configuration (port, toggle on/off)
    - Connection list and permissions
@@ -51,10 +51,10 @@ This plan outlines the phased implementation of a centralized settings page acce
 ┌─────────────────────────────────────────────────────────┐
 │  ⚙️ Settings                                    [Close] │
 ├─────────────────────────────────────────────────────────┤
-│  [ Cyberdeck ] [ TELA ] [ Advanced ]                   │
+│  [ RemoteAccess ] [ TELA ] [ Advanced ]                   │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  [Tab Content - RPC/WS Server config for Cyberdeck]    │
+│  [Tab Content - RPC/WS Server config for RemoteAccess]    │
 │                                                         │
 │  - OR -                                                 │
 │                                                         │
@@ -69,7 +69,7 @@ This plan outlines the phased implementation of a centralized settings page acce
 
 ### Proposed Tabs (3 Total):
 
-1. **Cyberdeck** - RPC/WS server configuration (moved from Cyberdeck module)
+1. **RemoteAccess** - RPC/WS server configuration (moved from RemoteAccess module)
    - RPC server settings (port, username, password, toggle)
    - WebSocket (XSWD) settings (port, toggle)
    - Connection status display
@@ -109,7 +109,7 @@ This plan outlines the phased implementation of a centralized settings page acce
 
 #### Tasks:
 1. Create `layoutAppSettings()` function in `layouts.go`
-2. Set up the tab container with 3 tabs (Cyberdeck, TELA, Advanced)
+2. Set up the tab container with 3 tabs (RemoteAccess, TELA, Advanced)
 3. Create placeholder content for each tab (simple labels indicating "Coming in Phase X")
 4. Add settings button with cogwheel icon (`theme.SettingsIcon()`) to dashboard
    - Position at top-right or bottom of dashboard screen
@@ -127,7 +127,7 @@ This plan outlines the phased implementation of a centralized settings page acce
 func layoutAppSettings() fyne.CanvasObject {
     // Create tabs
     tabs := container.NewAppTabs(
-        container.NewTabItem("Cyberdeck", container.NewVBox(/* placeholder */)),
+        container.NewTabItem("RemoteAccess", container.NewVBox(/* placeholder */)),
         container.NewTabItem("TELA", container.NewVBox(/* placeholder */)),
         container.NewTabItem("Advanced", container.NewVBox(/* placeholder */)),
     )
@@ -140,7 +140,7 @@ func layoutAppSettings() fyne.CanvasObject {
 feat(settings): create centralized settings page infrastructure
 
 - Add layoutAppSettings() with 3-tab interface
-- Create tabs: Cyberdeck, TELA, Advanced
+- Create tabs: RemoteAccess, TELA, Advanced
 - Add settings cogwheel button to dashboard
 - Set up navigation from dashboard with back button
 - Add placeholder content for future phases
@@ -159,11 +159,11 @@ Refs: settings-consolidation-phase-1
 
 ---
 
-### **Phase 2: Cyberdeck Tab Migration**
-**Objective**: Extract Cyberdeck configuration UI and move to settings page
+### **Phase 2: RemoteAccess Tab Migration**
+**Objective**: Extract RemoteAccess configuration UI and move to settings page
 
 #### Tasks:
-1. Extract RPC server configuration UI from `layoutCyberdeck()`:
+1. Extract RPC server configuration UI from `layoutRemoteAccess()`:
    - Port entry field with validation
    - Username entry field
    - Password entry field
@@ -171,12 +171,12 @@ Refs: settings-consolidation-phase-1
    - Status text (Blocked/Allowed)
    - Copy credentials hyperlink
 
-2. Extract WebSocket (XSWD) configuration UI from `layoutCyberdeck()`:
+2. Extract WebSocket (XSWD) configuration UI from `layoutRemoteAccess()`:
    - Port entry field with validation
    - Toggle button (Turn On/Off)
    - Status text (Blocked/Allowed)
 
-3. Create Cyberdeck tab content in `layoutAppSettings()`:
+3. Create RemoteAccess tab content in `layoutAppSettings()`:
    - Section header for RPC Configuration
    - RPC port, user, pass fields
    - RPC toggle button
@@ -185,34 +185,34 @@ Refs: settings-consolidation-phase-1
    - XSWD toggle button
    - Status indicators for both
 
-4. Ensure settings sync with Cyberdeck module:
-   - Use same `cyberdeck.RPC.*` and `cyberdeck.WS.*` variables
-   - Settings changes should reflect in Cyberdeck module immediately
-   - Cyberdeck module status changes should reflect in settings
+4. Ensure settings sync with RemoteAccess module:
+   - Use same `remoteAccess.RPC.*` and `remoteAccess.WS.*` variables
+   - Settings changes should reflect in RemoteAccess module immediately
+   - RemoteAccess module status changes should reflect in settings
 
-5. Keep existing server management in Cyberdeck module:
-   - Connection list remains in `layoutCyberdeck()`
-   - Permissions management remains in Cyberdeck module
+5. Keep existing server management in RemoteAccess module:
+   - Connection list remains in `layoutRemoteAccess()`
+   - Permissions management remains in RemoteAccess module
    - Settings page only handles configuration, not connections
 
 #### Files to Modify:
-- `layouts.go`: Extract RPC/WS configuration logic from `layoutCyberdeck()`
-- `layouts.go`: Add Cyberdeck tab content to `layoutAppSettings()`
+- `layouts.go`: Extract RPC/WS configuration logic from `layoutRemoteAccess()`
+- `layouts.go`: Add RemoteAccess tab content to `layoutAppSettings()`
 
 #### Code Considerations:
-- Use shared state: `cyberdeck.RPC.port`, `cyberdeck.RPC.user`, `cyberdeck.RPC.pass`
-- Use shared state: `cyberdeck.WS.port`
+- Use shared state: `remoteAccess.RPC.port`, `remoteAccess.RPC.user`, `remoteAccess.RPC.pass`
+- Use shared state: `remoteAccess.WS.port`
 - Toggle functions should call existing `toggleRPCServer()` and `toggleXSWD()`
 - Validation regex for ports: `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 
 #### Git Commit Message:
 ```
-feat(settings): migrate Cyberdeck configuration to settings page
+feat(settings): migrate RemoteAccess configuration to settings page
 
-- Extract RPC server configuration to Cyberdeck tab
-- Extract WebSocket (XSWD) configuration to Cyberdeck tab
+- Extract RPC server configuration to RemoteAccess tab
+- Extract WebSocket (XSWD) configuration to RemoteAccess tab
 - Add port validation and toggle functionality
-- Maintain synchronization with Cyberdeck module state
+- Maintain synchronization with RemoteAccess module state
 - Preserve server toggle functionality
 
 Refs: settings-consolidation-phase-2
@@ -227,7 +227,7 @@ Refs: settings-consolidation-phase-2
 - [ ] WS port configuration displays current value
 - [ ] WS port validation works
 - [ ] WS toggle button works
-- [ ] Settings sync with Cyberdeck module status
+- [ ] Settings sync with RemoteAccess module status
 - [ ] Toggle states persist after app restart
 - [ ] Copy credentials button works
 - [ ] Server status reflects actual state (Blocked/Allowed)
@@ -462,7 +462,7 @@ git push origin feature/settings-consolidation
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|---------|------------|
 | Settings data loss | Low | High | Don't change storage keys; use existing Get/Store functions; test thoroughly |
-| Cyberdeck server state sync issues | Medium | High | Keep shared state variables (cyberdeck.RPC.*, cyberdeck.WS.*); test toggles thoroughly |
+| RemoteAccess server state sync issues | Medium | High | Keep shared state variables (remoteAccess.RPC.*, remoteAccess.WS.*); test toggles thoroughly |
 | TELA search functionality broken | Low | High | Ensure settings still affect TELA module behavior; test search after migration |
 | UI layout issues on mobile | Medium | Medium | Test on actual Android device; use Fyne responsive containers; verify touch targets |
 | Broken navigation | Low | Medium | Comprehensive testing after each phase; test all navigation paths |
@@ -481,7 +481,7 @@ git push origin feature/settings-consolidation
 ### Integration Testing:
 - Test full user workflows
 - Verify cross-module communication:
-  - Cyberdeck settings → Cyberdeck module state
+  - RemoteAccess settings → RemoteAccess module state
   - TELA settings → TELA search behavior
   - Gnomon toggle → Gnomon indexer
 - Test settings across app restarts
@@ -497,14 +497,14 @@ git push origin feature/settings-consolidation
 ## Success Criteria
 
 1. ✅ Single settings page accessible via cogwheel from dashboard
-2. ✅ 3 functional tabs: Cyberdeck, TELA, Advanced
+2. ✅ 3 functional tabs: RemoteAccess, TELA, Advanced
 3. ✅ Connection settings remain accessible from login page
-4. ✅ All Cyberdeck settings migrated without data loss
+4. ✅ All RemoteAccess settings migrated without data loss
 5. ✅ All TELA settings migrated without data loss
 6. ✅ Gnomon and maintenance options moved to Advanced tab
 7. ✅ No duplicate settings UI remaining
 8. ✅ Mobile and PC compatible
-9. ✅ No regression in Cyberdeck or TELA functionality
+9. ✅ No regression in RemoteAccess or TELA functionality
 10. ✅ Clean git history with 4 commits (one per phase)
 
 ---
