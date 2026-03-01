@@ -109,6 +109,8 @@ func getBaseSize(s fyne.ThemeSizeName) float32 {
 		return 15
 	case theme.SizeNameInputBorder:
 		return 2
+	case theme.SizeNameInputRadius:
+		return 10
 	case theme.SizeNameHeadingText:
 		return 24
 	default:
