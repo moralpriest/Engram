@@ -417,7 +417,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	// Display wallet name
 	lblWalletName := canvas.NewText(walletName, colors.Green)
-	lblWalletName.TextSize = 18
+	lblWalletName.TextSize = 16
 	lblWalletName.Alignment = fyne.TextAlignCenter
 	lblWalletName.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -555,6 +555,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	form := container.NewVBox(
 		rectSpacer,
+		rectSpacer,
 		lblWalletName,
 		rectSpacer,
 		wPassword,
@@ -571,6 +572,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	layout := container.NewStack(
 		frame,
+		res.mainBg,
 		container.NewCenter(form),
 	)
 
