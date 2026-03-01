@@ -72,14 +72,14 @@ query_key, scinvoke, split_integrated_address, transfer, transfer_split
 
 **Key Questions:**
 - Are settings saved to different paths based on wallet state?
-- Do `setCyberdeck()` and `getCyberdeck()` use consistent storage paths?
+- Do `setRemoteAccess()` and `getRemoteAccess()` use consistent storage paths?
 - Is there a timing issue with wallet availability during load/save?
 - Are there network-specific storage conflicts?
 
 **Current Implementation Analysis:**
-- Save: `setCyberdeck(port, "WS")` in `OnChanged` callback (line 8304)
-- Save: `setCyberdeck(cyberdeck.WS.port, "WS")` on server start (line 83028)
-- Load: `getCyberdeck("WS")` in `initWebSocketState()` (line 8331)
+- Save: `setRemoteAccess(port, "WS")` in `OnChanged` callback (line 8304)
+- Save: `setRemoteAccess(remoteAccess.WS.port, "WS")` on server start (line 83028)
+- Load: `getRemoteAccess("WS")` in `initWebSocketState()` (line 8331)
 - Issue: Possible storage path mismatch or timing dependency
 
 #### 2.2 Fix Persistence Across Restarts
@@ -90,7 +90,7 @@ query_key, scinvoke, split_integrated_address, transfer, transfer_split
 4. **Storage Validation**: Add verification that saved settings are correctly loaded
 
 **Implementation Steps:**
-1. Examine current storage path resolution in `setCyberdeck()`/`getCyberdeck()`
+1. Examine current storage path resolution in `setRemoteAccess()`/`getRemoteAccess()`
 2. Identify if wallet state affects storage path selection
 3. Implement unified storage approach using `datashards/settings/` path
 4. Add explicit save on wallet shutdown/close
@@ -193,7 +193,7 @@ If fixes introduce new issues:
 - Some EPOCH methods are hardcoded but many from the expected list are missing
 
 #### WebSocket Persistence Issue Root Cause  
-- `setCyberdeck()`/`getCyberdeck()` use `StoreEncryptedValue()`/`GetEncryptedValue()` requiring `engram.Disk != nil`
+- `setRemoteAccess()`/`getRemoteAccess()` use `StoreEncryptedValue()`/`GetEncryptedValue()` requiring `engram.Disk != nil`
 - `initWebSocketState()` only loads settings if wallet available (line 3729)
 - Settings save when wallet open but can't load when wallet closed on restart
 - Recent commit unified storage paths but didn't address wallet dependency
@@ -252,8 +252,8 @@ If fixes introduce new issues:
 
 **Add new functions:**
 ```go
-// Set Cyberdeck endpoint setting with dual storage (encrypted + unencrypted fallback)
-func setCyberdeckDual(port, key string) {
+// Set RemoteAccess endpoint setting with dual storage (encrypted + unencrypted fallback)
+func setRemoteAccessDual(port, key string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -262,31 +262,31 @@ func setCyberdeckDual(port, key string) {
 	case "EPOCH":
 		key = "port.EPOCH"
 	default:
-		logger.Debugf("[Engram] setCyberdeckDual: invalid key\n")
+		logger.Debugf("[Engram] setRemoteAccessDual: invalid key\n")
 		return
 	}
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err := StoreEncryptedValue("Cyberdeck", []byte(key), []byte(port))
+		err := StoreEncryptedValue("RemoteAccess", []byte(key), []byte(port))
 		if err != nil {
-			logger.Debugf("[Engram] setCyberdeckDual encrypted storage failed: %s\n", err)
+			logger.Debugf("[Engram] setRemoteAccessDual encrypted storage failed: %s\n", err)
 		} else {
-			logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to encrypted storage", key)
+			logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to encrypted storage", key)
 		}
 	}
 	
 	// Always save to unencrypted storage as fallback
-	err := StoreValue("CyberdeckUnencrypted", []byte(key), []byte(port))
+	err := StoreValue("RemoteAccessUnencrypted", []byte(key), []byte(port))
 	if err != nil {
-		logger.Debugf("[Engram] setCyberdeckDual unencrypted storage failed: %s\n", err)
+		logger.Debugf("[Engram] setRemoteAccessDual unencrypted storage failed: %s\n", err)
 	} else {
-		logger.Printf("[Engram] setCyberdeckDual: Successfully saved %s to fallback storage", key)
+		logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to fallback storage", key)
 	}
 }
 
-// Get Cyberdeck endpoint setting with dual storage (try encrypted first, then fallback)
-func getCyberdeckDual(key string) (r string) {
+// Get RemoteAccess endpoint setting with dual storage (try encrypted first, then fallback)
+func getRemoteAccessDual(key string) (r string) {
 	switch key {
 	case "RPC":
 		key = "port.RPC"
@@ -300,25 +300,25 @@ func getCyberdeckDual(key string) (r string) {
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		stored, err := GetEncryptedValue("Cyberdeck", []byte(key))
+		stored, err := GetEncryptedValue("RemoteAccess", []byte(key))
 		if err == nil && stored != nil {
-			logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from encrypted storage", key)
+			logger.Printf("[Engram] getRemoteAccessDual: Successfully loaded %s from encrypted storage", key)
 			return string(stored)
 		} else if err != nil {
-			logger.Debugf("[Engram] getCyberdeckDual encrypted storage failed: %s\n", err)
+			logger.Debugf("[Engram] getRemoteAccessDual encrypted storage failed: %s\n", err)
 		}
 	}
 	
 	// Fallback to unencrypted storage
-	stored, err := GetValue("CyberdeckUnencrypted", []byte(key))
+	stored, err := GetValue("RemoteAccessUnencrypted", []byte(key))
 	if err == nil && stored != nil {
-		logger.Printf("[Engram] getCyberdeckDual: Successfully loaded %s from fallback storage", key)
+		logger.Printf("[Engram] getRemoteAccessDual: Successfully loaded %s from fallback storage", key)
 		return string(stored)
 	} else if err != nil {
-		logger.Debugf("[Engram] getCyberdeckDual fallback storage failed: %s\n", err)
+		logger.Debugf("[Engram] getRemoteAccessDual fallback storage failed: %s\n", err)
 	}
 	
-	logger.Printf("[Engram] getCyberdeckDual: No stored value found for %s", key)
+	logger.Printf("[Engram] getRemoteAccessDual: No stored value found for %s", key)
 	return ""
 }
 ```
@@ -328,13 +328,13 @@ func getCyberdeckDual(key string) (r string) {
 
 **Replace existing `OnChanged` function:**
 ```go
-cyberdeck.WS.portText.OnChanged = func(port string) {
-	if cyberdeck.WS.portText.Validate() == nil {
-		cyberdeck.WS.port = port
-		setCyberdeckDual(port, "WS") // Use dual storage instead of setCyberdeck()
+remoteAccess.WS.portText.OnChanged = func(port string) {
+	if remoteAccess.WS.portText.Validate() == nil {
+		remoteAccess.WS.port = port
+		setRemoteAccessDual(port, "WS") // Use dual storage instead of setRemoteAccess()
 		
 		// CRITICAL FIX: Save WebSocket enabled state to storage
-		cyberdeck.WS.global.enabled = true
+		remoteAccess.WS.global.enabled = true
 		setPermissions()
 	}
 }
@@ -344,9 +344,9 @@ cyberdeck.WS.portText.OnChanged = func(port string) {
 
 **Replace server start save code:**
 ```go
-if cyberdeck.WS.portText != nil && cyberdeck.WS.portText.Validate() == nil {
+if remoteAccess.WS.portText != nil && remoteAccess.WS.portText.Validate() == nil {
 	// Use dual storage for consistent persistence
-	setCyberdeckDual(cyberdeck.WS.portText.Text, "WS")
+	setRemoteAccessDual(remoteAccess.WS.portText.Text, "WS")
 }
 ```
 
@@ -360,10 +360,10 @@ func initWebSocketState() {
 	logger.Printf("[Engram] initWebSocketState() called - wallet available: %v", engram.Disk != nil)
 	
 	// Load stored WebSocket port using dual storage (works without wallet)
-	if wsPort := getCyberdeckDual("WS"); wsPort != "" {
-		cyberdeck.WS.port = wsPort
-		if cyberdeck.WS.portText != nil {
-			cyberdeck.WS.portText.SetText(wsPort)
+	if wsPort := getRemoteAccessDual("WS"); wsPort != "" {
+		remoteAccess.WS.port = wsPort
+		if remoteAccess.WS.portText != nil {
+			remoteAccess.WS.portText.SetText(wsPort)
 		}
 		logger.Printf("[Engram] WebSocket port loaded from dual storage: %s", wsPort)
 	} else {
@@ -382,9 +382,9 @@ The existing epoch.GetHandler() call at line 3915 should now work correctly sinc
 ## Implementation Steps
 
 1. **Apply Fix 1**: Replace EPOCH methods registration in `SetDefaultPermissions()`
-2. **Apply Fix 2**: Add dual storage functions after `setCyberdeck()` 
-3. **Apply Fix 3**: Update OnChanged callback and server start to use `setCyberdeckDual()`
-4. **Apply Fix 4**: Replace `initWebSocketState()` to use `getCyberdeckDual()` and remove wallet dependency
+2. **Apply Fix 2**: Add dual storage functions after `setRemoteAccess()` 
+3. **Apply Fix 3**: Update OnChanged callback and server start to use `setRemoteAccessDual()`
+4. **Apply Fix 4**: Replace `initWebSocketState()` to use `getRemoteAccessDual()` and remove wallet dependency
 5. **Test**: Restart wallet and verify both issues are resolved
 
 ## Expected Results After Fixes
