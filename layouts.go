@@ -7302,7 +7302,7 @@ func layoutMessages() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.43))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.12))
 
 	messages.Data = nil
 
@@ -7315,7 +7315,81 @@ func layoutMessages() fyne.CanvasObject {
 	}
 
 	data := getMessages(height)
+
+	formatContactListItem := func(input string) (string, bool) {
+		contact := strings.TrimSpace(input)
+		if contact == "" {
+			return "", false
+		}
+
+		if _, err := globals.ParseValidateAddress(contact); err == nil {
+			username, usernameErr := checkUsername(contact, -1)
+			if usernameErr == nil && username != "" {
+				return contact + "~~~" + username, true
+			}
+
+			return contact + "~~~", true
+		}
+
+		address, err := checkUsername(contact, -1)
+		if err != nil || address == "" {
+			return "", false
+		}
+
+		return address + "~~~" + contact, true
+	}
+
+	if engram.Disk != nil {
+		walletAddress := engram.Disk.GetAddress().String()
+		savedContacts, err := GetContacts(walletAddress)
+		if err == nil {
+			seen := make(map[string]struct{}, len(data))
+			for _, existing := range data {
+				split := strings.Split(existing, "~~~")
+				if len(split) > 0 {
+					seen[split[0]] = struct{}{}
+				}
+			}
+
+			for _, saved := range savedContacts {
+				formatted, ok := formatContactListItem(saved)
+				if !ok {
+					continue
+				}
+
+				split := strings.Split(formatted, "~~~")
+				if len(split) == 0 {
+					continue
+				}
+
+				if _, exists := seen[split[0]]; exists {
+					continue
+				}
+
+				seen[split[0]] = struct{}{}
+				data = append(data, formatted)
+			}
+
+			sort.Sort(sort.Reverse(sort.StringSlice(data)))
+		}
+	}
+
 	temp := data
+
+	// Keep the contact list compact when empty/small, expand only as needed.
+	minListHeight := float32(0)
+	if len(data) > 0 {
+		minListHeight = ui.Height * 0.05
+	}
+	maxListHeight := ui.Height * 0.43
+	rowHeight := float32(42)
+	listHeight := float32(len(data))*rowHeight + (ui.Height * 0.01)
+	if listHeight < minListHeight {
+		listHeight = minListHeight
+	} else if listHeight > maxListHeight {
+		listHeight = maxListHeight
+	}
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, listHeight))
 
 	list := binding.BindStringList(&data)
 
@@ -7334,7 +7408,10 @@ func layoutMessages() fyne.CanvasObject {
 			}
 			dataItem := strings.Split(str, "~~~")
 			short := dataItem[0]
-			address := short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+			address := short
+			if len(short) > DEFAULT_USERADDR_SHORTEN_LENGTH {
+				address = short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+			}
 			username := dataItem[1]
 			// If a username is longer than what *would* be a 'short' address of ...xyzxyzxyzx (e.g. 13), then shorten as well to be similar sizing
 			if len(username) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
@@ -7366,35 +7443,32 @@ func layoutMessages() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	searchList := []string{}
-
-	entrySearch := widget.NewEntry()
-	entrySearch.PlaceHolder = "Search for a Contact"
-	entrySearch.OnChanged = func(s string) {
-		s = strings.ToLower(s)
-		searchList = []string{}
-		if s == "" {
+	filterContacts := func(query string) {
+		query = strings.ToLower(strings.TrimSpace(query))
+		if query == "" {
 			data = temp
 			list.Reload()
-		} else {
-			for _, d := range temp {
-				tempd := strings.ToLower(d)
-				split := strings.Split(tempd, "~~~")
+			return
+		}
 
-				if split[1] == "" {
-					if strings.Contains(split[0], s) {
-						searchList = append(searchList, d)
-					}
-				} else {
-					if strings.Contains(split[1], s) {
-						searchList = append(searchList, d)
-					}
+		searchList := []string{}
+		for _, d := range temp {
+			tempd := strings.ToLower(d)
+			split := strings.Split(tempd, "~~~")
+
+			if split[1] == "" {
+				if strings.Contains(split[0], query) {
+					searchList = append(searchList, d)
+				}
+			} else {
+				if strings.Contains(split[1], query) {
+					searchList = append(searchList, d)
 				}
 			}
-
-			data = searchList
-			list.Reload()
 		}
+
+		data = searchList
+		list.Reload()
 	}
 
 	btnSend := widget.NewButton("New Message", func() {
@@ -7418,14 +7492,75 @@ func layoutMessages() fyne.CanvasObject {
 	entryDest.MultiLine = false
 	entryDest.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	entryDest.PlaceHolder = "Username or Address"
+
+	btnSaveContact := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		if engram.Disk == nil {
+			return
+		}
+
+		contact := strings.TrimSpace(entryDest.Text)
+		if contact == "" {
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsContact(walletAddress, contact) {
+			if err := RemoveContact(walletAddress, contact); err != nil {
+				logger.Errorf("[Contacts] Failed to remove contact: %s", err)
+				return
+			}
+		} else {
+			if _, err := globals.ParseValidateAddress(contact); err != nil {
+				if _, userErr := checkUsername(contact, -1); userErr != nil {
+					logger.Errorf("[Contacts] Failed to save contact: %s", userErr)
+					return
+				}
+			}
+
+			if err := AddContact(walletAddress, contact); err != nil {
+				logger.Errorf("[Contacts] Failed to save contact: %s", err)
+				return
+			}
+		}
+
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutMessages())
+		removeOverlays()
+	})
+	btnSaveContact.Disable()
+
+	refreshContactButton := func(value string) {
+		contact := strings.TrimSpace(value)
+		if contact == "" || len(contact) < 3 || engram.Disk == nil {
+			btnSaveContact.SetIcon(theme.ContentAddIcon())
+			btnSaveContact.Disable()
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsContact(walletAddress, contact) {
+			btnSaveContact.SetIcon(theme.ContentRemoveIcon())
+		} else {
+			btnSaveContact.SetIcon(theme.ContentAddIcon())
+		}
+
+		btnSaveContact.Enable()
+	}
+
 	entryDest.OnChanged = func(s string) {
 		messages.Contact = s
+		filterContacts(s)
 		if len(s) >= 3 {
 			btnSend.Enable()
+			refreshContactButton(s)
 			return
 		}
 		btnSend.Disable()
+		refreshContactButton(s)
 	}
+	refreshContactButton(entryDest.Text)
+
+	entryDestRow := container.NewBorder(nil, nil, nil, btnSaveContact, entryDest)
 
 	messageForm := container.NewVBox(
 		rectSpacer,
@@ -7437,15 +7572,12 @@ func layoutMessages() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		entrySearch,
-		rectSpacer,
+		entryDestRow,
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
 			msgbox.List,
 		),
-		rectSpacer,
-		entryDest,
 		rectSpacer,
 		btnSend,
 		rectSpacer,

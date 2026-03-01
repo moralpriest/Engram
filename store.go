@@ -21,6 +21,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/deroproject/graviton"
@@ -312,7 +314,6 @@ func DeleteKey(t string, key []byte) (err error) {
 	return
 }
 
-
 // TELA Favorites management
 // Favorites are stored per-wallet using the wallet address as key
 
@@ -429,5 +430,89 @@ func GetTELAFavorites(walletAddress string) (map[string]*TELAFavoriteData, error
 		}
 	}
 
+	return result, nil
+}
+
+// AddContact stores a contact for the current wallet.
+func AddContact(walletAddress, contact string) error {
+	if walletAddress == "" || contact == "" {
+		return errors.New("wallet address and contact required")
+	}
+
+	key := []byte("contact_" + walletAddress + "_" + contact)
+	return StoreEncryptedValue("Contacts", key, []byte(contact))
+}
+
+// RemoveContact deletes a stored contact for the current wallet.
+func RemoveContact(walletAddress, contact string) error {
+	if walletAddress == "" || contact == "" {
+		return errors.New("wallet address and contact required")
+	}
+
+	key := []byte("contact_" + walletAddress + "_" + contact)
+	return DeleteKey("Contacts", key)
+}
+
+// IsContact checks if a contact is already stored for the current wallet.
+func IsContact(walletAddress, contact string) bool {
+	if walletAddress == "" || contact == "" {
+		return false
+	}
+
+	key := []byte("contact_" + walletAddress + "_" + contact)
+	_, err := GetEncryptedValue("Contacts", key)
+	return err == nil
+}
+
+// GetContacts returns all stored contacts for the current wallet.
+func GetContacts(walletAddress string) ([]string, error) {
+	result := []string{}
+	if walletAddress == "" {
+		return result, nil
+	}
+
+	prefix := "contact_" + walletAddress + "_"
+
+	shard, err := GetShard()
+	if err != nil {
+		return result, err
+	}
+
+	store, err := graviton.NewDiskStore(shard)
+	if err != nil {
+		return result, err
+	}
+
+	ss, err := store.LoadSnapshot(0)
+	if err != nil {
+		return result, err
+	}
+
+	tree, err := ss.GetTree("Contacts")
+	if err != nil {
+		return result, nil
+	}
+
+	c := tree.Cursor()
+	for k, v, err := c.First(); err == nil; k, v, err = c.Next() {
+		keyStr := string(k)
+		if !strings.HasPrefix(keyStr, prefix) {
+			continue
+		}
+
+		decrypted, decryptErr := engram.Disk.Decrypt(v)
+		if decryptErr != nil {
+			continue
+		}
+
+		contact := strings.TrimSpace(string(decrypted))
+		if contact == "" {
+			continue
+		}
+
+		result = append(result, contact)
+	}
+
+	sort.Strings(result)
 	return result, nil
 }
