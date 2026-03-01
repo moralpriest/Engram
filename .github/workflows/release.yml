@@ -100,23 +100,28 @@ jobs:
         run: |
           VERSION="${{ needs.verify.outputs.version }}"
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-          
-          if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+
+          if [ -f "RELEASE_NOTES.md" ]; then
+            cp RELEASE_NOTES.md /tmp/changelog.md
+            echo "Using RELEASE_NOTES.md for release notes"
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+            if [ -z "$PREV_TAG" ]; then
+              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+            else
+              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+            fi
+
+            # Build changelog with proper variable expansion
+            echo "## What's Changed" > /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "$COMMITS" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "## Security" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
           fi
-          
-          # Build changelog with proper variable expansion
-          echo "## What's Changed" > /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "$COMMITS" >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "## Security" >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
-          echo "" >> /tmp/changelog.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
           
           # Output for use in release
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
@@ -365,7 +370,7 @@ jobs:
           output-file: release/sbom.spdx.json
 
       - name: Upload signed artifacts
-        uses: actions/upload-artifact@6f51ac03b93561f10f2f5355f5d0c4c5e0b1d2a3 # v4.4.0
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: signed-release
           path: release/*
@@ -407,7 +412,7 @@ jobs:
               echo "Verifying $file..."
               cosign verify-blob "$file" \
                 --bundle "${file}.bundle" \
-                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/v${{ github.ref_name }}" \
+                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
                 --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
               if [ $? -ne 0 ]; then
                 echo "ERROR: Signature verification failed for $file"
