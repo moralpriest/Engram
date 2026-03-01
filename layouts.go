@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -31,6 +32,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -49,6 +51,7 @@ import (
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
+	"github.com/creachadair/jrpc2"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
@@ -6564,6 +6567,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					DeleteKey("TELA Search", []byte("SCIDs"))
 					DeleteKey("TELA Search", []byte("Searched SCIDs"))
 					DeleteKey("TELA Search", []byte("Last Scan"))
+					DeleteKey("TELA Search", []byte("Last Indexed Height"))
 				}
 			},
 		)
@@ -16828,6 +16832,62 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	getSearchResults := func() {
+		scanStart := time.Now()
+		scanCtx, scanCancel := context.WithCancel(context.Background())
+		defer scanCancel()
+		var syncWaitSeconds int
+		var storedSCIDsCount int
+		var allCandidates int
+		var scannedCandidates int64
+		var versionHits int64
+		var indexInfoCalls int64
+		var retryCount int64
+		var preDispatchSkips int64
+		var negCacheSkips int64
+		var prefilterPassed int64
+		var prefilterDropped int64
+		var uiRefreshCount int64
+		var progressWriteCount int64
+		var interruptReason string
+		var phasePrefilterMs int64
+		var phaseScanMs int64
+		var phaseFinalizeMs int64
+		cacheHitMode := "full"
+		fullScanReason := "cold_start"
+		cacheIntegrity := "ok"
+		var heightDelta int64
+		var storedIndexedHeight int64
+
+		deviceClass := "desktop"
+		workerPoolSize := runtime.NumCPU()
+		uiRefreshInterval := 250 * time.Millisecond
+		progressCheckpointInterval := 2 * time.Second
+		if a.Driver().Device().IsMobile() {
+			deviceClass = "mobile"
+			workerPoolSize = runtime.NumCPU() / 2
+			if workerPoolSize < 6 {
+				workerPoolSize = 6
+			}
+			if workerPoolSize > 12 {
+				workerPoolSize = 12
+			}
+			uiRefreshInterval = 500 * time.Millisecond
+			progressCheckpointInterval = 4 * time.Second
+		} else {
+			workerPoolSize = runtime.NumCPU() * 2
+			if workerPoolSize < 16 {
+				workerPoolSize = 16
+			}
+			if workerPoolSize > 64 {
+				workerPoolSize = 64
+			}
+		}
+
+		saveProgress := func(position, total int, scid, state string) {
+			saveScanProgress(position, total, scid, state)
+			atomic.AddInt64(&progressWriteCount, 1)
+		}
+
 		fyne.Do(func() {
 			entrySearch.Disable()
 			entryAddSCID.Disable()
@@ -16846,6 +16906,7 @@ func layoutTELA() fyne.CanvasObject {
 			sAll = map[string]bool{}
 			forceFreshScan = false
 			clearScanProgress()
+			fullScanReason = "force_fresh_scan"
 		}
 
 		// Check for existing progress and handle resume scenarios
@@ -16865,6 +16926,28 @@ func layoutTELA() fyne.CanvasObject {
 		} else if progress.State == "interrupted" && isScanProgressStale(progress, 24) {
 			// Clear stale interrupted progress
 			clearScanProgress()
+		}
+
+		if gnomon.Index != nil {
+			if storedHeightRaw, err := GetEncryptedValue("TELA Search", []byte("Last Indexed Height")); err == nil {
+				if parsedHeight, parseErr := strconv.ParseInt(string(storedHeightRaw), 10, 64); parseErr == nil {
+					storedIndexedHeight = parsedHeight
+					heightDelta = gnomon.Index.LastIndexedHeight - storedIndexedHeight
+					if heightDelta < 0 {
+						heightDelta = 0
+					}
+				} else {
+					cacheIntegrity = "missing_height"
+				}
+			} else {
+				cacheIntegrity = "missing_height"
+			}
+		}
+		if rescanRecheck {
+			fullScanReason = "rescan_recheck"
+		} else if heightDelta > 0 {
+			cacheHitMode = "delta"
+			fullScanReason = "height_delta"
 		}
 
 		// Already scanned (skip if force fresh scan was just triggered)
@@ -16916,25 +16999,29 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		for gnomon.Index != nil && gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+			syncWaitSeconds++
 			// Check if user navigated away
 			if !strings.Contains(session.Domain, ".tela") {
-				saveScanProgress(0, 0, "", "interrupted")
+				interruptReason = "navigated_away"
+				saveProgress(0, 0, "", "interrupted")
 				return
 			}
 
 			// Check if Gnomon index became nil (stopped unexpectedly)
 			if gnomon.Index == nil {
+				interruptReason = "gnomon_nil_while_syncing"
 				results.Text = "  Gnomon stopped unexpectedly"
 				results.Color = colors.Red
 				fyne.Do(func() {
 					results.Refresh()
 				})
-				saveScanProgress(0, 0, "", "interrupted")
+				saveProgress(0, 0, "", "interrupted")
 				return
 			}
 
 			// Check connection health - wait for reconnect if disconnected
 			if !walletapi.Connected {
+				interruptReason = "connection_lost_syncing"
 				results.Text = "  Connection lost, waiting for reconnect..."
 				results.Color = colors.Yellow
 				fyne.Do(func() {
@@ -16949,19 +17036,20 @@ func layoutTELA() fyne.CanvasObject {
 
 					// Check if user navigated away while waiting
 					if !strings.Contains(session.Domain, ".tela") {
-						saveScanProgress(0, 0, "", "interrupted")
+						saveProgress(0, 0, "", "interrupted")
 						return
 					}
 				}
 
 				// If still disconnected after 30 seconds, mark as interrupted
 				if !walletapi.Connected {
+					interruptReason = "connection_timeout_syncing"
 					results.Text = "  Connection timeout"
 					results.Color = colors.Red
 					fyne.Do(func() {
 						results.Refresh()
 					})
-					saveScanProgress(0, 0, "", "interrupted")
+					saveProgress(0, 0, "", "interrupted")
 					return
 				}
 
@@ -16980,7 +17068,7 @@ func layoutTELA() fyne.CanvasObject {
 			// Save syncing state for progress tracking
 			daemonHeight := int(engram.Disk.Get_Daemon_Height())
 			if gnomon.Index != nil {
-				saveScanProgress(int(gnomon.Index.LastIndexedHeight), daemonHeight, "", "syncing")
+				saveProgress(int(gnomon.Index.LastIndexedHeight), daemonHeight, "", "syncing")
 			}
 
 			fyne.Do(func() {
@@ -16990,21 +17078,17 @@ func layoutTELA() fyne.CanvasObject {
 			time.Sleep(time.Second)
 		}
 
+		indexCacheStore := loadTelaIndexCache()
 		if !restrictiveMode {
-			storedAllSCIDs, err := GetEncryptedValue("TELA Search", []byte("Searched SCIDs"))
-			if err != nil {
-				// Nothing stored, scan for SCIDs
-				sAll = map[string]bool{}
-				logger.Debugf("[Engram] Could not get stored TELA Searched SCIDs: %s\n", err)
-			} else {
-				json.Unmarshal(storedAllSCIDs, &sAll)
-			}
+			sAll = loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
 		}
 
 		storedSCIDs, err := GetEncryptedValue("TELA Search", []byte("SCIDs"))
 		if err != nil {
 			// Nothing stored, scan for SCIDs
 			telaSCIDs = []string{}
+			cacheIntegrity = "missing_scids"
+			fullScanReason = "no_scid_cache"
 			logger.Debugf("[Engram] Could not get stored TELA SCIDs: %s\n", err)
 		} else {
 			// Have stored SCIDs
@@ -17017,53 +17101,100 @@ func layoutTELA() fyne.CanvasObject {
 				results.Refresh()
 			})
 
+			// Batch-fetch INDEX data for cached SCIDs missing from indexCacheStore
+			// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket
+			var cacheMissed []string
+			for _, sc := range telaSCIDs {
+				if _, ok := indexCacheStore[sc]; !ok {
+					cacheMissed = append(cacheMissed, sc)
+				}
+			}
+			if len(cacheMissed) > 0 {
+				results.Text = fmt.Sprintf("  Fetching INDEX data... (%d SCIDs)", len(cacheMissed))
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					results.Refresh()
+				})
+
+				fetched, fetchErr := batchFetchINDEXes(scanCtx, cacheMissed, 50)
+				if fetchErr != nil {
+					logger.Printf("[TELA] Batch INDEX fetch for cached SCIDs: %v\n", fetchErr)
+				}
+				for scid, index := range fetched {
+					indexCacheStore[scid] = index
+				}
+				atomic.AddInt64(&indexInfoCalls, int64(len(cacheMissed)))
+			}
+
+			cachedAdded := int64(0)
+			var cachedMu sync.Mutex
+			cachedWorkers := workerPoolSize / 2
+			if cachedWorkers < 8 {
+				cachedWorkers = 8
+			}
+			if cachedWorkers > 24 {
+				cachedWorkers = 24
+			}
+			cachedSlots := make(chan struct{}, cachedWorkers)
+			var cachedWg sync.WaitGroup
+
 			for i, sc := range telaSCIDs {
-				// Check connection before each RPC call
 				if !walletapi.Connected {
 					break
 				}
 
-				// Retry logic for GetINDEXInfo
-				var index tela.INDEX
-				var err error
-				maxRetries := 3
-				for attempt := 0; attempt < maxRetries; attempt++ {
-					index, err = tela.GetINDEXInfo(sc, session.Daemon)
-					if err == nil {
-						break
-					}
-					if !isConnectionError(err) {
-						break // Non-retryable error
-					}
-					if attempt < maxRetries-1 {
-						time.Sleep(time.Duration(attempt+1) * time.Second)
-					}
-				}
+				cachedSlots <- struct{}{}
+				cachedWg.Add(1)
+				go func(idx int, scid string) {
+					defer func() {
+						<-cachedSlots
+						cachedWg.Done()
+					}()
 
-				if err == nil && len(index.DOCs) > 0 {
-					if gnomon.GetAllSCIDVariableDetails(sc) == nil {
-						results.Text = fmt.Sprintf("  Adding... (%d / %d)", i, len(telaSCIDs))
-						results.Color = colors.Yellow
-						fyne.Do(func() {
-							results.Refresh()
-						})
-
-						gnomon.AddSCIDToIndex(sc)
+					var index tela.INDEX
+					if cached, ok := indexCacheStore[scid]; ok {
+						index = cached
+					} else {
+						// Not in cache and batch fetch didn't find it — skip
+						return
 					}
 
-					if !restrictiveMode {
-						_, ratings, err := getLikesRatio(sc, index.DURL, searchExclusions, minLikes)
-						if err != nil {
-							continue
+					if len(index.DOCs) < 1 {
+						return
+					}
+
+					if gnomon.GetAllSCIDVariableDetails(scid) == nil {
+						if atomic.AddInt64(&cachedAdded, 1)%8 == 0 {
+							results.Text = fmt.Sprintf("  Adding... (%d / %d)", idx+1, len(telaSCIDs))
+							results.Color = colors.Yellow
+							fyne.Do(func() {
+								results.Refresh()
+							})
 						}
-
-						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+						gnomon.AddSCIDToIndex(scid)
 					}
-				}
+
+					if restrictiveMode {
+						return
+					}
+
+					_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
+					if err != nil {
+						return
+					}
+
+					cachedMu.Lock()
+					telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+					cachedMu.Unlock()
+				}(i, sc)
 			}
 
-			// If recheck is false, run a rescan that pulls in any new contracts when first OnChanged to Search
-			if rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) {
+			cachedWg.Wait()
+			storedSCIDsCount = len(telaSCIDs)
+
+			if !rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) && heightDelta == 0 {
+				cacheHitMode = "cached_only"
+				fullScanReason = ""
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
 				searchData.Set(searching)
 
@@ -17091,7 +17222,12 @@ func layoutTELA() fyne.CanvasObject {
 					errorText.Refresh()
 				})
 
+				logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), versionHits, indexInfoCalls, retryCount, len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+
 				return
+			}
+			if heightDelta > 0 {
+				fullScanReason = "height_delta"
 			}
 		}
 
@@ -17106,33 +17242,164 @@ func layoutTELA() fyne.CanvasObject {
 			all = gnomon.GetAllOwnersAndSCIDs()
 		}
 
-		allLen := len(all)
+		allSCIDs := make([]string, 0, len(all))
+		for sc := range all {
+			allSCIDs = append(allSCIDs, sc)
+		}
+		sort.Strings(allSCIDs)
+
+		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
+			deltaSCIDs := make([]string, 0)
+			for _, sc := range allSCIDs {
+				heights := gnomon.GetSCIDInteractionHeight(sc)
+				if len(heights) == 0 {
+					deltaSCIDs = append(deltaSCIDs, sc)
+					continue
+				}
+				for _, h := range heights {
+					if h > storedIndexedHeight {
+						deltaSCIDs = append(deltaSCIDs, sc)
+						break
+					}
+				}
+			}
+			if len(deltaSCIDs) > 0 {
+				allSCIDs = deltaSCIDs
+			}
+		}
+
+		prefilterAllowed := map[string]bool{}
+		if !restrictiveMode {
+			candidates := make([]string, 0, len(allSCIDs))
+			for _, sc := range allSCIDs {
+				if !rescanRecheck && sAll[sc] {
+					prefilterAllowed[sc] = false
+					continue
+				}
+				candidates = append(candidates, sc)
+			}
+
+			results.Text = fmt.Sprintf("  Prefiltering... (%d candidates)", len(candidates))
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
+
+			prefilterStart := time.Now()
+			poolSize := 8
+			pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
+			if poolErr != nil {
+				logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
+				// Fallback: use Gnomon's single connection
+				if gnomon.Index != nil && gnomon.Index.RPC != nil && gnomon.Index.RPC.RPC != nil {
+					pool = []*jrpc2.Client{gnomon.Index.RPC.RPC}
+					poolCleanup = func() {} // Don't close Gnomon's connection
+				}
+			}
+
+			var passed map[string]bool
+			var batchStats batchPrefilterStats
+			var batchErr error
+			if len(pool) > 0 {
+				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, 200, 3, pool, func(completed, total int) {
+					results.Text = fmt.Sprintf("  Prefiltering... (%d / %d)", completed, total)
+					results.Color = colors.Yellow
+					fyne.Do(func() {
+						results.Refresh()
+					})
+				})
+				logger.Printf("[TELA] Prefilter returned, cleaning up %d pool connections...\n", len(pool))
+				poolCleanup()
+				logger.Printf("[TELA] Pool cleanup done\n")
+			} else {
+				batchErr = fmt.Errorf("no RPC connections available")
+			}
+			phasePrefilterMs = time.Since(prefilterStart).Milliseconds()
+			logger.Printf("[TELA] Prefilter phase took %dms, passed=%d err=%v\n", phasePrefilterMs, len(passed), batchErr)
+			if batchErr != nil {
+				logger.Printf("[TELA] Batch prefilter error: %v\n", batchErr)
+				for _, sc := range candidates {
+					prefilterAllowed[sc] = true
+				}
+			} else {
+				atomic.AddInt64(&retryCount, batchStats.Retries)
+				atomic.AddInt64(&prefilterPassed, batchStats.VersionHits)
+				atomic.AddInt64(&versionHits, batchStats.VersionHits)
+				atomic.AddInt64(&prefilterDropped, batchStats.Dropped)
+				for _, sc := range candidates {
+					prefilterAllowed[sc] = passed[sc]
+					if !passed[sc] {
+						sAll[sc] = true
+					}
+				}
+			}
+		}
+
+		// Batch-fetch INDEX data for prefilter-passed SCIDs not yet in indexCacheStore.
+		// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket.
+		if !restrictiveMode {
+			var indexNeeded []string
+			for scid, allowed := range prefilterAllowed {
+				if allowed {
+					if _, ok := indexCacheStore[scid]; !ok {
+						indexNeeded = append(indexNeeded, scid)
+					}
+				}
+			}
+			if len(indexNeeded) > 0 {
+				logger.Printf("[TELA] Batch INDEX fetch starting for %d SCIDs...\n", len(indexNeeded))
+				results.Text = fmt.Sprintf("  Fetching INDEX data... (%d SCIDs)", len(indexNeeded))
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					results.Refresh()
+				})
+
+				fetched, fetchErr := batchFetchINDEXes(scanCtx, indexNeeded, 50)
+				logger.Printf("[TELA] Batch INDEX fetch done: fetched=%d err=%v\n", len(fetched), fetchErr)
+				if fetchErr != nil {
+					logger.Printf("[TELA] Batch INDEX fetch for scan: %v\n", fetchErr)
+				}
+				for scid, index := range fetched {
+					indexCacheStore[scid] = index
+				}
+				atomic.AddInt64(&indexInfoCalls, int64(len(indexNeeded)))
+			}
+		}
+
+		allLen := len(allSCIDs)
+		allCandidates = allLen
 		resumeTarget := resumePosition
-		scanned := resumePosition // Progress counter, starts from resume position
-		skipCount := 0
-		workers := make(chan struct{}, runtime.NumCPU())
+		scanned := int64(resumePosition) // Progress counter, starts from resume position
+		scannedCandidates = scanned
+		workers := make(chan struct{}, workerPoolSize)
 		interrupted := false
 		var scanMu sync.Mutex
+		lastUIRefresh := time.Now().Add(-uiRefreshInterval)
+		lastProgressSave := time.Now()
 		seenSCIDs := make(map[string]bool, len(telaSCIDs))
 		for _, scid := range telaSCIDs {
 			seenSCIDs[scid] = true
 		}
 
-		for sc := range all {
-			// Skip already-processed SCIDs when resuming
-			if resumeTarget > 0 && skipCount < resumeTarget {
-				skipCount++
-				continue
-			}
+		scanPhaseStart := time.Now()
+
+		for i := resumeTarget; i < allLen; i++ {
+			sc := allSCIDs[i]
 
 			// Check for interrupted conditions
 			if gnomon.Index == nil || !strings.Contains(session.Domain, ".tela") {
+				if gnomon.Index == nil {
+					interruptReason = "gnomon_nil_during_scan"
+				} else {
+					interruptReason = "navigated_away"
+				}
 				interrupted = true
 				break
 			}
 
 			// Check connection during scan
 			if !walletapi.Connected {
+				interruptReason = "connection_lost_during_scan"
 				results.Text = "  Connection lost during scan"
 				results.Color = colors.Red
 				fyne.Do(func() {
@@ -17142,17 +17409,33 @@ func layoutTELA() fyne.CanvasObject {
 				break
 			}
 
-			scanned++
-			results.Text = fmt.Sprintf("  Scanning... (%d / %d)", scanned, allLen)
-			results.Color = colors.Yellow
+			scanMu.Lock()
+			alreadySeen := seenSCIDs[sc]
+			scanMu.Unlock()
+			if !restrictiveMode && !rescanRecheck && sAll[sc] {
+				atomic.AddInt64(&negCacheSkips, 1)
+			}
+			if !restrictiveMode && !rescanRecheck && (sAll[sc] || alreadySeen || !prefilterAllowed[sc]) {
+				atomic.AddInt64(&preDispatchSkips, 1)
+				scanned = atomic.AddInt64(&scannedCandidates, 1)
+				continue
+			}
 
-			fyne.Do(func() {
-				results.Refresh()
-			})
+			scanned = atomic.AddInt64(&scannedCandidates, 1)
+			now := time.Now()
+			if now.Sub(lastUIRefresh) >= uiRefreshInterval || scanned >= int64(allLen) {
+				lastUIRefresh = now
+				results.Text = fmt.Sprintf("  Scanning... (%d / %d)", scanned, allLen)
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					results.Refresh()
+				})
+				atomic.AddInt64(&uiRefreshCount, 1)
+			}
 
-			// Save progress every 50 items
-			if scanned%50 == 0 {
-				saveScanProgress(scanned, allLen, sc, "scanning")
+			if now.Sub(lastProgressSave) >= progressCheckpointInterval {
+				saveProgress(int(scanned), allLen, sc, "scanning")
+				lastProgressSave = now
 			}
 
 			workers <- struct{}{}
@@ -17163,59 +17446,21 @@ func layoutTELA() fyne.CanvasObject {
 					wg.Done()
 				}()
 
-				// Restrictive mode rechecks everytime, if rescan recheck is disabled SCIDs that have already been scanned won't be rechecked for faster list population
-				scanMu.Lock()
-				alreadySeen := seenSCIDs[scid]
-				scanMu.Unlock()
-				if !restrictiveMode && !rescanRecheck && (sAll[scid] || alreadySeen) {
-					return
-				}
-
 				// Check if Gnomon was stopped
 				if gnomon.Index == nil {
 					return
 				}
 
-				// Retry logic for GetSCIDValuesByKey
-				var vs []string
-				var err error
-				maxRetries := 3
-				for attempt := 0; attempt < maxRetries; attempt++ {
-					if gnomon.Index == nil {
+				if restrictiveMode || prefilterAllowed[scid] {
+					var index tela.INDEX
+					if cached, ok := indexCacheStore[scid]; ok {
+						index = cached
+					} else {
+						// Not in cache and batch fetch didn't find it — skip
 						return
 					}
-					vs, _, err = gnomon.Index.GetSCIDValuesByKey([]*structures.SCIDVariable{}, scid, "telaVersion", gnomon.Index.ChainHeight)
-					if err == nil {
-						break
-					}
-					if !isConnectionError(err) {
-						break // Non-retryable error
-					}
-					if attempt < maxRetries-1 {
-						time.Sleep(time.Duration(attempt+1) * time.Second)
-					}
-				}
-				if err != nil {
-					return
-				}
 
-				if vs != nil {
-					// Retry logic for GetINDEXInfo
-					var index tela.INDEX
-					for attempt := 0; attempt < maxRetries; attempt++ {
-						index, err = tela.GetINDEXInfo(scid, session.Daemon)
-						if err == nil {
-							break
-						}
-						if !isConnectionError(err) {
-							break // Non-retryable error
-						}
-						if attempt < maxRetries-1 {
-							time.Sleep(time.Duration(attempt+1) * time.Second)
-						}
-					}
-
-					if err == nil && len(index.DOCs) > 0 {
+					if len(index.DOCs) > 0 {
 						if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
 							return
 						}
@@ -17252,9 +17497,10 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		wg.Wait()
+		phaseScanMs = time.Since(scanPhaseStart).Milliseconds()
 
 		if interrupted {
-			saveScanProgress(scanned, allLen, "", "interrupted")
+			saveProgress(int(atomic.LoadInt64(&scannedCandidates)), allLen, "", "interrupted")
 			results.Text = "  Scan interrupted"
 			results.Color = colors.Yellow
 			fyne.Do(func() {
@@ -17262,8 +17508,11 @@ func layoutTELA() fyne.CanvasObject {
 				entrySearch.Enable()
 				entryAddSCID.Enable()
 			})
+			logger.Printf("[TELA] Search metrics: outcome=interrupted reason=%s elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", interruptReason, time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
 			return
 		}
+
+		finalizeStart := time.Now()
 
 		searching = telaSearchDisplayAll(telaSearch, sortBy)
 		searchData.Set(searching)
@@ -17277,25 +17526,39 @@ func layoutTELA() fyne.CanvasObject {
 
 		timeNow := time.Now().Format(time.RFC822)
 		StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow))
-		if allLen > 0 && scanned >= allLen {
-			saveScanProgress(scanned, allLen, "", "completed")
+		if gnomon.Index != nil {
+			if err := StoreEncryptedValue("TELA Search", []byte("Last Indexed Height"), []byte(strconv.FormatInt(gnomon.Index.LastIndexedHeight, 10))); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing Last Indexed Height: %v\n", err)
+			}
+		}
+		if allLen > 0 && atomic.LoadInt64(&scannedCandidates) >= int64(allLen) {
+			saveProgress(allLen, allLen, "", "completed")
 		} else {
-			saveScanProgress(scanned, allLen, "", "interrupted")
-			logger.Printf("[Gnomon] Scan ended before completion: %d/%d\n", scanned, allLen)
+			saveProgress(int(atomic.LoadInt64(&scannedCandidates)), allLen, "", "interrupted")
+			logger.Printf("[Gnomon] Scan ended before completion: %d/%d\n", atomic.LoadInt64(&scannedCandidates), allLen)
 		}
 
 		if storeSCIDs, err := json.Marshal(telaSCIDs); err == nil {
-			StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs)
+			if err := StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing SCIDs cache: count=%d bytes=%d err=%v\n", len(telaSCIDs), len(storeSCIDs), err)
+			}
+		} else {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed marshaling SCIDs cache: count=%d err=%v\n", len(telaSCIDs), err)
 		}
 
 		if !restrictiveMode {
-			for sc := range all {
-				sAll[sc] = true
+			if err := saveStringSetToEncryptedStorage("TELA Search", "NegativeCache", sAll); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing negative cache: entries=%d err=%v\n", len(sAll), err)
 			}
+		}
 
-			if sAllSCIDs, err := json.Marshal(sAll); err == nil {
-				StoreEncryptedValue("TELA Search", []byte("Searched SCIDs"), sAllSCIDs)
-			}
+		if err := saveTelaIndexCache(indexCacheStore); err != nil {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed storing INDEX cache: entries=%d err=%v\n", len(indexCacheStore), err)
 		}
 
 		if restrictiveMode && len(searching) < 1 {
@@ -17313,6 +17576,9 @@ func layoutTELA() fyne.CanvasObject {
 			entrySearch.Enable()
 			entryAddSCID.Enable()
 		})
+		phaseFinalizeMs = time.Since(finalizeStart).Milliseconds()
+
+		logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
 	}
 
 	entrySearch.OnChanged = func(s string) {
@@ -17493,6 +17759,8 @@ func layoutTELA() fyne.CanvasObject {
 				errorText.Refresh()
 				return
 			}
+			_ = DeleteKey("TELA Search", []byte("NegativeCache"))
+			_ = DeleteKey("TELA Search", []byte("IndexCache"))
 
 			telaSCIDs = bootstrapIndex.DOCs
 			errorText.Text = "bootstrap initialized"
