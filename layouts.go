@@ -16768,17 +16768,11 @@ func layoutTELA() fyne.CanvasObject {
 	})
 	btnActive.Importance = widget.LowImportance
 
-	btnSearch := widget.NewButtonWithIcon("", theme.SearchIcon(), func() {
-		wSelect.SetSelected("Search")
-	})
-	btnSearch.Importance = widget.LowImportance
-
 	// Horizontal button row (like dashboard)
 	tabButtons := container.NewHBox(
 		btnFavorites,
 		btnHistory,
 		btnActive,
-		btnSearch,
 	)
 
 	btnShutdown := widget.NewButton("Shutdown TELA", nil)
@@ -17907,6 +17901,11 @@ func layoutTELA() fyne.CanvasObject {
 		results.Color = colors.Gray
 	}
 	results.Refresh()
+
+	// Auto-trigger search when TELA page loads
+	go func() {
+		wSelect.SetSelected("Search")
+	}()
 
 	var historyResults []string
 	var historyMu sync.Mutex
