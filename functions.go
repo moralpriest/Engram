@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -368,6 +369,479 @@ type ScanProgress struct {
 	LastSCID  string `json:"last_scid"`
 	State     string `json:"state"` // "syncing", "scanning", "completed", "interrupted"
 	Timestamp int64  `json:"timestamp"`
+}
+
+type indexCache map[string]tela.INDEX
+
+type batchPrefilterStats struct {
+	VersionHits int64
+	Dropped     int64
+	Retries     int64
+}
+
+func loadStringSetFromEncryptedStorage(bucket, key string) map[string]bool {
+	set := map[string]bool{}
+	raw, err := GetEncryptedValue(bucket, []byte(key))
+	if err != nil || len(raw) == 0 {
+		return set
+	}
+
+	var entries []string
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		logger.Printf("[TELA] Failed decoding %s cache: %v\n", key, err)
+		return set
+	}
+
+	for _, entry := range entries {
+		if entry != "" {
+			set[entry] = true
+		}
+	}
+
+	return set
+}
+
+func saveStringSetToEncryptedStorage(bucket, key string, set map[string]bool) error {
+	entries := make([]string, 0, len(set))
+	for k, ok := range set {
+		if ok && k != "" {
+			entries = append(entries, k)
+		}
+	}
+	sort.Strings(entries)
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+
+	return StoreEncryptedValue(bucket, []byte(key), data)
+}
+
+func loadTelaIndexCache() indexCache {
+	cache := indexCache{}
+	raw, err := GetEncryptedValue("TELA Search", []byte("IndexCache"))
+	if err != nil || len(raw) == 0 {
+		return cache
+	}
+
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		logger.Printf("[TELA] Failed decoding INDEX cache: %v\n", err)
+		return indexCache{}
+	}
+
+	return cache
+}
+
+func saveTelaIndexCache(cache indexCache) error {
+	if cache == nil {
+		cache = indexCache{}
+	}
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+
+	return StoreEncryptedValue("TELA Search", []byte("IndexCache"), data)
+}
+
+// dialRPCPool creates n independent jrpc2 websocket connections to the DERO daemon.
+// Each connection has its own websocket and jrpc2.Client for true parallel RPC pipelines.
+// Caller must close all connections when done via the returned cleanup function.
+func dialRPCPool(endpoint string, n int) ([]*jrpc2.Client, func(), error) {
+	clients := make([]*jrpc2.Client, 0, n)
+	conns := make([]*websocket.Conn, 0, n)
+	uri := "ws://" + endpoint + "/ws"
+
+	cleanup := func() {
+		// Close websockets first to unblock jrpc2's background reader goroutines,
+		// then close jrpc2 clients. Reversing this order causes Close() to hang
+		// because jrpc2.Client.Close() calls done.Wait() on the reader goroutine
+		// which is stuck in websocket.NextReader().
+		for i := range conns {
+			conns[i].Close()
+		}
+		for i := range clients {
+			clients[i].Close()
+		}
+	}
+
+	for i := 0; i < n; i++ {
+		ws, _, err := websocket.DefaultDialer.Dial(uri, nil)
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("dial pool connection %d/%d: %w", i+1, n, err)
+		}
+		io := rwc.New(ws)
+		clients = append(clients, jrpc2.NewClient(channel.RawJSON(io, io), nil))
+		conns = append(conns, ws)
+	}
+	return clients, cleanup, nil
+}
+
+func batchPrefilterTelaVersions(ctx context.Context, scids []string, batchSize, maxRetries int, pool []*jrpc2.Client, onProgress func(completed, total int)) (map[string]bool, batchPrefilterStats, error) {
+	passed := make(map[string]bool)
+	stats := batchPrefilterStats{}
+
+	if len(scids) == 0 {
+		return passed, stats, nil
+	}
+	if batchSize < 1 {
+		batchSize = 1000
+	}
+	if maxRetries < 1 {
+		maxRetries = 3
+	}
+
+	if len(pool) == 0 {
+		return nil, stats, fmt.Errorf("rpc pool is empty")
+	}
+
+	chainHeight := gnomon.Index.ChainHeight
+	maxConcurrency := len(pool)
+
+	type batchJob struct {
+		items []string
+	}
+	type batchResult struct {
+		passed  map[string]bool
+		dropped int64
+		retries int64
+		err     error
+	}
+
+	totalBatches := (len(scids) + batchSize - 1) / batchSize
+	jobs := make(chan batchJob, totalBatches)
+	results := make(chan batchResult, totalBatches)
+	var wg sync.WaitGroup
+
+	worker := func(myClient *jrpc2.Client) {
+		defer wg.Done()
+		for job := range jobs {
+			// Check for cancellation before starting work
+			select {
+			case <-ctx.Done():
+				results <- batchResult{passed: make(map[string]bool), err: ctx.Err()}
+				return
+			default:
+			}
+
+			result := batchResult{passed: make(map[string]bool), dropped: int64(len(job.items))}
+			var responses []*jrpc2.Response
+			var err error
+
+			for attempt := 0; attempt < maxRetries; attempt++ {
+				// Check cancellation before each attempt
+				select {
+				case <-ctx.Done():
+					result.err = ctx.Err()
+					results <- result
+					return
+				default:
+				}
+
+				specs := make([]jrpc2.Spec, 0, len(job.items))
+				for _, scid := range job.items {
+					specs = append(specs, jrpc2.Spec{
+						Method: "DERO.GetSC",
+						Params: rpc.GetSC_Params{
+							SCID:       scid,
+							Variables:  false,
+							TopoHeight: chainHeight,
+							KeysString: []string{"telaVersion"},
+						},
+					})
+				}
+
+				batchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				responses, err = myClient.Batch(batchCtx, specs)
+				cancel()
+				if err == nil {
+					break
+				}
+
+				result.retries++
+				if !isConnectionError(err) || attempt >= maxRetries-1 {
+					break
+				}
+				time.Sleep(time.Duration(attempt+1) * time.Second)
+			}
+
+			if err != nil {
+				result.err = err
+				results <- result
+				continue
+			}
+
+			for i, resp := range responses {
+				if i >= len(job.items) || resp == nil || resp.Error() != nil {
+					continue
+				}
+
+				var out rpc.GetSC_Result
+				if err := resp.UnmarshalResult(&out); err != nil {
+					continue
+				}
+
+				// With Variables:false and KeysString:["telaVersion"],
+				// the daemon returns the value in ValuesString[0].
+				// When a key doesn't exist, the daemon returns "NOT AVAILABLE err: ..."
+				// so we must exclude that to only pass SCIDs with an actual telaVersion value.
+				scid := job.items[i]
+				if len(out.ValuesString) > 0 && out.ValuesString[0] != "" && !strings.HasPrefix(out.ValuesString[0], "NOT AVAILABLE") {
+					if !result.passed[scid] {
+						result.passed[scid] = true
+						result.dropped--
+					}
+				}
+			}
+
+			results <- result
+		}
+	}
+
+	workers := maxConcurrency
+	if workers > len(scids) {
+		workers = len(scids)
+	}
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go worker(pool[i])
+	}
+
+	go func() {
+		for i := 0; i < len(scids); i += batchSize {
+			// Check cancellation before sending the next job
+			select {
+			case <-ctx.Done():
+				close(jobs)
+				wg.Wait()
+				close(results)
+				return
+			default:
+			}
+
+			end := i + batchSize
+			if end > len(scids) {
+				end = len(scids)
+			}
+			jobs <- batchJob{items: scids[i:end]}
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+
+	var firstErr error
+	completedBatches := 0
+	for result := range results {
+		completedBatches++
+		stats.Retries += result.retries
+		stats.Dropped += result.dropped
+		for scid := range result.passed {
+			if !passed[scid] {
+				passed[scid] = true
+				stats.VersionHits++
+			}
+		}
+
+		if result.err != nil && firstErr == nil {
+			firstErr = result.err
+		}
+
+		// Report progress after each batch
+		if onProgress != nil {
+			onProgress(completedBatches, totalBatches)
+		}
+	}
+
+	if stats.Dropped < 0 {
+		stats.Dropped = 0
+	}
+
+	return passed, stats, firstErr
+}
+
+// decodeHex decodes a hex string, returning the original if decoding fails.
+func decodeHex(s string) string {
+	if decoded, err := hex.DecodeString(s); err == nil {
+		return string(decoded)
+	}
+	return s
+}
+
+// getHeaderFromVars tries v2Key first, then v1Key, hex-decoding the result.
+func getHeaderFromVars(vars map[string]interface{}, v2Key, v1Key string) string {
+	if v, ok := vars[v2Key].(string); ok {
+		return decodeHex(v)
+	}
+	if v, ok := vars[v1Key].(string); ok {
+		return decodeHex(v)
+	}
+	return ""
+}
+
+// parseINDEXDOCs extracts DOC SCIDs from a parsed DVM smart contract.
+// Reimplements unexported tela.parseINDEXForDOCs.
+func parseINDEXDOCs(sc dvm.SmartContract) []string {
+	var docKeys []string
+	docMap := map[string]string{}
+	for name, function := range sc.Functions {
+		if name == "InitializePrivate" {
+			for _, line := range function.Lines {
+				for i, parts := range line {
+					if strings.Contains(parts, `"DOC`) {
+						if i+2 < len(line) {
+							scid := strings.Trim(line[i+2], `"`)
+							docKeys = append(docKeys, parts)
+							docMap[parts] = scid
+						}
+					}
+				}
+			}
+		}
+	}
+	sort.Strings(docKeys)
+	scids := make([]string, 0, len(docKeys))
+	for _, v := range docKeys {
+		scids = append(scids, docMap[v])
+	}
+	return scids
+}
+
+// buildINDEXFromVars constructs a tela.INDEX from pre-fetched SC variables,
+// avoiding the per-SCID WebSocket connection that tela.GetINDEXInfo creates.
+func buildINDEXFromVars(scid string, vars map[string]interface{}) (tela.INDEX, error) {
+	var index tela.INDEX
+
+	// SC code is required
+	c, ok := vars["C"].(string)
+	if !ok {
+		return index, fmt.Errorf("could not get SC code from %s", scid)
+	}
+
+	var modTag string
+	if storedMods, ok := vars["mods"].(string); ok {
+		modTag = decodeHex(storedMods)
+	}
+
+	// Decode hex code
+	code := decodeHex(c)
+
+	// Validate INDEX version (exported, pure computation)
+	sc, version, err := tela.ValidINDEXVersion(code, modTag)
+	if err != nil {
+		return index, fmt.Errorf("scid does not parse as TELA-INDEX-1: %s", err)
+	}
+
+	// dURL is required
+	d, ok := vars["dURL"].(string)
+	if !ok {
+		return index, fmt.Errorf("could not get dURL from %s", scid)
+	}
+	dURL := decodeHex(d)
+
+	// Headers with V2 -> V1 fallback
+	nameHdr := getHeaderFromVars(vars, "var_header_name", "nameHdr")
+	descrHdr := getHeaderFromVars(vars, "var_header_description", "descrHdr")
+	iconHdr := getHeaderFromVars(vars, "var_header_icon", "iconURLHdr")
+
+	author := "anon"
+	if addr, ok := vars["owner"].(string); ok {
+		author = decodeHex(addr)
+	}
+
+	// Parse DOCs from SC code (reimplements unexported tela.parseINDEXForDOCs)
+	docs := parseINDEXDOCs(sc)
+
+	index = tela.INDEX{
+		Mods:      modTag,
+		SCID:      scid,
+		Author:    author,
+		DURL:      dURL,
+		DOCs:      docs,
+		SCVersion: &version,
+		SC:        sc,
+		Headers: tela.Headers{
+			NameHdr:  nameHdr,
+			DescrHdr: descrHdr,
+			IconHdr:  iconHdr,
+		},
+	}
+
+	return index, nil
+}
+
+// batchFetchINDEXes fetches SC variables for multiple SCIDs in batched RPC calls
+// and constructs tela.INDEX for each, using Gnomon's existing connection.
+// This replaces individual tela.GetINDEXInfo() calls which each open a new WebSocket.
+func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[string]tela.INDEX, error) {
+	result := make(map[string]tela.INDEX, len(scids))
+	if len(scids) == 0 {
+		return result, nil
+	}
+	if batchSize < 1 {
+		batchSize = 50
+	}
+
+	if gnomon.Index == nil || gnomon.Index.RPC == nil || gnomon.Index.RPC.RPC == nil {
+		return nil, fmt.Errorf("gnomon rpc client unavailable")
+	}
+	rpcClient := gnomon.Index.RPC.RPC
+
+	for i := 0; i < len(scids); i += batchSize {
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
+		}
+
+		end := i + batchSize
+		if end > len(scids) {
+			end = len(scids)
+		}
+		batch := scids[i:end]
+
+		specs := make([]jrpc2.Spec, len(batch))
+		for j, scid := range batch {
+			specs[j] = jrpc2.Spec{
+				Method: "DERO.GetSC",
+				Params: rpc.GetSC_Params{
+					SCID:      scid,
+					Variables: true,
+					Code:      false,
+				},
+			}
+		}
+
+		batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		responses, err := rpcClient.Batch(batchCtx, specs)
+		cancel()
+		if err != nil {
+			logger.Printf("[TELA] Batch INDEX fetch error at offset %d: %v\n", i, err)
+			continue
+		}
+
+		for j, resp := range responses {
+			if j >= len(batch) || resp == nil || resp.Error() != nil {
+				continue
+			}
+
+			var out rpc.GetSC_Result
+			if err := resp.UnmarshalResult(&out); err != nil {
+				continue
+			}
+
+			scid := batch[j]
+			index, err := buildINDEXFromVars(scid, out.VariableStringKeys)
+			if err != nil {
+				continue // Not a valid TELA INDEX — skip silently
+			}
+
+			result[scid] = index
+		}
+	}
+
+	return result, nil
 }
 
 // Get the Engram settings from the local Graviton tree
@@ -2684,7 +3158,10 @@ func clearAllTELACache() {
 		[]byte("ScanProgress"),
 		[]byte("SCIDs"),
 		[]byte("Searched SCIDs"),
+		[]byte("NegativeCache"),
+		[]byte("IndexCache"),
 		[]byte("Last Scan"),
+		[]byte("Last Indexed Height"),
 	}
 	for _, key := range keysToClear {
 		if err := DeleteKey("TELA Search", key); err != nil {
@@ -2804,6 +3281,21 @@ func (g *Gnomon) GetSCIDValuesByKey(scid string, key interface{}) (valuesstring 
 		return g.Index.GravDBBackend.GetSCIDValuesByKey(scid, key, g.Index.ChainHeight, true)
 	case "boltdb":
 		return g.Index.BBSBackend.GetSCIDValuesByKey(scid, key, g.Index.ChainHeight, true)
+	default:
+		return
+	}
+}
+
+// Method of Gnomon GetSCIDInteractionHeight() where DB type is defined by Indexer.DBType
+func (g *Gnomon) GetSCIDInteractionHeight(scid string) (heights []int64) {
+	if g.Index == nil {
+		return
+	}
+	switch g.Index.DBType {
+	case "gravdb":
+		return g.Index.GravDBBackend.GetSCIDInteractionHeight(scid)
+	case "boltdb":
+		return g.Index.BBSBackend.GetSCIDInteractionHeight(scid)
 	default:
 		return
 	}
