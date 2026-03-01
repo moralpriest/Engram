@@ -100,6 +100,17 @@ func main() {
 
 	// Initialize application
 	a = app.NewWithID("Engram")
+	if err := initDebugLog(); err != nil {
+		fmt.Printf("failed to initialize debug log: %s\n", err)
+	} else {
+		defer closeDebugLog()
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			writeCrashLog(r)
+			panic(r)
+		}
+	}()
 	a.Settings().SetTheme(themes.main)
 
 	if safeMode {

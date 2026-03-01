@@ -4,6 +4,7 @@
 datashards*
 mainnet*
 testnet*
+engram_debug.log
 
 # Build artifacts
 bin/
