@@ -424,6 +424,8 @@ jobs:
           echo "All signatures verified successfully!"
 
       - name: Verify attestations with GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd release
           echo "Verifying artifact attestations..."
