@@ -313,7 +313,7 @@ jobs:
     needs: [verify, changelog, build-linux, build-windows, build-macos, build-android]
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: write
       id-token: write
       attestations: write
     outputs:
