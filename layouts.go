@@ -551,24 +551,50 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 20))
 
+	isMobile := a.Driver().Device().IsMobile()
+
 	frame := &iframe{}
 
-	form := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		lblWalletName,
-		rectSpacer,
-		wPassword,
-		rectSpacer,
-		mode,
-		rectSpacer,
-		btnLogin,
-		rectSpacer,
-		rectSpacer,
-		btnSwitchAccount,
-		rectSpacer,
-		btnConnectionSettings,
-	)
+	var form *fyne.Container
+	if isMobile {
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			btnLogin,
+			rectSpacer,
+			rectSpacer,
+			btnSwitchAccount,
+			rectSpacer,
+			btnConnectionSettings,
+		)
+	} else {
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			btnLogin,
+			rectSpacer,
+			rectSpacer,
+			btnSwitchAccount,
+			rectSpacer,
+			btnConnectionSettings,
+		)
+	}
 
 	layout := container.NewStack(
 		frame,
