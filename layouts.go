@@ -5889,7 +5889,7 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.68))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -7264,7 +7264,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.68))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -7377,7 +7377,7 @@ func layoutMessages() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.12))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	messages.Data = nil
 
@@ -13021,7 +13021,7 @@ func layoutRecovery() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
@@ -13135,7 +13135,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	keys := engram.Disk.Get_Keys()
 	key := fmt.Sprintf("0000000000000000000000000000000000000000000000%s", keys.Secret.Text(16))
