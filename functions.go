@@ -218,14 +218,14 @@ type ProofData struct {
 }
 
 type Status struct {
-	Canvas     *canvas.Text
-	Message    string
-	Network    *canvas.Text
-	Connection *canvas.Circle
-	Sync       *canvas.Circle
-	RemoteAccess  *canvas.Circle
-	Gnomon     *canvas.Circle
-	EPOCH      *canvas.Circle
+	Canvas       *canvas.Text
+	Message      string
+	Network      *canvas.Text
+	Connection   *canvas.Circle
+	Sync         *canvas.Circle
+	RemoteAccess *canvas.Circle
+	Gnomon       *canvas.Circle
+	EPOCH        *canvas.Circle
 }
 
 type Transfers struct {
@@ -1763,9 +1763,8 @@ func login() {
 		engram.Disk = temp
 		session.Password = ""
 
-		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
-		initSettings()
-		logger.Printf("[Engram] Encrypted settings loaded successfully")
+		logger.Printf("[Engram] Wallet opened - loading encrypted settings in background...")
+		go initSettings()
 	}
 
 	switch session.Network {

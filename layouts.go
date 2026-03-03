@@ -611,7 +611,9 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 
-	session.Balance, _ = engram.Disk.Get_Balance()
+	session.BalanceText = canvas.NewText("...", colors.Green)
+	session.BalanceText.TextSize = 28
+	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
 
 	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
 		session.BalanceHidden = string(balanceHiddenVal) == "true"
@@ -619,12 +621,18 @@ func layoutDashboard() fyne.CanvasObject {
 		session.BalanceHidden = true
 	}
 
-	session.BalanceText = canvas.NewText(walletapi.FormatMoney(session.Balance), colors.Green)
-	session.BalanceText.TextSize = 28
-	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
-
 	if session.BalanceHidden {
 		session.BalanceText.Text = "••••••"
+	} else {
+		go func() {
+			if engram.Disk != nil {
+				session.Balance, _ = engram.Disk.Get_Balance()
+				fyne.Do(func() {
+					session.BalanceText.Text = walletapi.FormatMoney(session.Balance)
+					session.BalanceText.Refresh()
+				})
+			}
+		}()
 	}
 
 	var balanceToggleBtn *widget.Button
