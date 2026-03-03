@@ -2893,7 +2893,7 @@ func layoutRestore() fyne.CanvasObject {
 	successAddress.Alignment = fyne.TextAlignCenter
 	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
-	btnEnter := widget.NewButton("Enter", func() {
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
 		fyne.Do(func() {
 			login()
 		})
