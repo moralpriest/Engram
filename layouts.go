@@ -6668,11 +6668,11 @@ func layoutAppSettings() fyne.CanvasObject {
 		rectSpacer,
 		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Sort By"), wSortBy, nil),
 		rectSpacer,
-		// Start Port Range with wide bar
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Start Port Range"), nil, entryPortStart),
+		widget.NewRichTextFromMarkdown("### Start Port Range"),
+		entryPortStart,
 		rectSpacer,
-		// Search Min Likes % with wide bar
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Search Min Likes %"), nil, entryMinLikes),
+		widget.NewRichTextFromMarkdown("### Search Min Likes %"),
+		entryMinLikes,
 		rectSpacer,
 		widget.NewRichTextFromMarkdown("### Search Exclusions"),
 		entryExclusions,
