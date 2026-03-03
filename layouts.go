@@ -19227,7 +19227,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	btnFavoriteText := canvas.NewText("Add to Favorites", colors.Gray)
 	btnFavoriteText.TextSize = 14
-	btnFavoriteText.Alignment = fyne.TextAlignCenter
+	btnFavoriteText.Alignment = fyne.TextAlignTrailing
 
 	if engram.Disk != nil {
 		walletAddress := engram.Disk.GetAddress().String()
@@ -19284,6 +19284,13 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				container.NewHBox(
 					layout.NewSpacer(),
 					container.NewVBox(
+						container.NewCenter(
+							container.NewHBox(
+								btnFavoriteText,
+								btnFavorite,
+							),
+						),
+						rectSpacer,
 						container.NewCenter(
 							image,
 						),
@@ -19379,13 +19386,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						container.NewCenter(
-							btnFavorite,
-						),
-						rectSpacer,
-						container.NewCenter(
-							btnFavoriteText,
-						),
 					),
 					layout.NewSpacer(),
 				),
