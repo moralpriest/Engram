@@ -7215,7 +7215,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Create the tab container with width constraint
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Remote Access", remoteAccessContent),
+		container.NewTabItem("Remote", remoteAccessContent),
 		container.NewTabItem("TELA", telaContent),
 		container.NewTabItem("Advanced", advancedContent),
 	)
