@@ -17999,6 +17999,40 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
+	refreshFavoritesList := func() {
+		if engram.Disk != nil {
+			walletAddress := engram.Disk.GetAddress().String()
+			favs, err := GetTELAFavorites(walletAddress)
+			if err != nil || len(favs) == 0 {
+				if wSelect.Selected == "Favorites" {
+					results.Text = "  No favorites yet."
+					results.Color = colors.Gray
+					results.Refresh()
+				}
+				favorites = []string{}
+				favoritesData.Set(favorites)
+			} else {
+				if wSelect.Selected == "Favorites" {
+					results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
+					results.Color = colors.Green
+					results.Refresh()
+				}
+
+				favorites = []string{}
+				for scid, favData := range favs {
+					favorites = append(favorites, favData.Name+";;;"+scid)
+				}
+				sort.Strings(favorites)
+				favoritesData.Set(favorites)
+			}
+		}
+	}
+
+	refreshTELA := func() {
+		go refreshServerList()
+		refreshFavoritesList()
+	}
+
 	btnShutdown.OnTapped = func() {
 		switch btnShutdown.Text {
 		case "Rescan Blockchain":
@@ -18292,34 +18326,7 @@ func layoutTELA() fyne.CanvasObject {
 			entrySearch.Show()
 			entrySearch.SetPlaceHolder("Search favorites...")
 
-			if engram.Disk == nil {
-				results.Text = "  No wallet connected."
-				results.Color = colors.Gray
-				results.Refresh()
-				favorites = []string{}
-				favoritesData.Set(favorites)
-			} else {
-				walletAddress := engram.Disk.GetAddress().String()
-				favs, err := GetTELAFavorites(walletAddress)
-				if err != nil || len(favs) == 0 {
-					results.Text = "  No favorites yet."
-					results.Color = colors.Gray
-					results.Refresh()
-					favorites = []string{}
-					favoritesData.Set(favorites)
-				} else {
-					results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
-					results.Color = colors.Green
-					results.Refresh()
-
-					favorites = []string{}
-					for scid, favData := range favs {
-						favorites = append(favorites, favData.Name+";;;"+scid)
-					}
-					sort.Strings(favorites)
-					favoritesData.Set(favorites)
-				}
-			}
+			refreshFavoritesList()
 
 			favoritesBox.Show()
 			favoritesList.Refresh()
@@ -18637,7 +18644,7 @@ func layoutTELA() fyne.CanvasObject {
 		historyList.UnselectAll()
 		historyList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	searchList.OnSelected = func(id widget.ListItemID) {
@@ -18667,7 +18674,7 @@ func layoutTELA() fyne.CanvasObject {
 		searchList.UnselectAll()
 		searchList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	servingList.OnSelected = func(id widget.ListItemID) {
@@ -18697,7 +18704,7 @@ func layoutTELA() fyne.CanvasObject {
 		servingList.UnselectAll()
 		servingList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	favoritesList.OnSelected = func(id widget.ListItemID) {
@@ -19237,6 +19244,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 	}
 
+	var favContainer *fyne.Container
+	var favCenter *fyne.Container
+
 	btnFavorite := widget.NewButtonWithIcon("", resourceFavsPng, func() {
 		if engram.Disk == nil {
 			errorText.Text = "No wallet connected"
@@ -19274,7 +19284,27 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 		btnFavoriteText.Refresh()
 		errorText.Refresh()
+
+		if favContainer != nil {
+			favContainer.Refresh()
+		}
+		if favCenter != nil {
+			favCenter.Refresh()
+		}
+
+		if callback != nil {
+			callback()
+		}
 	})
+
+	favContainer = container.NewHBox(
+		btnFavoriteText,
+		btnFavorite,
+	)
+
+	favCenter = container.NewCenter(
+		favContainer,
+	)
 
 	center := container.NewStack(
 		rectBox,
@@ -19284,12 +19314,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				container.NewHBox(
 					layout.NewSpacer(),
 					container.NewVBox(
-						container.NewCenter(
-							container.NewHBox(
-								btnFavoriteText,
-								btnFavorite,
-							),
-						),
+						favCenter,
 						rectSpacer,
 						container.NewCenter(
 							image,
