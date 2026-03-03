@@ -1976,8 +1976,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnEnter := widget.NewButton("Enter", func() {
-		// Initialize the wallet and transition to dashboard
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
 		login()
 	})
 
@@ -1988,6 +1987,8 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
+		btnEnter,
+		rectSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
 			btnCopyAddress,
@@ -1996,8 +1997,6 @@ func layoutNewAccount() fyne.CanvasObject {
 			layout.NewSpacer(),
 		),
 		rectSpacer,
-		btnEnter,
-		rectSpacer,
 	)
 
 	formSuccess.Hide()
@@ -2005,14 +2004,11 @@ func layoutNewAccount() fyne.CanvasObject {
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
-			container.NewStack(
-				formSuccess,
-				form,
-			),
+			formSuccess,
 			layout.NewSpacer(),
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.70))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
 
 	btnCreate.OnTapped = func() {
 		if findAccount() {
@@ -2065,8 +2061,10 @@ func layoutNewAccount() fyne.CanvasObject {
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
+		scrollBox.Offset = fyne.NewPos(0, 0)
 		session.Window.Canvas().Content().Refresh()
 		session.Window.Canvas().Refresh(session.Window.Content())
 	}
@@ -2888,7 +2886,9 @@ func layoutRestore() fyne.CanvasObject {
 	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
 	btnEnter := widget.NewButton("Enter", func() {
-		login()
+		fyne.Do(func() {
+			login()
+		})
 	})
 
 	formSuccess := container.NewHBox(
@@ -2905,9 +2905,9 @@ func layoutRestore() fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(grid),
 			rectSpacer,
-			btnCopyAddress,
-			rectSpacer,
 			btnEnter,
+			rectSpacer,
+			btnCopyAddress,
 			rectSpacer,
 		),
 		layout.NewSpacer(),
@@ -3052,15 +3052,12 @@ func layoutRestore() fyne.CanvasObject {
 
 		engram.Disk.Get_Balance_Rescan()
 		engram.Disk.Save_Wallet()
-		engram.Disk.Close_Encrypted_Wallet()
 
-		session.WalletOpen = false
-		engram.Disk = nil
-		session.Path = ""
-		session.Name = ""
+		// Wallet remains open for immediate transition via "Enter" button
+		session.WalletOpen = true
 		tx = Transfers{}
 
-		// Clear sensitive data from form fields
+		// Clear sensitive password data from memory and UI
 		wPassword.SetText("")
 		wPasswordConfirm.SetText("")
 		seedEntry.SetText("")
@@ -3073,6 +3070,7 @@ func layoutRestore() fyne.CanvasObject {
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
 		session.Window.Canvas().Content().Refresh()
