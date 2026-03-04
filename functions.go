@@ -3484,7 +3484,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 					),
 					rectSpacer,
 					rectSpacer,
-					btnConfirm,
+					wrapMobileButton(btnConfirm),
 					rectSpacer,
 					rectSpacer,
 					container.NewHBox(

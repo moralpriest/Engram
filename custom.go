@@ -286,7 +286,11 @@ func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
 	btn := widget.NewButtonWithIcon("", icon, onTap)
 	btn.Importance = widget.MediumImportance
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(80, 40))
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+	sizeEnforcer.SetMinSize(scalePoint(80, h))
 	return container.NewStack(sizeEnforcer, btn)
 }
 

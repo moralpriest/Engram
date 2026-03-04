@@ -69,7 +69,21 @@ var telaNavigationStack struct {
 }
 
 func isMobileDevice() bool {
-	return runtime.GOOS == "android" && fyne.CurrentApp().Driver().Device().IsMobile()
+	return isMobile()
+}
+
+func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
+	return wrapMobileButton(widget.NewButtonWithIcon(label, icon, tapped))
+}
+
+func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {
+	if isMobile() {
+		// Enforce a minimum height for mobile buttons
+		sizeEnforcer := canvas.NewRectangle(color.Transparent)
+		sizeEnforcer.SetMinSize(scalePoint(100, 48))
+		return container.NewStack(sizeEnforcer, obj)
+	}
+	return obj
 }
 
 func pushTELANavigation(scid string) {
@@ -382,6 +396,44 @@ func layoutMain() fyne.CanvasObject {
 		),
 	)
 
+	if isMobile() {
+		form = container.NewStack(
+			res.mainBg,
+			container.NewVBox(
+				wSpacer,
+				container.NewStack(
+					headerBlock,
+				),
+				rectSpacer,
+				rectSpacer,
+				wAccount,
+				rectSpacer,
+				wPassword,
+				rectSpacer,
+				mode,
+				rectSpacer,
+				wrapMobileButton(btnLogin),
+				rectSpacer,
+				separator,
+				rectSpacer,
+				container.NewVBox(
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnNewAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnRecoverAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnConnectionSettings),
+					),
+				),
+				footer,
+			),
+		)
+	}
+
 	layout := container.NewStack(
 		frame,
 		container.NewBorder(
@@ -564,18 +616,21 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
 			lblWalletName,
 			rectSpacer,
 			wPassword,
 			rectSpacer,
 			mode,
 			rectSpacer,
-			btnLogin,
+			wrapMobileButton(btnLogin),
 			rectSpacer,
 			rectSpacer,
-			btnSwitchAccount,
+			wrapMobileButton(btnSwitchAccount),
 			rectSpacer,
-			btnConnectionSettings,
+			wrapMobileButton(btnConnectionSettings),
 		)
 	} else {
 		form = container.NewVBox(
@@ -900,6 +955,9 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}
 
+	btnTransfersWrapper := wrapMobileButton(btnTransfers)
+	gramSendWrapper := wrapMobileButton(gramSend)
+
 	separator := canvas.NewText(" | ", colors.Gray)
 	separator.TextSize = 14
 	separator.Alignment = fyne.TextAlignCenter
@@ -943,9 +1001,9 @@ func layoutDashboard() fyne.CanvasObject {
 		balanceCenter,
 		rectSpacer,
 		rectSpacer,
-		gramSend,
+		gramSendWrapper,
 		rectSpacer,
-		btnTransfers,
+		btnTransfersWrapper,
 		rectSpacer,
 		container.New(
 			layout.NewGridLayoutWithColumns(3),
@@ -1041,17 +1099,17 @@ func layoutDashboard() fyne.CanvasObject {
 		container.NewVBox(
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					btnDatapad,
-					btnTELA,
-					btnMessages,
+					wrapMobileButton(btnDatapad),
+					wrapMobileButton(btnTELA),
+					wrapMobileButton(btnMessages),
 				),
 			),
 			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					btnFilesContracts,
-					btnLogout,
-					btnSettings,
+					wrapMobileButton(btnFilesContracts),
+					wrapMobileButton(btnLogout),
+					wrapMobileButton(btnSettings),
 				),
 			),
 			rectSpacer,
@@ -1399,7 +1457,7 @@ func layoutSend() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					btnSend,
+					wrapMobileButton(btnSend),
 				),
 				layout.NewSpacer(),
 			),
@@ -1967,7 +2025,7 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		btnCreate,
+		wrapMobileButton(btnCreate),
 	)
 
 	footer := container.NewVBox(
@@ -1995,13 +2053,13 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		btnEnter,
+		wrapMobileButton(btnEnter),
 		rectSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
-			btnCopyAddress,
+			wrapMobileButton(btnCopyAddress),
 			layout.NewSpacer(),
-			btnCopySeed,
+			wrapMobileButton(btnCopySeed),
 			layout.NewSpacer(),
 		),
 		rectSpacer,
@@ -2012,7 +2070,16 @@ func layoutNewAccount() fyne.CanvasObject {
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
-			formSuccess,
+			container.NewVBox(
+				form,
+				formSuccess,
+				func() fyne.CanvasObject {
+					if isMobile() {
+						return NewSpacer(0, ui.Height*0.4)
+					}
+					return layout.NewSpacer()
+				}(),
+			),
 			layout.NewSpacer(),
 		),
 	)
@@ -2078,15 +2145,13 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRestore() fyne.CanvasObject {
@@ -2913,9 +2978,9 @@ func layoutRestore() fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(grid),
 			rectSpacer,
-			btnEnter,
+			wrapMobileButton(btnEnter),
 			rectSpacer,
-			btnCopyAddress,
+			wrapMobileButton(btnCopyAddress),
 			rectSpacer,
 		),
 		layout.NewSpacer(),
@@ -2931,6 +2996,12 @@ func layoutRestore() fyne.CanvasObject {
 				container.NewVBox(
 					form,
 					formSuccess,
+					func() fyne.CanvasObject {
+						if isMobile() {
+							return NewSpacer(0, ui.Height*0.4)
+						}
+						return layout.NewSpacer()
+					}(),
 				),
 				layout.NewSpacer(),
 			),
@@ -3099,7 +3170,7 @@ func layoutRestore() fyne.CanvasObject {
 	footer := container.NewCenter(
 		rect1,
 		container.NewVBox(
-			btnCreate,
+			wrapMobileButton(btnCreate),
 			rectSpacer,
 			container.NewHBox(
 				layout.NewSpacer(),
@@ -3111,16 +3182,13 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-			rectSpacer,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutAssetExplorer() fyne.CanvasObject {
@@ -5017,9 +5085,9 @@ func layoutTransfers() fyne.CanvasObject {
 			scrollBox,
 		),
 		wSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
-		btnClear,
+		wrapMobileButton(btnClear),
 		rectSpacer,
 		rectSpacer,
 	)
@@ -5557,7 +5625,7 @@ func layoutSettings() fyne.CanvasObject {
 
 			row := container.NewBorder(
 				nil, nil, nil,
-				container.NewHBox(rowIcon, removeBtn),
+				container.NewHBox(rowIcon, wrapMobileButton(removeBtn)),
 				addressLabel,
 			)
 
@@ -5585,7 +5653,7 @@ func layoutSettings() fyne.CanvasObject {
 			tapBtn.Text = ""
 
 			clickableRow := container.NewMax(
-				tapBtn,
+				wrapMobileButton(tapBtn),
 				row,
 			)
 
@@ -5879,9 +5947,9 @@ func layoutSettings() fyne.CanvasObject {
 		statusText,
 		rectSpacer,
 		rectSpacer,
-		btnDelete,
+		wrapMobileButton(btnDelete),
 		rectSpacer,
-		btnRestore,
+		wrapMobileButton(btnRestore),
 	)
 
 	scrollBox := container.NewVScroll(
@@ -6272,7 +6340,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					remoteAccess.WS.toggle,
+					wrapMobileButton(remoteAccess.WS.toggle),
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -6331,7 +6399,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					remoteAccess.RPC.toggle,
+					wrapMobileButton(remoteAccess.RPC.toggle),
 					wSpacer,
 					remoteAccess.RPC.portText,
 					rectSpacer,
@@ -6663,7 +6731,7 @@ func layoutAppSettings() fyne.CanvasObject {
 			),
 		),
 		rectSpacer,
-		btnShutdownTela,
+		wrapMobileButton(btnShutdownTela),
 		rectSpacer,
 		rectSpacer,
 		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Restrictive Mode"), nil, wRestrictiveMode),
@@ -6684,11 +6752,11 @@ func layoutAppSettings() fyne.CanvasObject {
 		entryExclusions,
 		rectSpacer,
 		rectSpacer,
-		btnResetDefaults,
+		wrapMobileButton(btnResetDefaults),
 		rectSpacer,
-		btnDeleteSearchData,
+		wrapMobileButton(btnDeleteSearchData),
 		rectSpacer,
-		btnClearHistory,
+		wrapMobileButton(btnClearHistory),
 	)
 
 	// Advanced Tab Content
@@ -7004,7 +7072,7 @@ func layoutAppSettings() fyne.CanvasObject {
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						wrapMobileButton(btnSubmit),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -7191,7 +7259,7 @@ func layoutAppSettings() fyne.CanvasObject {
 						rectSpacer,
 						textDatashardDesc2,
 						rectSpacer,
-						btnClearDatashard,
+						wrapMobileButton(btnClearDatashard),
 					),
 				),
 				layout.NewSpacer(),
@@ -7211,11 +7279,11 @@ func layoutAppSettings() fyne.CanvasObject {
 			layout.NewSpacer(),
 		),
 		rectSpacer,
-		btnClearLocalData,
+		wrapMobileButton(btnClearLocalData),
 		rectSpacer,
-		btnRestoreDefaults,
+		wrapMobileButton(btnRestoreDefaults),
 		rectSpacer,
-		btnExportDebugLog,
+		wrapMobileButton(btnExportDebugLog),
 		rectSpacer,
 	)
 
@@ -7660,7 +7728,7 @@ func layoutMessages() fyne.CanvasObject {
 			msgbox.List,
 		),
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
 		checkLimit,
 	)
@@ -8138,7 +8206,7 @@ func layoutPM() fyne.CanvasObject {
 		rectSpacer,
 		entry,
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
 		rectSpacer,
 		container.NewStack(
@@ -9069,7 +9137,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 						labelSeparator6,
 						rectSpacer,
 						rectSpacer,
-						btnRemove,
+						wrapMobileButton(btnRemove),
 						rectSpacer,
 						rectSpacer,
 					),
@@ -9541,7 +9609,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						wrapMobileButton(btnSubmit),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -9762,7 +9830,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				),
 				container.NewCenter(
 					container.NewVBox(
-						btnDefaults,
+						wrapMobileButton(btnDefaults),
 						rectWidth90,
 					),
 				),
@@ -10084,7 +10152,7 @@ func layoutIdentity() fyne.CanvasObject {
 		rectSpacer,
 		entryReg,
 		rectSpacer,
-		btnReg,
+		wrapMobileButton(btnReg),
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
@@ -11739,7 +11807,7 @@ func layoutDatapad() fyne.CanvasObject {
 		rectSpacer,
 		entryNewPad,
 		rectSpacer,
-		btnAdd,
+		wrapMobileButton(btnAdd),
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
@@ -11907,7 +11975,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12106,7 +12174,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12245,7 +12313,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12278,10 +12346,10 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 		container.NewCenter(
 			container.NewHBox(
-				widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") }),
-				widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") }),
-				widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") }),
-				widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") }),
+				wrapMobileButton(widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") })),
+				wrapMobileButton(widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") })),
+				wrapMobileButton(widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") })),
+				wrapMobileButton(widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") })),
 			),
 		),
 		rectSpacer,
@@ -12298,7 +12366,7 @@ func layoutPad() fyne.CanvasObject {
 				rectSpacer,
 				errorText,
 				rectSpacer,
-				btnSave,
+				wrapMobileButton(btnSave),
 				rectSpacer,
 			),
 		),
@@ -12429,9 +12497,9 @@ func layoutAccount() fyne.CanvasObject {
 
 	buttonsRow := container.NewHBox(
 		layout.NewSpacer(),
-		btnServiceAddress,
+		wrapMobileButton(btnServiceAddress),
 		rectSpacer,
-		btnIdentity,
+		wrapMobileButton(btnIdentity),
 		layout.NewSpacer(),
 	)
 
@@ -12528,7 +12596,7 @@ func layoutAccount() fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						btnConfirm,
+						wrapMobileButton(btnConfirm),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -12635,7 +12703,7 @@ func layoutAccount() fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						btnConfirm,
+						wrapMobileButton(btnConfirm),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -13015,7 +13083,7 @@ func layoutRecovery() fyne.CanvasObject {
 			layout.NewSpacer(),
 			container.NewStack(
 				rectHeader,
-				btnCopySeed,
+				wrapMobileButton(btnCopySeed),
 			),
 			layout.NewSpacer(),
 		),
@@ -14428,13 +14496,13 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Back button to return to dashboard
-	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+	btnBack := wrapMobileButton(newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	})
+	}))
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
 	labelResults := canvas.NewText("   RESULTS", colors.Gray)
@@ -14981,7 +15049,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		entryClone,
 		contractErrorText,
 		rectSpacer,
-		btnBrowseSC,
+		wrapMobileButton(btnBrowseSC),
 		rectSpacer,
 		rectSpacer,
 		container.NewHBox(
@@ -14991,7 +15059,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		btnEditor,
+		wrapMobileButton(btnEditor),
 	)
 
 	// ==================== TAB 3: ASSETS (Asset Explorer) ====================
@@ -15266,7 +15334,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 				),
 				rectSpacer,
 				rectSpacer,
-				btnMyAssets,
+				wrapMobileButton(btnMyAssets),
 			),
 			layout.NewSpacer(),
 		),
@@ -16965,7 +17033,7 @@ func layoutTELA() fyne.CanvasObject {
 			dlg.Hide()
 		})
 
-		dlg.SetButtons([]fyne.CanvasObject{btnConfirm, btnCancel})
+		dlg.SetButtons([]fyne.CanvasObject{wrapMobileButton(btnConfirm), btnCancel})
 		dlg.Show()
 	})
 
@@ -19337,7 +19405,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						labelStatus,
 						rectSpacer,
-						btnServer,
+						wrapMobileButton(btnServer),
 						rectSpacer,
 						textStatus,
 						rectSpacer,
