@@ -873,8 +873,6 @@ func initSettings() {
 			logger.Errorf("[Engram] Setting TELA shard: %s\n", err)
 			return
 		}
-
-		os.RemoveAll(tela.GetPath())
 	}
 }
 

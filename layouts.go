@@ -5963,7 +5963,7 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -7338,7 +7338,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
