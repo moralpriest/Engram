@@ -49,10 +49,28 @@ type Res struct {
 // Get app path
 func AppPath() (result string) {
 	result, _ = os.Getwd()
-	if runtime.GOOS == "android" {
-		result = a.Storage().RootURI().Path()
-	} else if runtime.GOOS == "ios" {
-		result = a.Storage().RootURI().Path()
+	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+		// Try to get internal storage root from Fyne
+		if a != nil {
+			storage := a.Storage()
+			if storage != nil {
+				root := storage.RootURI()
+				if root != nil {
+					path := root.Path()
+					if path != "" && path != "/" {
+						return path
+					}
+				}
+			}
+		}
+
+		// Fallback for Android - internal files dir
+		if runtime.GOOS == "android" {
+			// Try common Android internal paths as fallback
+			if _, err := os.Stat("/data/user/0/org.dero.engram/files"); err == nil {
+				return "/data/user/0/org.dero.engram/files"
+			}
+		}
 	}
 
 	return
