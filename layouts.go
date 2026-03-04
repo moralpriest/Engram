@@ -17564,7 +17564,7 @@ func layoutTELA() fyne.CanvasObject {
 			})
 
 			prefilterStart := time.Now()
-			poolSize := 8
+			poolSize := 3
 			pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
 			if poolErr != nil {
 				logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
@@ -18447,12 +18447,30 @@ func layoutTELA() fyne.CanvasObject {
 			results.Show()
 			entrySearch.SetPlaceHolder("Add SCID")
 			if gnomon.Index == nil {
-				results.Text = "  Gnomon is inactive."
+				results.Text = "  Gnomon is inactive. Waiting..."
 				results.Color = colors.Gray
 				results.Refresh()
-			}
 
-			go getSearchResults()
+				// Auto-retry: wait for Gnomon to start, then re-trigger the search tab
+				go func() {
+					for i := 0; i < 60; i++ {
+						time.Sleep(time.Second)
+						// If user navigated away, stop waiting
+						if !strings.Contains(session.Domain, ".tela") {
+							return
+						}
+						// Gnomon is now ready — re-trigger the search
+						if gnomon.Index != nil {
+							fyne.Do(func() {
+								wSelect.SetSelected("Search")
+							})
+							return
+						}
+					}
+				}()
+			} else {
+				go getSearchResults()
+			}
 
 			entrySearch.Show()
 			searchBox.Show()

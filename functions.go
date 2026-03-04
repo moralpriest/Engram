@@ -813,7 +813,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			}
 		}
 
-		batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		batchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		responses, err := rpcClient.Batch(batchCtx, specs)
 		cancel()
 		if err != nil {
