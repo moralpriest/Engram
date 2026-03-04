@@ -12432,7 +12432,7 @@ func layoutAccount() fyne.CanvasObject {
 			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
 			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
 		} else {
-			heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:len(addressStr)]
+			heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
 			addressToggleBtn.SetIcon(theme.VisibilityIcon())
 			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
 		}
@@ -12444,7 +12444,7 @@ func layoutAccount() fyne.CanvasObject {
 		heading.Text = "dE...••••••••"
 		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
 	} else {
-		heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:len(addressStr)]
+		heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
 		addressToggleBtn.SetIcon(theme.VisibilityIcon())
 	}
 
