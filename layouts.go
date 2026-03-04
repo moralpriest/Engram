@@ -18718,13 +18718,22 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		historyList.UnselectAll()
@@ -18748,13 +18757,22 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[1], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[1]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		searchList.UnselectAll()
@@ -18778,13 +18796,22 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		servingList.UnselectAll()
@@ -18814,13 +18841,21 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		scid := split[1]
-		index, err := tela.GetINDEXInfo(scid, session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo from favorites: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo from favorites: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		favoritesList.UnselectAll()
