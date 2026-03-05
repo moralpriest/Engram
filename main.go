@@ -26,6 +26,7 @@ import (
 	"fyne.io/fyne/v2/driver/mobile"
 
 	"github.com/blang/semver"
+	"github.com/civilware/tela/logger"
 
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
@@ -132,6 +133,9 @@ func main() {
 	session.Domain = "app.main.loading"
 	session.Window.CenterOnScreen()
 
+	// Initialize navigation stack
+	session.NavStack = NewNavigationStack()
+
 	// Load resources
 	loadResources()
 
@@ -198,25 +202,14 @@ func main() {
 
 	session.Domain = "app.main"
 
-	// Intercept mobile back button event
+	// Set up mobile back button handling
+	// Note: Fyne's mobile.KeyBack captures software back button on some devices
+	// Hardware back buttons and gesture navigation may vary by Android version/manufacturer
 	session.Window.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		logger.Printf("[KeyEvent] Received key: %s", ev.Name)
 		if ev.Name == mobile.KeyBack {
-			if session.LastDomain != nil {
-				session.Window.SetContent(layoutTransition())
-				session.Window.SetContent(session.LastDomain)
-			} else {
-				if engram.Disk != nil {
-					session.LastDomain = layoutDashboard()
-					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				} else {
-					session.LastDomain = layoutMain()
-					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutMain())
-				}
-			}
+			logger.Printf("[KeyEvent] Back key detected, handling navigation")
+			handleBackNavigation()
 		}
 	})
 
@@ -276,5 +269,59 @@ func main() {
 		// 	}
 		// }()
 		session.Window.ShowAndRun()
+	}
+}
+
+// handleBackNavigation handles back navigation using the navigation stack or LastDomain fallback
+func handleBackNavigation() {
+	logger.Printf("[Navigation] handleBackNavigation called, stack size: %d", session.NavStack.Size())
+
+	// First check if we have a navigation stack with history
+	if session.NavStack != nil && session.NavStack.CanGoBack() {
+		if entry, ok := session.NavStack.Pop(); ok {
+			logger.Printf("[Navigation] Popped to domain: %s", entry.Domain)
+
+			// Get the layout function for this domain
+			if layoutFn := getLayoutForDomain(entry.Domain); layoutFn != nil {
+				fyne.Do(func() {
+					session.Domain = entry.Domain
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutFn())
+				})
+				return
+			}
+
+			// Fallback: try to use the old LastDomain method
+			logger.Printf("[Navigation] No layout function found for domain: %s", entry.Domain)
+		}
+	}
+
+	// Fallback to LastDomain for backward compatibility
+	if session.LastDomain != nil {
+		logger.Printf("[Navigation] Using LastDomain fallback")
+		fyne.Do(func() {
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(session.LastDomain)
+		})
+		return
+	}
+
+	// If we're on main screen with wallet open, go to dashboard
+	if engram.Disk != nil {
+		logger.Printf("[Navigation] Going to dashboard (wallet open)")
+		fyne.Do(func() {
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutDashboard())
+		})
+		return
+	}
+
+	// On main/login screen - use mobile driver's GoBack to exit app (mobile only)
+	logger.Printf("[Navigation] Exiting app via GoBack()")
+	if a.Driver().Device().IsMobile() {
+		if mobileDriver, ok := a.(mobile.Driver); ok {
+			mobileDriver.GoBack()
+		}
 	}
 }

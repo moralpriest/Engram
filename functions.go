@@ -150,6 +150,7 @@ type Session struct {
 	RegHashes         int64
 	LimitMessages     bool
 	TrackRecentBlocks int64
+	NavStack          *NavigationStack
 }
 
 type RemoteAccess struct {

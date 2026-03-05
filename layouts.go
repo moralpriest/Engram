@@ -448,6 +448,11 @@ func layoutMain() fyne.CanvasObject {
 		),
 	)
 
+	// Register with navigation stack (main screen does not allow back)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, false)
+	}
+
 	return NewVScroll(layout)
 }
 
@@ -1129,6 +1134,11 @@ func layoutDashboard() fyne.CanvasObject {
 		c,
 	)
 
+	// Register with navigation stack (dashboard allows back to main)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
+
 	return NewVScroll(layout)
 }
 
@@ -1486,6 +1496,11 @@ func layoutSend() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (send allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -2043,7 +2058,12 @@ func layoutNewAccount() fyne.CanvasObject {
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
-		login()
+		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			login()
+			// Password will be cleared by login() after successful initialization
+		})
 	})
 
 	formSuccess := container.NewVBox(
@@ -2960,7 +2980,10 @@ func layoutRestore() fyne.CanvasObject {
 
 	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
 		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
 			login()
+			// Password will be cleared by login() after successful initialization
 		})
 	})
 
@@ -3141,7 +3164,7 @@ func layoutRestore() fyne.CanvasObject {
 		wPasswordConfirm.SetText("")
 		seedEntry.SetText("")
 		hexEntry.SetText("")
-		session.Password = ""
+		// Password kept for login() call via Enter button
 		session.PasswordConfirm = ""
 
 		btnCreate.Hide()
@@ -7376,6 +7399,11 @@ func layoutAppSettings() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (app settings allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
