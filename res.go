@@ -81,26 +81,20 @@ func GetAccounts() (result []string, err error) {
 
 	switch session.Network {
 	case NETWORK_MAINNET:
-		_, err = os.Stat(filepath.Join(AppPath(), "mainnet"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "mainnet")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator)
 	case NETWORK_SIMULATOR:
-		_, err = os.Stat(filepath.Join(AppPath(), "testnet_simulator"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "testnet_simulator")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator)
 	default:
-		_, err = os.Stat(filepath.Join(AppPath(), "testnet"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "testnet")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator)
 	}
 
 	matches, _ := filepath.Glob(path + "*.db")
