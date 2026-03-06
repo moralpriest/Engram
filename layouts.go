@@ -2872,6 +2872,13 @@ func layoutRestore() fyne.CanvasObject {
 				return
 			}
 
+
+			// Ensure directories exist before import
+			if err := checkDir(); err != nil {
+				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
 			filePath := ""
 			switch cachedNetwork {
 			case NETWORK_TESTNET:
