@@ -16770,6 +16770,8 @@ func layoutTELA() fyne.CanvasObject {
 	var favorites []string
 	var favoritesData binding.StringList
 	var favoritesList *widget.List
+	var refreshFavoritesList func()
+	var refreshAppsList func()
 
 	frame := &iframe{}
 	rectLeft := canvas.NewRectangle(color.Transparent)
@@ -16809,6 +16811,205 @@ func layoutTELA() fyne.CanvasObject {
 	errorText.TextSize = 12
 	errorText.Alignment = fyne.TextAlignCenter
 
+	var telaSearch []INDEXwithRatings
+
+	telaListHeartWidth := float32(34)
+	if isMobile {
+		telaListHeartWidth = 40
+	}
+
+	parseTelaListEntry := func(raw string) (name, scid string) {
+		split := strings.Split(raw, ";;;")
+		if len(split) > 0 {
+			name = split[0]
+		}
+		if len(split) > 1 {
+			scid = split[1]
+		}
+		return
+	}
+
+	normalizeSearch := func(s string) string {
+		return strings.ToLower(strings.TrimSpace(s))
+	}
+
+	findTelaSearchEntry := func(scid string) *INDEXwithRatings {
+		for i := range telaSearch {
+			if telaSearch[i].SCID == scid {
+				return &telaSearch[i]
+			}
+		}
+
+		return nil
+	}
+
+	isTelaActive := func(scid string) bool {
+		for _, serv := range tela.GetServerInfo() {
+			if serv.SCID == scid {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	newTelaListItem := func() fyne.CanvasObject {
+		heartBtn := widget.NewButtonWithIcon("", resourceHeartOutlineSvg, nil)
+		heartBtn.Importance = widget.LowImportance
+
+		activeBg := canvas.NewRectangle(color.Transparent)
+		activeBg.SetMinSize(fyne.NewSize(0, scaleSize(36)))
+
+		heartSpacer := canvas.NewRectangle(color.Transparent)
+		heartSpacer.SetMinSize(fyne.NewSize(telaListHeartWidth, scaleSize(34)))
+		heartWrap := container.NewCenter(container.NewStack(heartSpacer, container.NewCenter(heartBtn)))
+
+		nameLabel := widget.NewLabel("")
+		nameLabel.Alignment = fyne.TextAlignLeading
+		nameLabel.Truncation = fyne.TextTruncateEllipsis
+		nameLabel.Wrapping = fyne.TextWrapOff
+
+		activeLabel := canvas.NewText("", colors.Green)
+		activeLabel.TextSize = 11
+		activeLabel.TextStyle = fyne.TextStyle{Bold: true}
+		activeLabel.Alignment = fyne.TextAlignTrailing
+		activeWrap := container.NewPadded(activeLabel)
+
+		return container.NewStack(
+			activeBg,
+			container.NewBorder(
+				nil,
+				nil,
+				heartWrap,
+				activeWrap,
+				container.NewPadded(nameLabel),
+			),
+		)
+	}
+
+	updateTelaFavoriteButton := func(btn *widget.Button, scid string) {
+		if engram.Disk == nil {
+			btn.SetIcon(resourceHeartOutlineMutedSvg)
+			btn.Disable()
+			btn.OnTapped = nil
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsTELAFavorite(walletAddress, scid) {
+			btn.SetIcon(resourceFavsPng)
+		} else {
+			btn.SetIcon(resourceHeartOutlineSvg)
+		}
+		btn.Enable()
+	}
+
+	toggleTelaFavorite := func(scid string) {
+		if engram.Disk == nil {
+			errorText.Text = "No wallet connected"
+			errorText.Color = colors.Gray
+			errorText.Refresh()
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsTELAFavorite(walletAddress, scid) {
+			if err := RemoveTELAFavorite(walletAddress, scid); err != nil {
+				errorText.Text = "Error removing favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			errorText.Text = "Removed from favorites"
+			errorText.Color = colors.Green
+		} else {
+			entry := findTelaSearchEntry(scid)
+			if entry == nil {
+				errorText.Text = "Could not load TELA metadata"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			if err := AddTELAFavorite(walletAddress, scid, entry.NameHdr, entry.DescrHdr, entry.IconHdr, entry.ratings.Average); err != nil {
+				errorText.Text = "Error adding favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			errorText.Text = "Added to favorites"
+			errorText.Color = colors.Green
+		}
+
+		errorText.Refresh()
+		if refreshFavoritesList != nil {
+			refreshFavoritesList()
+		}
+		searchList.Refresh()
+		favoritesList.Refresh()
+	}
+
+	configureTelaListRow := func(raw string, co fyne.CanvasObject) {
+		row, ok := co.(*fyne.Container)
+		if !ok || len(row.Objects) < 2 {
+			return
+		}
+
+		activeBg, ok := row.Objects[0].(*canvas.Rectangle)
+		if !ok {
+			return
+		}
+
+		var heartBtn *widget.Button
+		var nameLabel *widget.Label
+		var activeLabel *canvas.Text
+
+		var walk func(fyne.CanvasObject)
+		walk = func(obj fyne.CanvasObject) {
+			switch v := obj.(type) {
+			case *widget.Button:
+				if heartBtn == nil {
+					heartBtn = v
+				}
+			case *widget.Label:
+				if nameLabel == nil {
+					nameLabel = v
+				}
+			case *canvas.Text:
+				if activeLabel == nil {
+					activeLabel = v
+				}
+			case *fyne.Container:
+				for _, child := range v.Objects {
+					walk(child)
+				}
+			}
+		}
+
+		walk(row.Objects[1])
+		if heartBtn == nil || nameLabel == nil || activeLabel == nil {
+			return
+		}
+
+		name, scid := parseTelaListEntry(raw)
+		nameLabel.SetText(name)
+		if isTelaActive(scid) {
+			activeLabel.Text = "LIVE"
+			activeBg.FillColor = color.NRGBA{R: 20, G: 120, B: 70, A: 48}
+		} else {
+			activeLabel.Text = ""
+			activeBg.FillColor = color.Transparent
+		}
+		activeBg.Refresh()
+		activeLabel.Refresh()
+		updateTelaFavoriteButton(heartBtn, scid)
+		heartBtn.OnTapped = func() {
+			toggleTelaFavorite(scid)
+		}
+	}
+
 	historyData = binding.BindStringList(&history)
 	historyList = widget.NewListWithData(historyData,
 		func() fyne.CanvasObject {
@@ -16835,15 +17036,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	searchData = binding.BindStringList(&searching)
 	searchList = widget.NewListWithData(searchData,
-		func() fyne.CanvasObject {
-			return container.NewStack(
-				container.NewVBox(
-					container.NewStack(
-						widget.NewLabel(""),
-					),
-				),
-			)
-		},
+		newTelaListItem,
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
 			str, err := dat.Get()
@@ -16851,9 +17044,7 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			split := strings.Split(str, ";;;")
-
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*widget.Label).SetText(split[0])
+			configureTelaListRow(str, co)
 		},
 	)
 
@@ -16881,23 +17072,20 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			split := strings.Split(str, ";;;")
+			if len(split) < 2 {
+				return
+			}
 
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			fyne.Do(func() {
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			})
 		},
 	)
 
 	favoritesData = binding.BindStringList(&favorites)
 	favoritesList = widget.NewListWithData(favoritesData,
-		func() fyne.CanvasObject {
-			return container.NewStack(
-				container.NewVBox(
-					container.NewStack(
-						widget.NewLabel(""),
-					),
-				),
-			)
-		},
+		newTelaListItem,
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
 			str, err := dat.Get()
@@ -16905,10 +17093,7 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			split := strings.Split(str, ";;;")
-			if len(split) > 0 {
-				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*widget.Label).SetText(split[0])
-			}
+			configureTelaListRow(str, co)
 		},
 	)
 
@@ -17048,7 +17233,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	var forceFreshScan bool
 
-	wSelect := widget.NewSelect([]string{"Favorites", "History", "Active", "Search"}, nil)
+	wSelect := widget.NewSelect([]string{"Search", "Favorites", "History"}, nil)
 	wSelect.SetSelectedIndex(0)
 
 	btnRescanTela := newSizedIconButton(theme.ViewRefreshIcon(), func() {
@@ -17092,6 +17277,11 @@ func layoutTELA() fyne.CanvasObject {
 		dlg.Show()
 	})
 
+	btnTela := widget.NewButtonWithIcon("Apps", resourceBrowserGlobeSvg, func() {
+		wSelect.SetSelected("Search")
+	})
+	btnTela.Importance = widget.LowImportance
+
 	btnFavorites := widget.NewButtonWithIcon("", resourceFavsPng, func() {
 		wSelect.SetSelected("Favorites")
 	})
@@ -17102,16 +17292,11 @@ func layoutTELA() fyne.CanvasObject {
 	})
 	btnHistory.Importance = widget.LowImportance
 
-	btnActive := widget.NewButtonWithIcon("Active", theme.ComputerIcon(), func() {
-		wSelect.SetSelected("Active")
-	})
-	btnActive.Importance = widget.LowImportance
-
 	// Horizontal button row (like dashboard)
 	tabButtons := container.NewHBox(
+		btnTela,
 		btnFavorites,
 		btnHistory,
-		btnActive,
 	)
 
 	btnShutdown := widget.NewButton("Shutdown TELA", nil)
@@ -17120,7 +17305,6 @@ func layoutTELA() fyne.CanvasObject {
 	var lastScan, searchExclusions, sortBy string
 	var minLikes float64
 	var telaSCIDs []string
-	var telaSearch []INDEXwithRatings
 	var sAll = map[string]bool{}
 
 	// Initialize TELA settings from storage
@@ -17917,9 +18101,26 @@ func layoutTELA() fyne.CanvasObject {
 	entrySearch.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
+		normalizedInput := normalizeSearch(s)
 
 		if s == "" {
-			go getSearchResults()
+			if wSelect.Selected == "Favorites" {
+				refreshFavoritesList()
+				favoritesList.Refresh()
+				if engram.Disk == nil {
+					results.Text = "  No wallet connected."
+					results.Color = colors.Gray
+				} else if len(favorites) == 0 {
+					results.Text = "  No favorites yet."
+					results.Color = colors.Gray
+				} else {
+					results.Text = fmt.Sprintf("  Favorites:  %d", len(favorites))
+					results.Color = colors.Green
+				}
+				results.Refresh()
+			} else {
+				go getSearchResults()
+			}
 			if !a.Driver().Device().IsMobile() {
 				entrySearch.HideCompletion()
 			}
@@ -17934,6 +18135,28 @@ func layoutTELA() fyne.CanvasObject {
 			} else {
 				entrySearch.HideCompletion()
 			}
+		}
+
+		if wSelect.Selected == "Favorites" {
+			var queryResult []string
+			for _, data := range favorites {
+				for _, split := range strings.Split(data, ";;;") {
+					if strings.Contains(normalizeSearch(split), normalizedInput) {
+						queryResult = append(queryResult, data)
+						break
+					}
+				}
+			}
+
+			sort.Strings(queryResult)
+			favoritesData.Set(queryResult)
+			favoritesList.Refresh()
+			results.Text = fmt.Sprintf("  Favorites:  %d", len(queryResult))
+			results.Color = colors.Green
+			results.Refresh()
+			entrySearch.Enable()
+
+			return
 		}
 
 		var queryResult []INDEXwithRatings
@@ -17968,7 +18191,7 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					for _, split := range data {
-						if strings.Contains(split, s) {
+						if strings.Contains(normalizeSearch(split), normalizedInput) {
 							queryResult = append(queryResult, ind)
 							break
 						}
@@ -17988,7 +18211,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		switch query[0] {
+		switch normalizeSearch(query[0]) {
 		case "name":
 			for _, ind := range telaSearch {
 				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
@@ -17996,7 +18219,7 @@ func layoutTELA() fyne.CanvasObject {
 					continue
 				}
 
-				if strings.Contains(ind.NameHdr, query[1]) {
+				if strings.Contains(normalizeSearch(ind.NameHdr), normalizeSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
@@ -18007,7 +18230,7 @@ func layoutTELA() fyne.CanvasObject {
 					continue
 				}
 
-				if strings.Contains(ind.DURL, query[1]) {
+				if strings.Contains(normalizeSearch(ind.DURL), normalizeSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
@@ -18113,47 +18336,64 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		sort.Strings(serversRunning)
-		servingData.Set(serversRunning)
-		servingList.Refresh()
-		if !isSearching && wSelect.Selected == "Active" {
-			results.Text = fmt.Sprintf("  Active Servers:  %d", len(serversRunning))
-			results.Color = colors.Green
-			results.Refresh()
-		}
+		fyne.Do(func() {
+			servingData.Set(serversRunning)
+			servingList.Refresh()
+			if refreshAppsList != nil {
+				refreshAppsList()
+			}
+			if !isSearching && wSelect.Selected == "Search" && len(serversRunning) > 0 {
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			}
+		})
 	}
 
-	refreshFavoritesList := func() {
+	refreshFavoritesList = func() {
 		if engram.Disk != nil {
 			walletAddress := engram.Disk.GetAddress().String()
 			favs, err := GetTELAFavorites(walletAddress)
 			if err != nil || len(favs) == 0 {
-				if wSelect.Selected == "Favorites" {
-					results.Text = "  No favorites yet."
-					results.Color = colors.Gray
-					results.Refresh()
-				}
 				favorites = []string{}
-				favoritesData.Set(favorites)
+				fyne.Do(func() {
+					favoritesData.Set(favorites)
+				})
 			} else {
-				if wSelect.Selected == "Favorites" {
-					results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
-					results.Color = colors.Green
-					results.Refresh()
-				}
-
 				favorites = []string{}
 				for scid, favData := range favs {
 					favorites = append(favorites, favData.Name+";;;"+scid)
 				}
 				sort.Strings(favorites)
-				favoritesData.Set(favorites)
+				fyne.Do(func() {
+					favoritesData.Set(favorites)
+				})
 			}
 		}
+	}
+
+	refreshAppsList = func() {
+		if len(telaSearch) == 0 {
+			return
+		}
+
+		updated := telaSearchDisplayAll(telaSearch, sortBy)
+		fyne.Do(func() {
+			searching = updated
+			searchData.Set(searching)
+			searchList.Refresh()
+			if !isSearching && wSelect.Selected == "Search" {
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			}
+		})
 	}
 
 	refreshTELA := func() {
 		go refreshServerList()
 		refreshFavoritesList()
+		refreshAppsList()
 	}
 
 	btnShutdown.OnTapped = func() {
@@ -18244,38 +18484,23 @@ func layoutTELA() fyne.CanvasObject {
 	// Hide all alternative views initially
 	entrySearch.Hide()
 	entryServeSCID.Hide()
-	historyBox.Hide()
 	favoritesBox.Hide()
+	historyBox.Hide()
 	searchBox.Hide()
 	servingBox.Hide()
 
-	// Initialize default view to Favorites (SetSelected doesn't trigger OnChanged, so init directly)
 	results.Show()
-	favoritesBox.Show()
-	if engram.Disk != nil {
-		walletAddress := engram.Disk.GetAddress().String()
-		favs, _ := GetTELAFavorites(walletAddress)
-		if favs != nil && len(favs) > 0 {
-			favorites = []string{}
-			for scid, favData := range favs {
-				favorites = append(favorites, favData.Name+";;;"+scid)
-			}
-			sort.Strings(favorites)
-			favoritesData.Set(favorites)
-			results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
-			results.Color = colors.Green
-			go preIndexFavorites(favs)
-		} else {
-			results.Text = "  No favorites yet."
-			results.Color = colors.Gray
-		}
-	} else {
-		results.Text = "  No wallet connected."
-		results.Color = colors.Gray
-	}
+	results.Text = "  Loading TELA dapps..."
+	results.Color = colors.Yellow
 	results.Refresh()
 
-	// Auto-trigger search when TELA page loads
+	if engram.Disk != nil {
+		walletAddress := engram.Disk.GetAddress().String()
+		if favs, _ := GetTELAFavorites(walletAddress); favs != nil && len(favs) > 0 {
+			go preIndexFavorites(favs)
+		}
+	}
+
 	go func() {
 		wSelect.SetSelected("Search")
 	}()
@@ -18406,10 +18631,12 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
+		normalizedInput := normalizeSearch(s)
+
 		var queryResult []string
 		for _, data := range history {
 			for _, split := range strings.Split(data, ";;;") {
-				if strings.Contains(split, s) {
+				if strings.Contains(normalizeSearch(split), normalizedInput) {
 					queryResult = append(queryResult, data)
 					break
 				}
@@ -18448,42 +18675,20 @@ func layoutTELA() fyne.CanvasObject {
 			results.Show()
 			entrySearch.Show()
 			entrySearch.SetPlaceHolder("Search favorites...")
-
 			refreshFavoritesList()
-
+			if engram.Disk == nil {
+				results.Text = "  No wallet connected."
+				results.Color = colors.Gray
+			} else if len(favorites) == 0 {
+				results.Text = "  No favorites yet."
+				results.Color = colors.Gray
+			} else {
+				results.Text = fmt.Sprintf("  Favorites:  %d", len(favorites))
+				results.Color = colors.Green
+			}
+			results.Refresh()
 			favoritesBox.Show()
 			favoritesList.Refresh()
-		case "Active":
-			results.Show()
-
-			servingData.Set(nil)
-
-			var serversRunning []string
-			for _, serv := range tela.GetServerInfo() {
-				serversRunning = append(serversRunning, serv.Name+";;;"+serv.Address+";;;;;;"+serv.SCID)
-			}
-
-			sort.Strings(serversRunning)
-			servingData.Set(serversRunning)
-			servingList.Refresh()
-
-			if !isSearching {
-				if session.Offline {
-					results.Text = "  Disabled in offline mode."
-					results.Color = colors.Gray
-					results.Refresh()
-				} else {
-					results.Text = fmt.Sprintf("  Active Servers:  %d", len(serversRunning))
-					results.Color = colors.Green
-					results.Refresh()
-				}
-			}
-
-			labelLastScan.Text = ""
-			labelLastScan.Refresh()
-
-			entryServeSCID.Show()
-			servingBox.Show()
 		case "History":
 			results.Show()
 			if gnomon.Index == nil {
@@ -18500,7 +18705,10 @@ func layoutTELA() fyne.CanvasObject {
 			servingList.UnselectAll()
 		case "Search":
 			results.Show()
-			entrySearch.SetPlaceHolder("Add SCID")
+			entrySearch.SetPlaceHolder("Search TELA")
+			if refreshAppsList != nil {
+				refreshAppsList()
+			}
 			if gnomon.Index == nil {
 				results.Text = "  Gnomon is inactive. Waiting..."
 				results.Color = colors.Gray
@@ -18523,6 +18731,16 @@ func layoutTELA() fyne.CanvasObject {
 						}
 					}
 				}()
+			} else if len(searching) > 0 {
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			} else if len(telaSearch) > 0 {
+				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searchData.Set(searching)
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
 			} else {
 				go getSearchResults()
 			}
@@ -19408,22 +19626,19 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 	}
 
-	btnFavoriteText := canvas.NewText("Add to Favorites", colors.Gray)
-	btnFavoriteText.TextSize = 14
-	btnFavoriteText.Alignment = fyne.TextAlignTrailing
+	var favContainer *fyne.Container
+	var favCenter *fyne.Container
+	var btnFavorite *widget.Button
 
+	btnFavoriteIcon := resourceHeartOutlineSvg
 	if engram.Disk != nil {
 		walletAddress := engram.Disk.GetAddress().String()
 		if IsTELAFavorite(walletAddress, index.SCID) {
-			btnFavoriteText.Text = "Remove from Favorites"
-			btnFavoriteText.Color = colors.Green
+			btnFavoriteIcon = resourceFavsPng
 		}
 	}
 
-	var favContainer *fyne.Container
-	var favCenter *fyne.Container
-
-	btnFavorite := widget.NewButtonWithIcon("", resourceFavsPng, func() {
+	btnFavorite = widget.NewButtonWithIcon("", btnFavoriteIcon, func() {
 		if engram.Disk == nil {
 			errorText.Text = "No wallet connected"
 			errorText.Color = colors.Red
@@ -19441,8 +19656,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				errorText.Refresh()
 				return
 			}
-			btnFavoriteText.Text = "Add to Favorites"
-			btnFavoriteText.Color = colors.Gray
+			btnFavorite.SetIcon(resourceHeartOutlineSvg)
 			errorText.Text = "Removed from favorites"
 			errorText.Color = colors.Green
 		} else {
@@ -19453,12 +19667,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				errorText.Refresh()
 				return
 			}
-			btnFavoriteText.Text = "Remove from Favorites"
-			btnFavoriteText.Color = colors.Green
+			btnFavorite.SetIcon(resourceFavsPng)
 			errorText.Text = "Added to favorites"
 			errorText.Color = colors.Green
 		}
-		btnFavoriteText.Refresh()
 		errorText.Refresh()
 
 		if favContainer != nil {
@@ -19474,7 +19686,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	})
 
 	favContainer = container.NewHBox(
-		btnFavoriteText,
 		btnFavorite,
 	)
 
