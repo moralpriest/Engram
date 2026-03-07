@@ -5567,7 +5567,8 @@ func layoutSettings() fyne.CanvasObject {
 		{Address: "127.0.0.1:10102", Status: "unknown"},
 	}
 	testnetNodes := []NodeItem{
-		{Address: "testnetexplorer.derofoundation.org:40402", Status: "unknown"},
+		{Address: "69.30.234.163:40402", Status: "unknown"},
+		{Address: "testnet.derofoundation.co:40402", Status: "unknown"},
 		{Address: "127.0.0.1:40402", Status: "unknown"},
 	}
 	simulatorNodes := []NodeItem{
