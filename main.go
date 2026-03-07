@@ -19,6 +19,7 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -79,6 +80,7 @@ var Connected bool
 var nav Navigation
 var ui UI
 var appExiting bool
+var previousDomain string
 
 func main() {
 	// Parse version from ldflags-injected string
@@ -210,6 +212,58 @@ func main() {
 		if ev.Name == mobile.KeyBack {
 			logger.Printf("[KeyEvent] Back key detected, handling navigation")
 			handleBackNavigation()
+		}
+	})
+
+	// Set up mobile lifecycle handling - handle app background/foreground transitions
+	// This prevents crashes when switching apps on mobile
+	a.Lifecycle().SetOnExitedForeground(func() {
+		logger.Printf("[Lifecycle] App losing focus (background)")
+		// Save current domain before going to background
+		if session.Domain != "" {
+			previousDomain = session.Domain
+		}
+	})
+
+	a.Lifecycle().SetOnEnteredForeground(func() {
+		logger.Printf("[Lifecycle] App gaining focus (foreground), previous domain: %s", previousDomain)
+
+		// Only handle reinitialization if wallet was open
+		if session.WalletOpen && engram.Disk != nil {
+			// Reinitialize RPC connections if needed
+			go func() {
+				// Give the UI a moment to settle
+				time.Sleep(500 * time.Millisecond)
+
+				// Check if RPC connection is alive, reconnect if needed
+				if !session.Offline {
+					if rpc_client.RPC == nil {
+						logger.Printf("[Lifecycle] RPC connection lost, reconnecting...")
+						// Reconnection will happen naturally on next operation
+						// Just ensure the UI is refreshed
+						fyne.Do(func() {
+							if session.Window != nil && session.Window.Content() != nil {
+								session.Window.Content().Refresh()
+							}
+						})
+					}
+				}
+
+				// Refresh the current content to ensure UI is stable
+				fyne.Do(func() {
+					if session.Window != nil && session.Window.Content() != nil {
+						session.Window.Content().Refresh()
+						logger.Printf("[Lifecycle] UI refreshed after foreground")
+					}
+				})
+			}()
+		} else if previousDomain != "" {
+			// Wallet was not open, just refresh the UI
+			fyne.Do(func() {
+				if session.Window != nil && session.Window.Content() != nil {
+					session.Window.Content().Refresh()
+				}
+			})
 		}
 	})
 
