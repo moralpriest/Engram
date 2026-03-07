@@ -338,9 +338,11 @@ func layoutMain() fyne.CanvasObject {
 	status.Sync.FillColor = colors.Gray
 
 	// Separator line between Connect and more options
-	separatorLine := canvas.NewRectangle(colors.Gray)
+	separatorLine := canvas.NewRectangle(color.White)
 	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
 	separator := container.NewCenter(separatorLine)
+	separatorSpacer := canvas.NewRectangle(color.Transparent)
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 	// Create uniform button container - each button same size
 	buttonGrid := container.NewVBox(
@@ -607,12 +609,28 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 20))
 
+	separatorLine := canvas.NewRectangle(color.White)
+	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
+	separator := container.NewCenter(separatorLine)
+	separatorSpacer := canvas.NewRectangle(color.Transparent)
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
+
 	isMobile := a.Driver().Device().IsMobile()
 
 	frame := &iframe{}
 
 	var form *fyne.Container
 	if isMobile {
+		buttonGroup := container.NewVBox(
+			container.New(layout.NewGridLayout(1),
+				wrapMobileButton(btnSwitchAccount),
+			),
+			rectSpacer,
+			container.New(layout.NewGridLayout(1),
+				wrapMobileButton(btnConnectionSettings),
+			),
+		)
+
 		form = container.NewVBox(
 			rectSpacer,
 			rectSpacer,
@@ -630,13 +648,18 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			mode,
 			rectSpacer,
 			wrapMobileButton(btnLogin),
-			rectSpacer,
-			rectSpacer,
-			wrapMobileButton(btnSwitchAccount),
-			rectSpacer,
-			wrapMobileButton(btnConnectionSettings),
+			separatorSpacer,
+			separator,
+			separatorSpacer,
+			buttonGroup,
 		)
 	} else {
+		buttonGroup := container.NewVBox(
+			btnSwitchAccount,
+			rectSpacer,
+			btnConnectionSettings,
+		)
+
 		form = container.NewVBox(
 			rectSpacer,
 			rectSpacer,
@@ -647,11 +670,10 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			mode,
 			rectSpacer,
 			btnLogin,
-			rectSpacer,
-			rectSpacer,
-			btnSwitchAccount,
-			rectSpacer,
-			btnConnectionSettings,
+			separatorSpacer,
+			separator,
+			separatorSpacer,
+			buttonGroup,
 		)
 	}
 
