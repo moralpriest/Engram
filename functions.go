@@ -6090,17 +6090,37 @@ func telaFilterSearchExclusions(dURL, searchExclusions string) (err error) {
 
 // Sort and return search display strings for list widget
 func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string) (display []string) {
+	activeSCIDs := map[string]struct{}{}
+	for _, serv := range tela.GetServerInfo() {
+		activeSCIDs[serv.SCID] = struct{}{}
+	}
+
 	switch sortBy {
 	case "Z-A":
 		sort.Slice(telaSearch, func(i, j int) bool {
+			_, iActive := activeSCIDs[telaSearch[i].SCID]
+			_, jActive := activeSCIDs[telaSearch[j].SCID]
+			if iActive != jActive {
+				return iActive
+			}
 			return telaSearch[i].NameHdr > telaSearch[j].NameHdr
 		})
 	case "A-Z":
 		sort.Slice(telaSearch, func(i, j int) bool {
+			_, iActive := activeSCIDs[telaSearch[i].SCID]
+			_, jActive := activeSCIDs[telaSearch[j].SCID]
+			if iActive != jActive {
+				return iActive
+			}
 			return telaSearch[i].NameHdr < telaSearch[j].NameHdr
 		})
 	default: // Ratings
 		sort.Slice(telaSearch, func(i, j int) bool {
+			_, iActive := activeSCIDs[telaSearch[i].SCID]
+			_, jActive := activeSCIDs[telaSearch[j].SCID]
+			if iActive != jActive {
+				return iActive
+			}
 			if telaSearch[i].ratings.Likes != telaSearch[j].ratings.Likes {
 				return telaSearch[i].ratings.Likes > telaSearch[j].ratings.Likes
 			}
