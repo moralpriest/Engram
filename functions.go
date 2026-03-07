@@ -150,6 +150,7 @@ type Session struct {
 	RegHashes         int64
 	LimitMessages     bool
 	TrackRecentBlocks int64
+	NavStack          *NavigationStack
 }
 
 type RemoteAccess struct {
@@ -218,14 +219,14 @@ type ProofData struct {
 }
 
 type Status struct {
-	Canvas     *canvas.Text
-	Message    string
-	Network    *canvas.Text
-	Connection *canvas.Circle
-	Sync       *canvas.Circle
-	RemoteAccess  *canvas.Circle
-	Gnomon     *canvas.Circle
-	EPOCH      *canvas.Circle
+	Canvas       *canvas.Text
+	Message      string
+	Network      *canvas.Text
+	Connection   *canvas.Circle
+	Sync         *canvas.Circle
+	RemoteAccess *canvas.Circle
+	Gnomon       *canvas.Circle
+	EPOCH        *canvas.Circle
 }
 
 type Transfers struct {
@@ -813,7 +814,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			}
 		}
 
-		batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		batchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		responses, err := rpcClient.Batch(batchCtx, specs)
 		cancel()
 		if err != nil {
@@ -873,8 +874,6 @@ func initSettings() {
 			logger.Errorf("[Engram] Setting TELA shard: %s\n", err)
 			return
 		}
-
-		os.RemoveAll(tela.GetPath())
 	}
 }
 
@@ -1763,9 +1762,8 @@ func login() {
 		engram.Disk = temp
 		session.Password = ""
 
-		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
-		initSettings()
-		logger.Printf("[Engram] Encrypted settings loaded successfully")
+		logger.Printf("[Engram] Wallet opened - loading encrypted settings in background...")
+		go initSettings()
 	}
 
 	switch session.Network {
@@ -3485,7 +3483,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 					),
 					rectSpacer,
 					rectSpacer,
-					btnConfirm,
+					wrapMobileButton(btnConfirm),
 					rectSpacer,
 					rectSpacer,
 					container.NewHBox(

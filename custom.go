@@ -67,7 +67,7 @@ func NewImageButton(res fyne.Resource, onTap func()) *ImageButton {
 func (b *ImageButton) CreateRenderer() fyne.WidgetRenderer {
 	renderer := b.Button.CreateRenderer()
 	b.image = canvas.NewImageFromResource(b.imageRes)
-	imgWidth := scaleSize(70)
+	imgWidth := scaleSize(90)
 	imgHeight := scaleSize(35)
 	b.image.SetMinSize(fyne.NewSize(imgWidth, imgHeight))
 	b.image.FillMode = canvas.ImageFillContain
@@ -87,14 +87,14 @@ type imageButtonRenderer struct {
 
 func (r *imageButtonRenderer) Layout(size fyne.Size) {
 	r.baseRenderer.Layout(size)
-	imgWidth := scaleSize(70)
+	imgWidth := scaleSize(90)
 	imgHeight := scaleSize(35)
 	r.image.Resize(fyne.NewSize(imgWidth, imgHeight))
 	r.image.Move(fyne.NewPos((size.Width-imgWidth)/2, (size.Height-imgHeight)/2))
 }
 
 func (r *imageButtonRenderer) MinSize() fyne.Size {
-	return scalePoint(80, 40)
+	return scalePoint(100, 40)
 }
 
 func (r *imageButtonRenderer) Refresh() {
@@ -286,7 +286,11 @@ func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
 	btn := widget.NewButtonWithIcon("", icon, onTap)
 	btn.Importance = widget.MediumImportance
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(80, 40))
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+	sizeEnforcer.SetMinSize(scalePoint(100, h))
 	return container.NewStack(sizeEnforcer, btn)
 }
 

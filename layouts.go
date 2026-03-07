@@ -69,7 +69,20 @@ var telaNavigationStack struct {
 }
 
 func isMobileDevice() bool {
-	return runtime.GOOS == "android" && fyne.CurrentApp().Driver().Device().IsMobile()
+	return isMobile()
+}
+
+func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
+	return wrapMobileButton(widget.NewButtonWithIcon(label, icon, tapped))
+}
+
+func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {
+	if isMobile() {
+		sizeEnforcer := canvas.NewRectangle(color.Transparent)
+		sizeEnforcer.SetMinSize(scalePoint(48, 48))
+		return container.NewStack(sizeEnforcer, obj)
+	}
+	return obj
 }
 
 func pushTELANavigation(scid string) {
@@ -382,6 +395,44 @@ func layoutMain() fyne.CanvasObject {
 		),
 	)
 
+	if isMobile() {
+		form = container.NewStack(
+			res.mainBg,
+			container.NewVBox(
+				wSpacer,
+				container.NewStack(
+					headerBlock,
+				),
+				rectSpacer,
+				rectSpacer,
+				wAccount,
+				rectSpacer,
+				wPassword,
+				rectSpacer,
+				mode,
+				rectSpacer,
+				wrapMobileButton(btnLogin),
+				rectSpacer,
+				separator,
+				rectSpacer,
+				container.NewVBox(
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnNewAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnRecoverAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnConnectionSettings),
+					),
+				),
+				footer,
+			),
+		)
+	}
+
 	layout := container.NewStack(
 		frame,
 		container.NewBorder(
@@ -395,6 +446,11 @@ func layoutMain() fyne.CanvasObject {
 			nil,
 		),
 	)
+
+	// Register with navigation stack (main screen does not allow back)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, false)
+	}
 
 	return NewVScroll(layout)
 }
@@ -551,24 +607,53 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 20))
 
+	isMobile := a.Driver().Device().IsMobile()
+
 	frame := &iframe{}
 
-	form := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		lblWalletName,
-		rectSpacer,
-		wPassword,
-		rectSpacer,
-		mode,
-		rectSpacer,
-		btnLogin,
-		rectSpacer,
-		rectSpacer,
-		btnSwitchAccount,
-		rectSpacer,
-		btnConnectionSettings,
-	)
+	var form *fyne.Container
+	if isMobile {
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			wrapMobileButton(btnLogin),
+			rectSpacer,
+			rectSpacer,
+			wrapMobileButton(btnSwitchAccount),
+			rectSpacer,
+			wrapMobileButton(btnConnectionSettings),
+		)
+	} else {
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			btnLogin,
+			rectSpacer,
+			rectSpacer,
+			btnSwitchAccount,
+			rectSpacer,
+			btnConnectionSettings,
+		)
+	}
 
 	layout := container.NewStack(
 		frame,
@@ -585,7 +670,9 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 
-	session.Balance, _ = engram.Disk.Get_Balance()
+	session.BalanceText = canvas.NewText("...", colors.Green)
+	session.BalanceText.TextSize = 28
+	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
 
 	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
 		session.BalanceHidden = string(balanceHiddenVal) == "true"
@@ -593,12 +680,18 @@ func layoutDashboard() fyne.CanvasObject {
 		session.BalanceHidden = true
 	}
 
-	session.BalanceText = canvas.NewText(walletapi.FormatMoney(session.Balance), colors.Green)
-	session.BalanceText.TextSize = 28
-	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
-
 	if session.BalanceHidden {
 		session.BalanceText.Text = "••••••"
+	} else {
+		go func() {
+			if engram.Disk != nil {
+				session.Balance, _ = engram.Disk.Get_Balance()
+				fyne.Do(func() {
+					session.BalanceText.Text = walletapi.FormatMoney(session.Balance)
+					session.BalanceText.Refresh()
+				})
+			}
+		}()
 	}
 
 	var balanceToggleBtn *widget.Button
@@ -866,6 +959,9 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}
 
+	btnTransfersWrapper := wrapMobileButton(btnTransfers)
+	gramSendWrapper := wrapMobileButton(gramSend)
+
 	separator := canvas.NewText(" | ", colors.Gray)
 	separator.TextSize = 14
 	separator.Alignment = fyne.TextAlignCenter
@@ -909,9 +1005,9 @@ func layoutDashboard() fyne.CanvasObject {
 		balanceCenter,
 		rectSpacer,
 		rectSpacer,
-		gramSend,
+		gramSendWrapper,
 		rectSpacer,
-		btnTransfers,
+		btnTransfersWrapper,
 		rectSpacer,
 		container.New(
 			layout.NewGridLayoutWithColumns(3),
@@ -1007,17 +1103,17 @@ func layoutDashboard() fyne.CanvasObject {
 		container.NewVBox(
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					btnDatapad,
-					btnTELA,
-					btnMessages,
+					wrapMobileButton(btnDatapad),
+					wrapMobileButton(btnTELA),
+					wrapMobileButton(btnMessages),
 				),
 			),
 			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					btnFilesContracts,
-					btnLogout,
-					btnSettings,
+					wrapMobileButton(btnFilesContracts),
+					wrapMobileButton(btnLogout),
+					wrapMobileButton(btnSettings),
 				),
 			),
 			rectSpacer,
@@ -1036,6 +1132,11 @@ func layoutDashboard() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (dashboard allows back to main)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -1365,7 +1466,7 @@ func layoutSend() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					btnSend,
+					wrapMobileButton(btnSend),
 				),
 				layout.NewSpacer(),
 			),
@@ -1394,6 +1495,11 @@ func layoutSend() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (send allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -1933,7 +2039,7 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		btnCreate,
+		wrapMobileButton(btnCreate),
 	)
 
 	footer := container.NewVBox(
@@ -1950,9 +2056,13 @@ func layoutNewAccount() fyne.CanvasObject {
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnEnter := widget.NewButton("Enter", func() {
-		// Initialize the wallet and transition to dashboard
-		login()
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			login()
+			// Password will be cleared by login() after successful initialization
+		})
 	})
 
 	formSuccess := container.NewVBox(
@@ -1962,15 +2072,15 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
+		wrapMobileButton(btnEnter),
+		rectSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
-			btnCopyAddress,
+			wrapMobileButton(btnCopyAddress),
 			layout.NewSpacer(),
-			btnCopySeed,
+			wrapMobileButton(btnCopySeed),
 			layout.NewSpacer(),
 		),
-		rectSpacer,
-		btnEnter,
 		rectSpacer,
 	)
 
@@ -1979,14 +2089,20 @@ func layoutNewAccount() fyne.CanvasObject {
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
-			container.NewStack(
-				formSuccess,
+			container.NewVBox(
 				form,
+				formSuccess,
+				func() fyne.CanvasObject {
+					if isMobile() {
+						return NewSpacer(0, ui.Height*0.4)
+					}
+					return layout.NewSpacer()
+				}(),
 			),
 			layout.NewSpacer(),
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.70))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
 
 	btnCreate.OnTapped = func() {
 		if findAccount() {
@@ -2039,22 +2155,22 @@ func layoutNewAccount() fyne.CanvasObject {
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
+		scrollBox.Offset = fyne.NewPos(0, 0)
 		session.Window.Canvas().Content().Refresh()
 		session.Window.Canvas().Refresh(session.Window.Content())
 	}
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRestore() fyne.CanvasObject {
@@ -2755,6 +2871,12 @@ func layoutRestore() fyne.CanvasObject {
 				return
 			}
 
+			// Ensure directories exist before import
+			if err := checkDir(); err != nil {
+				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
 			filePath := ""
 			switch cachedNetwork {
 			case NETWORK_TESTNET:
@@ -2861,8 +2983,13 @@ func layoutRestore() fyne.CanvasObject {
 	successAddress.Alignment = fyne.TextAlignCenter
 	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
-	btnEnter := widget.NewButton("Enter", func() {
-		login()
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			login()
+			// Password will be cleared by login() after successful initialization
+		})
 	})
 
 	formSuccess := container.NewHBox(
@@ -2879,9 +3006,9 @@ func layoutRestore() fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(grid),
 			rectSpacer,
-			btnCopyAddress,
+			wrapMobileButton(btnEnter),
 			rectSpacer,
-			btnEnter,
+			wrapMobileButton(btnCopyAddress),
 			rectSpacer,
 		),
 		layout.NewSpacer(),
@@ -2897,13 +3024,19 @@ func layoutRestore() fyne.CanvasObject {
 				container.NewVBox(
 					form,
 					formSuccess,
+					func() fyne.CanvasObject {
+						if isMobile() {
+							return NewSpacer(0, ui.Height*0.4)
+						}
+						return layout.NewSpacer()
+					}(),
 				),
 				layout.NewSpacer(),
 			),
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	btnCreate.OnTapped = func() {
 		if engram.Disk != nil {
@@ -3026,20 +3159,17 @@ func layoutRestore() fyne.CanvasObject {
 
 		engram.Disk.Get_Balance_Rescan()
 		engram.Disk.Save_Wallet()
-		engram.Disk.Close_Encrypted_Wallet()
 
-		session.WalletOpen = false
-		engram.Disk = nil
-		session.Path = ""
-		session.Name = ""
+		// Wallet remains open for immediate transition via "Enter" button
+		session.WalletOpen = true
 		tx = Transfers{}
 
-		// Clear sensitive data from form fields
+		// Clear sensitive password data from memory and UI
 		wPassword.SetText("")
 		wPasswordConfirm.SetText("")
 		seedEntry.SetText("")
 		hexEntry.SetText("")
-		session.Password = ""
+		// Password kept for login() call via Enter button
 		session.PasswordConfirm = ""
 
 		btnCreate.Hide()
@@ -3047,6 +3177,7 @@ func layoutRestore() fyne.CanvasObject {
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
 		session.Window.Canvas().Content().Refresh()
@@ -3067,7 +3198,7 @@ func layoutRestore() fyne.CanvasObject {
 	footer := container.NewCenter(
 		rect1,
 		container.NewVBox(
-			btnCreate,
+			wrapMobileButton(btnCreate),
 			rectSpacer,
 			container.NewHBox(
 				layout.NewSpacer(),
@@ -3079,16 +3210,13 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-			rectSpacer,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutAssetExplorer() fyne.CanvasObject {
@@ -4985,9 +5113,9 @@ func layoutTransfers() fyne.CanvasObject {
 			scrollBox,
 		),
 		wSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
-		btnClear,
+		wrapMobileButton(btnClear),
 		rectSpacer,
 		rectSpacer,
 	)
@@ -5379,7 +5507,7 @@ func layoutTransition() fyne.CanvasObject {
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
 	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
@@ -5525,7 +5653,7 @@ func layoutSettings() fyne.CanvasObject {
 
 			row := container.NewBorder(
 				nil, nil, nil,
-				container.NewHBox(rowIcon, removeBtn),
+				container.NewHBox(rowIcon, wrapMobileButton(removeBtn)),
 				addressLabel,
 			)
 
@@ -5553,7 +5681,7 @@ func layoutSettings() fyne.CanvasObject {
 			tapBtn.Text = ""
 
 			clickableRow := container.NewMax(
-				tapBtn,
+				wrapMobileButton(tapBtn),
 				row,
 			)
 
@@ -5649,7 +5777,7 @@ func layoutSettings() fyne.CanvasObject {
 		}
 	}
 
-	entrySection := container.NewBorder(nil, nil, nil, btnAddNode, entryCustomNode)
+	entrySection := container.NewBorder(nil, nil, nil, wrapMobileButton(btnAddNode), entryCustomNode)
 	entryWrapper := container.NewStack(
 		canvas.NewRectangle(color.Transparent),
 		entrySection,
@@ -5847,9 +5975,9 @@ func layoutSettings() fyne.CanvasObject {
 		statusText,
 		rectSpacer,
 		rectSpacer,
-		btnDelete,
+		wrapMobileButton(btnDelete),
 		rectSpacer,
-		btnRestore,
+		wrapMobileButton(btnRestore),
 	)
 
 	scrollBox := container.NewVScroll(
@@ -5863,7 +5991,7 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.68))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -5911,7 +6039,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
@@ -6240,7 +6368,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					remoteAccess.WS.toggle,
+					wrapMobileButton(remoteAccess.WS.toggle),
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -6299,7 +6427,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					remoteAccess.RPC.toggle,
+					wrapMobileButton(remoteAccess.RPC.toggle),
 					wSpacer,
 					remoteAccess.RPC.portText,
 					rectSpacer,
@@ -6631,7 +6759,7 @@ func layoutAppSettings() fyne.CanvasObject {
 			),
 		),
 		rectSpacer,
-		btnShutdownTela,
+		wrapMobileButton(btnShutdownTela),
 		rectSpacer,
 		rectSpacer,
 		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Restrictive Mode"), nil, wRestrictiveMode),
@@ -6642,21 +6770,21 @@ func layoutAppSettings() fyne.CanvasObject {
 		rectSpacer,
 		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Sort By"), wSortBy, nil),
 		rectSpacer,
-		// Start Port Range with wide bar
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Start Port Range"), nil, entryPortStart),
+		widget.NewRichTextFromMarkdown("### Start Port Range"),
+		entryPortStart,
 		rectSpacer,
-		// Search Min Likes % with wide bar
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Search Min Likes %"), nil, entryMinLikes),
+		widget.NewRichTextFromMarkdown("### Search Min Likes %"),
+		entryMinLikes,
 		rectSpacer,
 		widget.NewRichTextFromMarkdown("### Search Exclusions"),
 		entryExclusions,
 		rectSpacer,
 		rectSpacer,
-		btnResetDefaults,
+		wrapMobileButton(btnResetDefaults),
 		rectSpacer,
-		btnDeleteSearchData,
+		wrapMobileButton(btnDeleteSearchData),
 		rectSpacer,
-		btnClearHistory,
+		wrapMobileButton(btnClearHistory),
 	)
 
 	// Advanced Tab Content
@@ -6972,7 +7100,7 @@ func layoutAppSettings() fyne.CanvasObject {
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						wrapMobileButton(btnSubmit),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -7159,7 +7287,7 @@ func layoutAppSettings() fyne.CanvasObject {
 						rectSpacer,
 						textDatashardDesc2,
 						rectSpacer,
-						btnClearDatashard,
+						wrapMobileButton(btnClearDatashard),
 					),
 				),
 				layout.NewSpacer(),
@@ -7179,17 +7307,17 @@ func layoutAppSettings() fyne.CanvasObject {
 			layout.NewSpacer(),
 		),
 		rectSpacer,
-		btnClearLocalData,
+		wrapMobileButton(btnClearLocalData),
 		rectSpacer,
-		btnRestoreDefaults,
+		wrapMobileButton(btnRestoreDefaults),
 		rectSpacer,
-		btnExportDebugLog,
+		wrapMobileButton(btnExportDebugLog),
 		rectSpacer,
 	)
 
 	// Create the tab container with width constraint
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Remote Access", remoteAccessContent),
+		container.NewTabItem("Remote", remoteAccessContent),
 		container.NewTabItem("TELA", telaContent),
 		container.NewTabItem("Advanced", advancedContent),
 	)
@@ -7238,7 +7366,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.68))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -7276,6 +7404,11 @@ func layoutAppSettings() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (app settings allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -7351,7 +7484,7 @@ func layoutMessages() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.12))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	messages.Data = nil
 
@@ -7628,7 +7761,7 @@ func layoutMessages() fyne.CanvasObject {
 			msgbox.List,
 		),
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
 		checkLimit,
 	)
@@ -8106,7 +8239,7 @@ func layoutPM() fyne.CanvasObject {
 		rectSpacer,
 		entry,
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
 		rectSpacer,
 		container.NewStack(
@@ -9037,7 +9170,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 						labelSeparator6,
 						rectSpacer,
 						rectSpacer,
-						btnRemove,
+						wrapMobileButton(btnRemove),
 						rectSpacer,
 						rectSpacer,
 					),
@@ -9509,7 +9642,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						wrapMobileButton(btnSubmit),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -9730,7 +9863,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				),
 				container.NewCenter(
 					container.NewVBox(
-						btnDefaults,
+						wrapMobileButton(btnDefaults),
 						rectWidth90,
 					),
 				),
@@ -10052,7 +10185,7 @@ func layoutIdentity() fyne.CanvasObject {
 		rectSpacer,
 		entryReg,
 		rectSpacer,
-		btnReg,
+		wrapMobileButton(btnReg),
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
@@ -11707,7 +11840,7 @@ func layoutDatapad() fyne.CanvasObject {
 		rectSpacer,
 		entryNewPad,
 		rectSpacer,
-		btnAdd,
+		wrapMobileButton(btnAdd),
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
@@ -11875,7 +12008,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12074,7 +12207,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12213,7 +12346,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -12246,10 +12379,10 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 		container.NewCenter(
 			container.NewHBox(
-				widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") }),
-				widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") }),
-				widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") }),
-				widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") }),
+				wrapMobileButton(widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") })),
+				wrapMobileButton(widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") })),
+				wrapMobileButton(widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") })),
+				wrapMobileButton(widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") })),
 			),
 		),
 		rectSpacer,
@@ -12266,7 +12399,7 @@ func layoutPad() fyne.CanvasObject {
 				rectSpacer,
 				errorText,
 				rectSpacer,
-				btnSave,
+				wrapMobileButton(btnSave),
 				rectSpacer,
 			),
 		),
@@ -12332,7 +12465,7 @@ func layoutAccount() fyne.CanvasObject {
 			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
 			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
 		} else {
-			heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:len(addressStr)]
+			heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
 			addressToggleBtn.SetIcon(theme.VisibilityIcon())
 			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
 		}
@@ -12344,7 +12477,7 @@ func layoutAccount() fyne.CanvasObject {
 		heading.Text = "dE...••••••••"
 		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
 	} else {
-		heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:len(addressStr)]
+		heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
 		addressToggleBtn.SetIcon(theme.VisibilityIcon())
 	}
 
@@ -12397,9 +12530,9 @@ func layoutAccount() fyne.CanvasObject {
 
 	buttonsRow := container.NewHBox(
 		layout.NewSpacer(),
-		btnServiceAddress,
+		wrapMobileButton(btnServiceAddress),
 		rectSpacer,
-		btnIdentity,
+		wrapMobileButton(btnIdentity),
 		layout.NewSpacer(),
 	)
 
@@ -12496,7 +12629,7 @@ func layoutAccount() fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						btnConfirm,
+						wrapMobileButton(btnConfirm),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -12603,7 +12736,7 @@ func layoutAccount() fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						btnConfirm,
+						wrapMobileButton(btnConfirm),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -12983,7 +13116,7 @@ func layoutRecovery() fyne.CanvasObject {
 			layout.NewSpacer(),
 			container.NewStack(
 				rectHeader,
-				btnCopySeed,
+				wrapMobileButton(btnCopySeed),
 			),
 			layout.NewSpacer(),
 		),
@@ -12995,7 +13128,7 @@ func layoutRecovery() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
@@ -13109,7 +13242,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	keys := engram.Disk.Get_Keys()
 	key := fmt.Sprintf("0000000000000000000000000000000000000000000000%s", keys.Secret.Text(16))
@@ -14396,13 +14529,13 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Back button to return to dashboard
-	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+	btnBack := wrapMobileButton(newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	})
+	}))
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
 	labelResults := canvas.NewText("   RESULTS", colors.Gray)
@@ -14949,7 +15082,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		entryClone,
 		contractErrorText,
 		rectSpacer,
-		btnBrowseSC,
+		wrapMobileButton(btnBrowseSC),
 		rectSpacer,
 		rectSpacer,
 		container.NewHBox(
@@ -14959,7 +15092,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		btnEditor,
+		wrapMobileButton(btnEditor),
 	)
 
 	// ==================== TAB 3: ASSETS (Asset Explorer) ====================
@@ -15234,7 +15367,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 				),
 				rectSpacer,
 				rectSpacer,
-				btnMyAssets,
+				wrapMobileButton(btnMyAssets),
 			),
 			layout.NewSpacer(),
 		),
@@ -16624,7 +16757,7 @@ func layoutTELA() fyne.CanvasObject {
 	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
 
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
@@ -16933,7 +17066,7 @@ func layoutTELA() fyne.CanvasObject {
 			dlg.Hide()
 		})
 
-		dlg.SetButtons([]fyne.CanvasObject{btnConfirm, btnCancel})
+		dlg.SetButtons([]fyne.CanvasObject{wrapMobileButton(btnConfirm), btnCancel})
 		dlg.Show()
 	})
 
@@ -17464,7 +17597,7 @@ func layoutTELA() fyne.CanvasObject {
 			})
 
 			prefilterStart := time.Now()
-			poolSize := 8
+			poolSize := 3
 			pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
 			if poolErr != nil {
 				logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
@@ -17967,6 +18100,40 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
+	refreshFavoritesList := func() {
+		if engram.Disk != nil {
+			walletAddress := engram.Disk.GetAddress().String()
+			favs, err := GetTELAFavorites(walletAddress)
+			if err != nil || len(favs) == 0 {
+				if wSelect.Selected == "Favorites" {
+					results.Text = "  No favorites yet."
+					results.Color = colors.Gray
+					results.Refresh()
+				}
+				favorites = []string{}
+				favoritesData.Set(favorites)
+			} else {
+				if wSelect.Selected == "Favorites" {
+					results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
+					results.Color = colors.Green
+					results.Refresh()
+				}
+
+				favorites = []string{}
+				for scid, favData := range favs {
+					favorites = append(favorites, favData.Name+";;;"+scid)
+				}
+				sort.Strings(favorites)
+				favoritesData.Set(favorites)
+			}
+		}
+	}
+
+	refreshTELA := func() {
+		go refreshServerList()
+		refreshFavoritesList()
+	}
+
 	btnShutdown.OnTapped = func() {
 		switch btnShutdown.Text {
 		case "Rescan Blockchain":
@@ -18260,34 +18427,7 @@ func layoutTELA() fyne.CanvasObject {
 			entrySearch.Show()
 			entrySearch.SetPlaceHolder("Search favorites...")
 
-			if engram.Disk == nil {
-				results.Text = "  No wallet connected."
-				results.Color = colors.Gray
-				results.Refresh()
-				favorites = []string{}
-				favoritesData.Set(favorites)
-			} else {
-				walletAddress := engram.Disk.GetAddress().String()
-				favs, err := GetTELAFavorites(walletAddress)
-				if err != nil || len(favs) == 0 {
-					results.Text = "  No favorites yet."
-					results.Color = colors.Gray
-					results.Refresh()
-					favorites = []string{}
-					favoritesData.Set(favorites)
-				} else {
-					results.Text = fmt.Sprintf("  Favorites:  %d", len(favs))
-					results.Color = colors.Green
-					results.Refresh()
-
-					favorites = []string{}
-					for scid, favData := range favs {
-						favorites = append(favorites, favData.Name+";;;"+scid)
-					}
-					sort.Strings(favorites)
-					favoritesData.Set(favorites)
-				}
-			}
+			refreshFavoritesList()
 
 			favoritesBox.Show()
 			favoritesList.Refresh()
@@ -18340,12 +18480,30 @@ func layoutTELA() fyne.CanvasObject {
 			results.Show()
 			entrySearch.SetPlaceHolder("Add SCID")
 			if gnomon.Index == nil {
-				results.Text = "  Gnomon is inactive."
+				results.Text = "  Gnomon is inactive. Waiting..."
 				results.Color = colors.Gray
 				results.Refresh()
-			}
 
-			go getSearchResults()
+				// Auto-retry: wait for Gnomon to start, then re-trigger the search tab
+				go func() {
+					for i := 0; i < 60; i++ {
+						time.Sleep(time.Second)
+						// If user navigated away, stop waiting
+						if !strings.Contains(session.Domain, ".tela") {
+							return
+						}
+						// Gnomon is now ready — re-trigger the search
+						if gnomon.Index != nil {
+							fyne.Do(func() {
+								wSelect.SetSelected("Search")
+							})
+							return
+						}
+					}
+				}()
+			} else {
+				go getSearchResults()
+			}
 
 			entrySearch.Show()
 			searchBox.Show()
@@ -18593,19 +18751,28 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		historyList.UnselectAll()
 		historyList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	searchList.OnSelected = func(id widget.ListItemID) {
@@ -18623,19 +18790,28 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[1], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[1]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		searchList.UnselectAll()
 		searchList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	servingList.OnSelected = func(id widget.ListItemID) {
@@ -18653,19 +18829,28 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		servingList.UnselectAll()
 		servingList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	favoritesList.OnSelected = func(id widget.ListItemID) {
@@ -18689,13 +18874,21 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		scid := split[1]
-		index, err := tela.GetINDEXInfo(scid, session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo from favorites: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo from favorites: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		favoritesList.UnselectAll()
@@ -19195,7 +19388,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	btnFavoriteText := canvas.NewText("Add to Favorites", colors.Gray)
 	btnFavoriteText.TextSize = 14
-	btnFavoriteText.Alignment = fyne.TextAlignCenter
+	btnFavoriteText.Alignment = fyne.TextAlignTrailing
 
 	if engram.Disk != nil {
 		walletAddress := engram.Disk.GetAddress().String()
@@ -19204,6 +19397,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			btnFavoriteText.Color = colors.Green
 		}
 	}
+
+	var favContainer *fyne.Container
+	var favCenter *fyne.Container
 
 	btnFavorite := widget.NewButtonWithIcon("", resourceFavsPng, func() {
 		if engram.Disk == nil {
@@ -19242,7 +19438,27 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 		btnFavoriteText.Refresh()
 		errorText.Refresh()
+
+		if favContainer != nil {
+			favContainer.Refresh()
+		}
+		if favCenter != nil {
+			favCenter.Refresh()
+		}
+
+		if callback != nil {
+			callback()
+		}
 	})
+
+	favContainer = container.NewHBox(
+		btnFavoriteText,
+		btnFavorite,
+	)
+
+	favCenter = container.NewCenter(
+		favContainer,
+	)
 
 	center := container.NewStack(
 		rectBox,
@@ -19252,6 +19468,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				container.NewHBox(
 					layout.NewSpacer(),
 					container.NewVBox(
+						favCenter,
+						rectSpacer,
 						container.NewCenter(
 							image,
 						),
@@ -19273,7 +19491,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						labelStatus,
 						rectSpacer,
-						btnServer,
+						wrapMobileButton(btnServer),
 						rectSpacer,
 						textStatus,
 						rectSpacer,
@@ -19347,13 +19565,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						container.NewCenter(
-							btnFavorite,
-						),
-						rectSpacer,
-						container.NewCenter(
-							btnFavoriteText,
-						),
 					),
 					layout.NewSpacer(),
 				),
