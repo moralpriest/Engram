@@ -78,9 +78,8 @@ func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.Can
 
 func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {
 	if isMobile() {
-		// Enforce a minimum height for mobile buttons
 		sizeEnforcer := canvas.NewRectangle(color.Transparent)
-		sizeEnforcer.SetMinSize(scalePoint(100, 48))
+		sizeEnforcer.SetMinSize(scalePoint(48, 48))
 		return container.NewStack(sizeEnforcer, obj)
 	}
 	return obj
@@ -2872,7 +2871,6 @@ func layoutRestore() fyne.CanvasObject {
 				return
 			}
 
-
 			// Ensure directories exist before import
 			if err := checkDir(); err != nil {
 				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
@@ -3038,7 +3036,7 @@ func layoutRestore() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	btnCreate.OnTapped = func() {
 		if engram.Disk != nil {
@@ -5509,7 +5507,7 @@ func layoutTransition() fyne.CanvasObject {
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
 	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
@@ -5779,7 +5777,7 @@ func layoutSettings() fyne.CanvasObject {
 		}
 	}
 
-	entrySection := container.NewBorder(nil, nil, nil, btnAddNode, entryCustomNode)
+	entrySection := container.NewBorder(nil, nil, nil, wrapMobileButton(btnAddNode), entryCustomNode)
 	entryWrapper := container.NewStack(
 		canvas.NewRectangle(color.Transparent),
 		entrySection,
@@ -5993,7 +5991,7 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -6041,7 +6039,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
@@ -7368,7 +7366,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -16759,7 +16757,7 @@ func layoutTELA() fyne.CanvasObject {
 	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
 
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
