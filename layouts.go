@@ -1371,7 +1371,7 @@ func layoutSend() fyne.CanvasObject {
 		}
 	}
 
-	sendHeading := canvas.NewText("S E N D    M O N E Y", colors.Gray)
+	sendHeading := canvas.NewText("S E N D    D E R O", colors.Gray)
 	sendHeading.TextSize = 16
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
