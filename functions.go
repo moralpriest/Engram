@@ -1599,7 +1599,18 @@ func safeCanvasFocus(obj fyne.Focusable) {
 		if appExiting || session.Window == nil {
 			return
 		}
-		session.Window.Canvas().Focus(obj)
+
+		canvasObj, ok := obj.(fyne.CanvasObject)
+		if !ok || !canvasObj.Visible() {
+			return
+		}
+
+		canvas := fyne.CurrentApp().Driver().CanvasForObject(canvasObj)
+		if canvas == nil || canvas != session.Window.Canvas() {
+			return
+		}
+
+		canvas.Focus(obj)
 	})
 }
 
