@@ -374,10 +374,54 @@ type ScanProgress struct {
 
 type indexCache map[string]tela.INDEX
 
+type telaCandidateCache map[string]telaCandidateMeta
+
+type telaCandidateMeta struct {
+	LastCheckedHeight int64  `json:"last_checked_height"`
+	Result            string `json:"result"`
+}
+
+const (
+	telaCandidateValidIndex    = "valid_index"
+	telaCandidateNotTela       = "not_tela_version"
+	telaCandidateInvalidIndex  = "invalid_index"
+	telaCandidateNoDocs        = "no_docs"
+	telaCandidateExcludedByURL = "excluded_by_durl"
+)
+
 type batchPrefilterStats struct {
 	VersionHits int64
 	Dropped     int64
 	Retries     int64
+}
+
+func (c telaCandidateCache) set(scid, result string, height int64) {
+	if c == nil || scid == "" {
+		return
+	}
+	c[scid] = telaCandidateMeta{LastCheckedHeight: height, Result: result}
+}
+
+func (c telaCandidateCache) validSCIDs() []string {
+	valid := make([]string, 0, len(c))
+	for scid, meta := range c {
+		if meta.Result == telaCandidateValidIndex {
+			valid = append(valid, scid)
+		}
+	}
+	sort.Strings(valid)
+	return valid
+}
+
+func (c telaCandidateCache) negativeSet() map[string]bool {
+	set := map[string]bool{}
+	for scid, meta := range c {
+		switch meta.Result {
+		case telaCandidateNotTela, telaCandidateInvalidIndex, telaCandidateNoDocs:
+			set[scid] = true
+		}
+	}
+	return set
 }
 
 func loadStringSetFromEncryptedStorage(bucket, key string) map[string]bool {
@@ -443,6 +487,33 @@ func saveTelaIndexCache(cache indexCache) error {
 	}
 
 	return StoreEncryptedValue("TELA Search", []byte("IndexCache"), data)
+}
+
+func loadTelaCandidateCache() telaCandidateCache {
+	cache := telaCandidateCache{}
+	raw, err := GetEncryptedValue("TELA Search", []byte("CandidateCache"))
+	if err != nil || len(raw) == 0 {
+		return cache
+	}
+
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		logger.Printf("[TELA] Failed decoding candidate cache: %v\n", err)
+		return telaCandidateCache{}
+	}
+
+	return cache
+}
+
+func saveTelaCandidateCache(cache telaCandidateCache) error {
+	if cache == nil {
+		cache = telaCandidateCache{}
+	}
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+
+	return StoreEncryptedValue("TELA Search", []byte("CandidateCache"), data)
 }
 
 // dialRPCPool creates n independent jrpc2 websocket connections to the DERO daemon.
@@ -775,24 +846,25 @@ func buildINDEXFromVars(scid string, vars map[string]interface{}) (tela.INDEX, e
 // batchFetchINDEXes fetches SC variables for multiple SCIDs in batched RPC calls
 // and constructs tela.INDEX for each, using Gnomon's existing connection.
 // This replaces individual tela.GetINDEXInfo() calls which each open a new WebSocket.
-func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[string]tela.INDEX, error) {
+func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[string]tela.INDEX, map[string]bool, error) {
 	result := make(map[string]tela.INDEX, len(scids))
+	invalid := make(map[string]bool)
 	if len(scids) == 0 {
-		return result, nil
+		return result, invalid, nil
 	}
 	if batchSize < 1 {
 		batchSize = 50
 	}
 
 	if gnomon.Index == nil || gnomon.Index.RPC == nil || gnomon.Index.RPC.RPC == nil {
-		return nil, fmt.Errorf("gnomon rpc client unavailable")
+		return nil, nil, fmt.Errorf("gnomon rpc client unavailable")
 	}
 	rpcClient := gnomon.Index.RPC.RPC
 
 	for i := 0; i < len(scids); i += batchSize {
 		select {
 		case <-ctx.Done():
-			return result, ctx.Err()
+			return result, invalid, ctx.Err()
 		default:
 		}
 
@@ -835,6 +907,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			scid := batch[j]
 			index, err := buildINDEXFromVars(scid, out.VariableStringKeys)
 			if err != nil {
+				invalid[scid] = true
 				continue // Not a valid TELA INDEX — skip silently
 			}
 
@@ -842,7 +915,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		}
 	}
 
-	return result, nil
+	return result, invalid, nil
 }
 
 // Get the Engram settings from the local Graviton tree
@@ -3020,6 +3093,10 @@ func startGnomon() {
 
 			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions)
 			indexer.InitLog(globals.Arguments, os.Stdout)
+			parallelBlocks := 8
+			if isMobile() {
+				parallelBlocks = 4
+			}
 
 			// We can allow parallel processing of x blocks at a time
 			go func() {
@@ -3039,7 +3116,7 @@ func startGnomon() {
 						})
 					}
 				}()
-				gnomon.Index.StartDaemonMode(4)
+				gnomon.Index.StartDaemonMode(parallelBlocks)
 			}()
 
 			logger.Printf("[Gnomon] Scan Status: [%d / %d]\n", height, gnomon.Index.LastIndexedHeight)
