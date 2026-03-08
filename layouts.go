@@ -2003,7 +2003,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	wAccount.OnChanged = func(s string) {
-		wAccount.Validate()
+		_ = wAccount.Validate()
 	}
 
 	wLanguage := widget.NewSelect(languages, nil)
@@ -2710,7 +2710,7 @@ func layoutRestore() fyne.CanvasObject {
 			}
 		}
 		seedInfo.Refresh()
-		seedEntry.Validate()
+		_ = seedEntry.Validate()
 	}
 
 	seedEntry.Validator = func(s string) (err error) {
@@ -3180,7 +3180,7 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		engram.Disk.Save_Wallet()
+		_ = engram.Disk.Save_Wallet()
 
 		// Wallet remains open for immediate transition via "Enter" button
 		session.WalletOpen = true
@@ -3435,7 +3435,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	owned = 0
 	assetData = nil
-	listData.Set(nil)
+	_ = listData.Set(nil)
 
 	if session.Offline {
 		results.Text = "  Asset tracking is disabled in offline mode."
