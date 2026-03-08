@@ -2003,7 +2003,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	wAccount.OnChanged = func(s string) {
-		wAccount.Validate()
+		_ = wAccount.Validate()
 	}
 
 	wLanguage := widget.NewSelect(languages, nil)
@@ -2710,7 +2710,7 @@ func layoutRestore() fyne.CanvasObject {
 			}
 		}
 		seedInfo.Refresh()
-		seedEntry.Validate()
+		_ = seedEntry.Validate()
 	}
 
 	seedEntry.Validator = func(s string) (err error) {
@@ -3180,7 +3180,7 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		engram.Disk.Save_Wallet()
+		_ = engram.Disk.Save_Wallet()
 
 		// Wallet remains open for immediate transition via "Enter" button
 		session.WalletOpen = true
@@ -3435,7 +3435,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	owned = 0
 	assetData = nil
-	listData.Set(nil)
+	_ = listData.Set(nil)
 
 	if session.Offline {
 		results.Text = "  Asset tracking is disabled in offline mode."
@@ -5528,12 +5528,14 @@ func layoutTransition() fyne.CanvasObject {
 
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
+	frame := &iframe{}
+
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	heading := canvas.NewText("Settings", colors.Green)
+	heading := canvas.NewText("CONNECTION SETTINGS", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -5541,14 +5543,17 @@ func layoutSettings() fyne.CanvasObject {
 	labelNetwork := canvas.NewText("NETWORK", colors.Gray)
 	labelNetwork.TextStyle = fyne.TextStyle{Bold: true}
 	labelNetwork.TextSize = 14
+	labelNetwork.Alignment = fyne.TextAlignCenter
 
 	labelNode := canvas.NewText("CONNECTION", colors.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
 	labelNode.TextSize = 14
+	labelNode.Alignment = fyne.TextAlignCenter
 
 	labelSecurity := canvas.NewText("SECURITY", colors.Gray)
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = 14
+	labelSecurity.Alignment = fyne.TextAlignCenter
 
 	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
 	textRemoteAccess.Wrapping = fyne.TextWrapWord
@@ -6014,13 +6019,12 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
-			widget.NewLabel(""),
+			rectSpacer,
 			heading,
-			widget.NewLabel(""),
 			scrollBox,
 			rectSpacer,
 			rectSpacer,
@@ -6049,7 +6053,12 @@ func layoutSettings() fyne.CanvasObject {
 		nil,
 	)
 
-	return NewVScroll(c)
+	layout := container.NewStack(
+		frame,
+		c,
+	)
+
+	return NewVScroll(layout)
 }
 
 // layoutAppSettings creates the centralized settings page with 3 tabs:
