@@ -6714,6 +6714,9 @@ func layoutAppSettings() fyne.CanvasObject {
 					DeleteKey("TELA Search", []byte("Searched SCIDs"))
 					DeleteKey("TELA Search", []byte("Last Scan"))
 					DeleteKey("TELA Search", []byte("Last Indexed Height"))
+					DeleteKey("TELA Search", []byte("CandidateCache"))
+					DeleteKey("TELA Search", []byte("NegativeCache"))
+					DeleteKey("TELA Search", []byte("IndexCache"))
 				}
 			},
 		)
@@ -17278,7 +17281,13 @@ func layoutTELA() fyne.CanvasObject {
 		dlg.Show()
 	})
 
+	activateTelaSearch := func() {}
+
 	btnTela := widget.NewButtonWithIcon("Apps", resourceBrowserGlobeSvg, func() {
+		if wSelect.Selected == "Search" {
+			activateTelaSearch()
+			return
+		}
 		wSelect.SetSelected("Search")
 	})
 	btnTela.Importance = widget.LowImportance
@@ -17307,6 +17316,8 @@ func layoutTELA() fyne.CanvasObject {
 	var minLikes float64
 	var telaSCIDs []string
 	var sAll = map[string]bool{}
+	var telaStartupWaitMu sync.Mutex
+	telaStartupWaiting := false
 
 	// Initialize TELA settings from storage
 	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
@@ -17349,7 +17360,8 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
-	getSearchResults := func() {
+	var getSearchResults func()
+	getSearchResults = func() {
 		scanStart := time.Now()
 		scanCtx, scanCancel := context.WithCancel(context.Background())
 		defer scanCancel()
@@ -17375,6 +17387,27 @@ func layoutTELA() fyne.CanvasObject {
 		cacheIntegrity := "ok"
 		var heightDelta int64
 		var storedIndexedHeight int64
+
+		currentDaemonHeight := func() int64 {
+			if engram.Disk == nil {
+				return 0
+			}
+
+			return int64(engram.Disk.Get_Daemon_Height())
+		}
+
+		isGnomonCaughtUp := func() bool {
+			if gnomon.Index == nil {
+				return false
+			}
+
+			daemonHeight := currentDaemonHeight()
+			if daemonHeight <= 0 {
+				return gnomon.Index.LastIndexedHeight > 0
+			}
+
+			return gnomon.Index.LastIndexedHeight >= daemonHeight
+		}
 
 		deviceClass := "desktop"
 		workerPoolSize := runtime.NumCPU()
@@ -17503,6 +17536,10 @@ func layoutTELA() fyne.CanvasObject {
 
 		defer func() {
 			isSearching = false
+			fyne.Do(func() {
+				entrySearch.Enable()
+				entryAddSCID.Enable()
+			})
 			if !session.Offline && gnomon.Index != nil {
 				if btnShutdown.Disabled() {
 					fyne.Do(func() {
@@ -17513,10 +17550,57 @@ func layoutTELA() fyne.CanvasObject {
 		}()
 
 		if gnomon.Index == nil {
+			results.Text = "  Gnomon is starting..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
 			return
 		}
 
-		for gnomon.Index != nil && gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+		hasTelaCache := func() bool {
+			if raw, err := GetEncryptedValue("TELA Search", []byte("SCIDs")); err == nil && len(raw) > 0 {
+				var cachedSCIDs []string
+				if json.Unmarshal(raw, &cachedSCIDs) == nil && len(cachedSCIDs) > 0 {
+					return true
+				}
+			}
+			if raw, err := GetEncryptedValue("TELA Search", []byte("IndexCache")); err == nil && len(raw) > 0 {
+				var cachedINDEXes indexCache
+				if json.Unmarshal(raw, &cachedINDEXes) == nil && len(cachedINDEXes) > 0 {
+					return true
+				}
+			}
+			if raw, err := GetEncryptedValue("TELA Search", []byte("CandidateCache")); err == nil && len(raw) > 0 {
+				var cachedCandidates telaCandidateCache
+				if json.Unmarshal(raw, &cachedCandidates) == nil {
+					for _, meta := range cachedCandidates {
+						if meta.Result == telaCandidateValidIndex {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		}
+
+		gnomonReadyForTela := func() bool {
+			if gnomon.Index == nil {
+				return false
+			}
+			if hasTelaCache() {
+				return true
+			}
+
+			allOwnersAndSCIDs := gnomon.GetAllOwnersAndSCIDs()
+			if len(allOwnersAndSCIDs) <= 1 {
+				return false
+			}
+
+			return isGnomonCaughtUp()
+		}
+
+		for !gnomonReadyForTela() {
 			syncWaitSeconds++
 			// Check if user navigated away
 			if !strings.Contains(session.Domain, ".tela") {
@@ -17580,7 +17664,7 @@ func layoutTELA() fyne.CanvasObject {
 				entrySearch.Disable()
 				entryAddSCID.Disable()
 			})
-			results.Text = "  Gnomon is syncing..."
+			results.Text = "  Gnomon is starting..."
 			results.Color = colors.Yellow
 
 			// Save syncing state for progress tracking
@@ -17596,15 +17680,54 @@ func layoutTELA() fyne.CanvasObject {
 			time.Sleep(time.Second)
 		}
 
+		allowTelaIndexMutations := isGnomonCaughtUp()
+
+		if gnomon.Index != nil && gnomon.Index.LastIndexedHeight < currentDaemonHeight() {
+			results.Text = "  Gnomon still syncing, using available TELA data..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
+		}
+
 		indexCacheStore := loadTelaIndexCache()
+		candidateCache := loadTelaCandidateCache()
+		currentScanHeight := storedIndexedHeight
+		var candidateCacheMu sync.RWMutex
+		if gnomon.Index != nil {
+			currentScanHeight = gnomon.Index.LastIndexedHeight
+		}
 		if !restrictiveMode {
-			sAll = loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
+			sAll = candidateCache.negativeSet()
+			if len(sAll) == 0 {
+				sAll = loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
+			}
+		}
+
+		setCandidateCache := func(scid, result string) {
+			candidateCacheMu.Lock()
+			candidateCache.set(scid, result, currentScanHeight)
+			candidateCacheMu.Unlock()
+		}
+		isNegativeSCID := func(scid string) bool {
+			candidateCacheMu.RLock()
+			defer candidateCacheMu.RUnlock()
+			return sAll[scid]
+		}
+		setNegativeSCID := func(scid string, negative bool) {
+			candidateCacheMu.Lock()
+			if negative {
+				sAll[scid] = true
+			} else {
+				delete(sAll, scid)
+			}
+			candidateCacheMu.Unlock()
 		}
 
 		storedSCIDs, err := GetEncryptedValue("TELA Search", []byte("SCIDs"))
 		if err != nil {
 			// Nothing stored, scan for SCIDs
-			telaSCIDs = []string{}
+			telaSCIDs = candidateCache.validSCIDs()
 			cacheIntegrity = "missing_scids"
 			fullScanReason = "no_scid_cache"
 			logger.Debugf("[Engram] Could not get stored TELA SCIDs: %s\n", err)
@@ -17634,12 +17757,18 @@ func layoutTELA() fyne.CanvasObject {
 					results.Refresh()
 				})
 
-				fetched, fetchErr := batchFetchINDEXes(scanCtx, cacheMissed, 50)
+				fetched, invalid, fetchErr := batchFetchINDEXes(scanCtx, cacheMissed, 50)
 				if fetchErr != nil {
 					logger.Printf("[TELA] Batch INDEX fetch for cached SCIDs: %v\n", fetchErr)
 				}
 				for scid, index := range fetched {
 					indexCacheStore[scid] = index
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
+				}
+				for scid := range invalid {
+					setCandidateCache(scid, telaCandidateInvalidIndex)
+					setNegativeSCID(scid, true)
 				}
 				atomic.AddInt64(&indexInfoCalls, int64(len(cacheMissed)))
 			}
@@ -17678,10 +17807,12 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					if len(index.DOCs) < 1 {
+						setCandidateCache(scid, telaCandidateNoDocs)
+						setNegativeSCID(scid, true)
 						return
 					}
 
-					if gnomon.GetAllSCIDVariableDetails(scid) == nil {
+					if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
 						if atomic.AddInt64(&cachedAdded, 1)%8 == 0 {
 							results.Text = fmt.Sprintf("  Adding... (%d / %d)", idx+1, len(telaSCIDs))
 							results.Color = colors.Yellow
@@ -17693,13 +17824,18 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					if restrictiveMode {
+						setCandidateCache(scid, telaCandidateValidIndex)
 						return
 					}
 
 					_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
 					if err != nil {
+						setCandidateCache(scid, telaCandidateExcludedByURL)
 						return
 					}
+
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
 
 					cachedMu.Lock()
 					telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
@@ -17709,6 +17845,34 @@ func layoutTELA() fyne.CanvasObject {
 
 			cachedWg.Wait()
 			storedSCIDsCount = len(telaSCIDs)
+
+			if !allowTelaIndexMutations {
+				cacheHitMode = "cached_syncing"
+				fullScanReason = ""
+				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searchData.Set(searching)
+
+				results.Text = fmt.Sprintf("  TELA cache loaded while Gnomon syncs: %d", len(telaSearch))
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					entrySearch.Enable()
+					entryAddSCID.Enable()
+				})
+
+				if last, err := GetEncryptedValue("TELA Search", []byte("Last Scan")); err == nil {
+					lastScan = string(last)
+					labelLastScan.Text = fmt.Sprintf("  %s", lastScan)
+					labelLastScan.Color = colors.Yellow
+				}
+
+				fyne.Do(func() {
+					results.Refresh()
+					labelLastScan.Refresh()
+				})
+
+				logger.Printf("[TELA] Deferring full scan until Gnomon catches up; showing cached results only\n")
+				return
+			}
 
 			if !rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) && heightDelta == 0 {
 				cacheHitMode = "cached_only"
@@ -17751,6 +17915,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		var wg sync.WaitGroup
 
+		hasCachedTelaData := hasTelaCache()
 		var all = map[string]string{}
 		if restrictiveMode {
 			for _, sc := range telaSCIDs {
@@ -17760,6 +17925,22 @@ func layoutTELA() fyne.CanvasObject {
 			all = gnomon.GetAllOwnersAndSCIDs()
 		}
 
+		if !restrictiveMode && !hasCachedTelaData && len(all) <= 1 {
+			results.Text = "  Gnomon is preparing SCIDs..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
+
+			go func() {
+				time.Sleep(2 * time.Second)
+				if strings.Contains(session.Domain, ".tela") {
+					go getSearchResults()
+				}
+			}()
+			return
+		}
+
 		allSCIDs := make([]string, 0, len(all))
 		for sc := range all {
 			allSCIDs = append(allSCIDs, sc)
@@ -17767,21 +17948,36 @@ func layoutTELA() fyne.CanvasObject {
 		sort.Strings(allSCIDs)
 
 		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
+			candidateSet := map[string]bool{}
+			candidateCacheMu.RLock()
+			validCandidateSCIDs := candidateCache.validSCIDs()
+			candidateCacheMu.RUnlock()
+			for _, sc := range validCandidateSCIDs {
+				candidateSet[sc] = true
+			}
 			deltaSCIDs := make([]string, 0)
 			for _, sc := range allSCIDs {
 				heights := gnomon.GetSCIDInteractionHeight(sc)
 				if len(heights) == 0 {
 					deltaSCIDs = append(deltaSCIDs, sc)
+					candidateSet[sc] = true
 					continue
 				}
 				for _, h := range heights {
 					if h > storedIndexedHeight {
 						deltaSCIDs = append(deltaSCIDs, sc)
+						candidateSet[sc] = true
 						break
 					}
 				}
 			}
-			if len(deltaSCIDs) > 0 {
+			if len(candidateSet) > 0 {
+				allSCIDs = make([]string, 0, len(candidateSet))
+				for sc := range candidateSet {
+					allSCIDs = append(allSCIDs, sc)
+				}
+				sort.Strings(allSCIDs)
+			} else if len(deltaSCIDs) > 0 {
 				allSCIDs = deltaSCIDs
 			}
 		}
@@ -17790,7 +17986,7 @@ func layoutTELA() fyne.CanvasObject {
 		if !restrictiveMode {
 			candidates := make([]string, 0, len(allSCIDs))
 			for _, sc := range allSCIDs {
-				if !rescanRecheck && sAll[sc] {
+				if !rescanRecheck && isNegativeSCID(sc) {
 					prefilterAllowed[sc] = false
 					continue
 				}
@@ -17847,7 +18043,10 @@ func layoutTELA() fyne.CanvasObject {
 				for _, sc := range candidates {
 					prefilterAllowed[sc] = passed[sc]
 					if !passed[sc] {
-						sAll[sc] = true
+						setCandidateCache(sc, telaCandidateNotTela)
+						setNegativeSCID(sc, true)
+					} else {
+						setNegativeSCID(sc, false)
 					}
 				}
 			}
@@ -17872,13 +18071,19 @@ func layoutTELA() fyne.CanvasObject {
 					results.Refresh()
 				})
 
-				fetched, fetchErr := batchFetchINDEXes(scanCtx, indexNeeded, 50)
+				fetched, invalid, fetchErr := batchFetchINDEXes(scanCtx, indexNeeded, 50)
 				logger.Printf("[TELA] Batch INDEX fetch done: fetched=%d err=%v\n", len(fetched), fetchErr)
 				if fetchErr != nil {
 					logger.Printf("[TELA] Batch INDEX fetch for scan: %v\n", fetchErr)
 				}
 				for scid, index := range fetched {
 					indexCacheStore[scid] = index
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
+				}
+				for scid := range invalid {
+					setCandidateCache(scid, telaCandidateInvalidIndex)
+					setNegativeSCID(scid, true)
 				}
 				atomic.AddInt64(&indexInfoCalls, int64(len(indexNeeded)))
 			}
@@ -17930,10 +18135,10 @@ func layoutTELA() fyne.CanvasObject {
 			scanMu.Lock()
 			alreadySeen := seenSCIDs[sc]
 			scanMu.Unlock()
-			if !restrictiveMode && !rescanRecheck && sAll[sc] {
+			if !restrictiveMode && !rescanRecheck && isNegativeSCID(sc) {
 				atomic.AddInt64(&negCacheSkips, 1)
 			}
-			if !restrictiveMode && !rescanRecheck && (sAll[sc] || alreadySeen || !prefilterAllowed[sc]) {
+			if !restrictiveMode && !rescanRecheck && (isNegativeSCID(sc) || alreadySeen || !prefilterAllowed[sc]) {
 				atomic.AddInt64(&preDispatchSkips, 1)
 				scanned = atomic.AddInt64(&scannedCandidates, 1)
 				continue
@@ -17974,6 +18179,8 @@ func layoutTELA() fyne.CanvasObject {
 					if cached, ok := indexCacheStore[scid]; ok {
 						index = cached
 					} else {
+						setCandidateCache(scid, telaCandidateInvalidIndex)
+						setNegativeSCID(scid, true)
 						// Not in cache and batch fetch didn't find it — skip
 						return
 					}
@@ -17983,7 +18190,7 @@ func layoutTELA() fyne.CanvasObject {
 							return
 						}
 
-						if gnomon.GetAllSCIDVariableDetails(scid) == nil {
+						if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
 							gnomon.AddSCIDToIndex(scid)
 						}
 
@@ -17999,12 +18206,19 @@ func layoutTELA() fyne.CanvasObject {
 
 						_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
 						if err != nil {
+							setCandidateCache(scid, telaCandidateExcludedByURL)
 							return
 						}
+
+						setCandidateCache(scid, telaCandidateValidIndex)
+						setNegativeSCID(scid, false)
 
 						scanMu.Lock()
 						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
 						scanMu.Unlock()
+					} else {
+						setCandidateCache(scid, telaCandidateNoDocs)
+						setNegativeSCID(scid, true)
 					}
 				}
 			}(sc)
@@ -18077,6 +18291,17 @@ func layoutTELA() fyne.CanvasObject {
 		if err := saveTelaIndexCache(indexCacheStore); err != nil {
 			cacheIntegrity = "write_failed"
 			logger.Printf("[TELA] Failed storing INDEX cache: entries=%d err=%v\n", len(indexCacheStore), err)
+		}
+
+		candidateCacheMu.RLock()
+		candidateCacheSnapshot := make(telaCandidateCache, len(candidateCache))
+		for scid, meta := range candidateCache {
+			candidateCacheSnapshot[scid] = meta
+		}
+		candidateCacheMu.RUnlock()
+		if err := saveTelaCandidateCache(candidateCacheSnapshot); err != nil {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed storing candidate cache: entries=%d err=%v\n", len(candidateCacheSnapshot), err)
 		}
 
 		if restrictiveMode && len(searching) < 1 {
@@ -18318,6 +18543,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			_ = DeleteKey("TELA Search", []byte("NegativeCache"))
 			_ = DeleteKey("TELA Search", []byte("IndexCache"))
+			_ = DeleteKey("TELA Search", []byte("CandidateCache"))
 
 			telaSCIDs = bootstrapIndex.DOCs
 			errorText.Text = "bootstrap initialized"
@@ -18658,6 +18884,82 @@ func layoutTELA() fyne.CanvasObject {
 		})
 	}
 
+	activateTelaSearch = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+
+		entryHistory.Hide()
+		entrySearch.Show()
+		entryServeSCID.Hide()
+		favoritesBox.Hide()
+		historyBox.Hide()
+		searchBox.Show()
+		servingBox.Hide()
+		results.Show()
+
+		entrySearch.SetPlaceHolder("Search TELA")
+		if refreshAppsList != nil {
+			refreshAppsList()
+		}
+		if gnomon.Index == nil {
+			if engram.Disk != nil {
+				enableGnomon, _ := getGnomon()
+				if enableGnomon == "1" {
+					go startGnomon()
+				}
+			}
+			results.Text = "  Gnomon is inactive. Waiting..."
+			results.Color = colors.Gray
+			results.Refresh()
+
+			telaStartupWaitMu.Lock()
+			if telaStartupWaiting {
+				telaStartupWaitMu.Unlock()
+				searchList.Refresh()
+				return
+			}
+			telaStartupWaiting = true
+			telaStartupWaitMu.Unlock()
+
+			go func() {
+				defer func() {
+					telaStartupWaitMu.Lock()
+					telaStartupWaiting = false
+					telaStartupWaitMu.Unlock()
+				}()
+				for i := 0; i < 60; i++ {
+					time.Sleep(time.Second)
+					if !strings.Contains(session.Domain, ".tela") {
+						return
+					}
+					if gnomon.Index != nil {
+						fyne.Do(func() {
+							results.Text = "  Starting TELA scan..."
+							results.Color = colors.Yellow
+							results.Refresh()
+						})
+						go getSearchResults()
+						return
+					}
+				}
+			}()
+		} else if len(searching) > 0 {
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+			results.Color = colors.Green
+			results.Refresh()
+		} else if len(telaSearch) > 0 {
+			searching = telaSearchDisplayAll(telaSearch, sortBy)
+			searchData.Set(searching)
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+			results.Color = colors.Green
+			results.Refresh()
+		} else {
+			go getSearchResults()
+		}
+
+		searchList.Refresh()
+	}
+
 	wSelect.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
@@ -18705,50 +19007,7 @@ func layoutTELA() fyne.CanvasObject {
 			historyList.Refresh()
 			servingList.UnselectAll()
 		case "Search":
-			results.Show()
-			entrySearch.SetPlaceHolder("Search TELA")
-			if refreshAppsList != nil {
-				refreshAppsList()
-			}
-			if gnomon.Index == nil {
-				results.Text = "  Gnomon is inactive. Waiting..."
-				results.Color = colors.Gray
-				results.Refresh()
-
-				// Auto-retry: wait for Gnomon to start, then re-trigger the search tab
-				go func() {
-					for i := 0; i < 60; i++ {
-						time.Sleep(time.Second)
-						// If user navigated away, stop waiting
-						if !strings.Contains(session.Domain, ".tela") {
-							return
-						}
-						// Gnomon is now ready — re-trigger the search
-						if gnomon.Index != nil {
-							fyne.Do(func() {
-								wSelect.SetSelected("Search")
-							})
-							return
-						}
-					}
-				}()
-			} else if len(searching) > 0 {
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
-				results.Color = colors.Green
-				results.Refresh()
-			} else if len(telaSearch) > 0 {
-				searching = telaSearchDisplayAll(telaSearch, sortBy)
-				searchData.Set(searching)
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
-				results.Color = colors.Green
-				results.Refresh()
-			} else {
-				go getSearchResults()
-			}
-
-			entrySearch.Show()
-			searchBox.Show()
-			searchList.Refresh()
+			activateTelaSearch()
 		}
 	}
 
@@ -18765,6 +19024,8 @@ func layoutTELA() fyne.CanvasObject {
 		results.Refresh()
 		entryAddSCID.Disable()
 	}
+
+	activateTelaSearch()
 
 	entryServeSCID.OnChanged = func(s string) {
 		errorText.Text = ""

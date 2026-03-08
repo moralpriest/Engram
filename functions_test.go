@@ -92,6 +92,49 @@ func TestBatchPrefilterTelaVersionsGuards(t *testing.T) {
 	})
 }
 
+func TestTelaCandidateCacheHelpers(t *testing.T) {
+	cache := telaCandidateCache{}
+	cache.set("valid-b", telaCandidateValidIndex, 22)
+	cache.set("not-tela", telaCandidateNotTela, 22)
+	cache.set("invalid", telaCandidateInvalidIndex, 22)
+	cache.set("no-docs", telaCandidateNoDocs, 22)
+	cache.set("excluded", telaCandidateExcludedByURL, 22)
+
+	valid := cache.validSCIDs()
+	if len(valid) != 1 || valid[0] != "valid-b" {
+		t.Fatalf("unexpected valid SCIDs: %#v", valid)
+	}
+
+	negative := cache.negativeSet()
+	for _, scid := range []string{"not-tela", "invalid", "no-docs"} {
+		if !negative[scid] {
+			t.Fatalf("expected %q in negative set", scid)
+		}
+	}
+	if negative["valid-b"] {
+		t.Fatal("did not expect valid candidate in negative set")
+	}
+	if negative["excluded"] {
+		t.Fatal("did not expect settings-dependent exclusion in negative set")
+	}
+	if meta := cache["valid-b"]; meta.LastCheckedHeight != 22 || meta.Result != telaCandidateValidIndex {
+		t.Fatalf("unexpected metadata stored: %+v", meta)
+	}
+}
+
+func TestBatchFetchINDEXesEmpty(t *testing.T) {
+	fetched, invalid, err := batchFetchINDEXes(context.Background(), nil, 50)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fetched) != 0 {
+		t.Fatalf("expected empty fetched map, got %d items", len(fetched))
+	}
+	if len(invalid) != 0 {
+		t.Fatalf("expected empty invalid map, got %d items", len(invalid))
+	}
+}
+
 func TestBuildINDEXFromVarsErrors(t *testing.T) {
 	t.Run("missing C fails", func(t *testing.T) {
 		_, err := buildINDEXFromVars("scid", map[string]interface{}{})
