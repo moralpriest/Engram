@@ -256,6 +256,8 @@ func main() {
 						logger.Printf("[Lifecycle] UI refreshed after foreground")
 					}
 				})
+
+				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
 			// Wallet was not open, just refresh the UI
