@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
@@ -1748,6 +1749,8 @@ func closeWallet() {
 			logger.Printf("[Engram] RPC client closed.\n")
 		}
 
+		resetMessageCache()
+
 		session.Path = ""
 		session.Name = ""
 
@@ -1845,6 +1848,7 @@ func login() {
 
 		engram.Disk = temp
 		session.Password = ""
+		loadPersistedMessageCache()
 
 		logger.Printf("[Engram] Wallet opened - loading encrypted settings in background...")
 		go initSettings()
@@ -1948,6 +1952,8 @@ func login() {
 			if regDone {
 				go startGnomon()
 			}
+
+			refreshMessageHistoryAsync(false)
 
 			fyne.Do(func() {
 				updateDashboardAfterLogin()
@@ -2799,76 +2805,718 @@ func sendMessage(m string, s string, r string) (txid crypto.Hash, err error) {
 	return
 }
 
+type MessageRecord struct {
+	Entry      rpc.Entry
+	ContactKey string
+	Label      string
+	Comment    string
+}
+
+type MessageThreadSummary struct {
+	ContactKey string
+	Label      string
+	LastText   string
+	LastTime   time.Time
+	LastTXID   string
+	Count      int
+}
+
+type MessageCache struct {
+	Height  uint64
+	Records []MessageRecord
+	ByTXID  map[string]MessageRecord
+	Address string
+	Primed  bool
+	Loaded  bool
+	Threads []MessageThreadSummary
+}
+
+var messageCache MessageCache
+
+type persistedMessageRecord struct {
+	TXID            string `json:"txid"`
+	Height          uint64 `json:"height"`
+	TimeUnix        int64  `json:"time_unix"`
+	Incoming        bool   `json:"incoming"`
+	Destination     string `json:"destination"`
+	DestinationPort uint64 `json:"destination_port"`
+	SourcePort      uint64 `json:"source_port"`
+	Replyback       string `json:"replyback"`
+	ContactKey      string `json:"contact_key"`
+	Label           string `json:"label"`
+	Comment         string `json:"comment"`
+}
+
+type persistedMessageCache struct {
+	Version       int                      `json:"version"`
+	Network       string                   `json:"network"`
+	WalletAddress string                   `json:"wallet_address"`
+	Height        uint64                   `json:"height"`
+	SavedAtUnix   int64                    `json:"saved_at_unix"`
+	Records       []persistedMessageRecord `json:"records"`
+	Threads       []persistedMessageThread `json:"threads"`
+}
+
+type persistedMessageThread struct {
+	ContactKey string `json:"contact_key"`
+	Label      string `json:"label"`
+	LastText   string `json:"last_text"`
+	LastTime   int64  `json:"last_time"`
+	LastTXID   string `json:"last_txid"`
+	Count      int    `json:"count"`
+}
+
+const messageCacheVersion = 1
+
+var messageRefreshState struct {
+	sync.Mutex
+	running bool
+}
+
+func messageComment(entry rpc.Entry) string {
+	if entry.Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
+		return strings.TrimSpace(entry.Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string))
+	}
+
+	if entry.Payload_RPC.HasValue("C", rpc.DataString) {
+		return strings.TrimSpace(entry.Payload_RPC.Value("C", rpc.DataString).(string))
+	}
+
+	return ""
+}
+
+func decodePayloadWithTrim(payload []byte) (rpc.Arguments, error) {
+	var args rpc.Arguments
+	if len(payload) == 0 {
+		return nil, errors.New("zero length payload")
+	}
+
+	if err := args.UnmarshalBinary(payload); err == nil {
+		return args, nil
+	}
+
+	trimmed := bytes.TrimRight(payload, "\x00")
+	if len(trimmed) != len(payload) {
+		var trimmedArgs rpc.Arguments
+		if err := trimmedArgs.UnmarshalBinary(trimmed); err == nil {
+			return trimmedArgs, nil
+		}
+	}
+
+	for end := len(payload) - 1; end >= 1; end-- {
+		candidate := payload[:end]
+		var try rpc.Arguments
+		if err := try.UnmarshalBinary(candidate); err == nil {
+			return try, nil
+		}
+	}
+
+	return nil, errors.New("unable to decode trimmed payload")
+}
+
+func applyDecodedArgs(entry *rpc.Entry, args rpc.Arguments) {
+	entry.Payload_RPC = append([]rpc.Argument{}, args...)
+	entry.PayloadError = ""
+	if args.Has(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
+		entry.DestinationPort = args.Value(rpc.RPC_DESTINATION_PORT, rpc.DataUint64).(uint64)
+	}
+	if args.Has(rpc.RPC_SOURCE_PORT, rpc.DataUint64) {
+		entry.SourcePort = args.Value(rpc.RPC_SOURCE_PORT, rpc.DataUint64).(uint64)
+	}
+}
+
+func enrichMessageEntry(base rpc.Entry) rpc.Entry {
+	var zeroscid crypto.Hash
+
+	if _, err := base.ProcessPayload(); err == nil && messageComment(base) != "" {
+		return base
+	}
+	if args, err := decodePayloadWithTrim(base.Payload); err == nil {
+		applyDecodedArgs(&base, args)
+		if messageComment(base) != "" {
+			return base
+		}
+	}
+
+	_, detail := engram.Disk.Get_Payments_TXID(zeroscid, base.TXID)
+	if detail.TXID == "" {
+		return base
+	}
+
+	if _, err := detail.ProcessPayload(); err == nil {
+		if messageComment(detail) != "" {
+			return detail
+		}
+	}
+	if args, err := decodePayloadWithTrim(detail.Payload); err == nil {
+		applyDecodedArgs(&detail, args)
+		if messageComment(detail) != "" {
+			return detail
+		}
+	}
+
+	if len(base.Payload_RPC) == 0 && len(detail.Payload_RPC) > 0 {
+		base.Payload_RPC = detail.Payload_RPC
+	}
+	if len(base.Payload) == 0 && len(detail.Payload) > 0 {
+		base.Payload = detail.Payload
+	}
+	if base.PayloadError == "" && detail.PayloadError != "" {
+		base.PayloadError = detail.PayloadError
+	}
+	if base.Destination == "" {
+		base.Destination = detail.Destination
+	}
+	if base.DestinationPort == 0 {
+		base.DestinationPort = detail.DestinationPort
+	}
+	if base.SourcePort == 0 {
+		base.SourcePort = detail.SourcePort
+	}
+
+	if _, err := base.ProcessPayload(); err != nil {
+		if args, trimErr := decodePayloadWithTrim(base.Payload); trimErr == nil {
+			applyDecodedArgs(&base, args)
+		}
+	}
+	return base
+}
+
+func messageReplyback(entry rpc.Entry) string {
+	if entry.Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
+		return strings.TrimSpace(entry.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string))
+	}
+
+	return ""
+}
+
+func messageDstPort(entry rpc.Entry) uint64 {
+	if entry.DestinationPort != 0 {
+		return entry.DestinationPort
+	}
+
+	if entry.Payload_RPC.Has(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
+		return entry.Payload_RPC.Value(rpc.RPC_DESTINATION_PORT, rpc.DataUint64).(uint64)
+	}
+
+	return 0
+}
+
+func resolveMessageContact(contact string, height int64) (key string, label string) {
+	contact = strings.TrimSpace(contact)
+	if contact == "" {
+		return "", ""
+	}
+
+	if addr, err := globals.ParseValidateAddress(contact); err == nil {
+		return addr.String(), ""
+	}
+
+	if resolved, err := checkUsername(contact, height); err == nil && strings.TrimSpace(resolved) != "" {
+		return strings.TrimSpace(resolved), contact
+	}
+
+	return contact, ""
+}
+
+func resolveAddressDisplay(address string) string {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return ""
+	}
+
+	usernames, err := queryUsernames(address)
+	if err == nil && len(usernames) > 0 && strings.TrimSpace(usernames[0]) != "" {
+		return usernames[0]
+	}
+
+	stored, err := getUsernames()
+	if err == nil {
+		for _, username := range stored {
+			username = strings.TrimSpace(username)
+			if username == "" {
+				continue
+			}
+
+			if resolved, resolveErr := checkUsername(username, -1); resolveErr == nil && strings.TrimSpace(resolved) == address {
+				return username
+			}
+		}
+	}
+
+	return ""
+}
+
+func canonicalThreadKeyForMessage(message MessageRecord) string {
+	if key, _ := resolveMessageContact(message.ContactKey, int64(message.Entry.Height)); key != "" {
+		return key
+	}
+
+	if message.Entry.Incoming {
+		if replyback := messageReplyback(message.Entry); replyback != "" {
+			if key, _ := resolveMessageContact(replyback, int64(message.Entry.Height)); key != "" {
+				return key
+			}
+		}
+	} else {
+		if key, _ := resolveMessageContact(message.Entry.Destination, -1); key != "" {
+			return key
+		}
+	}
+
+	return strings.TrimSpace(message.ContactKey)
+}
+
+func currentMessageCacheKey() string {
+	if engram.Disk == nil {
+		return ""
+	}
+
+	return fmt.Sprintf("cache_%s_%s", session.Network, engram.Disk.GetAddress().String())
+}
+
+func resetMessageCache() {
+	messageCache = MessageCache{}
+	messageRefreshState.Lock()
+	messageRefreshState.running = false
+	messageRefreshState.Unlock()
+}
+
+func buildMessageCacheSnapshot(records []MessageRecord, height uint64, address string) {
+	messageCache.Height = height
+	messageCache.Address = address
+	messageCache.Primed = true
+	messageCache.Loaded = true
+	messageCache.Records = make([]MessageRecord, len(records))
+	copy(messageCache.Records, records)
+	messageCache.ByTXID = make(map[string]MessageRecord, len(records))
+	for _, record := range records {
+		messageCache.ByTXID[record.Entry.TXID] = record
+	}
+	messageCache.Threads = buildMessageThreadSummaries(records)
+}
+
+func buildMessageThreadSummaries(records []MessageRecord) []MessageThreadSummary {
+	threads := make(map[string]MessageThreadSummary)
+	for _, record := range records {
+		key := canonicalThreadKeyForMessage(record)
+		summary := threads[key]
+		summary.ContactKey = key
+		if summary.Label == "" && record.Label != "" {
+			summary.Label = record.Label
+		}
+		summary.Count++
+		if summary.LastTXID == "" || summary.LastTime.Before(record.Entry.Time) {
+			summary.LastTime = record.Entry.Time
+			summary.LastTXID = record.Entry.TXID
+			summary.LastText = record.Comment
+			if record.Label != "" {
+				summary.Label = record.Label
+			}
+		}
+		if summary.Label == "" {
+			summary.Label = resolveAddressDisplay(summary.ContactKey)
+		}
+		threads[key] = summary
+	}
+
+	result := make([]MessageThreadSummary, 0, len(threads))
+	for _, summary := range threads {
+		result = append(result, summary)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].LastTime.After(result[j].LastTime)
+	})
+
+	return result
+}
+
+func savePersistedMessageCache() {
+	if engram.Disk == nil || !messageCache.Primed {
+		return
+	}
+
+	persisted := persistedMessageCache{
+		Version:       messageCacheVersion,
+		Network:       session.Network,
+		WalletAddress: messageCache.Address,
+		Height:        messageCache.Height,
+		SavedAtUnix:   time.Now().Unix(),
+		Records:       make([]persistedMessageRecord, 0, len(messageCache.Records)),
+		Threads:       make([]persistedMessageThread, 0, len(messageCache.Threads)),
+	}
+
+	for _, record := range messageCache.Records {
+		persisted.Records = append(persisted.Records, persistedMessageRecord{
+			TXID:            record.Entry.TXID,
+			Height:          record.Entry.Height,
+			TimeUnix:        record.Entry.Time.Unix(),
+			Incoming:        record.Entry.Incoming,
+			Destination:     record.Entry.Destination,
+			DestinationPort: record.Entry.DestinationPort,
+			SourcePort:      record.Entry.SourcePort,
+			Replyback:       messageReplyback(record.Entry),
+			ContactKey:      record.ContactKey,
+			Label:           record.Label,
+			Comment:         record.Comment,
+		})
+	}
+
+	for _, thread := range messageCache.Threads {
+		persisted.Threads = append(persisted.Threads, persistedMessageThread{
+			ContactKey: thread.ContactKey,
+			Label:      thread.Label,
+			LastText:   thread.LastText,
+			LastTime:   thread.LastTime.Unix(),
+			LastTXID:   thread.LastTXID,
+			Count:      thread.Count,
+		})
+	}
+
+	data, err := json.Marshal(persisted)
+	if err != nil {
+		logger.Errorf("[MsgDebug] Failed to marshal message cache: %s", err)
+		return
+	}
+
+	if err := StoreEncryptedValue("Messages", []byte(currentMessageCacheKey()), data); err != nil {
+		logger.Errorf("[MsgDebug] Failed to persist message cache: %s", err)
+	}
+}
+
+func loadPersistedMessageCache() {
+	resetMessageCache()
+	if engram.Disk == nil {
+		return
+	}
+
+	data, err := GetEncryptedValue("Messages", []byte(currentMessageCacheKey()))
+	if err != nil || len(data) == 0 {
+		return
+	}
+
+	var persisted persistedMessageCache
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		logger.Errorf("[MsgDebug] Failed to decode persisted message cache: %s", err)
+		return
+	}
+
+	if persisted.Version != messageCacheVersion || persisted.Network != session.Network || persisted.WalletAddress != engram.Disk.GetAddress().String() {
+		return
+	}
+
+	currentHeight := engram.Disk.Get_Height()
+	if persisted.Height > currentHeight {
+		return
+	}
+
+	records := make([]MessageRecord, 0, len(persisted.Records))
+	for _, item := range persisted.Records {
+		if item.TXID == "" || item.ContactKey == "" {
+			continue
+		}
+
+		entry := rpc.Entry{
+			TXID:            item.TXID,
+			Height:          item.Height,
+			Time:            time.Unix(item.TimeUnix, 0),
+			Incoming:        item.Incoming,
+			Destination:     item.Destination,
+			DestinationPort: item.DestinationPort,
+			SourcePort:      item.SourcePort,
+		}
+		if item.Replyback != "" {
+			entry.Payload_RPC = append(entry.Payload_RPC, rpc.Argument{Name: rpc.RPC_NEEDS_REPLYBACK_ADDRESS, DataType: rpc.DataString, Value: item.Replyback})
+		}
+		if item.Comment != "" {
+			entry.Payload_RPC = append(entry.Payload_RPC, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: item.Comment})
+		}
+
+		records = append(records, MessageRecord{
+			Entry:      entry,
+			ContactKey: item.ContactKey,
+			Label:      item.Label,
+			Comment:    item.Comment,
+		})
+	}
+
+	buildMessageCacheSnapshot(records, persisted.Height, persisted.WalletAddress)
+	if len(persisted.Threads) > 0 {
+		messageCache.Threads = make([]MessageThreadSummary, 0, len(persisted.Threads))
+		for _, thread := range persisted.Threads {
+			label := thread.Label
+			if label == "" {
+				label = resolveAddressDisplay(thread.ContactKey)
+			}
+			messageCache.Threads = append(messageCache.Threads, MessageThreadSummary{
+				ContactKey: thread.ContactKey,
+				Label:      label,
+				LastText:   thread.LastText,
+				LastTime:   time.Unix(thread.LastTime, 0),
+				LastTXID:   thread.LastTXID,
+				Count:      thread.Count,
+			})
+		}
+	}
+}
+
+func getMessageCacheSnapshot() []MessageRecord {
+	if !messageCache.Loaded || len(messageCache.Records) == 0 {
+		return nil
+	}
+
+	result := make([]MessageRecord, len(messageCache.Records))
+	copy(result, messageCache.Records)
+	return result
+}
+
+func getMessageThreadSnapshot() []MessageThreadSummary {
+	if len(messageCache.Threads) == 0 {
+		return nil
+	}
+
+	result := make([]MessageThreadSummary, len(messageCache.Threads))
+	copy(result, messageCache.Threads)
+	return result
+}
+
+func rebuildMessageHistory() {
+	if engram.Disk == nil {
+		return
+	}
+
+	DeleteKey("Messages", []byte(currentMessageCacheKey()))
+	resetMessageCache()
+	refreshMessageHistoryAsync(true)
+}
+
+func refreshMessageHistoryAsync(force bool) {
+	if engram.Disk == nil {
+		return
+	}
+
+	messageRefreshState.Lock()
+	if messageRefreshState.running {
+		messageRefreshState.Unlock()
+		return
+	}
+	messageRefreshState.running = true
+	messageRefreshState.Unlock()
+
+	go func() {
+		defer func() {
+			messageRefreshState.Lock()
+			messageRefreshState.running = false
+			messageRefreshState.Unlock()
+		}()
+
+		if force {
+			messageCache.Primed = false
+			messageCache.Height = 0
+		}
+
+		scanMessageTransfers(0)
+		savePersistedMessageCache()
+
+		fyne.Do(func() {
+			if session.Window == nil {
+				return
+			}
+			if session.Domain == "app.messages" {
+				session.Window.SetContent(layoutMessages())
+			} else if session.Domain == "app.messages.contact" {
+				session.Window.SetContent(layoutPM())
+			}
+		})
+	}()
+}
+
+func messageMatchesContact(message MessageRecord, selected string) bool {
+	selected = strings.TrimSpace(selected)
+	if selected == "" {
+		return false
+	}
+
+	selectedKey, selectedLabel := resolveMessageContact(selected, -1)
+	messageKey := canonicalThreadKeyForMessage(message)
+
+	if selectedKey != "" && messageKey == selectedKey {
+		return true
+	}
+
+	if messageKey == selected {
+		return true
+	}
+
+	if selectedLabel != "" && strings.EqualFold(strings.TrimSpace(message.Label), strings.TrimSpace(selectedLabel)) {
+		return true
+	}
+
+	if strings.EqualFold(strings.TrimSpace(message.Label), selected) {
+		return true
+	}
+
+	return false
+}
+
+func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
+	if engram.Disk == nil {
+		return nil
+	}
+
+	currentHeight := engram.Disk.Get_Height()
+	currentAddress := engram.Disk.GetAddress().String()
+	if minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height == currentHeight && len(messageCache.Records) > 0 {
+		cached := make([]MessageRecord, len(messageCache.Records))
+		copy(cached, messageCache.Records)
+		return cached
+	}
+
+	startHeight := minHeight
+	cacheReusable := minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height <= currentHeight
+	if cacheReusable && messageCache.Height > 0 {
+		startHeight = messageCache.Height + 1
+	}
+
+	var zeroscid crypto.Hash
+	messageAmount, _ := globals.ParseAmount("0.00001")
+	entries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, currentHeight, "", "", 0, 0)
+	logger.Printf("[MsgDebug] Show_Transfers returned %d entries for message scan", len(entries))
+
+	if cacheReusable {
+		result = make([]MessageRecord, len(messageCache.Records))
+		copy(result, messageCache.Records)
+	}
+
+	for i := range entries {
+		entry := entries[i]
+		entry = enrichMessageEntry(entry)
+		entryErr := error(nil)
+		if len(entry.Payload_RPC) == 0 {
+			_, entryErr = entry.ProcessPayload()
+		}
+
+		_, detail := engram.Disk.Get_Payments_TXID(zeroscid, entry.TXID)
+		if detail.TXID != "" {
+			_, _ = detail.ProcessPayload()
+			if entry.Destination == "" {
+				entry.Destination = detail.Destination
+			}
+			if len(entry.Payload_RPC) == 0 && len(detail.Payload_RPC) > 0 {
+				entry.Payload_RPC = detail.Payload_RPC
+			}
+			if len(entry.Payload) == 0 && len(detail.Payload) > 0 {
+				entry.Payload = detail.Payload
+			}
+			if entry.PayloadError == "" && detail.PayloadError != "" {
+				entry.PayloadError = detail.PayloadError
+			}
+			if entry.DestinationPort == 0 {
+				entry.DestinationPort = detail.DestinationPort
+			}
+			if entry.SourcePort == 0 {
+				entry.SourcePort = detail.SourcePort
+			}
+			if entry.Time.IsZero() {
+				entry.Time = detail.Time
+			}
+			if entry.Height == 0 {
+				entry.Height = detail.Height
+			}
+		}
+
+		port := messageDstPort(entry)
+		comment := messageComment(entry)
+		replyback := messageReplyback(entry)
+		isMessageAmount := !entry.Incoming && entry.Amount == messageAmount
+		hasMessagePayload := comment != "" || replyback != ""
+
+		if port != 1337 && !isMessageAmount && !hasMessagePayload {
+			continue
+		}
+
+		_ = entryErr
+
+		record := MessageRecord{
+			Entry:   entry,
+			Comment: comment,
+		}
+
+		if entry.Incoming {
+			if replyback == "" {
+				continue
+			}
+
+			record.ContactKey, record.Label = resolveMessageContact(replyback, int64(entry.Height))
+		} else {
+			record.ContactKey, record.Label = resolveMessageContact(entry.Destination, -1)
+		}
+
+		if record.ContactKey == "" {
+			continue
+		}
+		record.ContactKey = canonicalThreadKeyForMessage(record)
+
+		if record.Label == "" {
+			record.Label = resolveAddressDisplay(record.ContactKey)
+		}
+
+		if record.Comment == "" {
+			record.Comment = "[message]"
+		}
+
+		if cacheReusable {
+			if _, exists := messageCache.ByTXID[record.Entry.TXID]; exists {
+				for idx := range result {
+					if result[idx].Entry.TXID == record.Entry.TXID {
+						result[idx] = record
+						break
+					}
+				}
+			} else {
+				result = append(result, record)
+			}
+		} else {
+			result = append(result, record)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Entry.Time.Before(result[j].Entry.Time)
+	})
+
+	if minHeight == 0 {
+		messageCache.Height = currentHeight
+		messageCache.Address = currentAddress
+		messageCache.Primed = true
+		messageCache.Records = make([]MessageRecord, len(result))
+		copy(messageCache.Records, result)
+		messageCache.ByTXID = make(map[string]MessageRecord, len(result))
+		for _, record := range result {
+			messageCache.ByTXID[record.Entry.TXID] = record
+		}
+	}
+
+	logger.Printf("[MsgDebug] scanMessageTransfers returning %d messages", len(result))
+	return result
+}
+
 // Get a list of message transactions from an address
 func getMessagesFromUser(s string, h uint64) (result []rpc.Entry) {
-	var zeroscid crypto.Hash
 	if s == "" {
 		return
 	}
 
-	messages := engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), h)
+	selectedKey, selectedLabel := resolveMessageContact(s, -1)
+	selectedLabel = strings.TrimSpace(selectedLabel)
+	if selectedKey == "" {
+		selectedKey = strings.TrimSpace(s)
+	}
 
-	for m := range messages {
-		var username bool
-		var username2 bool
-
-		txid := messages[m].TXID
-		_, tx := engram.Disk.Get_Payments_TXID(zeroscid, txid)
-
-		//check, err := engram.Disk.NameToAddress(s)
-		check, err := checkUsername(s, -1)
-		if err != nil {
-			username = false
-		} else {
-			username = true
-		}
-
-		if tx.Incoming {
-			if tx.Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				height := int64(tx.Height)
-				check2, err := checkUsername(tx.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string), height)
-				if err != nil {
-					username2 = false
-					addr, err := globals.ParseValidateAddress(tx.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string))
-					if err != nil {
-						check2 = ""
-					} else {
-						check2 = addr.String()
-					}
-				} else {
-					username2 = true
-				}
-
-				// Check for spoofing
-				//if ring_member_exists(txid, check2) {
-
-				if username && username2 {
-					if check == check2 {
-						result = append(result, messages[m])
-					}
-				} else if !username && !username2 {
-					if s == tx.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) {
-						result = append(result, messages[m])
-					}
-				} else if check == tx.Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) {
-					result = append(result, messages[m])
-				} else if s == check2 {
-					result = append(result, messages[m])
-				}
-				//}
-			}
-		} else {
-			//addr, err := engram.Disk.NameToAddress(s)
-			addr, err := checkUsername(s, -1)
-			if err != nil {
-				if tx.Destination == s {
-					result = append(result, messages[m])
-				}
-			} else {
-				if tx.Destination == addr {
-					result = append(result, messages[m])
-				}
-			}
+	for _, message := range scanMessageTransfers(h) {
+		if messageMatchesContact(message, s) || (selectedKey != "" && canonicalThreadKeyForMessage(message) == selectedKey) || (selectedLabel != "" && strings.EqualFold(strings.TrimSpace(message.Label), selectedLabel)) {
+			result = append(result, message.Entry)
 		}
 	}
 
@@ -2877,74 +3525,33 @@ func getMessagesFromUser(s string, h uint64) (result []rpc.Entry) {
 
 // Get a list of all message transactions and sort them by address
 func getMessages(h uint64) (result []string) {
-	var zeroscid crypto.Hash
-	messages := engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), h)
-
-	for m := range messages {
-		if messages[m].Incoming {
-			if messages[m].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				if messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) == "" {
-
-				} else {
-					height := int64(messages[m].Height)
-					sender, _ := checkUsername(messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string), height)
-					if sender == "" {
-						addr, err := globals.ParseValidateAddress(messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string))
-						if err != nil {
-
-						} else {
-							sender = addr.String()
-							for r := range result {
-								if r > -1 && r < len(result) {
-									if strings.Contains(result[r], sender+"~~~") {
-										copy(result[r:], result[r+1:])
-										result[len(result)-1] = ""
-										result = result[:len(result)-1]
-									}
-								}
-							}
-							result = append(result, sender+"~~~")
-						}
-					} else {
-						// Check for spoofing
-						//if ring_member_exists(messages[m].TXID, sender) {
-						for r := range result {
-							if r > -1 && r < len(result) {
-								//if strings.Contains(result[r], sender+"```"+messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)) {
-								if strings.Contains(result[r], sender+"~~~") {
-									copy(result[r:], result[r+1:])
-									result[len(result)-1] = ""
-									result = result[:len(result)-1]
-								}
-							}
-						}
-						result = append(result, sender+"~~~"+messages[m].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string))
-						//} else {
-						// TODO: Add spoofing address to the ban list?
-						//}
-					}
-				}
-			}
-		} else {
-			if messages[m].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				uname := ""
-				for r := range result {
-					if r > -1 && r < len(result) {
-						if strings.Contains(result[r], messages[m].Destination+"~~~") {
-							split := strings.Split(result[r], "~~~")
-							uname = split[1]
-							copy(result[r:], result[r+1:])
-							result[len(result)-1] = ""
-							result = result[:len(result)-1]
-						}
-					}
-				}
-				result = append(result, messages[m].Destination+"~~~"+uname)
-			}
+	latestByContact := make(map[string]MessageRecord)
+	for _, message := range scanMessageTransfers(h) {
+		previous, ok := latestByContact[message.ContactKey]
+		if !ok || previous.Entry.Time.Before(message.Entry.Time) {
+			latestByContact[message.ContactKey] = message
 		}
 	}
 
-	sort.Sort(sort.Reverse(sort.StringSlice(result)))
+	type contactRow struct {
+		key   string
+		label string
+		time  time.Time
+	}
+
+	rows := make([]contactRow, 0, len(latestByContact))
+	for _, message := range latestByContact {
+		rows = append(rows, contactRow{key: canonicalThreadKeyForMessage(message), label: message.Label, time: message.Entry.Time})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].time.After(rows[j].time)
+	})
+
+	for _, row := range rows {
+		result = append(result, row.key+"~~~"+row.label)
+	}
+
 	return
 }
 
