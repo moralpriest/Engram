@@ -2003,7 +2003,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	wAccount.OnChanged = func(s string) {
-		_ = wAccount.Validate()
+		wAccount.Validate()
 	}
 
 	wLanguage := widget.NewSelect(languages, nil)
@@ -2710,7 +2710,7 @@ func layoutRestore() fyne.CanvasObject {
 			}
 		}
 		seedInfo.Refresh()
-		_ = seedEntry.Validate()
+		seedEntry.Validate()
 	}
 
 	seedEntry.Validator = func(s string) (err error) {
@@ -3180,7 +3180,7 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		_ = engram.Disk.Save_Wallet()
+		engram.Disk.Save_Wallet()
 
 		// Wallet remains open for immediate transition via "Enter" button
 		session.WalletOpen = true
@@ -3435,7 +3435,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	owned = 0
 	assetData = nil
-	_ = listData.Set(nil)
+	listData.Set(nil)
 
 	if session.Offline {
 		results.Text = "  Asset tracking is disabled in offline mode."
@@ -5528,14 +5528,12 @@ func layoutTransition() fyne.CanvasObject {
 
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
-	frame := &iframe{}
-
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	heading := canvas.NewText("CONNECTION SETTINGS", colors.Green)
+	heading := canvas.NewText("Settings", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -5543,17 +5541,14 @@ func layoutSettings() fyne.CanvasObject {
 	labelNetwork := canvas.NewText("NETWORK", colors.Gray)
 	labelNetwork.TextStyle = fyne.TextStyle{Bold: true}
 	labelNetwork.TextSize = 14
-	labelNetwork.Alignment = fyne.TextAlignCenter
 
 	labelNode := canvas.NewText("CONNECTION", colors.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
 	labelNode.TextSize = 14
-	labelNode.Alignment = fyne.TextAlignCenter
 
 	labelSecurity := canvas.NewText("SECURITY", colors.Gray)
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = 14
-	labelSecurity.Alignment = fyne.TextAlignCenter
 
 	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
 	textRemoteAccess.Wrapping = fyne.TextWrapWord
@@ -6019,12 +6014,13 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
-			rectSpacer,
+			widget.NewLabel(""),
 			heading,
+			widget.NewLabel(""),
 			scrollBox,
 			rectSpacer,
 			rectSpacer,
@@ -6053,12 +6049,7 @@ func layoutSettings() fyne.CanvasObject {
 		nil,
 	)
 
-	layout := container.NewStack(
-		frame,
-		c,
-	)
-
-	return NewVScroll(layout)
+	return NewVScroll(c)
 }
 
 // layoutAppSettings creates the centralized settings page with 3 tabs:
@@ -7478,26 +7469,6 @@ func layoutMessages() fyne.CanvasObject {
 		checkLimit.Checked = true
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-	_ = line1
-	_ = line2
-
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -7519,7 +7490,7 @@ func layoutMessages() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.43))
 
 	messages.Data = nil
 
@@ -7531,82 +7502,31 @@ func layoutMessages() fyne.CanvasObject {
 		height = 0
 	}
 
-	data := getMessages(height)
-
-	formatContactListItem := func(input string) (string, bool) {
-		contact := strings.TrimSpace(input)
-		if contact == "" {
-			return "", false
-		}
-
-		if _, err := globals.ParseValidateAddress(contact); err == nil {
-			username, usernameErr := checkUsername(contact, -1)
-			if usernameErr == nil && username != "" {
-				return contact + "~~~" + username, true
+	threadSummaries := getMessageThreadSnapshot()
+	data := []string{}
+	if len(threadSummaries) > 0 {
+		for _, thread := range threadSummaries {
+			label := thread.Label
+			if label == "" {
+				label = resolveAddressDisplay(thread.ContactKey)
 			}
-
-			return contact + "~~~", true
-		}
-
-		address, err := checkUsername(contact, -1)
-		if err != nil || address == "" {
-			return "", false
-		}
-
-		return address + "~~~" + contact, true
-	}
-
-	if engram.Disk != nil {
-		walletAddress := engram.Disk.GetAddress().String()
-		savedContacts, err := GetContacts(walletAddress)
-		if err == nil {
-			seen := make(map[string]struct{}, len(data))
-			for _, existing := range data {
-				split := strings.Split(existing, "~~~")
-				if len(split) > 0 {
-					seen[split[0]] = struct{}{}
-				}
+			if label == "" && thread.ContactKey == "" {
+				continue
 			}
-
-			for _, saved := range savedContacts {
-				formatted, ok := formatContactListItem(saved)
-				if !ok {
-					continue
-				}
-
-				split := strings.Split(formatted, "~~~")
-				if len(split) == 0 {
-					continue
-				}
-
-				if _, exists := seen[split[0]]; exists {
-					continue
-				}
-
-				seen[split[0]] = struct{}{}
-				data = append(data, formatted)
-			}
-
-			sort.Sort(sort.Reverse(sort.StringSlice(data)))
+			data = append(data, thread.ContactKey+"~~~"+label+"~~~"+thread.LastText+"~~~"+thread.LastTime.Format(time.RFC3339))
 		}
 	}
-
+	if len(data) == 0 {
+		data = getMessages(height)
+		for i, row := range data {
+			split := strings.Split(row, "~~~")
+			if len(split) < 2 {
+				continue
+			}
+			data[i] = split[0] + "~~~" + split[1] + "~~~~~~"
+		}
+	}
 	temp := data
-
-	// Keep the contact list compact when empty/small, expand only as needed.
-	minListHeight := float32(0)
-	if len(data) > 0 {
-		minListHeight = ui.Height * 0.05
-	}
-	maxListHeight := ui.Height * 0.43
-	rowHeight := float32(42)
-	listHeight := float32(len(data))*rowHeight + (ui.Height * 0.01)
-	if listHeight < minListHeight {
-		listHeight = minListHeight
-	} else if listHeight > maxListHeight {
-		listHeight = maxListHeight
-	}
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, listHeight))
 
 	list := binding.BindStringList(&data)
 
@@ -7623,22 +7543,43 @@ func layoutMessages() fyne.CanvasObject {
 			if err != nil {
 				return
 			}
-			dataItem := strings.Split(str, "~~~")
+			dataItem := strings.SplitN(str, "~~~", 4)
+			if len(dataItem) < 2 {
+				return
+			}
 			short := dataItem[0]
 			address := short
 			if len(short) > DEFAULT_USERADDR_SHORTEN_LENGTH {
 				address = short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 			}
 			username := dataItem[1]
+			preview := ""
+			if len(dataItem) >= 3 {
+				preview = dataItem[2]
+			}
+			if username == "" {
+				username = resolveAddressDisplay(dataItem[0])
+			}
+			if len(preview) > 24 {
+				preview = preview[:24] + "..."
+			}
 			// If a username is longer than what *would* be a 'short' address of ...xyzxyzxyzx (e.g. 13), then shorten as well to be similar sizing
 			if len(username) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
 				username = "..." + username[len(username)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 			}
 
 			if username == "" {
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText("..." + address)
+				text := "..." + address
+				if preview != "" {
+					text += "  " + preview
+				}
+				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(text)
 			} else {
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(username)
+				text := username
+				if preview != "" {
+					text += "  " + preview
+				}
+				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(text)
 			}
 			co.(*fyne.Container).Objects[0].(*widget.Label).Wrapping = fyne.TextWrapWord
 			co.(*fyne.Container).Objects[0].(*widget.Label).TextStyle.Bold = false
@@ -7648,6 +7589,9 @@ func layoutMessages() fyne.CanvasObject {
 	msgbox.List.OnSelected = func(id widget.ListItemID) {
 		msgbox.List.UnselectAll()
 		split := strings.Split(data[id], "~~~")
+		if len(split) < 2 {
+			return
+		}
 		if split[1] == "" {
 			messages.Contact = split[0]
 		} else {
@@ -7660,33 +7604,9 @@ func layoutMessages() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	filterContacts := func(query string) {
-		query = strings.ToLower(strings.TrimSpace(query))
-		if query == "" {
-			data = temp
-			list.Reload()
-			return
-		}
-
-		searchList := []string{}
-		for _, d := range temp {
-			tempd := strings.ToLower(d)
-			split := strings.Split(tempd, "~~~")
-
-			if split[1] == "" {
-				if strings.Contains(split[0], query) {
-					searchList = append(searchList, d)
-				}
-			} else {
-				if strings.Contains(split[1], query) {
-					searchList = append(searchList, d)
-				}
-			}
-		}
-
-		data = searchList
-		list.Reload()
-	}
+	rebuildBtn := widget.NewButton("Rebuild Message History", func() {
+		rebuildMessageHistory()
+	})
 
 	btnSend := widget.NewButton("New Message", func() {
 		_, err := globals.ParseValidateAddress(messages.Contact)
@@ -7705,79 +7625,59 @@ func layoutMessages() fyne.CanvasObject {
 	})
 	btnSend.Disable()
 
-	entryDest := NewMobileEntry()
-	entryDest.MultiLine = false
-	entryDest.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
-	entryDest.PlaceHolder = "Username or Address"
+	contactInput := widget.NewEntry()
+	contactInput.MultiLine = false
+	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	contactInput.PlaceHolder = "Search username or address"
 
-	btnSaveContact := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
-		if engram.Disk == nil {
-			return
+	validateContactInput := func(value string) bool {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return false
 		}
 
-		contact := strings.TrimSpace(entryDest.Text)
-		if contact == "" {
-			return
+		if _, err := globals.ParseValidateAddress(value); err == nil {
+			return true
 		}
 
-		walletAddress := engram.Disk.GetAddress().String()
-		if IsContact(walletAddress, contact) {
-			if err := RemoveContact(walletAddress, contact); err != nil {
-				logger.Errorf("[Contacts] Failed to remove contact: %s", err)
-				return
-			}
-		} else {
-			if _, err := globals.ParseValidateAddress(contact); err != nil {
-				if _, userErr := checkUsername(contact, -1); userErr != nil {
-					logger.Errorf("[Contacts] Failed to save contact: %s", userErr)
-					return
-				}
-			}
-
-			if err := AddContact(walletAddress, contact); err != nil {
-				logger.Errorf("[Contacts] Failed to save contact: %s", err)
-				return
-			}
-		}
-
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMessages())
-		removeOverlays()
-	})
-	btnSaveContact.Disable()
-
-	refreshContactButton := func(value string) {
-		contact := strings.TrimSpace(value)
-		if contact == "" || len(contact) < 3 || engram.Disk == nil {
-			btnSaveContact.SetIcon(theme.ContentAddIcon())
-			btnSaveContact.Disable()
-			return
-		}
-
-		walletAddress := engram.Disk.GetAddress().String()
-		if IsContact(walletAddress, contact) {
-			btnSaveContact.SetIcon(theme.ContentRemoveIcon())
-		} else {
-			btnSaveContact.SetIcon(theme.ContentAddIcon())
-		}
-
-		btnSaveContact.Enable()
+		_, err := checkUsername(value, -1)
+		return err == nil
 	}
 
-	entryDest.OnChanged = func(s string) {
-		messages.Contact = s
+	filterContacts := func(query string) {
+		query = strings.ToLower(strings.TrimSpace(query))
+		searchList := []string{}
+		if query == "" {
+			data = temp
+			list.Reload()
+			return
+		}
+
+		for _, d := range temp {
+			tempd := strings.ToLower(d)
+			split := strings.SplitN(tempd, "~~~", 4)
+			if len(split) < 2 {
+				continue
+			}
+
+			if strings.Contains(split[0], query) || strings.Contains(split[1], query) {
+				searchList = append(searchList, d)
+			}
+		}
+
+		data = searchList
+		list.Reload()
+	}
+
+	contactInput.OnChanged = func(s string) {
 		filterContacts(s)
-		if len(s) >= 3 {
+		messages.Contact = strings.TrimSpace(s)
+		if validateContactInput(s) {
 			btnSend.Enable()
-			refreshContactButton(s)
-			return
+		} else {
+			btnSend.Disable()
 		}
-		btnSend.Disable()
-		refreshContactButton(s)
 	}
-	refreshContactButton(entryDest.Text)
-
-	entryDestRow := container.NewBorder(nil, nil, nil, btnSaveContact, entryDest)
 
 	messageForm := container.NewVBox(
 		rectSpacer,
@@ -7789,14 +7689,17 @@ func layoutMessages() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		entryDestRow,
+		contactInput,
+		rectSpacer,
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
 			msgbox.List,
 		),
 		rectSpacer,
-		wrapMobileButton(btnSend),
+		btnSend,
+		rectSpacer,
+		rebuildBtn,
 		rectSpacer,
 		checkLimit,
 	)
@@ -7849,8 +7752,6 @@ func layoutMessages() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
 				btnBack,
@@ -7875,7 +7776,7 @@ func layoutMessages() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutPM() fyne.CanvasObject {
@@ -7887,24 +7788,18 @@ func layoutPM() fyne.CanvasObject {
 
 	getPrimaryUsername()
 
-	contactAddress := ""
+	selectedKey, selectedLabel := resolveMessageContact(messages.Contact, -1)
+	contactAddress := messages.Contact
+	if selectedLabel != "" {
+		contactAddress = selectedLabel
+	} else if display := resolveAddressDisplay(selectedKey); display != "" {
+		contactAddress = display
+	} else if display := resolveAddressDisplay(strings.TrimSpace(messages.Contact)); display != "" {
+		contactAddress = display
+	}
 
-	// So message contact sizes are not overblown from UI
-	_, err := globals.ParseValidateAddress(messages.Contact)
-	if err != nil {
-		//_, err := engram.Disk.NameToAddress(messages.Contact)
-		_, err := checkUsername(messages.Contact, -1)
-		if err == nil {
-			contactAddress = messages.Contact
-		}
-	} /* else {
-		short := messages.Contact[len(messages.Contact)-10:]
-		contactAddress = "..." + short
-	}*/
-
-	// Safety, even though valid addresses are sized enough but usernames may not be
-	if len(messages.Contact) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
-		short := messages.Contact[len(messages.Contact)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+	if len(contactAddress) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
+		short := contactAddress[len(contactAddress)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 		contactAddress = "..." + short
 	}
 
@@ -7921,26 +7816,6 @@ func layoutPM() fyne.CanvasObject {
 	lastActive.TextSize = 12
 	lastActive.Alignment = fyne.TextAlignCenter
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-	_ = line1
-	_ = line2
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -7994,17 +7869,50 @@ func layoutPM() fyne.CanvasObject {
 		height = 0
 	}
 
-	data := getMessagesFromUser(messages.Contact, height)
+	messageRecords := []MessageRecord{}
+	records := getMessageCacheSnapshot()
+	if len(records) == 0 {
+		records = scanMessageTransfers(height)
+	}
+	for _, message := range records {
+		if height > 0 && message.Entry.Height < height {
+			continue
+		}
+		if messageMatchesContact(message, messages.Contact) {
+			messageRecords = append(messageRecords, message)
+		}
+	}
+	originalMessageRecords := make([]MessageRecord, len(messageRecords))
+	copy(originalMessageRecords, messageRecords)
+	renderThread := func(filtered []MessageRecord) {
+		messages.Data = nil
+		chats.Objects = nil
+		if len(filtered) == 0 {
+			empty := widget.NewLabel("No messages found.")
+			empty.Alignment = fyne.TextAlignCenter
+			chats.Add(empty)
+			chats.Refresh()
+			chatbox.Refresh()
+			return
+		}
 
-	for d := range data {
-		if data[d].Incoming {
-			if data[d].Payload_RPC.Has(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				if data[d].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) == "" {
+		type renderedMessage struct {
+			Sender     string
+			Comment    string
+			Timestamp  string
+			IsIncoming bool
+		}
 
-				} else {
-					t := data[d].Time
+		renderedMessages := []renderedMessage{}
+
+		for d := range filtered {
+			if filtered[d].Entry.Incoming {
+				replyback := messageReplyback(filtered[d].Entry)
+				if replyback != "" {
+
+					t := filtered[d].Entry.Time
 					time := string(t.Format(time.RFC822))
-					comment := data[d].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
+					comment := filtered[d].Comment
 					links := getTextURL(comment)
 
 					for i := range links {
@@ -8025,142 +7933,168 @@ func layoutPM() fyne.CanvasObject {
 							comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
 						}
 					}
-					messages.Data = append(messages.Data, data[d].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)+";;;;"+comment+";;;;"+time)
+					renderedMessages = append(renderedMessages, renderedMessage{Sender: replyback, Comment: comment, Timestamp: time, IsIncoming: true})
 				}
-			}
-		} else {
-			t := data[d].Time
-			time := string(t.Format(time.RFC822))
-			comment := data[d].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
-			links := getTextURL(comment)
+			} else {
+				t := filtered[d].Entry.Time
+				time := string(t.Format(time.RFC822))
+				comment := filtered[d].Comment
+				links := getTextURL(comment)
 
-			for i := range links {
-				if comment == links[i] {
-					if len(links[i]) > 25 {
-						comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
+				for i := range links {
+					if comment == links[i] {
+						if len(links[i]) > 25 {
+							comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
+						} else {
+							comment = `[ ` + links[i] + ` ](` + links[i] + `)`
+						}
 					} else {
-						comment = `[ ` + links[i] + ` ](` + links[i] + `)`
+						linkText := ""
+						split := strings.Split(comment, links[i])
+						if len(links[i]) > 25 {
+							linkText = links[i][0:25] + "..."
+						} else {
+							linkText = links[i]
+						}
+						comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
 					}
-				} else {
-					linkText := ""
-					split := strings.Split(comment, links[i])
-					if len(links[i]) > 25 {
-						linkText = links[i][0:25] + "..."
-					} else {
-						linkText = links[i]
-					}
-					comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
 				}
+				renderedMessages = append(renderedMessages, renderedMessage{Sender: engram.Disk.GetAddress().String(), Comment: comment, Timestamp: time, IsIncoming: false})
 			}
-			messages.Data = append(messages.Data, engram.Disk.GetAddress().String()+";;;;"+comment+";;;;"+time)
+		}
+
+		if len(renderedMessages) > 0 {
+			for _, rendered := range renderedMessages {
+				mdata := widget.NewRichTextFromMarkdown("")
+				mdata.Wrapping = fyne.TextWrapWord
+				datetime := canvas.NewText("", colors.Green)
+				datetime.TextSize = 11
+				boxColor := colors.Flint
+				rect := canvas.NewRectangle(boxColor)
+				rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
+				rect.CornerRadius = 5.0
+				rect5 := canvas.NewRectangle(color.Transparent)
+				rect5.SetMinSize(fyne.NewSize(5, 5))
+
+				if !rendered.IsIncoming {
+					rect.FillColor = colors.DarkGreen
+					mdata.ParseMarkdown(rendered.Comment)
+					datetime.Text = rendered.Timestamp
+					e = container.NewBorder(
+						nil,
+						container.NewVBox(
+							container.NewHBox(
+								layout.NewSpacer(),
+								datetime,
+								rect5,
+							),
+							rect5,
+						),
+						rectOutbound,
+						container.NewStack(
+							rect,
+							container.NewVBox(
+								mdata,
+							),
+						),
+					)
+				} else {
+					rect.FillColor = colors.Flint
+					mdata.ParseMarkdown(rendered.Comment)
+					datetime.Text = rendered.Timestamp
+					e = container.NewBorder(
+						nil,
+						container.NewVBox(
+							container.NewHBox(
+								rect5,
+								datetime,
+								layout.NewSpacer(),
+							),
+							rect5,
+						),
+						container.NewStack(
+							rect,
+							container.NewVBox(
+								mdata,
+							),
+						),
+						rectOutbound,
+					)
+				}
+
+				lastActive.Text = "Last Updated:  " + time.Now().Format(time.RFC822)
+				lastActive.Refresh()
+
+				messages.Data = append(messages.Data, rendered.Sender+";;;;"+rendered.Comment+";;;;"+rendered.Timestamp)
+				chats.Add(e)
+				chats.Refresh()
+				chatbox.Refresh()
+				chatbox.ScrollToBottom()
+			}
 		}
 	}
 
-	if len(data) > 0 {
-		for m := range messages.Data {
-			var sender string
-			split := strings.Split(messages.Data[m], ";;;;")
-			mdata := widget.NewRichTextFromMarkdown("")
-			mdata.Wrapping = fyne.TextWrapWord
-			datetime := canvas.NewText("", colors.Green)
-			datetime.TextSize = 11
-			boxColor := colors.Flint
-			rect := canvas.NewRectangle(boxColor)
-			rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
-			rect.CornerRadius = 5.0
-			rect5 := canvas.NewRectangle(color.Transparent)
-			rect5.SetMinSize(fyne.NewSize(5, 5))
-
-			//uname, err := engram.Disk.NameToAddress(split[0])
-			uname, err := checkUsername(split[0], -1)
-			if err != nil {
-				sender = split[0]
-			} else {
-				sender = uname
-			}
-
-			if sender == engram.Disk.GetAddress().String() {
-				rect.FillColor = colors.DarkGreen
-				mdata.ParseMarkdown(split[1])
-				datetime.Text = split[2]
-				e = container.NewBorder(
-					nil,
-					container.NewVBox(
-						container.NewHBox(
-							layout.NewSpacer(),
-							datetime,
-							rect5,
-						),
-						rect5,
-					),
-					rectOutbound,
-					container.NewStack(
-						rect,
-						container.NewVBox(
-							mdata,
-						),
-					),
-				)
-			} else {
-				rect.FillColor = colors.Flint
-				mdata.ParseMarkdown(split[1])
-				datetime.Text = split[2]
-				e = container.NewBorder(
-					nil,
-					container.NewVBox(
-						container.NewHBox(
-							rect5,
-							datetime,
-							layout.NewSpacer(),
-						),
-						rect5,
-					),
-					container.NewStack(
-						rect,
-						container.NewVBox(
-							mdata,
-						),
-					),
-					rectOutbound,
-				)
-			}
-
-			lastActive.Text = "Last Updated:  " + time.Now().Format(time.RFC822)
-			lastActive.Refresh()
-
-			chats.Add(e)
-			chats.Refresh()
-			chatbox.Refresh()
-			chatbox.ScrollToBottom()
+	renderThread(messageRecords)
+	threadSearch := widget.NewEntry()
+	threadSearch.PlaceHolder = "Search within this thread"
+	threadSearch.OnChanged = func(s string) {
+		query := strings.ToLower(strings.TrimSpace(s))
+		if query == "" {
+			renderThread(originalMessageRecords)
+			return
 		}
+
+		filtered := make([]MessageRecord, 0)
+		for _, message := range originalMessageRecords {
+			if strings.Contains(strings.ToLower(message.Comment), query) {
+				filtered = append(filtered, message)
+			}
+		}
+
+		renderThread(filtered)
 	}
 
 	btnSend := widget.NewButton("Send", nil)
 	btnSend.Disable()
 
-	entry := NewMobileEntry()
+	entry := widget.NewEntry()
 	entry.MultiLine = false
 	entry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	entry.PlaceHolder = "Message"
-	entry.OnFocusGained = func() {
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			fyne.Do(func() {
-				chatbox.ScrollToBottom()
-			})
-		}()
-	}
 	entry.OnChanged = func(s string) {
 		messages.Message = s
+		contact := messages.Contact
+		//check, err := engram.Disk.NameToAddress(messages.Contact)
+		check, err := checkUsername(messages.Contact, -1)
+		if err == nil {
+			contact = check
+		}
 
-		if messages.Message == "" {
-			btnSend.Text = "Send"
+		_, err = globals.ParseValidateAddress(contact)
+		if err != nil {
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutMessages())
+			removeOverlays()
+			return
+		}
+
+		err = checkMessagePack(messages.Message, session.Username, contact)
+		if err != nil {
+			btnSend.Text = "Message too long..."
 			btnSend.Disable()
 			btnSend.Refresh()
+			return
 		} else {
-			btnSend.Text = "Send"
-			btnSend.Enable()
-			btnSend.Refresh()
+			if messages.Message == "" {
+				btnSend.Text = "Send"
+				btnSend.Disable()
+				btnSend.Refresh()
+			} else {
+				btnSend.Text = "Send"
+				btnSend.Enable()
+				btnSend.Refresh()
+			}
 		}
 	}
 
@@ -8171,6 +8105,7 @@ func layoutPM() fyne.CanvasObject {
 		contact := ""
 		_, err := globals.ParseValidateAddress(messages.Contact)
 		if err != nil {
+			//check, err := engram.Disk.NameToAddress(messages.Contact)
 			check, err := checkUsername(messages.Contact, -1)
 			if err != nil {
 				logger.Errorf("[Message] Failed to send: %s\n", err)
@@ -8182,14 +8117,6 @@ func layoutPM() fyne.CanvasObject {
 			contact = check
 		} else {
 			contact = messages.Contact
-		}
-
-		err = checkMessagePack(messages.Message, session.Username, contact)
-		if err != nil {
-			btnSend.Text = "Message too long..."
-			btnSend.Disable()
-			btnSend.Refresh()
-			return
 		}
 
 		btnSend.Text = "Setting up transfer..."
@@ -8229,30 +8156,23 @@ func layoutPM() fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					fyne.Do(func() {
-						btnSend.Text = "Failed to send message..."
-						btnSend.Disable()
-						btnSend.Refresh()
-					})
-
+					btnSend.Text = "Failed to send message..."
+					btnSend.Disable()
+					btnSend.Refresh()
 					break
 				}
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					fyne.Do(func() {
-						btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-						btnSend.Refresh()
-					})
+					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+					btnSend.Refresh()
 				}
 
 				// If success, reload page w/ latest content. Otherwise retain the Failure message for UX relay
 				if success {
-					fyne.Do(func() {
-						session.Window.SetContent(layoutTransition())
-						session.Window.SetContent(layoutPM())
-					})
-
+					refreshMessageHistoryAsync(false)
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutPM())
 					break
 				} else {
 					time.Sleep(time.Second * 1)
@@ -8272,15 +8192,18 @@ func layoutPM() fyne.CanvasObject {
 		rectSpacer,
 		lastActive,
 		rectSpacer,
-		entry,
-		rectSpacer,
-		wrapMobileButton(btnSend),
+		threadSearch,
 		rectSpacer,
 		rectSpacer,
 		container.NewStack(
 			subframe,
 			chatbox,
 		),
+		rectSpacer,
+		rectSpacer,
+		entry,
+		rectSpacer,
+		btnSend,
 		rectSpacer,
 		rectSpacer,
 	)
@@ -8338,8 +8261,6 @@ func layoutPM() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
 				btnBack,
@@ -8364,7 +8285,7 @@ func layoutPM() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRemoteAccess() fyne.CanvasObject {
@@ -10998,47 +10919,36 @@ func layoutHistory() fyne.CanvasObject {
 		count := 0
 		data = nil
 		listData.Set(nil)
-		entries = engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
+		messages := scanMessageTransfers(0)
 
-		if entries != nil {
+		if messages != nil {
 			go func() {
-				for e := range entries {
-					var stamp string
+				for _, message := range messages {
 					var direction string
-					var comment string
+					comment := message.Comment
 
-					entries[e].ProcessPayload()
-
-					timefmt := entries[e].Time
-					stamp = timefmt.Format("2006-01-02")
-
-					temp := entries[e].Incoming
-					if !temp {
+					stamp := message.Entry.Time.Format("2006-01-02")
+					if !message.Entry.Incoming {
 						direction = "Sent    "
 					} else {
 						direction = "Received"
 					}
-					if entries[e].Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-						contact := ""
-						username := ""
-						if entries[e].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-							contact = entries[e].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)
-							if len(contact) > 10 {
-								username = contact[0:10] + ".."
-							} else {
-								username = contact
-							}
-						}
 
-						comment = entries[e].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
-						if len(comment) > 10 {
-							comment = comment[0:10] + ".."
-						}
-
-						txid = entries[e].TXID
-						count += 1
-						data = append(data, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+txid+";;;"+contact)
+					username := message.Label
+					if username == "" {
+						username = message.ContactKey
 					}
+					if len(username) > 10 {
+						username = username[0:10] + ".."
+					}
+
+					if len(comment) > 10 {
+						comment = comment[0:10] + ".."
+					}
+
+					txid = message.Entry.TXID
+					count += 1
+					data = append(data, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+txid+";;;"+message.ContactKey)
 				}
 
 				results.Text = fmt.Sprintf("  Results:  %d", count)
@@ -11304,6 +11214,7 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 
 	var zeroscid crypto.Hash
 	_, details := engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	details = enrichMessageEntry(details)
 
 	stamp := string(details.Time.Format(time.RFC822))
 	height := strconv.FormatUint(details.Height, 10)
@@ -11328,10 +11239,8 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	valuePayload := widget.NewRichTextFromMarkdown("--")
 	valuePayload.Wrapping = fyne.TextWrapBreak
 
-	if details.Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-		if details.Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string) != "" {
-			valuePayload.ParseMarkdown("" + details.Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string))
-		}
+	if comment := messageComment(details); comment != "" {
+		valuePayload.ParseMarkdown("" + comment)
 	}
 
 	valueAmount := canvas.NewText("", colors.Account)
