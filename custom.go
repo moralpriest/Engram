@@ -236,7 +236,9 @@ func (o *iframeRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (o *iframeRenderer) Refresh() {
-	o.rect.Refresh()
+	uiDo(func() {
+		o.rect.Refresh()
+	})
 }
 
 type mobileEntry struct {

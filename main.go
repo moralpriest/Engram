@@ -124,6 +124,7 @@ func main() {
 	session.Window.SetMaster()
 	session.Window.SetCloseIntercept(func() {
 		appExiting = true
+		appExitFlag.Store(true)
 		if engram.Disk != nil {
 			closeWallet()
 		}
@@ -235,6 +236,10 @@ func main() {
 				// Give the UI a moment to settle
 				time.Sleep(500 * time.Millisecond)
 
+				if engram.Disk == nil || !session.WalletOpen {
+					return
+				}
+
 				// Check if RPC connection is alive, reconnect if needed
 				if !session.Offline {
 					if rpc_client.RPC == nil {
@@ -251,6 +256,9 @@ func main() {
 
 				// Refresh the current content to ensure UI is stable
 				fyne.Do(func() {
+					if engram.Disk == nil || !session.WalletOpen {
+						return
+					}
 					if session.Window != nil && session.Window.Content() != nil {
 						session.Window.Content().Refresh()
 						logger.Printf("[Lifecycle] UI refreshed after foreground")
