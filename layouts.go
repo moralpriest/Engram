@@ -3729,10 +3729,10 @@ func layoutMyAssets() fyne.CanvasObject {
 
 			results.Color = colors.Green
 
-			fyne.Do(func() {
+			uiDo(func() {
 				results.Refresh()
 				labelLastScan.Refresh()
-				listData.Set(assetData)
+				_ = listData.Set(assetData)
 			})
 
 			listBox.OnSelected = func(id widget.ListItemID) {
@@ -3756,7 +3756,7 @@ func layoutMyAssets() fyne.CanvasObject {
 					listBox.UnselectAll()
 				*/
 
-				fyne.Do(func() {
+				uiDo(func() {
 					listBox.UnselectAll()
 					session.LastDomain = session.Window.Content()
 					session.Window.SetContent(layoutTransition())
@@ -3764,7 +3764,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				})
 			}
 
-			fyne.Do(func() {
+			uiDo(func() {
 				listBox.Refresh()
 				btnRescan.Enable()
 			})
@@ -4003,12 +4003,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			go func() {
 				exists, err := checkUsername(s, -1)
 				if err != nil && exists == "" {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Disable()
 						entryAddress.SetValidationError(errors.New("invalid username or address"))
 					})
 				} else {
-					fyne.Do(func() {
+					uiDo(func() {
 						entryAddress.SetValidationError(nil)
 						btnSend.Enable()
 					})
@@ -4092,6 +4092,10 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				sHeight := walletapi.Get_Daemon_Height()
 
 				for session.Domain == "app.manager" {
+					if !safeWalletOpen() {
+						return
+					}
+
 					var zeroscid crypto.Hash
 					_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
@@ -4104,7 +4108,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					fyne.Do(func() {
+					uiDo(func() {
 						entryAddress.Text = ""
 						entryAddress.Refresh()
 						entryAmount.Text = ""
@@ -4119,8 +4123,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-					fyne.Do(func() {
+					uiDo(func() {
+						btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 						btnSend.Refresh()
 					})
 				}
@@ -4133,13 +4137,13 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 					}
 					balance.Text = "  " + globals.FormatMoney(bal)
 
-					fyne.Do(func() {
+					uiDo(func() {
 						balance.Refresh()
 					})
 				}
 
 				if bal != zerobal {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Text = "Send Asset"
 						btnSend.Enable()
 						btnSend.Refresh()
@@ -4152,7 +4156,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 						selectRingSize.Enable()
 					})
 				} else {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Text = "You do not own this asset"
 						btnSend.Disable()
 						btnSend.Refresh()
@@ -7513,18 +7517,11 @@ func layoutMessages() fyne.CanvasObject {
 			if label == "" && thread.ContactKey == "" {
 				continue
 			}
-			data = append(data, thread.ContactKey+"~~~"+label+"~~~"+thread.LastText+"~~~"+thread.LastTime.Format(time.RFC3339))
+			data = append(data, thread.ContactKey+"~~~"+label)
 		}
 	}
 	if len(data) == 0 {
 		data = getMessages(height)
-		for i, row := range data {
-			split := strings.Split(row, "~~~")
-			if len(split) < 2 {
-				continue
-			}
-			data[i] = split[0] + "~~~" + split[1] + "~~~~~~"
-		}
 	}
 	temp := data
 
@@ -7532,10 +7529,7 @@ func layoutMessages() fyne.CanvasObject {
 
 	msgbox.List = widget.NewListWithData(list,
 		func() fyne.CanvasObject {
-			c := container.NewVBox(
-				widget.NewLabel(""),
-			)
-			return c
+			return widget.NewLabel("")
 		},
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
@@ -7553,37 +7547,23 @@ func layoutMessages() fyne.CanvasObject {
 				address = short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 			}
 			username := dataItem[1]
-			preview := ""
-			if len(dataItem) >= 3 {
-				preview = dataItem[2]
-			}
 			if username == "" {
 				username = resolveAddressDisplay(dataItem[0])
-			}
-			if len(preview) > 24 {
-				preview = preview[:24] + "..."
 			}
 			// If a username is longer than what *would* be a 'short' address of ...xyzxyzxyzx (e.g. 13), then shorten as well to be similar sizing
 			if len(username) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
 				username = "..." + username[len(username)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 			}
 
+			label := co.(*widget.Label)
 			if username == "" {
-				text := "..." + address
-				if preview != "" {
-					text += "  " + preview
-				}
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(text)
+				label.SetText("..." + address)
 			} else {
-				text := username
-				if preview != "" {
-					text += "  " + preview
-				}
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(text)
+				label.SetText(username)
 			}
-			co.(*fyne.Container).Objects[0].(*widget.Label).Wrapping = fyne.TextWrapWord
-			co.(*fyne.Container).Objects[0].(*widget.Label).TextStyle.Bold = false
-			co.(*fyne.Container).Objects[0].(*widget.Label).Alignment = fyne.TextAlignLeading
+			label.Wrapping = fyne.TextWrapWord
+			label.TextStyle.Bold = false
+			label.Alignment = fyne.TextAlignLeading
 		})
 
 	msgbox.List.OnSelected = func(id widget.ListItemID) {
@@ -13816,9 +13796,11 @@ func layoutFileManager() fyne.CanvasObject {
 				dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
 					if err != nil {
 						logger.Errorf("[Engram] File dialog: %s\n", err)
-						errorText.Text = "could not open signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not open signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
@@ -13829,27 +13811,33 @@ func layoutFileManager() fyne.CanvasObject {
 					uc, err := storage.Reader(files[0])
 					if err != nil {
 						logger.Errorf("[Engram] Cannot create reader for %s: %s\n", inputFileName, err)
-						errorText.Text = "could not access file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not access file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
 					filedata, err := readFromURI(uc)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
-						errorText.Text = "could not read file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not read file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
 					_, err = writeToURI(engram.Disk.SignData(filedata), uri)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
-						errorText.Text = "could not write signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not write signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
@@ -13858,17 +13846,19 @@ func layoutFileManager() fyne.CanvasObject {
 
 					logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
 
-					errorText.Text = "signed file successfully"
-					errorText.Color = colors.Green
-					errorText.Refresh()
+					uiDo(func() {
+						errorText.Text = "signed file successfully"
+						errorText.Color = colors.Green
+						errorText.Refresh()
 
-					signedResults = append(signedResults, outputFile)
-					signedData.Set(signedResults)
-					signedList.Refresh()
+						signedResults = append(signedResults, outputFile)
+						_ = signedData.Set(signedResults)
+						signedList.Refresh()
 
-					signedLen := len(signedResults)
-					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
-					labelResults.Refresh()
+						signedLen := len(signedResults)
+						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+						labelResults.Refresh()
+					})
 
 				}, session.Window)
 
@@ -13963,7 +13953,7 @@ func layoutFileManager() fyne.CanvasObject {
 						errorText.Refresh()
 
 						verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
-						verifiedData.Set(verifiedResults)
+						_ = verifiedData.Set(verifiedResults)
 						verifiedList.Refresh()
 
 						verifiedLen := len(verifiedResults)
@@ -14564,88 +14554,86 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			inputFileName := uc.URI().Name()
 			outputFileName := inputFileName + ".signed"
 
-			go func() {
-				dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
-					if err != nil {
-						logger.Errorf("[Engram] Save file dialog: %s\n", err)
-						fyne.Do(func() {
-							browseErrorText.Text = "could not open signed file"
-							browseErrorText.Color = colors.Red
-							browseErrorText.Refresh()
-						})
-
-						return
-					}
-
-					if uri == nil {
-						return // Canceled
-					}
-
-					filedata, err := readFromURI(uc)
-					if err != nil {
-						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
-						fyne.Do(func() {
-							browseErrorText.Text = "could not read file"
-							browseErrorText.Color = colors.Red
-							browseErrorText.Refresh()
-						})
-
-						return
-					}
-
-					_, err = writeToURI(engram.Disk.SignData(filedata), uri)
-					if err != nil {
-						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
-						fyne.Do(func() {
-							browseErrorText.Text = "could not write signed file"
-							browseErrorText.Color = colors.Red
-							browseErrorText.Refresh()
-						})
-
-						return
-					}
-
-					outputFile := uri.URI().Name()
-					if a.Driver().Device().IsMobile() {
-						outputFile = outputFileName
-					}
-
-					logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
-
-					fyne.Do(func() {
-						browseErrorText.Text = "signed file successfully"
-						browseErrorText.Color = colors.Green
+			dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
+				if err != nil {
+					logger.Errorf("[Engram] Save file dialog: %s\n", err)
+					uiDo(func() {
+						browseErrorText.Text = "could not open signed file"
+						browseErrorText.Color = colors.Red
 						browseErrorText.Refresh()
-
-						signedResults = append(signedResults, outputFile)
-						signedData.Set(signedResults)
-						signedList.Refresh()
-
-						signedLen := len(signedResults)
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
-						labelResults.Refresh()
 					})
 
-				}, session.Window)
-
-				if !a.Driver().Device().IsMobile() {
-					uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
-					if err == nil {
-						dialogFileSign.SetLocation(uri)
-					} else {
-						logger.Errorf("[Engram] Could not open current directory %s\n", err)
-					}
+					return
 				}
 
-				fyne.Do(func() {
-					dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
-					dialogFileSign.SetView(dialog.ListView)
-					dialogFileSign.SetFileName(outputFileName)
-					dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
-					dialogFileSign.SetConfirmText("Save Sign")
-					dialogFileSign.Show()
+				if uri == nil {
+					return // Canceled
+				}
+
+				filedata, err := readFromURI(uc)
+				if err != nil {
+					logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
+					uiDo(func() {
+						browseErrorText.Text = "could not read file"
+						browseErrorText.Color = colors.Red
+						browseErrorText.Refresh()
+					})
+
+					return
+				}
+
+				_, err = writeToURI(engram.Disk.SignData(filedata), uri)
+				if err != nil {
+					logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
+					uiDo(func() {
+						browseErrorText.Text = "could not write signed file"
+						browseErrorText.Color = colors.Red
+						browseErrorText.Refresh()
+					})
+
+					return
+				}
+
+				outputFile := uri.URI().Name()
+				if a.Driver().Device().IsMobile() {
+					outputFile = outputFileName
+				}
+
+				logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
+
+				uiDo(func() {
+					browseErrorText.Text = "signed file successfully"
+					browseErrorText.Color = colors.Green
+					browseErrorText.Refresh()
+
+					signedResults = append(signedResults, outputFile)
+					_ = signedData.Set(signedResults)
+					signedList.Refresh()
+
+					signedLen := len(signedResults)
+					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+					labelResults.Refresh()
 				})
-			}()
+
+			}, session.Window)
+
+			if !a.Driver().Device().IsMobile() {
+				uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+				if err == nil {
+					dialogFileSign.SetLocation(uri)
+				} else {
+					logger.Errorf("[Engram] Could not open current directory %s\n", err)
+				}
+			}
+
+			uiDo(func() {
+				dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
+				dialogFileSign.SetView(dialog.ListView)
+				dialogFileSign.SetFileName(outputFileName)
+				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+				dialogFileSign.SetConfirmText("Save Sign")
+				dialogFileSign.Show()
+			})
 		}
 	}, session.Window)
 
@@ -15126,15 +15114,13 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				return
 			}
 
-			go func() {
-				fyne.Do(func() {
-					removeOverlays()
-					capture := session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filepath.Base(filename), ".bas"), string(filedata)))
-					session.LastDomain = capture
-				})
-			}()
+			uiDo(func() {
+				removeOverlays()
+				capture := session.Window.Content()
+				session.Window.SetContent(layoutTransition())
+				session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filepath.Base(filename), ".bas"), string(filedata)))
+				session.LastDomain = capture
+			})
 		} else {
 			browseErrorText.Text = "unsupported file type"
 			browseErrorText.Color = colors.Red
@@ -17846,7 +17832,7 @@ func layoutTELA() fyne.CanvasObject {
 		if !restrictiveMode && !hasCachedTelaData && len(all) <= 1 {
 			results.Text = "  Gnomon is preparing SCIDs..."
 			results.Color = colors.Yellow
-			fyne.Do(func() {
+			uiDo(func() {
 				results.Refresh()
 			})
 
@@ -17913,7 +17899,7 @@ func layoutTELA() fyne.CanvasObject {
 
 			results.Text = fmt.Sprintf("  Prefiltering... (%d candidates)", len(candidates))
 			results.Color = colors.Yellow
-			fyne.Do(func() {
+			uiDo(func() {
 				results.Refresh()
 			})
 
@@ -17936,7 +17922,7 @@ func layoutTELA() fyne.CanvasObject {
 				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, 200, 3, pool, func(completed, total int) {
 					results.Text = fmt.Sprintf("  Prefiltering... (%d / %d)", completed, total)
 					results.Color = colors.Yellow
-					fyne.Do(func() {
+					uiDo(func() {
 						results.Refresh()
 					})
 				})
@@ -17985,7 +17971,7 @@ func layoutTELA() fyne.CanvasObject {
 				logger.Printf("[TELA] Batch INDEX fetch starting for %d SCIDs...\n", len(indexNeeded))
 				results.Text = fmt.Sprintf("  Fetching INDEX data... (%d SCIDs)", len(indexNeeded))
 				results.Color = colors.Yellow
-				fyne.Do(func() {
+				uiDo(func() {
 					results.Refresh()
 				})
 
@@ -18043,7 +18029,7 @@ func layoutTELA() fyne.CanvasObject {
 				interruptReason = "connection_lost_during_scan"
 				results.Text = "  Connection lost during scan"
 				results.Color = colors.Red
-				fyne.Do(func() {
+				uiDo(func() {
 					results.Refresh()
 				})
 				interrupted = true
@@ -18068,7 +18054,7 @@ func layoutTELA() fyne.CanvasObject {
 				lastUIRefresh = now
 				results.Text = fmt.Sprintf("  Scanning... (%d / %d)", scanned, allLen)
 				results.Color = colors.Yellow
-				fyne.Do(func() {
+				uiDo(func() {
 					results.Refresh()
 				})
 				atomic.AddInt64(&uiRefreshCount, 1)
