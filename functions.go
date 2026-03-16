@@ -3058,8 +3058,29 @@ type MessageCache struct {
 	ByThread map[string][]MessageRecord
 }
 
+type RenderedThreadMessage struct {
+	Sender     string
+	Comment    string
+	Timestamp  string
+	IsIncoming bool
+}
+
+type HistoryRowCache struct {
+	Height       uint64
+	Address      string
+	Transfers    []rpc.Entry
+	NormalRows   []string
+	CoinbaseRows []string
+	MessageRows  []string
+	Loaded       bool
+}
+
 var messageCache MessageCache
 var addressDisplayCache = map[string]string{}
+var historyRowCache HistoryRowCache
+var historyRowCacheMu sync.RWMutex
+var renderedThreadCacheMu sync.RWMutex
+var renderedThreadCache = map[string][]RenderedThreadMessage{}
 
 func uiDo(fn func()) {
 	if fn == nil || appExitFlag.Load() {
@@ -3076,6 +3097,149 @@ func uiDo(fn func()) {
 
 func safeWalletOpen() bool {
 	return engram.Disk != nil && session.WalletOpen
+}
+
+func getCachedThreadMessages(contact string, minHeight uint64) []MessageRecord {
+	messageCacheMu.RLock()
+	defer messageCacheMu.RUnlock()
+
+	if len(messageCache.ByThread) == 0 {
+		return nil
+	}
+
+	key, _ := resolveMessageContact(contact, -1)
+	if key == "" {
+		key = strings.TrimSpace(contact)
+	}
+	records := messageCache.ByThread[key]
+	if len(records) == 0 {
+		return nil
+	}
+
+	result := make([]MessageRecord, 0, len(records))
+	for _, record := range records {
+		if minHeight > 0 && record.Entry.Height < minHeight {
+			continue
+		}
+		result = append(result, record)
+	}
+	return result
+}
+
+func getRenderedThreadCache(contact string, minHeight uint64) ([]RenderedThreadMessage, bool) {
+	renderedThreadCacheMu.RLock()
+	defer renderedThreadCacheMu.RUnlock()
+	key, _ := resolveMessageContact(contact, -1)
+	if key == "" {
+		key = strings.TrimSpace(contact)
+	}
+	if minHeight > 0 {
+		key = fmt.Sprintf("%s:%d", key, minHeight)
+	}
+	items, ok := renderedThreadCache[key]
+	if !ok {
+		return nil, false
+	}
+	copyItems := append([]RenderedThreadMessage(nil), items...)
+	return copyItems, true
+}
+
+func setRenderedThreadCache(contact string, minHeight uint64, items []RenderedThreadMessage) {
+	renderedThreadCacheMu.Lock()
+	defer renderedThreadCacheMu.Unlock()
+	key, _ := resolveMessageContact(contact, -1)
+	if key == "" {
+		key = strings.TrimSpace(contact)
+	}
+	if minHeight > 0 {
+		key = fmt.Sprintf("%s:%d", key, minHeight)
+	}
+	renderedThreadCache[key] = append([]RenderedThreadMessage(nil), items...)
+}
+
+func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string, ok bool) {
+	historyRowCacheMu.RLock()
+	defer historyRowCacheMu.RUnlock()
+
+	if engram.Disk == nil || !historyRowCache.Loaded {
+		return nil, nil, nil, nil, false
+	}
+
+	address := engram.Disk.GetAddress().String()
+	height := engram.Disk.Get_Height()
+	if historyRowCache.Address != address || historyRowCache.Height != height {
+		return nil, nil, nil, nil, false
+	}
+
+	transfers = append([]rpc.Entry(nil), historyRowCache.Transfers...)
+	normalRows = append([]string(nil), historyRowCache.NormalRows...)
+	coinbaseRows = append([]string(nil), historyRowCache.CoinbaseRows...)
+	messageRows = append([]string(nil), historyRowCache.MessageRows...)
+	return transfers, normalRows, coinbaseRows, messageRows, true
+}
+
+func setHistoryRowCache(transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
+	if engram.Disk == nil {
+		return
+	}
+
+	historyRowCacheMu.Lock()
+	defer historyRowCacheMu.Unlock()
+	historyRowCache.Address = engram.Disk.GetAddress().String()
+	historyRowCache.Height = engram.Disk.Get_Height()
+	historyRowCache.Transfers = append([]rpc.Entry(nil), transfers...)
+	historyRowCache.NormalRows = append([]string(nil), normalRows...)
+	historyRowCache.CoinbaseRows = append([]string(nil), coinbaseRows...)
+	historyRowCache.MessageRows = append([]string(nil), messageRows...)
+	historyRowCache.Loaded = true
+}
+
+func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows []string, coinbaseRows []string, messageRows []string) {
+	normalRows = make([]string, 0, len(entries))
+	coinbaseRows = make([]string, 0, len(entries))
+	messageRows = make([]string, 0, len(messages))
+
+	for e := range entries {
+		var direction string
+		stamp := entries[e].Time.Format("2006-01-02")
+		height := strconv.FormatUint(entries[e].Height, 10)
+		txid := entries[e].TXID
+
+		if entries[e].Coinbase {
+			coinbaseRows = append(coinbaseRows, "Network;;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid)
+			continue
+		}
+
+		if !entries[e].Incoming {
+			direction = "Sent"
+			normalRows = append(normalRows, direction+";;;("+globals.FormatMoney(entries[e].Amount)+");;;"+height+";;;"+stamp+";;;"+txid)
+		} else {
+			direction = "Received"
+			normalRows = append(normalRows, direction+";;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid)
+		}
+	}
+
+	for _, message := range messages {
+		direction := "Received"
+		if !message.Entry.Incoming {
+			direction = "Sent    "
+		}
+		username := message.Label
+		if username == "" {
+			username = message.ContactKey
+		}
+		if len(username) > 10 {
+			username = username[0:10] + ".."
+		}
+		comment := message.Comment
+		if len(comment) > 10 {
+			comment = comment[0:10] + ".."
+		}
+		stamp := message.Entry.Time.Format("2006-01-02")
+		messageRows = append(messageRows, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+message.Entry.TXID+";;;"+message.ContactKey)
+	}
+
+	return normalRows, coinbaseRows, messageRows
 }
 
 type persistedMessageRecord struct {
@@ -4165,6 +4329,11 @@ func startGnomon() {
 
 			// exclude the Gnomon SC, etc. to keep faster sync times
 			var exclusions []string
+
+			if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+				gnomon.Active = 1
+				return
+			}
 
 			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions)
 			indexer.InitLog(globals.Arguments, os.Stdout)

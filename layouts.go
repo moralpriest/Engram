@@ -56,6 +56,7 @@ import (
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/rpc"
+	"github.com/deroproject/derohe/transaction"
 	"github.com/deroproject/derohe/walletapi"
 	"github.com/deroproject/derohe/walletapi/mnemonics"
 	"github.com/deroproject/derohe/walletapi/xswd"
@@ -7868,17 +7869,19 @@ func layoutPM() fyne.CanvasObject {
 		height = 0
 	}
 
-	messageRecords := []MessageRecord{}
-	records := getMessageCacheSnapshot()
-	if len(records) == 0 {
-		records = scanMessageTransfers(height)
-	}
-	for _, message := range records {
-		if height > 0 && message.Entry.Height < height {
-			continue
+	messageRecords := getCachedThreadMessages(messages.Contact, height)
+	if len(messageRecords) == 0 {
+		records := getMessageCacheSnapshot()
+		if len(records) == 0 {
+			records = scanMessageTransfers(height)
 		}
-		if messageMatchesContact(message, messages.Contact) {
-			messageRecords = append(messageRecords, message)
+		for _, message := range records {
+			if height > 0 && message.Entry.Height < height {
+				continue
+			}
+			if messageMatchesContact(message, messages.Contact) {
+				messageRecords = append(messageRecords, message)
+			}
 		}
 	}
 	originalMessageRecords := make([]MessageRecord, len(messageRecords))
@@ -7895,20 +7898,47 @@ func layoutPM() fyne.CanvasObject {
 			return
 		}
 
-		type renderedMessage struct {
-			Sender     string
-			Comment    string
-			Timestamp  string
-			IsIncoming bool
+		renderedMessages := make([]RenderedThreadMessage, 0, len(filtered))
+		useCachedRender := len(filtered) == len(originalMessageRecords)
+		if useCachedRender {
+			if cached, ok := getRenderedThreadCache(messages.Contact, height); ok {
+				renderedMessages = cached
+			} else {
+				useCachedRender = false
+			}
 		}
 
-		renderedMessages := []renderedMessage{}
+		if !useCachedRender {
+			for d := range filtered {
+				if filtered[d].Entry.Incoming {
+					replyback := messageReplyback(filtered[d].Entry)
+					if replyback != "" {
+						t := filtered[d].Entry.Time
+						time := string(t.Format(time.RFC822))
+						comment := filtered[d].Comment
+						links := getTextURL(comment)
 
-		for d := range filtered {
-			if filtered[d].Entry.Incoming {
-				replyback := messageReplyback(filtered[d].Entry)
-				if replyback != "" {
-
+						for i := range links {
+							if comment == links[i] {
+								if len(links[i]) > 25 {
+									comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
+								} else {
+									comment = `[ ` + links[i] + ` ](` + links[i] + `)`
+								}
+							} else {
+								linkText := ""
+								split := strings.Split(comment, links[i])
+								if len(links[i]) > 25 {
+									linkText = links[i][0:25] + "..."
+								} else {
+									linkText = links[i]
+								}
+								comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
+							}
+						}
+						renderedMessages = append(renderedMessages, RenderedThreadMessage{Sender: replyback, Comment: comment, Timestamp: time, IsIncoming: true})
+					}
+				} else {
 					t := filtered[d].Entry.Time
 					time := string(t.Format(time.RFC822))
 					comment := filtered[d].Comment
@@ -7932,37 +7962,17 @@ func layoutPM() fyne.CanvasObject {
 							comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
 						}
 					}
-					renderedMessages = append(renderedMessages, renderedMessage{Sender: replyback, Comment: comment, Timestamp: time, IsIncoming: true})
+					renderedMessages = append(renderedMessages, RenderedThreadMessage{Sender: engram.Disk.GetAddress().String(), Comment: comment, Timestamp: time, IsIncoming: false})
 				}
-			} else {
-				t := filtered[d].Entry.Time
-				time := string(t.Format(time.RFC822))
-				comment := filtered[d].Comment
-				links := getTextURL(comment)
-
-				for i := range links {
-					if comment == links[i] {
-						if len(links[i]) > 25 {
-							comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
-						} else {
-							comment = `[ ` + links[i] + ` ](` + links[i] + `)`
-						}
-					} else {
-						linkText := ""
-						split := strings.Split(comment, links[i])
-						if len(links[i]) > 25 {
-							linkText = links[i][0:25] + "..."
-						} else {
-							linkText = links[i]
-						}
-						comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
-					}
-				}
-				renderedMessages = append(renderedMessages, renderedMessage{Sender: engram.Disk.GetAddress().String(), Comment: comment, Timestamp: time, IsIncoming: false})
+			}
+			if len(filtered) == len(originalMessageRecords) {
+				setRenderedThreadCache(messages.Contact, height, renderedMessages)
 			}
 		}
 
 		if len(renderedMessages) > 0 {
+			newObjects := make([]fyne.CanvasObject, 0, len(renderedMessages))
+			newData := make([]string, 0, len(renderedMessages))
 			for _, rendered := range renderedMessages {
 				mdata := widget.NewRichTextFromMarkdown("")
 				mdata.Wrapping = fyne.TextWrapWord
@@ -8021,15 +8031,16 @@ func layoutPM() fyne.CanvasObject {
 					)
 				}
 
-				lastActive.Text = "Last Updated:  " + time.Now().Format(time.RFC822)
-				lastActive.Refresh()
-
-				messages.Data = append(messages.Data, rendered.Sender+";;;;"+rendered.Comment+";;;;"+rendered.Timestamp)
-				chats.Add(e)
-				chats.Refresh()
-				chatbox.Refresh()
-				chatbox.ScrollToBottom()
+				newData = append(newData, rendered.Sender+";;;;"+rendered.Comment+";;;;"+rendered.Timestamp)
+				newObjects = append(newObjects, e)
 			}
+			messages.Data = newData
+			chats.Objects = newObjects
+			lastActive.Text = "Last Updated:  " + time.Now().Format(time.RFC822)
+			lastActive.Refresh()
+			chats.Refresh()
+			chatbox.Refresh()
+			chatbox.ScrollToBottom()
 		}
 	}
 
@@ -8055,11 +8066,43 @@ func layoutPM() fyne.CanvasObject {
 
 	btnSend := widget.NewButton("Send", nil)
 	btnSend.Disable()
+	labelLimit := canvas.NewText("", colors.Gray)
+	labelLimit.TextSize = 11
+	labelLimit.Alignment = fyne.TextAlignLeading
+	updateMessageLimit := func(message string, sender string) {
+		if sender == "" && engram.Disk != nil {
+			sender = engram.Disk.GetAddress().String()
+		}
+
+		args := rpc.Arguments{
+			{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: uint64(1337)},
+			{Name: rpc.RPC_VALUE_TRANSFER, DataType: rpc.DataUint64, Value: uint64(1)},
+			{Name: rpc.RPC_EXPIRY, DataType: rpc.DataTime, Value: time.Now().Add(time.Hour).UTC()},
+			{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: message},
+			{Name: rpc.RPC_NEEDS_REPLYBACK_ADDRESS, DataType: rpc.DataString, Value: sender},
+		}
+
+		packed, err := args.MarshalBinary()
+		if err != nil {
+			labelLimit.Text = fmt.Sprintf("%d chars", len(message))
+			labelLimit.Refresh()
+			return
+		}
+
+		remaining := transaction.PAYLOAD0_LIMIT - len(packed)
+		if remaining < 0 {
+			remaining = 0
+		}
+
+		labelLimit.Text = fmt.Sprintf("%d chars, ~%d bytes left", len(message), remaining)
+		labelLimit.Refresh()
+	}
 
 	entry := widget.NewEntry()
 	entry.MultiLine = false
 	entry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	entry.PlaceHolder = "Message"
+	updateMessageLimit("", session.Username)
 	entry.OnChanged = func(s string) {
 		messages.Message = s
 		contact := messages.Contact
@@ -8077,6 +8120,7 @@ func layoutPM() fyne.CanvasObject {
 			removeOverlays()
 			return
 		}
+		updateMessageLimit(messages.Message, session.Username)
 
 		err = checkMessagePack(messages.Message, session.Username, contact)
 		if err != nil {
@@ -8135,9 +8179,11 @@ func layoutPM() fyne.CanvasObject {
 		btnSend.Text = "Confirming..."
 		btnSend.Disable()
 		btnSend.Refresh()
+		sentMessage := messages.Message
 		messages.Message = ""
 		entry.Text = ""
 		entry.Refresh()
+		updateMessageLimit("", session.Username)
 
 		go func() {
 			generation := currentWalletGeneration()
@@ -8179,8 +8225,21 @@ func layoutPM() fyne.CanvasObject {
 						if !isWalletGenerationActive(generation) {
 							return
 						}
-						session.Window.SetContent(layoutTransition())
-						session.Window.SetContent(layoutPM())
+						messageRecords = append(messageRecords, MessageRecord{
+							Entry: rpc.Entry{
+								TXID:     txid.String(),
+								Time:     time.Now(),
+								Incoming: false,
+							},
+							ContactKey: messages.Contact,
+							Label:      messages.Contact,
+							Comment:    sentMessage,
+						})
+						originalMessageRecords = append(originalMessageRecords, messageRecords[len(messageRecords)-1])
+						renderThread(messageRecords)
+						btnSend.Text = "Send"
+						btnSend.Disable()
+						btnSend.Refresh()
 					})
 					break
 				} else {
@@ -8209,6 +8268,8 @@ func layoutPM() fyne.CanvasObject {
 			chatbox,
 		),
 		rectSpacer,
+		rectSpacer,
+		labelLimit,
 		rectSpacer,
 		entry,
 		rectSpacer,
@@ -10741,7 +10802,10 @@ func layoutHistory() fyne.CanvasObject {
 	var zeroscid crypto.Hash
 	var listData binding.StringList
 	var listBox *widget.List
-	var txid string
+	var cachedTransfers []rpc.Entry
+	var historyNormalRows []string
+	var historyCoinbaseRows []string
+	var historyMessageRows []string
 
 	view := ""
 
@@ -10820,86 +10884,78 @@ func layoutHistory() fyne.CanvasObject {
 	label := canvas.NewText(view, colors.Account)
 	label.TextSize = 15
 	label.TextStyle = fyne.TextStyle{Bold: true}
+	findCachedTransfer := func(txid string) rpc.Entry {
+		for i := range cachedTransfers {
+			if cachedTransfers[i].TXID == txid {
+				return cachedTransfers[i]
+			}
+		}
+		return rpc.Entry{}
+	}
+
+	ensureHistoryRows := func() {
+		if transfers, normalRows, coinbaseRows, messageRows, ok := getHistoryRowCache(); ok {
+			cachedTransfers = transfers
+			historyNormalRows = normalRows
+			historyCoinbaseRows = coinbaseRows
+			historyMessageRows = messageRows
+			return
+		}
+
+		entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+		cachedTransfers = append([]rpc.Entry(nil), entries...)
+		messages := scanMessageTransfers(0)
+		historyNormalRows, historyCoinbaseRows, historyMessageRows = buildHistoryRows(entries, messages)
+		setHistoryRowCache(cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows)
+	}
 
 	// Function to load Normal transactions
 	loadNormal := func() {
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
-		count := 0
 		data = nil
-		listData.Set(nil)
-		entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+		_ = listData.Set(nil)
 
-		if entries != nil {
-			go func() {
-				for e := range entries {
-					var height string
-					var direction string
-					var stamp string
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyNormalRows...)
 
-					entries[e].ProcessPayload()
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
 
-					if !entries[e].Coinbase {
-						timefmt := entries[e].Time
-						stamp = timefmt.Format("2006-01-02")
-						height = strconv.FormatUint(entries[e].Height, 10)
-						amount := ""
-						txid = entries[e].TXID
+			_ = listData.Set(data)
 
-						if !entries[e].Incoming {
-							direction = "Sent"
-							amount = "(" + globals.FormatMoney(entries[e].Amount) + ")"
-						} else {
-							direction = "Received"
-							amount = globals.FormatMoney(entries[e].Amount)
-						}
+			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				result := findCachedTransfer(split[4])
 
-						count += 1
-						data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-					}
-				}
-
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				listData.Set(data)
-
-				listBox.OnSelected = func(id widget.ListItemID) {
-					split := strings.Split(data[id], ";;;")
-					var zeroscid crypto.Hash
-					_, result := engram.Disk.Get_Payments_TXID(zeroscid, split[4])
-
-					if result.TXID == "" {
-						label.Text = "---"
-					} else {
-						label.Text = result.TXID
-					}
-
-					fyne.Do(func() {
-						label.Refresh()
-					})
-
-					overlay := session.Window.Canvas().Overlays()
-					overlay.Add(
-						container.NewStack(
-							&iframe{},
-							canvas.NewRectangle(colors.DarkMatter),
-						),
-					)
-					overlay.Add(layoutHistoryDetail(split[4]))
-					listBox.UnselectAll()
+				if result.TXID == "" {
+					label.Text = "---"
+				} else {
+					label.Text = result.TXID
 				}
 
 				fyne.Do(func() {
-					results.Refresh()
-					listBox.Refresh()
-					listBox.ScrollToBottom()
+					label.Refresh()
 				})
-			}()
-		} else {
-			results.Text = fmt.Sprintf("  Results:  %d", count)
-			results.Refresh()
-		}
+
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4]))
+				listBox.UnselectAll()
+			}
+
+			fyne.Do(func() {
+				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
+			})
+		}()
 	}
 
 	// Function to load Coinbase transactions
@@ -10907,54 +10963,27 @@ func layoutHistory() fyne.CanvasObject {
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
-		count := 0
 		data = nil
-		listData.Set(nil)
-		entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+		_ = listData.Set(nil)
 
-		if entries != nil {
-			go func() {
-				for e := range entries {
-					var height string
-					var direction string
-					var stamp string
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyCoinbaseRows...)
 
-					entries[e].ProcessPayload()
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
 
-					if entries[e].Coinbase {
-						direction = "Network"
-						timefmt := entries[e].Time
-						stamp = timefmt.Format("2006-01-02")
-						height = strconv.FormatUint(entries[e].Height, 10)
-						amount := globals.FormatMoney(entries[e].Amount)
-						txid = entries[e].TXID
+			_ = listData.Set(data)
 
-						count += 1
-						data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-					}
-				}
-
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				listData.Set(data)
-
-				listBox.OnSelected = func(id widget.ListItemID) {
-					listBox.UnselectAll()
-				}
-
-				fyne.Do(func() {
-					results.Refresh()
-					listBox.Refresh()
-					listBox.ScrollToBottom()
-				})
-			}()
-		} else {
-			results.Text = fmt.Sprintf("  Results:  %d", count)
+			listBox.OnSelected = func(id widget.ListItemID) {
+				listBox.UnselectAll()
+			}
 
 			fyne.Do(func() {
 				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
 			})
-		}
+		}()
 	}
 
 	// Function to load Messages
@@ -10962,72 +10991,38 @@ func layoutHistory() fyne.CanvasObject {
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
-		count := 0
 		data = nil
-		listData.Set(nil)
-		messages := scanMessageTransfers(0)
+		_ = listData.Set(nil)
 
-		if messages != nil {
-			go func() {
-				for _, message := range messages {
-					var direction string
-					comment := message.Comment
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyMessageRows...)
 
-					stamp := message.Entry.Time.Format("2006-01-02")
-					if !message.Entry.Incoming {
-						direction = "Sent    "
-					} else {
-						direction = "Received"
-					}
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
 
-					username := message.Label
-					if username == "" {
-						username = message.ContactKey
-					}
-					if len(username) > 10 {
-						username = username[0:10] + ".."
-					}
+			_ = listData.Set(data)
 
-					if len(comment) > 10 {
-						comment = comment[0:10] + ".."
-					}
-
-					txid = message.Entry.TXID
-					count += 1
-					data = append(data, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+txid+";;;"+message.ContactKey)
-				}
-
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				listData.Set(data)
-
-				listBox.OnSelected = func(id widget.ListItemID) {
-					split := strings.Split(data[id], ";;;")
-					overlay := session.Window.Canvas().Overlays()
-					overlay.Add(
-						container.NewStack(
-							&iframe{},
-							canvas.NewRectangle(colors.DarkMatter),
-						),
-					)
-					overlay.Add(layoutHistoryDetail(split[4]))
-					listBox.UnselectAll()
-					listBox.Refresh()
-				}
-
-				fyne.Do(func() {
-					results.Refresh()
-					listBox.Refresh()
-					listBox.ScrollToBottom()
-				})
-			}()
-		} else {
-			results.Text = fmt.Sprintf("  Results:  %d", count)
+			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				_ = findCachedTransfer(split[4])
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4]))
+				listBox.UnselectAll()
+				listBox.Refresh()
+			}
 
 			fyne.Do(func() {
 				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
 			})
-		}
+		}()
 	}
 
 	// Create tab content containers (needed for proper tab rendering)
