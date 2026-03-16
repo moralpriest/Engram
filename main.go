@@ -233,10 +233,11 @@ func main() {
 		if session.WalletOpen && engram.Disk != nil {
 			// Reinitialize RPC connections if needed
 			go func() {
+				generation := currentWalletGeneration()
 				// Give the UI a moment to settle
 				time.Sleep(500 * time.Millisecond)
 
-				if engram.Disk == nil || !session.WalletOpen {
+				if !isWalletGenerationActive(generation) {
 					return
 				}
 
@@ -256,7 +257,7 @@ func main() {
 
 				// Refresh the current content to ensure UI is stable
 				fyne.Do(func() {
-					if engram.Disk == nil || !session.WalletOpen {
+					if !isWalletGenerationActive(generation) {
 						return
 					}
 					if session.Window != nil && session.Window.Content() != nil {
@@ -265,6 +266,9 @@ func main() {
 					}
 				})
 
+				if !isWalletGenerationActive(generation) {
+					return
+				}
 				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
