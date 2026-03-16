@@ -258,6 +258,10 @@ type TELAFavoriteData struct {
 	LastUpdated int64   `json:"last_updated"`
 }
 
+func shouldSkipWalletSave() bool {
+	return true
+}
+
 type MessageBox struct {
 	List *widget.List
 	Data binding.ExternalStringList
@@ -266,13 +270,66 @@ type MessageBox struct {
 var messageCacheMu sync.RWMutex
 var addressDisplayCacheMu sync.RWMutex
 
+var walletSessionMu sync.RWMutex
+var walletSessionGeneration uint64
+var pulseSessionGeneration uint64
+var pulseRunning bool
+
+func currentWalletGeneration() uint64 {
+	walletSessionMu.RLock()
+	defer walletSessionMu.RUnlock()
+	return walletSessionGeneration
+}
+
+func isWalletGenerationActive(generation uint64) bool {
+	walletSessionMu.RLock()
+	defer walletSessionMu.RUnlock()
+	return generation != 0 && generation == walletSessionGeneration && engram.Disk != nil && session.WalletOpen
+}
+
+func beginWalletSession() uint64 {
+	walletSessionMu.Lock()
+	defer walletSessionMu.Unlock()
+	walletSessionGeneration++
+	return walletSessionGeneration
+}
+
 func beginWalletShutdown() bool {
+	walletSessionMu.Lock()
+	defer walletSessionMu.Unlock()
+	if !session.WalletOpen && engram.Disk == nil {
+		return false
+	}
+	walletSessionGeneration++
+	pulseRunning = false
+	pulseSessionGeneration = 0
 	return true
 }
 
 func finishWalletShutdown() {}
 
-func beginWalletSession() {}
+func startPulseForActiveWallet() bool {
+	walletSessionMu.Lock()
+	defer walletSessionMu.Unlock()
+	if engram.Disk == nil || !session.WalletOpen {
+		return false
+	}
+	if pulseRunning && pulseSessionGeneration == walletSessionGeneration {
+		return false
+	}
+	pulseRunning = true
+	pulseSessionGeneration = walletSessionGeneration
+	return true
+}
+
+func finishPulseForGeneration(generation uint64) {
+	walletSessionMu.Lock()
+	defer walletSessionMu.Unlock()
+	if pulseSessionGeneration == generation {
+		pulseRunning = false
+		pulseSessionGeneration = 0
+	}
+}
 
 var appExitFlag atomic.Bool
 
@@ -1291,6 +1348,13 @@ func refreshPulseWalletState(sentNotifications *bool) {
 // Go routine to update the latest information from the connected daemon (Online Mode only)
 
 func StartPulse() {
+	if !startPulseForActiveWallet() {
+		return
+	}
+
+	generation := currentWalletGeneration()
+	defer finishPulseForGeneration(generation)
+
 	if !walletapi.Connected && engram.Disk != nil {
 		logger.Printf("[Network] Attempting network connection to: %s\n", walletapi.Daemon_Endpoint)
 		err := walletapi.Connect(session.Daemon)
@@ -1310,7 +1374,7 @@ func StartPulse() {
 
 			go func() {
 				count := 0
-				for engram.Disk != nil {
+				for isWalletGenerationActive(generation) {
 					if !session.WalletOpen {
 						break
 					}
@@ -1338,7 +1402,7 @@ func StartPulse() {
 
 						time.Sleep(time.Second)
 					} else {
-						if engram.Disk == nil || !session.WalletOpen {
+						if !isWalletGenerationActive(generation) {
 							break
 						}
 
@@ -1812,11 +1876,15 @@ func closeWallet() {
 
 		stopEPOCH()
 		engram.Disk.SetOfflineMode()
-		if err := engram.Disk.Save_Wallet(); err != nil {
+		walletapi.Connected = false
+		session.Offline = true
+		globals.Exit_In_Progress = true
+		if shouldSkipWalletSave() {
+			logger.Printf("[Engram] Skipping wallet save on close because runtime-only fields are attached")
+		} else if err := engram.Disk.Save_Wallet(); err != nil {
 			logger.Errorf("[Engram] Failed to save wallet on close: %s\n", err)
 		}
 
-		globals.Exit_In_Progress = true
 		engram.Disk.Close_Encrypted_Wallet()
 		session.WalletOpen = false
 		session.Domain = "app.main"
@@ -1870,6 +1938,9 @@ func closeWallet() {
 				removeOverlays()
 			}
 		})
+		if gnomon.Active == 0 {
+			gnomon.Active = 1
+		}
 		//session.Window.CenterOnScreen()
 		logger.Printf("[Engram] Wallet saved and closed successfully.\n")
 		return
@@ -2035,9 +2106,13 @@ func login() {
 		session.Balance = 0
 
 		go func() {
+			generation := currentWalletGeneration()
 			connected := waitForConnectionWithTimeout(5 * time.Second)
-			if !connected {
+			if !connected || !isWalletGenerationActive(generation) {
 				uiDo(func() {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
 					status.Connection.FillColor = colors.Red
 					status.Connection.Refresh()
 					status.Sync.FillColor = colors.Red
@@ -2052,15 +2127,18 @@ func login() {
 			})
 
 			waitForWalletSync(3 * time.Second)
+			if !isWalletGenerationActive(generation) {
+				return
+			}
 
 			needsReg, regDone := checkRegistrationWithTimeout(10 * time.Second)
-			if engram.Disk == nil || !session.WalletOpen {
+			if !isWalletGenerationActive(generation) {
 				return
 			}
 
 			if needsReg {
 				fyne.Do(func() {
-					if engram.Disk == nil || !session.WalletOpen {
+					if !isWalletGenerationActive(generation) {
 						return
 					}
 					registerAccount()
@@ -2071,11 +2149,11 @@ func login() {
 				return
 			}
 
-			if regDone {
+			if regDone && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
 				go startGnomon()
 			}
 
-			if engram.Disk == nil || !session.WalletOpen {
+			if !isWalletGenerationActive(generation) {
 				return
 			}
 
@@ -3097,6 +3175,10 @@ func applyDecodedArgs(entry *rpc.Entry, args rpc.Arguments) {
 }
 
 func enrichMessageEntry(base rpc.Entry) rpc.Entry {
+	if engram.Disk == nil || !session.WalletOpen {
+		return base
+	}
+
 	var zeroscid crypto.Hash
 
 	if _, err := base.ProcessPayload(); err == nil && messageComment(base) != "" {
@@ -3107,6 +3189,9 @@ func enrichMessageEntry(base rpc.Entry) rpc.Entry {
 		if messageComment(base) != "" {
 			return base
 		}
+	}
+	if engram.Disk == nil || !session.WalletOpen {
+		return base
 	}
 
 	_, detail := engram.Disk.Get_Payments_TXID(zeroscid, base.TXID)
@@ -3655,6 +3740,7 @@ func refreshMessageHistoryAsync(force bool) {
 	if engram.Disk == nil {
 		return
 	}
+	generation := currentWalletGeneration()
 
 	messageRefreshState.Lock()
 	if messageRefreshState.running {
@@ -3671,6 +3757,10 @@ func refreshMessageHistoryAsync(force bool) {
 			messageRefreshState.Unlock()
 		}()
 
+		if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+			return
+		}
+
 		if force {
 			messageCacheMu.Lock()
 			messageCache.Primed = false
@@ -3679,10 +3769,13 @@ func refreshMessageHistoryAsync(force bool) {
 		}
 
 		scanMessageTransfers(0)
+		if !isWalletGenerationActive(generation) {
+			return
+		}
 		savePersistedMessageCache()
 
 		uiDo(func() {
-			if engram.Disk == nil || !session.WalletOpen {
+			if !isWalletGenerationActive(generation) {
 				return
 			}
 			if session.Window == nil {
@@ -3755,11 +3848,19 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	}
 
 	for i := range entries {
+		if engram.Disk == nil || !session.WalletOpen {
+			break
+		}
+
 		entry := entries[i]
 		entry = enrichMessageEntry(entry)
 		entryErr := error(nil)
 		if len(entry.Payload_RPC) == 0 {
 			_, entryErr = entry.ProcessPayload()
+		}
+
+		if engram.Disk == nil || !session.WalletOpen {
+			break
 		}
 
 		_, detail := engram.Disk.Get_Payments_TXID(zeroscid, entry.TXID)
@@ -3903,12 +4004,24 @@ func getMessages(h uint64) (result []string) {
 
 // Returns a list of registered usernames from Gnomon
 func queryUsernames(address string) (result []string, err error) {
+	generation := currentWalletGeneration()
 	if gnomon.Index != nil && engram.Disk != nil {
+		if !isWalletGenerationActive(generation) {
+			return nil, nil
+		}
 		result, _ = gnomon.Graviton.GetSCIDKeysByValue("0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight(), false)
+		if !isWalletGenerationActive(generation) {
+			return nil, nil
+		}
 		if len(result) <= 0 {
 			result, _, err = gnomon.Index.GetSCIDKeysByValue(nil, "0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight())
+			if !isWalletGenerationActive(generation) {
+				return nil, nil
+			}
 			if err != nil {
-				logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
+				if !strings.Contains(err.Error(), "closed network connection") {
+					logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
+				}
 				return
 			}
 		}
@@ -3949,8 +4062,17 @@ func getPrimaryUsername() (err error) {
 
 // Start the Gnomon indexer
 func startGnomon() {
+	generation := currentWalletGeneration()
+	if !isWalletGenerationActive(generation) {
+		return
+	}
+	if globals.Exit_In_Progress {
+		return
+	}
+
 	if walletapi.Connected {
 		if gnomon.Index == nil && gnomon.Active == 1 {
+			gnomon.Active = 2
 			path := filepath.Join(AppPath(), "datashards", "gnomon")
 			switch session.Network {
 			case NETWORK_TESTNET:
@@ -4069,10 +4191,17 @@ func startGnomon() {
 						})
 					}
 				}()
+				if !isWalletGenerationActive(generation) || gnomon.Index == nil {
+					return
+				}
 				gnomon.Index.StartDaemonMode(parallelBlocks)
+				if !isWalletGenerationActive(generation) {
+					return
+				}
 			}()
 
 			logger.Printf("[Gnomon] Scan Status: [%d / %d]\n", height, gnomon.Index.LastIndexedHeight)
+			gnomon.Active = 1
 		}
 	}
 }
@@ -4125,9 +4254,13 @@ func isDatabaseCorrupted(path string) bool {
 // Stop all indexers and close Gnomon
 func stopGnomon() {
 	if gnomon.Index != nil {
+		gnomon.Active = 0
 		gnomon.Index.Close()
 		gnomon.Index = nil
 		logger.Printf("[Gnomon] Closed all indexers.\n")
+	}
+	if gnomon.Index == nil {
+		gnomon.Active = 0
 	}
 	// CRITICAL FIX: Also close BBolt database to release file lock
 	if gnomon.BBolt != nil && gnomon.BBolt.DB != nil {
@@ -6295,6 +6428,11 @@ func toggleXSWD(endpoint string) {
 
 // Prompt when an application submits request to connect to wallet with XSWD
 func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
+	generation := currentWalletGeneration()
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return false
+	}
+
 	if remoteAccess.WS.advanced {
 		// If global permissions enabled set them here
 		if remoteAccess.WS.global.enabled {
@@ -6510,6 +6648,10 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	done := make(chan struct{})
 	btnDismiss := widget.NewButton("Deny", nil)
 	btnDismiss.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
 		if options.Selected == xswd.Allow.String() {
 			confirmed = true
 		}
@@ -6580,6 +6722,9 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	case <-ad.OnClose:
 
+	}
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return false
 	}
 
 	overlay.Top().Hide()
@@ -6676,6 +6821,11 @@ func handleTELALinkRequest(linkParams TELALink_Params) (params string, err error
 // Ask permission to complete a specific request from a connected application,
 // can choose to Allow, Always Allow, Deny, Always Deny the request
 func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (choice xswd.Permission) {
+	generation := currentWalletGeneration()
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return xswd.Deny
+	}
+
 	method := request.Method()
 	// Gnomon methods behave as AlwaysAllow
 	if strings.HasPrefix(method, "Gnomon.") {
@@ -6803,6 +6953,10 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	done := make(chan struct{})
 	btnDismiss := widget.NewButton("Deny", nil)
 	btnDismiss.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
 		switch options.Selected {
 		case xswd.Allow.String():
 			choice = xswd.Allow
@@ -6829,6 +6983,9 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	linkRemove := widget.NewHyperlinkWithStyle("Remove Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkRemove.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			return
+		}
 		verificationOverlay(
 			false,
 			ad.Name,
@@ -6897,6 +7054,9 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	case <-ad.OnClose:
 
+	}
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return xswd.Deny
 	}
 
 	overlay.Top().Hide()
