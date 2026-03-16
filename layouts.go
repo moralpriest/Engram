@@ -3180,7 +3180,9 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		engram.Disk.Save_Wallet()
+		if err := engram.Disk.Save_Wallet(); err != nil {
+			logger.Errorf("[Register] Failed to save wallet after creation: %s\n", err)
+		}
 
 		// Wallet remains open for immediate transition via "Enter" button
 		session.WalletOpen = true
@@ -5002,7 +5004,11 @@ func layoutTransfers() fyne.CanvasObject {
 					}
 
 					go func() {
-						fyne.Do(func() {
+						generation := currentWalletGeneration()
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
 							btnClear.Disable()
 							btnSend.Text = "Confirming..."
 							btnSend.Refresh()
@@ -5012,11 +5018,18 @@ func layoutTransfers() fyne.CanvasObject {
 						sHeight := walletapi.Get_Daemon_Height()
 
 						for session.Domain == "app.transfers" {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
 							var zeroscid crypto.Hash
 							_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
 							if result.TXID == txid.String() {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Transfer Successful!"
 									btnSend.Refresh()
 								})
@@ -5026,7 +5039,10 @@ func layoutTransfers() fyne.CanvasObject {
 
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Transfer failed..."
 									btnSend.Disable()
 									btnSend.Refresh()
@@ -5036,7 +5052,10 @@ func layoutTransfers() fyne.CanvasObject {
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 									btnSend.Refresh()
 								})
@@ -5047,14 +5066,14 @@ func layoutTransfers() fyne.CanvasObject {
 					}()
 
 					pendingList = pendingList[:0]
-					fyne.Do(func() {
-						data.Reload()
+					uiDo(func() {
+						_ = data.Reload()
 						btnSend.Disable()
 						btnClear.Disable()
 					})
 				}
 			} else {
-				fyne.Do(func() {
+				uiDo(func() {
 					btnSubmit.Text = "Invalid Password..."
 					btnSubmit.Disable()
 					btnSubmit.Refresh()
@@ -8121,10 +8140,15 @@ func layoutPM() fyne.CanvasObject {
 		entry.Refresh()
 
 		go func() {
+			generation := currentWalletGeneration()
 			walletapi.WaitNewHeightBlock()
 			sHeight := walletapi.Get_Daemon_Height()
 			var success bool
 			for session.Domain == "app.messages.contact" {
+				if !isWalletGenerationActive(generation) {
+					return
+				}
+
 				var zeroscid crypto.Hash
 				_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
@@ -8151,8 +8175,13 @@ func layoutPM() fyne.CanvasObject {
 				// If success, reload page w/ latest content. Otherwise retain the Failure message for UX relay
 				if success {
 					refreshMessageHistoryAsync(false)
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutPM())
+					uiDo(func() {
+						if !isWalletGenerationActive(generation) {
+							return
+						}
+						session.Window.SetContent(layoutTransition())
+						session.Window.SetContent(layoutPM())
+					})
 					break
 				} else {
 					time.Sleep(time.Second * 1)
@@ -9933,7 +9962,11 @@ func layoutIdentity() fyne.CanvasObject {
 					logger.Errorf("[Username] %s\n", err)
 				} else {
 					go func() {
-						fyne.Do(func() {
+						generation := currentWalletGeneration()
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
 							entryReg.Text = ""
 							entryReg.Refresh()
 						})
@@ -9942,13 +9975,20 @@ func layoutIdentity() fyne.CanvasObject {
 						sHeight := walletapi.Get_Daemon_Height()
 
 						for {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
 							if session.Domain == "app.Identity" {
 								//vars, _, _, err := gnomon.Index.RPC.GetSCVariables("0000000000000000000000000000000000000000000000000000000000000001", engram.Disk.Get_Daemon_TopoHeight(), nil, []string{session.NewUser}, nil, false)
 								usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 								if err != nil {
 									logger.Errorf("[Username] Error querying usernames: %s\n", err)
 
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = "Error querying usernames"
 										btnReg.Refresh()
 									})
@@ -9961,7 +10001,10 @@ func layoutIdentity() fyne.CanvasObject {
 										logger.Printf("[Username] Successfully registered username: %s\n", session.NewUser)
 										_ = tx
 
-										fyne.Do(func() {
+										uiDo(func() {
+											if !isWalletGenerationActive(generation) {
+												return
+											}
 											btnReg.Text = "Registration successful!"
 											btnReg.Refresh()
 											session.NewUser = ""
@@ -9974,7 +10017,10 @@ func layoutIdentity() fyne.CanvasObject {
 
 								// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 								if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = "Unable to register..."
 										btnReg.Refresh()
 									})
@@ -9984,7 +10030,10 @@ func layoutIdentity() fyne.CanvasObject {
 
 								// If daemon height has incremented, print retry counters into button space
 								if walletapi.Get_Daemon_Height()-sHeight > 0 {
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 										btnReg.Refresh()
 									})
@@ -10309,16 +10358,24 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 				btnSend.Text = "Confirming..."
 				btnSend.Refresh()
 				go func() {
+					generation := currentWalletGeneration()
 					walletapi.WaitNewHeightBlock()
 					sHeight := walletapi.Get_Daemon_Height()
 
 					for {
+						if !isWalletGenerationActive(generation) {
+							return
+						}
+
 						found := false
 						if session.Domain == "app.Identity" {
 							usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 							if err != nil {
 								logger.Errorf("[Username] Error querying usernames: %s\n", err)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Error querying usernames"
 									btnSend.Refresh()
 									btnSetPrimary.Enable()
@@ -10335,7 +10392,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 							if !found {
 								logger.Printf("[TransferOwnership] %s was successfully transferred to: %s\n", username, address)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									session.Window.SetContent(layoutTransition())
 									session.Window.SetContent(layoutIdentity())
 									removeOverlays()
@@ -10347,7 +10407,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
 								logger.Errorf("[TransferOwnership] %s was unsuccessful in transferring to: %s\n", username, address)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Unable to transfer..."
 									btnSend.Refresh()
 									btnSetPrimary.Enable()
@@ -10358,7 +10421,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 									btnSend.Refresh()
 								})
@@ -12750,7 +12816,9 @@ func layoutAccount() fyne.CanvasObject {
 						btnChange.Text = "Password Updated"
 						btnChange.Disable()
 						btnChange.Refresh()
-						engram.Disk.Save_Wallet()
+						if err := engram.Disk.Save_Wallet(); err != nil {
+							logger.Errorf("[Settings] Failed to save wallet after password change: %s\n", err)
+						}
 					}
 				} else {
 					btnChange.Text = "Passwords do not match"
@@ -17154,24 +17222,37 @@ func layoutTELA() fyne.CanvasObject {
 			dlg.Hide()
 			clearAllTELACache()
 			forceFreshScan = true
+			generation := currentWalletGeneration()
 
 			results.Text = "  Resetting Gnomon index..."
 			results.Color = colors.Yellow
-			fyne.Do(func() {
+			uiDo(func() {
+				if !isWalletGenerationActive(generation) {
+					return
+				}
 				results.Refresh()
 			})
 
 			go func() {
-				resetGnomonIndex()
+				if err := resetGnomonIndex(); err != nil {
+					logger.Errorf("[TELA] Could not reset gnomon index: %s\n", err)
+					return
+				}
 
 				for i := 0; i < 60; i++ {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
 					time.Sleep(time.Second)
 					if gnomon.Index != nil {
 						break
 					}
 				}
 
-				fyne.Do(func() {
+				uiDo(func() {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
 					wSelect.SetSelected("Search")
 				})
 			}()
@@ -18807,8 +18888,9 @@ func layoutTELA() fyne.CanvasObject {
 		}
 		if gnomon.Index == nil {
 			if engram.Disk != nil {
+				generation := currentWalletGeneration()
 				enableGnomon, _ := getGnomon()
-				if enableGnomon == "1" {
+				if enableGnomon == "1" && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
 					go startGnomon()
 				}
 			}
@@ -18826,23 +18908,32 @@ func layoutTELA() fyne.CanvasObject {
 			telaStartupWaitMu.Unlock()
 
 			go func() {
+				generation := currentWalletGeneration()
 				defer func() {
 					telaStartupWaitMu.Lock()
 					telaStartupWaiting = false
 					telaStartupWaitMu.Unlock()
 				}()
 				for i := 0; i < 60; i++ {
+					if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+						return
+					}
 					time.Sleep(time.Second)
 					if !strings.Contains(session.Domain, ".tela") {
 						return
 					}
 					if gnomon.Index != nil {
-						fyne.Do(func() {
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
 							results.Text = "  Starting TELA scan..."
 							results.Color = colors.Yellow
 							results.Refresh()
 						})
-						go getSearchResults()
+						if isWalletGenerationActive(generation) {
+							go getSearchResults()
+						}
 						return
 					}
 				}
@@ -18853,12 +18944,15 @@ func layoutTELA() fyne.CanvasObject {
 			results.Refresh()
 		} else if len(telaSearch) > 0 {
 			searching = telaSearchDisplayAll(telaSearch, sortBy)
-			searchData.Set(searching)
+			_ = searchData.Set(searching)
 			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
 			results.Color = colors.Green
 			results.Refresh()
 		} else {
-			go getSearchResults()
+			generation := currentWalletGeneration()
+			if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+				go getSearchResults()
+			}
 		}
 
 		searchList.Refresh()
@@ -18904,7 +18998,10 @@ func layoutTELA() fyne.CanvasObject {
 				results.Refresh()
 			}
 
-			go getHistoryResults()
+			generation := currentWalletGeneration()
+			if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+				go getHistoryResults()
+			}
 
 			entryHistory.Show()
 			historyBox.Show()
@@ -19140,7 +19237,10 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
-	go getHistoryResults()
+	generation := currentWalletGeneration()
+	if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+		go getHistoryResults()
+	}
 
 	historyList.OnSelected = func(id widget.ListItemID) {
 		errorText.Text = ""
