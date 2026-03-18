@@ -31,9 +31,9 @@ type NavEntry struct {
 
 // NavigationStack manages the history of screens for back navigation
 type NavigationStack struct {
-	mu       sync.RWMutex
-	history  []NavEntry
-	maxSize  int
+	mu      sync.RWMutex
+	history []NavEntry
+	maxSize int
 }
 
 // NewNavigationStack creates a new navigation stack
@@ -135,21 +135,21 @@ func (ns *NavigationStack) Size() int {
 // layoutRegistry maps domain names to layout functions
 // Note: Only layouts that take no parameters can be registered here
 var layoutRegistry = map[string]LayoutFunc{
-	"app.main":              layoutMain,
-	"app.wallet":            layoutDashboard,
-	"app.send":              layoutSend,
-	"app.service":           layoutServiceAddress,
-	"app.create":            layoutNewAccount,
-	"app.restore":           layoutRestore,
-	"app.explorer":          layoutAssetExplorer,
-	"app.myassets":          layoutMyAssets,
-	"app.transfers":         layoutTransfers,
-	"app.settings":          layoutSettings,
-	"app.appsettings":       layoutAppSettings,
-	"app.messages":          layoutMessages,
-	"app.messages.contact":  layoutMessages, // Go back to messages list
-	"app.remoteaccess":      layoutRemoteAccess,
-	"app.register":          layoutNewAccount,
+	"app.main":             layoutMain,
+	"app.wallet":           layoutDashboard,
+	"app.send":             layoutSend,
+	"app.service":          layoutServiceAddress,
+	"app.create":           layoutNewAccount,
+	"app.restore":          layoutRestore,
+	"app.explorer":         layoutAssetExplorer,
+	"app.myassets":         layoutMyAssets,
+	"app.transfers":        layoutTransfers,
+	"app.settings":         layoutSettings,
+	"app.appsettings":      layoutAppSettings,
+	"app.messages":         layoutMessages,
+	"app.messages.contact": layoutMessages, // Go back to messages list
+	"app.remoteaccess":     layoutRemoteAccess,
+	"app.register":         layoutNewAccount,
 }
 
 // getLayoutForDomain returns the layout function for a given domain
