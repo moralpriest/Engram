@@ -47,68 +47,23 @@ func (e *returnEntry) TypedKey(key *fyne.KeyEvent) {
 	}
 }
 
-// ImageButton is a button that displays an image with proper button styling
-type ImageButton struct {
-	widget.Button
-	image    *canvas.Image
-	imageRes fyne.Resource
-}
-
-func NewImageButton(res fyne.Resource, onTap func()) *ImageButton {
-	btn := &ImageButton{
-		imageRes: res,
-	}
-	btn.OnTapped = onTap
+// NewImageButton creates a button that displays an image with proper button styling
+func NewImageButton(res fyne.Resource, onTap func()) *fyne.Container {
+	btn := widget.NewButton("", onTap)
 	btn.Importance = widget.MediumImportance
-	btn.ExtendBaseWidget(btn)
-	return btn
-}
 
-func (b *ImageButton) CreateRenderer() fyne.WidgetRenderer {
-	renderer := b.Button.CreateRenderer()
-	b.image = canvas.NewImageFromResource(b.imageRes)
+	img := canvas.NewImageFromResource(res)
+	img.FillMode = canvas.ImageFillContain
+
 	imgWidth := scaleSize(90)
 	imgHeight := scaleSize(35)
-	b.image.SetMinSize(fyne.NewSize(imgWidth, imgHeight))
-	b.image.FillMode = canvas.ImageFillContain
 
-	return &imageButtonRenderer{
-		baseRenderer: renderer,
-		image:        b.image,
-		button:       b,
-	}
-}
+	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
 
-type imageButtonRenderer struct {
-	baseRenderer fyne.WidgetRenderer
-	image        *canvas.Image
-	button       *ImageButton
-}
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(100, 40))
 
-func (r *imageButtonRenderer) Layout(size fyne.Size) {
-	r.baseRenderer.Layout(size)
-	imgWidth := scaleSize(90)
-	imgHeight := scaleSize(35)
-	r.image.Resize(fyne.NewSize(imgWidth, imgHeight))
-	r.image.Move(fyne.NewPos((size.Width-imgWidth)/2, (size.Height-imgHeight)/2))
-}
-
-func (r *imageButtonRenderer) MinSize() fyne.Size {
-	return scalePoint(100, 40)
-}
-
-func (r *imageButtonRenderer) Refresh() {
-	r.baseRenderer.Refresh()
-	r.image.Refresh()
-}
-
-func (r *imageButtonRenderer) Objects() []fyne.CanvasObject {
-	objects := r.baseRenderer.Objects()
-	return append(objects, r.image)
-}
-
-func (r *imageButtonRenderer) Destroy() {
-	r.baseRenderer.Destroy()
+	return container.NewStack(sizeEnforcer, btn, container.NewCenter(imgSizer))
 }
 
 var _ fyne.Draggable = (*iframe)(nil)
