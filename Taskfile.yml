@@ -145,9 +145,8 @@ tasks:
   package-linux:
     desc: Package for Linux
     env:
-      GOFLAGS: -ldflags={{.LDFLAGS}}
     cmds:
-      - fyne package -os linux -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - fyne package --target linux --name {{.APP_NAME}} --app-version {{.VERSION}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.tar.xz dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
@@ -155,9 +154,8 @@ tasks:
   package-windows:
     desc: Package for Windows
     env:
-      GOFLAGS: -ldflags={{.LDFLAGS}}
     cmds:
-      - fyne package -os windows -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - fyne package --target windows --name {{.APP_NAME}} --app-version {{.VERSION}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.exe dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
@@ -165,9 +163,8 @@ tasks:
   package-macos:
     desc: Package for macOS
     env:
-      GOFLAGS: -ldflags={{.LDFLAGS}}
     cmds:
-      - fyne package -os darwin -name {{.APP_NAME}} -appVersion {{.VERSION}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz
@@ -175,9 +172,8 @@ tasks:
   package-android:
     desc: Package for Android
     env:
-      GOFLAGS: -ldflags={{.LDFLAGS}}
     cmds:
-      - fyne package -os android/arm64 -name {{.APP_NAME}} -appVersion {{.VERSION}} -appID {{.APP_ID}} -icon Icon.png -tags {{.BUILD_TAGS}}
+      - fyne package --target android/arm64 --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk

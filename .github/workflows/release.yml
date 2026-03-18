@@ -162,8 +162,8 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os linux -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
-            -icon Icon.png -tags migrated_fynedo
+          fyne package --target linux --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --icon Icon.png --tags migrated_fynedo
           mv Engram.tar.xz engram-${{ needs.verify.outputs.version }}-linux-amd64.tar.xz
 
       - name: Upload artifact
@@ -202,8 +202,8 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os windows -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} `
-            -icon Icon.png -tags migrated_fynedo
+          fyne package --target windows --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} `
+            --icon Icon.png --tags migrated_fynedo
           Rename-Item -Path "Engram.exe" -NewName "engram-${{ needs.verify.outputs.version }}-windows-amd64.exe"
 
       - name: Upload artifact
@@ -242,8 +242,8 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os darwin -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
-            -icon Icon.png -tags migrated_fynedo
+          fyne package --target darwin --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --icon Icon.png --tags migrated_fynedo
           tar -czvf engram-${{ needs.verify.outputs.version }}-macos-amd64.tar.gz Engram.app
 
       - name: Upload artifact
@@ -296,8 +296,8 @@ jobs:
         env:
           GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package -os android/arm64 -name Engram -appVersion ${{ needs.verify.outputs.fyne_version }} \
-            -appID com.engram.wallet -icon Icon.png -tags migrated_fynedo
+          fyne package --target android/arm64 --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --app-id com.engram.wallet --icon Icon.png --tags migrated_fynedo
           mv Engram.apk engram-${{ needs.verify.outputs.version }}-android-arm64.apk
 
       - name: Upload artifact
