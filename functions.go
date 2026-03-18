@@ -53,7 +53,6 @@ import (
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
-	"github.com/civilware/tela/shards"
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/creachadair/jrpc2/handler"
@@ -1022,7 +1021,7 @@ func initSettings() {
 	logger.Printf("[Engram] initSettings() completed")
 
 	if a.Driver().Device().IsMobile() {
-		err := tela.SetShardPath(filepath.Join(AppPath(), filepath.Dir(shards.GetPath())))
+		err := tela.SetShardPath(AppPath())
 		if err != nil {
 			logger.Errorf("[Engram] Setting TELA shard: %s\n", err)
 			return
@@ -1877,7 +1876,6 @@ func closeWallet() {
 		stopEPOCH()
 		engram.Disk.SetOfflineMode()
 		walletapi.Connected = false
-		session.Offline = true
 		globals.Exit_In_Progress = true
 		if shouldSkipWalletSave() {
 			logger.Printf("[Engram] Skipping wallet save on close because runtime-only fields are attached")
@@ -2024,7 +2022,6 @@ func login() {
 			if len(session.Error) > 40 {
 				session.Error = fmt.Sprintf("%s...", session.Error[0:40])
 			}
-			session.Window.Canvas().Content().Refresh()
 			removeOverlays()
 			return
 		}
@@ -3178,6 +3175,19 @@ func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseR
 	return transfers, normalRows, coinbaseRows, messageRows, true
 }
 
+func getTransferTime(txid string) time.Time {
+	transfers, _, _, _, ok := getHistoryRowCache()
+	if !ok {
+		return time.Time{}
+	}
+	for _, t := range transfers {
+		if t.TXID == txid {
+			return t.Time
+		}
+	}
+	return time.Time{}
+}
+
 func setHistoryRowCache(transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
 	if engram.Disk == nil {
 		return
@@ -3206,7 +3216,11 @@ func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows
 		txid := entries[e].TXID
 
 		if entries[e].Coinbase {
-			coinbaseRows = append(coinbaseRows, "Network;;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid)
+			amount := entries[e].Amount
+			if amount < 0 {
+				amount = -amount
+			}
+			coinbaseRows = append(coinbaseRows, "Received;;;"+globals.FormatMoney(amount)+";;;"+height+";;;"+stamp+";;;"+txid)
 			continue
 		}
 
