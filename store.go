@@ -229,6 +229,11 @@ func GetValue(t string, key []byte) (result []byte, err error) {
 func GetEncryptedValue(t string, key []byte) (result []byte, err error) {
 	result = []byte("")
 
+	if engram.Disk == nil {
+		err = errors.New("error: no active account found")
+		return
+	}
+
 	if t == "" {
 		err = errors.New("error: missing graviton tree input")
 		return

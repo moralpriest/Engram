@@ -67,6 +67,9 @@ func AppPath() (result string) {
 		// Fallback for Android - internal files dir
 		if runtime.GOOS == "android" {
 			// Try common Android internal paths as fallback
+			if _, err := os.Stat("/data/user/0/com.engram.wallet/files"); err == nil {
+				return "/data/user/0/com.engram.wallet/files"
+			}
 			if _, err := os.Stat("/data/user/0/org.dero.engram/files"); err == nil {
 				return "/data/user/0/org.dero.engram/files"
 			}
