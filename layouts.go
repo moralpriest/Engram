@@ -10902,7 +10902,7 @@ func layoutHistory() fyne.CanvasObject {
 			return
 		}
 
-		entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+		entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
 		cachedTransfers = append([]rpc.Entry(nil), entries...)
 		messages := scanMessageTransfers(0)
 		historyNormalRows, historyCoinbaseRows, historyMessageRows = buildHistoryRows(entries, messages)
@@ -10946,7 +10946,7 @@ func layoutHistory() fyne.CanvasObject {
 						canvas.NewRectangle(colors.DarkMatter),
 					),
 				)
-				overlay.Add(layoutHistoryDetail(split[4]))
+				overlay.Add(layoutHistoryDetail(split[4], result))
 				listBox.UnselectAll()
 			}
 
@@ -10975,6 +10975,27 @@ func layoutHistory() fyne.CanvasObject {
 			_ = listData.Set(data)
 
 			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				result := findCachedTransfer(split[4])
+
+				if result.TXID == "" {
+					label.Text = "---"
+				} else {
+					label.Text = result.TXID
+				}
+
+				fyne.Do(func() {
+					label.Refresh()
+				})
+
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4], result))
 				listBox.UnselectAll()
 			}
 
@@ -11004,7 +11025,7 @@ func layoutHistory() fyne.CanvasObject {
 
 			listBox.OnSelected = func(id widget.ListItemID) {
 				split := strings.Split(data[id], ";;;")
-				_ = findCachedTransfer(split[4])
+				result := findCachedTransfer(split[4])
 				overlay := session.Window.Canvas().Overlays()
 				overlay.Add(
 					container.NewStack(
@@ -11012,7 +11033,7 @@ func layoutHistory() fyne.CanvasObject {
 						canvas.NewRectangle(colors.DarkMatter),
 					),
 				)
-				overlay.Add(layoutHistoryDetail(split[4]))
+				overlay.Add(layoutHistoryDetail(split[4], result))
 				listBox.UnselectAll()
 				listBox.Refresh()
 			}
@@ -11116,7 +11137,7 @@ func layoutHistory() fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
-func layoutHistoryDetail(txid string) fyne.CanvasObject {
+func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
@@ -11257,7 +11278,11 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	_, details := engram.Disk.Get_Payments_TXID(zeroscid, txid)
 	details = enrichMessageEntry(details)
 
-	stamp := string(details.Time.Format(time.RFC822))
+	transferTime := transfer.Time
+	if transferTime.IsZero() {
+		transferTime = details.Time
+	}
+	stamp := string(transferTime.Format(time.RFC822))
 	height := strconv.FormatUint(details.Height, 10)
 
 	valueMember := widget.NewRichTextFromMarkdown(" ")
@@ -11291,7 +11316,17 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	valueDirection := canvas.NewText("", colors.Account)
 	valueDirection.TextSize = 22
 	valueDirection.TextStyle = fyne.TextStyle{Bold: true}
-	if details.Incoming {
+	if details.Coinbase {
+		valueDirection.Text = "  Received"
+		labelMember.Text = "  SOURCE"
+		valueMember.ParseMarkdown("  Network (Mining Reward)")
+		valueAmount.Color = colors.Green
+		amount := details.Amount
+		if amount < 0 {
+			amount = -amount
+		}
+		valueAmount.Text = "  + " + globals.FormatMoney(amount)
+	} else if details.Incoming {
 		valueDirection.Text = "  Received"
 		labelMember.Text = "  SENDER  ADDRESS"
 		if details.Sender == "" || details.Sender == engram.Disk.GetAddress().String() {
@@ -19723,122 +19758,128 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		} else {
 			showLoadingOverlay()
 
-			if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
-				url, err := url.Parse(link)
-				if err != nil {
-					logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-					errorText.Text = "error could parse URL"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-				} else {
-					pushTELANavigation(index.SCID)
-
-					err = fyne.CurrentApp().OpenURL(url)
+			go func() {
+				// Start the TELA server
+				if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
+					// Server started successfully, get the URL
+					url, err := url.Parse(link)
 					if err != nil {
-						logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-						errorText.Text = "error could not open browser"
+						logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+						errorText.Text = "error could parse URL"
 						errorText.Color = colors.Red
-
-						if isMobileDevice() {
-							fyne.Do(func() {
-								dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-							})
-						}
 						errorText.Refresh()
-					} else if isMobileDevice() {
-						logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
-					}
-				}
+					} else {
+						pushTELANavigation(index.SCID)
 
-				textStatus.Text = "Running"
-				textStatus.Color = colors.Green
-				textStatus.Refresh()
-				btnServer.Text = "Shutdown Application"
-				btnServer.Refresh()
-				linkOpenInBrowser.Show()
-
-				err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
-				if err != nil {
-					logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
-				}
-			} else {
-				if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
-					removeOverlays()
-
-					go func() {
-						// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
-						telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
-						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
+						// Open the URL in browser
+						err = fyne.CurrentApp().OpenURL(url)
 						if err != nil {
-							logger.Errorf("[Engram] Open TELA link: %s\n", err)
-							fyne.Do(func() {
+							logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+							errorText.Text = "error could not open browser"
+							errorText.Color = colors.Red
+
+							if isMobileDevice() {
+								fyne.Do(func() {
+									dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+								})
+							}
+						} else {
+							logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+						}
+					}
+				} else {
+					// Check if this is an update conflict
+					if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
+						removeOverlays()
+
+						generation := currentWalletGeneration()
+						go func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
+							// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
+							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
+							linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							if err != nil {
+								logger.Errorf("[Engram] Open TELA link: %s\n", err)
 								errorText.Text = "error could not open TELA"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
 
-							return
-						}
+								return
+							}
 
-						if linkPermission != xswd.Allow {
-							return
-						}
+							if linkPermission != xswd.Allow {
+								removeOverlays()
+								return
+							}
 
-						link, err := serveTELAUpdates(index.SCID)
-						if err != nil {
-							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-							fyne.Do(func() {
+							// Serve the updated content
+							link, err := serveTELAUpdates(index.SCID)
+							if err != nil {
+								logger.Errorf("[Engram] Error serving TELA: %s\n", err)
 								errorText.Text = telaErrorToString(err)
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
-							return
-						}
+								return
+							}
 
-						url, err := url.Parse(link)
-						if err != nil {
-							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-							fyne.Do(func() {
+							url, err := url.Parse(link)
+							if err != nil {
+								logger.Errorf("[Engram] TELA URL parse: %s\n", err)
 								errorText.Text = "error could parse URL"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
-						} else {
-							err = fyne.CurrentApp().OpenURL(url)
-							if err != nil {
-								fyne.Do(func() {
+							} else {
+								pushTELANavigation(index.SCID)
+
+								err = fyne.CurrentApp().OpenURL(url)
+								if err != nil {
+									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
 									errorText.Text = "error could not open browser"
 									errorText.Color = colors.Red
-									errorText.Refresh()
-								})
+
+									if isMobileDevice() {
+										fyne.Do(func() {
+											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+										})
+									}
+								} else {
+									logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+								}
 							}
-						}
 
+							fyne.Do(func() {
+								textStatus.Text = "   Online"
+								textStatus.Color = colors.Green
+								textStatus.Refresh()
+								btnServer.Text = "Shutdown Application"
+								btnServer.Refresh()
+								linkOpenInBrowser.Show()
+							})
+
+							err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
+							if err != nil {
+								logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
+							}
+						}()
+					} else {
+						// Other error occurred
 						fyne.Do(func() {
-							textStatus.Text = "   Online"
-							textStatus.Color = colors.Green
-							textStatus.Refresh()
-							btnServer.Text = "Shutdown Application"
-							btnServer.Refresh()
-							linkOpenInBrowser.Show()
+							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
+							errorText.Text = telaErrorToString(err)
+							errorText.Color = colors.Red
+							errorText.Refresh()
 						})
-
-						err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
-						if err != nil {
-							logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
-						}
-					}()
-
-					return
+					}
 				}
 
-				logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-				errorText.Text = telaErrorToString(err)
-				errorText.Color = colors.Red
-				errorText.Refresh()
-			}
-
-			removeOverlays()
+				// Always remove overlays when done
+				uiDo(func() {
+					removeOverlays()
+				})
+			}()
 		}
 	}
 
