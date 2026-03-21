@@ -1298,7 +1298,7 @@ func layoutDashboard() fyne.CanvasObject {
 					wrapMobileButton(btnMessages),
 				),
 			),
-			rectSpacerLarge,
+			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
 					wrapMobileButton(btnFilesContracts),
@@ -6204,7 +6204,6 @@ func layoutSettings() fyne.CanvasObject {
 		rectSpacer,
 		statusText,
 		wrapMobileButton(btnDelete),
-		rectSpacer,
 		wrapMobileButton(btnRestore),
 	)
 
