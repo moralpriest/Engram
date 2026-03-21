@@ -29,7 +29,7 @@ Fixes # (issue)
   - [ ] Module: Transfers
   - [ ] Module: Asset Explorer
   - [ ] Module: Services
-  - [ ] Module: Cyberdeck
+  - [ ] Module: Remote Access
   - [ ] Module: File Manager
   - [ ] Module: Contract Builder
   - [ ] Module: Datapad

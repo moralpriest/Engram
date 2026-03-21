@@ -4,3 +4,18 @@
 datashards*
 mainnet*
 testnet*
+engram_debug.log
+engram
+
+# Build artifacts
+bin/
+dist/
+.task/
+
+# Test artifacts
+coverage.out
+coverage.html
+
+# IDEs
+.cursor*
+.opencode*

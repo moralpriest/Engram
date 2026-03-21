@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -28,27 +29,51 @@ import (
 )
 
 type Res struct {
-	bg          *canvas.Image
-	bg2         *canvas.Image
-	icon        *canvas.Image
-	load        *canvas.Image
-	loading     *x.AnimatedGif
-	header      *canvas.Image
-	dero        *canvas.Image
-	gram        *canvas.Image
-	block       *canvas.Image
-	red_alert   *canvas.Image
-	green_alert *canvas.Image
-	mainBg      *canvas.Image
+	bg               *canvas.Image
+	bg2              *canvas.Image
+	icon             *canvas.Image
+	load             *canvas.Image
+	loading          *x.AnimatedGif
+	header           *canvas.Image
+	dero             *canvas.Image
+	gram             *canvas.Image
+	block            *canvas.Image
+	red_alert        *canvas.Image
+	green_alert      *canvas.Image
+	mainBg           *canvas.Image
+	telaBg           *canvas.Image
+	cachedTransition *fyne.Container
+	transitionMu     sync.Mutex
 }
 
 // Get app path
 func AppPath() (result string) {
 	result, _ = os.Getwd()
-	if runtime.GOOS == "android" {
-		result = a.Storage().RootURI().Path()
-	} else if runtime.GOOS == "ios" {
-		result = a.Storage().RootURI().Path()
+	if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+		// Try to get internal storage root from Fyne
+		if a != nil {
+			storage := a.Storage()
+			if storage != nil {
+				root := storage.RootURI()
+				if root != nil {
+					path := root.Path()
+					if path != "" && path != "/" {
+						return path
+					}
+				}
+			}
+		}
+
+		// Fallback for Android - internal files dir
+		if runtime.GOOS == "android" {
+			// Try common Android internal paths as fallback
+			if _, err := os.Stat("/data/user/0/com.engram.wallet/files"); err == nil {
+				return "/data/user/0/com.engram.wallet/files"
+			}
+			if _, err := os.Stat("/data/user/0/org.dero.engram/files"); err == nil {
+				return "/data/user/0/org.dero.engram/files"
+			}
+		}
 	}
 
 	return
@@ -59,26 +84,20 @@ func GetAccounts() (result []string, err error) {
 
 	switch session.Network {
 	case NETWORK_MAINNET:
-		_, err = os.Stat(filepath.Join(AppPath(), "mainnet"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "mainnet")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator)
 	case NETWORK_SIMULATOR:
-		_, err = os.Stat(filepath.Join(AppPath(), "testnet_simulator"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "testnet_simulator")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator)
 	default:
-		_, err = os.Stat(filepath.Join(AppPath(), "testnet"))
-		if err != nil {
-			return
-		} else {
-			path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator)
+		if _, err := os.Stat(filepath.Join(AppPath(), "testnet")); err != nil {
+			return []string{}, nil
 		}
+		path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator)
 	}
 
 	matches, _ := filepath.Glob(path + "*.db")

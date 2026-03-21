@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -27,10 +28,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -49,16 +52,70 @@ import (
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
+	"github.com/creachadair/jrpc2"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/rpc"
+	"github.com/deroproject/derohe/transaction"
 	"github.com/deroproject/derohe/walletapi"
 	"github.com/deroproject/derohe/walletapi/mnemonics"
 	"github.com/deroproject/derohe/walletapi/xswd"
 	"github.com/deroproject/graviton"
 	qrcode "github.com/skip2/go-qrcode"
 )
+
+var telaNavigationStack struct {
+	sync.Mutex
+	history []string
+}
+
+func isMobileDevice() bool {
+	return isMobile()
+}
+
+func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
+	return wrapMobileButton(widget.NewButtonWithIcon(label, icon, tapped))
+}
+
+func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {
+	if isMobile() {
+		sizeEnforcer := canvas.NewRectangle(color.Transparent)
+		sizeEnforcer.SetMinSize(scalePoint(48, 48))
+		return container.NewStack(sizeEnforcer, obj)
+	}
+	return obj
+}
+
+func pushTELANavigation(scid string) {
+	telaNavigationStack.Lock()
+	defer telaNavigationStack.Unlock()
+	telaNavigationStack.history = append(telaNavigationStack.history, scid)
+}
+
+func popTELANavigation() string {
+	telaNavigationStack.Lock()
+	defer telaNavigationStack.Unlock()
+	if len(telaNavigationStack.history) == 0 {
+		return ""
+	}
+	index := len(telaNavigationStack.history) - 1
+	scid := telaNavigationStack.history[index]
+	telaNavigationStack.history = telaNavigationStack.history[:index]
+	return scid
+}
+
+func hasTELANavigationHistory() bool {
+	telaNavigationStack.Lock()
+	defer telaNavigationStack.Unlock()
+	return len(telaNavigationStack.history) > 0
+}
+
+func clearTELANavigationHistory() {
+	telaNavigationStack.Lock()
+	defer telaNavigationStack.Unlock()
+	telaNavigationStack.history = nil
+}
 
 func layoutMain() fyne.CanvasObject {
 	// Set theme
@@ -69,7 +126,7 @@ func layoutMain() fyne.CanvasObject {
 
 	// Define objects
 
-	btnLogin := widget.NewButton("Connect", nil)
+	btnLogin := widget.NewButtonWithIcon("Connect", resourceConnectPng, nil)
 
 	if session.Error != "" {
 		btnLogin.Text = session.Error
@@ -136,55 +193,32 @@ func layoutMain() fyne.CanvasObject {
 		}
 	})
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	linkCreate := widget.NewHyperlinkWithStyle("Create a new account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCreate.OnTapped = func() {
+	// New Account button with icon
+	btnNewAccount := widget.NewButtonWithIcon("New Account", theme.ContentAddIcon(), func() {
 		session.Domain = "app.create"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutNewAccount())
 		removeOverlays()
-	}
+	})
 
-	linkRecover := widget.NewHyperlinkWithStyle("Recover an existing account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkRecover.OnTapped = func() {
+	// Recover Account button with icon
+	btnRecoverAccount := widget.NewButtonWithIcon("Recover Account", theme.DocumentIcon(), func() {
 		session.Domain = "app.restore"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutRestore())
 		removeOverlays()
-	}
+	})
 
-	linkSettings := widget.NewHyperlinkWithStyle("Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkSettings.OnTapped = func() {
+	// Connection Settings button with icon
+	btnConnectionSettings := widget.NewButtonWithIcon("Connection Settings", theme.SettingsIcon(), func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutSettings())
 		removeOverlays()
-	}
+	})
 
 	modeData := binding.BindBool(&session.Offline)
 	mode := widget.NewCheckWithData(" Offline Mode", modeData)
@@ -199,11 +233,6 @@ func layoutMain() fyne.CanvasObject {
 			btnLogin.Refresh()
 		}
 	}
-
-	footer := canvas.NewText("© 2025  DERO FOUNDATION  |  VERSION  "+version.String(), colors.Gray)
-	footer.TextSize = 10
-	footer.Alignment = fyne.TextAlignCenter
-	footer.TextStyle = fyne.TextStyle{Bold: true}
 
 	wPassword := NewReturnEntry()
 	wPassword.OnReturn = btnLogin.OnTapped
@@ -269,7 +298,7 @@ func layoutMain() fyne.CanvasObject {
 			btnLogin.Disable()
 		}
 
-		session.Window.Canvas().Focus(wPassword)
+		safeCanvasFocus(wPassword)
 
 		btnLogin.Refresh()
 	}
@@ -279,6 +308,13 @@ func layoutMain() fyne.CanvasObject {
 		wPassword.Disable()
 	} else {
 		wAccount.Enable()
+		// Auto-select if there's only one account
+		if len(list) == 1 {
+			wAccount.SetSelected(list[0])
+			// OnChanged will be triggered, which sets path and focuses password
+			// Explicitly focus password field to ensure it gets focus
+			safeCanvasFocus(wPassword)
+		}
 	}
 
 	wSpacer := widget.NewLabel(" ")
@@ -298,10 +334,46 @@ func layoutMain() fyne.CanvasObject {
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
 
 	status.Connection.FillColor = colors.Gray
-	status.Cyberdeck.FillColor = colors.Gray
+	status.RemoteAccess.FillColor = colors.Gray
 	status.Gnomon.FillColor = colors.Gray
 	status.EPOCH.FillColor = colors.Gray
 	status.Sync.FillColor = colors.Gray
+
+	// Separator line between Connect and more options
+	separatorLine := canvas.NewRectangle(color.White)
+	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
+	separator := container.NewCenter(separatorLine)
+	separatorSpacer := canvas.NewRectangle(color.Transparent)
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	// Create uniform button container - each button same size
+	buttonGrid := container.NewVBox(
+		container.New(layout.NewGridLayout(1),
+			btnNewAccount,
+		),
+		rectSpacer,
+		container.New(layout.NewGridLayout(1),
+			btnRecoverAccount,
+		),
+		rectSpacer,
+		container.New(layout.NewGridLayout(1),
+			btnConnectionSettings,
+		),
+	)
+
+	// Footer text
+	copyrightLabel := canvas.NewText("Copyright 2023-2026 DERO Foundation. All rights reserved.", colors.Gray)
+	copyrightLabel.TextSize = 10
+	copyrightLabel.Alignment = fyne.TextAlignCenter
+
+	versionLabel := canvas.NewText(fmt.Sprintf("Engram v%s", versionString), colors.Gray)
+	versionLabel.TextSize = 10
+	versionLabel.Alignment = fyne.TextAlignCenter
+
+	footer := container.NewVBox(
+		copyrightLabel,
+		versionLabel,
+	)
 
 	form := container.NewStack(
 		res.mainBg,
@@ -318,45 +390,52 @@ func layoutMain() fyne.CanvasObject {
 			rectSpacer,
 			mode,
 			rectSpacer,
-			rectSpacer,
 			btnLogin,
-			wSpacer,
-			container.NewStack(
-				container.NewHBox(
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-				),
-			),
 			rectSpacer,
+			separator,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					linkCreate,
-					layout.NewSpacer(),
-				),
-			),
-			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					linkRecover,
-					layout.NewSpacer(),
-				),
-			),
-			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					linkSettings,
-					layout.NewSpacer(),
-				),
-			),
+			buttonGrid,
+			footer,
 		),
 	)
+
+	if isMobile() {
+		form = container.NewStack(
+			res.mainBg,
+			container.NewVBox(
+				wSpacer,
+				container.NewStack(
+					headerBlock,
+				),
+				rectSpacer,
+				rectSpacer,
+				wAccount,
+				rectSpacer,
+				wPassword,
+				rectSpacer,
+				mode,
+				rectSpacer,
+				wrapMobileButton(btnLogin),
+				rectSpacer,
+				separator,
+				rectSpacer,
+				container.NewVBox(
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnNewAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnRecoverAccount),
+					),
+					rectSpacer,
+					container.New(layout.NewGridLayout(1),
+						wrapMobileButton(btnConnectionSettings),
+					),
+				),
+				footer,
+			),
+		)
+	}
 
 	layout := container.NewStack(
 		frame,
@@ -366,16 +445,247 @@ func layoutMain() fyne.CanvasObject {
 					form,
 				),
 			),
-			container.NewVBox(
-				footer,
-				wSpacer,
-			),
+			nil,
 			nil,
 			nil,
 		),
 	)
 
+	// Register with navigation stack (main screen does not allow back)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, false)
+	}
+
 	return NewVScroll(layout)
+}
+
+// layoutSingleWalletLogin shows a simplified login screen for when only 1 wallet exists
+func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
+	a.Settings().SetTheme(themes.main)
+	session.Domain = "app.main"
+	session.Password = ""
+
+	// Set the wallet path automatically
+	switch session.Network {
+	case NETWORK_TESTNET:
+		session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + walletName
+	case NETWORK_SIMULATOR:
+		session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + walletName
+	default:
+		session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + walletName
+	}
+
+	// Display wallet name
+	lblWalletName := canvas.NewText(walletName, colors.Green)
+	lblWalletName.TextSize = 16
+	lblWalletName.Alignment = fyne.TextAlignCenter
+	lblWalletName.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Password entry
+	wPassword := NewReturnEntry()
+	wPassword.Password = true
+	wPassword.SetPlaceHolder("Password")
+
+	// Login button
+	btnLogin := widget.NewButtonWithIcon("Connect", resourceConnectPng, nil)
+	btnLogin.Disable()
+
+	if session.Error != "" {
+		btnLogin.Text = session.Error
+		btnLogin.Disable()
+		btnLogin.Refresh()
+		session.Error = ""
+	}
+
+	btnLogin.OnTapped = func() {
+		if session.Password == "" {
+			btnLogin.Text = "Invalid password..."
+			btnLogin.Disable()
+			btnLogin.Refresh()
+		} else {
+			if !session.Offline {
+				btnLogin.Text = "Connect"
+			} else {
+				btnLogin.Text = "Decrypt"
+			}
+			btnLogin.Enable()
+			btnLogin.Refresh()
+			login()
+			btnLogin.Text = session.Error
+			btnLogin.Disable()
+			btnLogin.Refresh()
+			session.Error = ""
+		}
+	}
+
+	wPassword.OnReturn = btnLogin.OnTapped
+	wPassword.OnChanged = func(s string) {
+		session.Error = ""
+		if !session.Offline {
+			btnLogin.Text = "Connect"
+		} else {
+			btnLogin.Text = "Decrypt"
+		}
+		btnLogin.Enable()
+		btnLogin.Refresh()
+		session.Password = s
+
+		if len(s) < 1 {
+			btnLogin.Disable()
+			btnLogin.Refresh()
+		} else {
+			btnLogin.Enable()
+		}
+
+		btnLogin.Refresh()
+	}
+
+	// Auto-focus password field
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		fyne.Do(func() {
+			safeCanvasFocus(wPassword)
+		})
+	}()
+
+	// Offline mode toggle
+	modeData := binding.BindBool(&session.Offline)
+	mode := widget.NewCheckWithData(" Offline Mode", modeData)
+	mode.OnChanged = func(b bool) {
+		if b {
+			session.Offline = true
+			btnLogin.Text = "Decrypt"
+			btnLogin.Refresh()
+		} else {
+			session.Offline = false
+			btnLogin.Text = "Connect"
+			btnLogin.Refresh()
+		}
+	}
+
+	// Switch Account button
+	btnSwitchAccount := widget.NewButtonWithIcon("Switch Account", theme.AccountIcon(), func() {
+		session.Domain = "app.main"
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutMain())
+		removeOverlays()
+	})
+
+	// Connection Settings button
+	btnConnectionSettings := widget.NewButtonWithIcon("Connection Settings", theme.SettingsIcon(), func() {
+		session.Domain = "app.settings"
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutSettings())
+		removeOverlays()
+	})
+
+	// Handle return key
+	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
+		if session.Domain == "app.main" {
+			if k.Name == fyne.KeyReturn {
+				if session.Password == "" {
+					btnLogin.Text = "Invalid password..."
+					btnLogin.Disable()
+					btnLogin.Refresh()
+				} else {
+					if !session.Offline {
+						btnLogin.Text = "Connect"
+					} else {
+						btnLogin.Text = "Decrypt"
+					}
+					btnLogin.Enable()
+					btnLogin.Refresh()
+					login()
+					btnLogin.Text = session.Error
+					btnLogin.Disable()
+					btnLogin.Refresh()
+					session.Error = ""
+				}
+			}
+		}
+	})
+
+	// Layout
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 20))
+
+	separatorLine := canvas.NewRectangle(color.White)
+	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
+	separator := container.NewCenter(separatorLine)
+	separatorSpacer := canvas.NewRectangle(color.Transparent)
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	isMobile := a.Driver().Device().IsMobile()
+
+	frame := &iframe{}
+
+	var form *fyne.Container
+	if isMobile {
+		buttonGroup := container.NewVBox(
+			container.New(layout.NewGridLayout(1),
+				wrapMobileButton(btnSwitchAccount),
+			),
+			rectSpacer,
+			container.New(layout.NewGridLayout(1),
+				wrapMobileButton(btnConnectionSettings),
+			),
+		)
+
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			wrapMobileButton(btnLogin),
+			separatorSpacer,
+			separator,
+			separatorSpacer,
+			buttonGroup,
+		)
+	} else {
+		buttonGroup := container.NewVBox(
+			btnSwitchAccount,
+			rectSpacer,
+			btnConnectionSettings,
+		)
+
+		form = container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			lblWalletName,
+			rectSpacer,
+			wPassword,
+			rectSpacer,
+			mode,
+			rectSpacer,
+			btnLogin,
+			separatorSpacer,
+			separator,
+			separatorSpacer,
+			buttonGroup,
+		)
+	}
+
+	layout := container.NewStack(
+		frame,
+		res.mainBg,
+		container.NewCenter(form),
+	)
+
+	return layout
 }
 
 func layoutDashboard() fyne.CanvasObject {
@@ -384,10 +694,68 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 
-	session.Balance, _ = engram.Disk.Get_Balance()
-	session.BalanceText = canvas.NewText(walletapi.FormatMoney(session.Balance), colors.Green)
+	session.BalanceText = canvas.NewText("...", colors.Green)
 	session.BalanceText.TextSize = 28
 	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
+
+	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
+		session.BalanceHidden = string(balanceHiddenVal) == "true"
+	} else {
+		session.BalanceHidden = true
+	}
+
+	if session.BalanceHidden {
+		session.BalanceText.Text = "••••••"
+	} else {
+		go func() {
+			if engram.Disk != nil {
+				session.Balance, _ = engram.Disk.Get_Balance()
+				fyne.Do(func() {
+					session.BalanceText.Text = walletapi.FormatMoney(session.Balance)
+					session.BalanceText.Refresh()
+				})
+			}
+		}()
+	}
+
+	var balanceToggleBtn *widget.Button
+	balanceToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		session.BalanceHidden = !session.BalanceHidden
+
+		if session.BalanceHidden {
+			balanceToggleBtn.SetIcon(theme.VisibilityOffIcon())
+			session.BalanceText.Text = "••••••"
+			session.BalanceText.Refresh()
+			balanceToggleBtn.Refresh()
+			go StoreEncryptedValue("settings", []byte("BalanceHidden"), []byte("true"))
+		} else {
+			balanceToggleBtn.SetIcon(theme.VisibilityIcon())
+			session.BalanceText.Text = "..."
+			session.BalanceText.Refresh()
+			balanceToggleBtn.Refresh()
+			go func() {
+				if engram.Disk != nil {
+					currentBalance, _ := engram.Disk.Get_Balance()
+					fyne.Do(func() {
+						session.BalanceText.Text = walletapi.FormatMoney(currentBalance)
+						session.BalanceText.Refresh()
+					})
+				}
+				StoreEncryptedValue("settings", []byte("BalanceHidden"), []byte("false"))
+			}()
+		}
+	})
+	balanceToggleBtn.Importance = widget.LowImportance
+
+	if session.BalanceHidden {
+		balanceToggleBtn.SetIcon(theme.VisibilityOffIcon())
+	}
+
+	if addressHiddenVal, err := GetEncryptedValue("settings", []byte("AddressHidden")); err == nil {
+		session.AddressHidden = string(addressHiddenVal) == "true"
+	} else {
+		session.AddressHidden = true
+	}
 
 	network := ""
 	switch session.Network {
@@ -405,8 +773,9 @@ func layoutDashboard() fyne.CanvasObject {
 	frame := &iframe{}
 
 	balanceCenter := container.NewCenter(
-		container.NewCenter(
+		container.NewHBox(
 			session.BalanceText,
+			balanceToggleBtn,
 		),
 	)
 
@@ -447,20 +816,20 @@ func layoutDashboard() fyne.CanvasObject {
 	daemonLabel.Alignment = fyne.TextAlignCenter
 	daemonLabel.TextStyle = fyne.TextStyle{Bold: false}
 
-	cyberdeckText := "CYBERDECK"
-	if cyberdeck.WS.server != nil {
-		cyberdeckText = "CYBERDECK (WS)"
-	} else if cyberdeck.RPC.server != nil {
-		cyberdeckText = "CYBERDECK (RPC)"
+	remoteAccessText := "REMOTE ACCESS"
+	if remoteAccess.WS.server != nil {
+		remoteAccessText = "REMOTE ACCESS (WS)"
+	} else if remoteAccess.RPC.server != nil {
+		remoteAccessText = "REMOTE ACCESS (RPC)"
 	} else {
-		status.Cyberdeck.FillColor = colors.Gray
-		status.Cyberdeck.Refresh()
+		status.RemoteAccess.FillColor = colors.Gray
+		status.RemoteAccess.Refresh()
 	}
 
-	cyberdeckLabel := canvas.NewText(cyberdeckText, colors.Gray)
-	cyberdeckLabel.TextSize = 12
-	cyberdeckLabel.Alignment = fyne.TextAlignTrailing
-	cyberdeckLabel.TextStyle = fyne.TextStyle{Bold: false}
+	remoteAccessLabel := canvas.NewText(remoteAccessText, colors.Gray)
+	remoteAccessLabel.TextSize = 12
+	remoteAccessLabel.Alignment = fyne.TextAlignTrailing
+	remoteAccessLabel.TextStyle = fyne.TextStyle{Bold: false}
 
 	gnomonLabel := canvas.NewText("GNOMON", colors.Gray)
 	gnomonLabel.TextSize = 12
@@ -472,7 +841,7 @@ func layoutDashboard() fyne.CanvasObject {
 	epochLabel.Alignment = fyne.TextAlignTrailing
 	epochLabel.TextStyle = fyne.TextStyle{Bold: false}
 	if !epoch.IsActive() {
-		if cyberdeck.EPOCH.err != nil {
+		if remoteAccess.EPOCH.err != nil {
 			status.EPOCH.FillColor = colors.Red
 			status.EPOCH.Refresh()
 		} else {
@@ -491,7 +860,9 @@ func layoutDashboard() fyne.CanvasObject {
 		telaStatus.FillColor = colors.Green
 	}
 
-	animationCanvas := canvas.NewCircle(color.Transparent)
+	syncAnimationCanvas := canvas.NewCircle(color.Transparent)
+	gnomonAnimationCanvas := canvas.NewCircle(color.Transparent)
+	epochAnimationCanvas := canvas.NewCircle(color.Transparent)
 
 	if !session.Offline {
 		if len(session.Daemon) > 30 {
@@ -503,10 +874,14 @@ func layoutDashboard() fyne.CanvasObject {
 		animationStatus := canvas.NewColorRGBAAnimation(
 			color.Transparent,
 			colors.Yellow,
-			time.Second,
+			2*time.Second,
 			func(c color.Color) {
-				animationCanvas.FillColor = c
-				animationCanvas.Refresh()
+				syncAnimationCanvas.FillColor = c
+				syncAnimationCanvas.Refresh()
+				gnomonAnimationCanvas.FillColor = c
+				gnomonAnimationCanvas.Refresh()
+				epochAnimationCanvas.FillColor = c
+				epochAnimationCanvas.Refresh()
 			})
 
 		animationStatus.RepeatCount = fyne.AnimationRepeatForever
@@ -519,11 +894,6 @@ func layoutDashboard() fyne.CanvasObject {
 	session.StatusText.TextSize = 12
 	session.StatusText.Alignment = fyne.TextAlignTrailing
 	session.StatusText.TextStyle = fyne.TextStyle{Bold: false}
-
-	menuLabel := canvas.NewText("  M O D U L E S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
@@ -542,13 +912,217 @@ func layoutDashboard() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkLogout := widget.NewHyperlinkWithStyle("Sign Out", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkLogout.OnTapped = func() {
+	btnLogout := newSizedIconButton(theme.LogoutIcon(), func() {
+		if session.Navigating {
+			return
+		}
+		session.Navigating = true
+		defer func() { session.Navigating = false }()
 		closeWallet()
-	}
+	})
 
-	linkHistory := widget.NewHyperlinkWithStyle("View History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	// Settings button with cogwheel icon
+	btnSettings := newSizedIconButton(theme.SettingsIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAppSettings())
+		removeOverlays()
+	})
+
+	// Datapad module button with icon
+	btnDatapad := newSizedIconButton(theme.DocumentIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDatapad())
+		removeOverlays()
+	})
+
+	// Messages module button with icon
+	btnMessages := newSizedIconButton(theme.MailComposeIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutMessages())
+		removeOverlays()
+	})
+
+	// Files & Contracts module button (merged File Manager + Contract Builder)
+	btnFilesContracts := newSizedIconButton(theme.FolderIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutFilesAndContracts())
+		removeOverlays()
+	})
+
+	// TELA module button with logo - custom image button with proper sizing
+	btnTELA := NewImageButton(resourceTelaPng, func() {
+		// Log entry immediately for crash diagnosis
+		logger.Printf("[TELA-BUTTON] === ENTRY - button callback started ===\n")
+
+		if session.Navigating {
+			logger.Printf("[TELA-BUTTON] Already navigating, returning early\n")
+			return
+		}
+
+		// Set navigating flag with recovery to ensure it's reset on panic
+		session.Navigating = true
+		logger.Printf("[TELA-BUTTON] Set Navigating=true\n")
+
+		// Primary panic recovery - catches panics in this callback
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[TELA-BUTTON] === PANIC RECOVERED ===\n")
+				logger.Errorf("[TELA-BUTTON] Panic value: %v\n", r)
+				logger.Errorf("[TELA-BUTTON] Stack: %s\n", debug.Stack())
+				session.Navigating = false
+				session.Domain = "app.wallet"
+
+				// Safe UI update
+				fyne.Do(func() {
+					if session.Window != nil {
+						session.Window.SetContent(layoutDashboard())
+					}
+				})
+				logger.Printf("[TELA-BUTTON] === PANIC RECOVERY COMPLETE ===\n")
+			}
+		}()
+
+		// Ensure navigating is reset on any exit
+		defer func() {
+			session.Navigating = false
+			logger.Printf("[TELA-BUTTON] Reset Navigating=false\n")
+		}()
+
+		logger.Printf("[TELA-BUTTON] Checking state - gnomon.Index=%v walletapi.Connected=%v engram.Disk=%v session.WalletOpen=%v\n",
+			gnomon.Index != nil, walletapi.Connected, engram.Disk != nil, session.WalletOpen)
+
+		// Guard: If Gnomon is still initializing (Index is nil), show warning instead of crashing
+		if gnomon.Index == nil {
+			logger.Printf("[TELA-BUTTON] Guard triggered - gnomon.Index is nil\n")
+			showLoadingOverlay()
+			fyne.Do(func() {
+				errLabel := canvas.NewText("Gnomon is initializing, please wait...", colors.Yellow)
+				errLabel.Alignment = fyne.TextAlignCenter
+				content := container.NewCenter(container.NewVBox(errLabel))
+				if session.Window != nil {
+					session.Window.SetContent(content)
+				}
+			})
+			// Wait and retry after a delay
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Errorf("[TELA-BUTTON] Retry goroutine panic: %v\n", r)
+					}
+				}()
+				time.Sleep(3 * time.Second)
+				logger.Printf("[TELA-BUTTON] Retry check - gnomon.Index=%v walletapi.Connected=%v\n", gnomon.Index != nil, walletapi.Connected)
+				if gnomon.Index != nil {
+					fyne.Do(func() {
+						if session.Window != nil && session.WalletOpen {
+							session.Window.SetContent(layoutTransition())
+							session.Window.SetContent(layoutTELA())
+							removeOverlays()
+						}
+					})
+				} else {
+					fyne.Do(func() {
+						if session.Window != nil && session.WalletOpen {
+							session.Window.SetContent(layoutDashboard())
+						}
+					})
+				}
+			}()
+			return
+		}
+
+		if !walletapi.Connected {
+			logger.Printf("[TELA-BUTTON] Guard triggered - walletapi.Connected is false\n")
+			showLoadingOverlay()
+			fyne.Do(func() {
+				errLabel := canvas.NewText("Waiting for connection...", colors.Yellow)
+				errLabel.Alignment = fyne.TextAlignCenter
+				content := container.NewCenter(container.NewVBox(errLabel))
+				if session.Window != nil {
+					session.Window.SetContent(content)
+				}
+			})
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Errorf("[TELA-BUTTON] Connection retry goroutine panic: %v\n", r)
+					}
+				}()
+				time.Sleep(3 * time.Second)
+				logger.Printf("[TELA-BUTTON] Connection retry check - gnomon.Index=%v walletapi.Connected=%v\n", gnomon.Index != nil, walletapi.Connected)
+				if walletapi.Connected && gnomon.Index != nil {
+					fyne.Do(func() {
+						if session.Window != nil && session.WalletOpen {
+							session.Window.SetContent(layoutTransition())
+							session.Window.SetContent(layoutTELA())
+							removeOverlays()
+						}
+					})
+				} else {
+					fyne.Do(func() {
+						if session.Window != nil && session.WalletOpen {
+							session.Window.SetContent(layoutDashboard())
+						}
+					})
+				}
+			}()
+			return
+		}
+
+		// Verify session state before proceeding
+		if session.Window == nil {
+			logger.Errorf("[TELA-BUTTON] ERROR: session.Window is nil, cannot proceed\n")
+			return
+		}
+
+		if !session.WalletOpen {
+			logger.Errorf("[TELA-BUTTON] ERROR: session.WalletOpen is false, wallet not open\n")
+			return
+		}
+
+		if engram.Disk == nil {
+			logger.Errorf("[TELA-BUTTON] ERROR: engram.Disk is nil, wallet not loaded\n")
+			return
+		}
+
+		logger.Printf("[TELA-BUTTON] All guards passed, proceeding to open TELA...\n")
+
+		// Safe capture of current content
+		logger.Printf("[TELA-BUTTON] Capturing session.Window.Content()\n")
+		currentContent := session.Window.Content()
+		if currentContent == nil {
+			logger.Printf("[TELA-BUTTON] Warning: current content is nil\n")
+		}
+		session.LastDomain = currentContent
+
+		logger.Printf("[TELA-BUTTON] Setting transition content\n")
+		session.Window.SetContent(layoutTransition())
+
+		logger.Printf("[TELA-BUTTON] Calling layoutTELA()\n")
+		telaLayout := layoutTELA()
+		logger.Printf("[TELA-BUTTON] layoutTELA() returned, setting content\n")
+
+		if telaLayout == nil {
+			logger.Errorf("[TELA-BUTTON] ERROR: layoutTELA() returned nil\n")
+			session.Window.SetContent(layoutDashboard())
+			return
+		}
+
+		session.Window.SetContent(telaLayout)
+		logger.Printf("[TELA-BUTTON] TELA content set, removing overlays\n")
+
+		removeOverlays()
+		logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
+	})
+
+	linkHistory := widget.NewHyperlinkWithStyle("History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkHistory.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -556,69 +1130,47 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	menu := widget.NewSelect([]string{"Identity", "My Account", "Messages", "Transfers", "Asset Explorer", "Services", "Cyberdeck", "File Manager", "Contract Builder", "Datapad", "TELA", " "}, nil)
-	menu.PlaceHolder = "Select Module ..."
-	menu.OnChanged = func(s string) {
-		if s == "My Account" {
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutAccount())
-			removeOverlays()
-		} else if s == "Transfers" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutTransfers())
-			removeOverlays()
-		} else if s == "Asset Explorer" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutAssetExplorer())
-			removeOverlays()
-		} else if s == "File Manager" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutFileManager())
-			removeOverlays()
-		} else if s == "Contract Builder" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutContractBuilder(""))
-			removeOverlays()
-		} else if s == "Datapad" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutDatapad())
-			removeOverlays()
-		} else if s == "Messages" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutMessages())
-			removeOverlays()
-		} else if s == "Cyberdeck" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutCyberdeck())
-			removeOverlays()
-		} else if s == "Identity" {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutIdentity())
-			removeOverlays()
-		} else if s == "Services" {
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutServiceAddress())
-			removeOverlays()
-		} else if s == "TELA" {
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutTELA())
-			removeOverlays()
-		} else {
-			session.Window.Canvas().SetContent(layoutTransition())
-			session.Window.Canvas().SetContent(layoutDashboard())
-			removeOverlays()
-		}
-
+	linkMyAccount := widget.NewHyperlinkWithStyle("My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkMyAccount.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAccount())
+		removeOverlays()
 	}
+
+	btnTransfers := widget.NewButton("Transfers", nil)
+	btnTransfers.OnTapped = func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutTransfers())
+		removeOverlays()
+	}
+
+	btnTransfersWrapper := wrapMobileButton(btnTransfers)
+	gramSendWrapper := wrapMobileButton(gramSend)
+
+	separator := canvas.NewText(" | ", colors.Gray)
+	separator.TextSize = 14
+	separator.Alignment = fyne.TextAlignCenter
 
 	res.gram.SetMinSize(fyne.NewSize(ui.Width, 150))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
+	rectSpacerLarge := canvas.NewRectangle(color.Transparent)
+	rectSpacerLarge.SetMinSize(fyne.NewSize(10, 25))
+
 	rectSquare := canvas.NewRectangle(color.Transparent)
 	rectSquare.SetMinSize(fyne.NewSize(5, 5))
+
+	statusDotSize := fyne.NewSize(10, 10)
+	connectionDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.Connection))
+	syncDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, syncAnimationCanvas, status.Sync))
+	gnomonDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, gnomonAnimationCanvas, status.Gnomon))
+	epochDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, epochAnimationCanvas, status.EPOCH))
+	telaDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, telaStatus))
+	remoteAccessDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.RemoteAccess))
 
 	rectOffset := canvas.NewRectangle(color.Transparent)
 	rectOffset.SetMinSize(fyne.NewSize(81, 1))
@@ -643,26 +1195,16 @@ func layoutDashboard() fyne.CanvasObject {
 		balanceCenter,
 		rectSpacer,
 		rectSpacer,
-		gramSend,
+		gramSendWrapper,
 		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
+		btnTransfersWrapper,
+		rectSpacer,
+		container.New(
+			layout.NewGridLayoutWithColumns(3),
+			linkMyAccount,
+			separator,
 			linkHistory,
-			layout.NewSpacer(),
 		),
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			line1,
-			layout.NewSpacer(),
-			menuLabel,
-			layout.NewSpacer(),
-			line2,
-		),
-		rectSpacer,
-		rectSpacer,
-		menu,
-		rectSpacer,
 		rectSpacer,
 		container.NewHBox(
 			line1,
@@ -672,13 +1214,9 @@ func layoutDashboard() fyne.CanvasObject {
 			line2,
 		),
 		rectSpacer,
-		rectSpacer,
 		container.NewVBox(
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					status.Connection,
-				),
+				connectionDot,
 				rectSquare,
 				daemonLabel,
 				layout.NewSpacer(),
@@ -687,19 +1225,11 @@ func layoutDashboard() fyne.CanvasObject {
 					session.StatusText,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.Sync,
-				),
+				syncDot,
 			),
 			rectOffset,
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.Gnomon,
-				),
+				gnomonDot,
 				rectSquare,
 				gnomonLabel,
 				layout.NewSpacer(),
@@ -708,30 +1238,20 @@ func layoutDashboard() fyne.CanvasObject {
 					epochLabel,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					animationCanvas,
-					status.EPOCH,
-				),
+				epochDot,
 			),
 			rectOffset,
 			container.NewHBox(
-				container.NewStack(
-					rectStatus,
-					telaStatus,
-				),
+				telaDot,
 				rectSquare,
 				telaLabel,
 				layout.NewSpacer(),
 				container.NewStack(
 					rectOffset,
-					cyberdeckLabel,
+					remoteAccessLabel,
 				),
 				rectSquare,
-				container.NewStack(
-					rectStatus,
-					status.Cyberdeck,
-				),
+				remoteAccessDot,
 			),
 		),
 	)
@@ -754,19 +1274,11 @@ func layoutDashboard() fyne.CanvasObject {
 
 		if k.Name == fyne.KeyRight {
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutCyberdeck())
+			session.Window.SetContent(layoutRemoteAccess())
 			removeOverlays()
 		} else if k.Name == fyne.KeyLeft {
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutIdentity())
-			removeOverlays()
-		} else if k.Name == fyne.KeyUp {
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutTransfers())
-			removeOverlays()
-		} else if k.Name == fyne.KeyDown {
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutMessages())
+			session.Window.SetContent(layoutFilesAndContracts())
 			removeOverlays()
 		}
 	})
@@ -780,9 +1292,20 @@ func layoutDashboard() fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			container.NewCenter(
-				linkLogout,
+				container.New(layout.NewGridLayoutWithColumns(3),
+					wrapMobileButton(btnDatapad),
+					wrapMobileButton(btnTELA),
+					wrapMobileButton(btnMessages),
+				),
 			),
-			rectSpacer,
+			rectSpacerLarge,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(3),
+					wrapMobileButton(btnFilesContracts),
+					wrapMobileButton(btnLogout),
+					wrapMobileButton(btnSettings),
+				),
+			),
 			rectSpacer,
 			rectSpacer,
 		),
@@ -799,6 +1322,11 @@ func layoutDashboard() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (dashboard allows back to main)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -844,6 +1372,7 @@ func layoutSend() fyne.CanvasObject {
 
 	options := []string{"Anonymity Set:   2  (None)", "Anonymity Set:   4  (Low)", "Anonymity Set:   8  (Low)", "Anonymity Set:   16  (Recommended)", "Anonymity Set:   32  (Medium)", "Anonymity Set:   64  (High)", "Anonymity Set:   128  (High)"}
 	wRings := widget.NewSelect(options, nil)
+	wRings.SetSelected("Anonymity Set:   16  (Recommended)")
 
 	wReceiver := widget.NewEntry()
 	wReceiver.SetPlaceHolder("Receiver username or address")
@@ -1011,7 +1540,7 @@ func layoutSend() fyne.CanvasObject {
 			tx.Ringsize = 16
 			wRings.SetSelected(options[3])
 		}
-		session.Window.Canvas().Focus(wReceiver)
+		safeCanvasFocus(wReceiver)
 	}
 
 	btnSend.OnTapped = func() {
@@ -1032,7 +1561,7 @@ func layoutSend() fyne.CanvasObject {
 		}
 	}
 
-	sendHeading := canvas.NewText("S E N D    M O N E Y", colors.Gray)
+	sendHeading := canvas.NewText("S E N D    D E R O", colors.Gray)
 	sendHeading.TextSize = 16
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
@@ -1059,8 +1588,18 @@ func layoutSend() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkCancel := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkCancel := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDashboard())
+		removeOverlays()
+		if len(tx.Pending) == 0 {
+			tx = Transfers{}
+		}
+	})
 
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 260))
@@ -1104,16 +1643,6 @@ func layoutSend() fyne.CanvasObject {
 		form,
 	)
 
-	linkCancel.OnTapped = func() {
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
-		removeOverlays()
-		if len(tx.Pending) == 0 {
-			tx = Transfers{}
-		}
-	}
-
 	top := container.NewCenter(
 		layout.NewSpacer(),
 		grid,
@@ -1127,7 +1656,7 @@ func layoutSend() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					btnSend,
+					wrapMobileButton(btnSend),
 				),
 				layout.NewSpacer(),
 			),
@@ -1156,6 +1685,11 @@ func layoutSend() fyne.CanvasObject {
 		frame,
 		c,
 	)
+
+	// Register with navigation stack (send allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
 
 	return NewVScroll(layout)
 }
@@ -1241,7 +1775,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 	}
 	wPaymentID.SetPlaceHolder("Payment ID / Service Port")
 
-	sendHeading := canvas.NewText("S E R V I C E    A D D R E S S", colors.Gray)
+	sendHeading := canvas.NewText("P A Y M E N T    R E Q U E S T", colors.Gray)
 	sendHeading.TextSize = 16
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
@@ -1268,8 +1802,15 @@ func layoutServiceAddress() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkCancel := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAccount())
+		removeOverlays()
+	})
 
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 260))
@@ -1288,7 +1829,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 			}
 
 			if err == nil {
-				header := canvas.NewText("CREATE  SERVICE  ADDRESS", colors.Gray)
+				header := canvas.NewText("CREATE  PAYMENT  REQUEST", colors.Gray)
 				header.TextSize = 14
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
@@ -1303,7 +1844,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 				labelAddress.Alignment = fyne.TextAlignCenter
 				labelAddress.TextStyle = fyne.TextStyle{Bold: true}
 
-				btnCopy := widget.NewButton("Copy Service Address", nil)
+				btnCopy := widget.NewButton("Copy Payment Request", nil)
 
 				valueAddress := widget.NewRichTextFromMarkdown("")
 				valueAddress.Wrapping = fyne.TextWrapBreak
@@ -1444,13 +1985,6 @@ func layoutServiceAddress() fyne.CanvasObject {
 		form,
 	)
 
-	linkCancel.OnTapped = func() {
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
-		removeOverlays()
-	}
-
 	top := container.NewCenter(
 		layout.NewSpacer(),
 		grid,
@@ -1473,7 +2007,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewHBox(
 					layout.NewSpacer(),
-					linkCancel,
+					btnBack,
 					layout.NewSpacer(),
 				),
 				layout.NewSpacer(),
@@ -1517,15 +2051,14 @@ func layoutNewAccount() fyne.CanvasObject {
 	btnCreate := widget.NewButton("Create", nil)
 	btnCreate.Disable()
 
-	linkCancel := widget.NewHyperlinkWithStyle("Return to Login", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCancel.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.Domain = "app.main"
 		session.Error = ""
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMain())
 		removeOverlays()
-	}
+	})
 
 	btnCopySeed := widget.NewButton("Copy Recovery Words", nil)
 	btnCopyAddress := widget.NewButton("Copy Address", nil)
@@ -1645,7 +2178,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	wLanguage.OnChanged = func(s string) {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
-		session.Window.Canvas().Focus(wAccount)
+		safeCanvasFocus(wAccount)
 
 		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && !findAccount() && session.Language != -1 {
 			btnCreate.Enable()
@@ -1696,13 +2229,13 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		btnCreate,
+		wrapMobileButton(btnCreate),
 	)
 
 	footer := container.NewVBox(
 		container.NewHBox(
 			layout.NewSpacer(),
-			linkCancel,
+			btnBack,
 			layout.NewSpacer(),
 		),
 		wSpacer,
@@ -1713,6 +2246,15 @@ func layoutNewAccount() fyne.CanvasObject {
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			login()
+			// Password will be cleared by login() after successful initialization
+		})
+	})
+
 	formSuccess := container.NewVBox(
 		body,
 		wSpacer,
@@ -1720,8 +2262,15 @@ func layoutNewAccount() fyne.CanvasObject {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		btnCopyAddress,
-		btnCopySeed,
+		wrapMobileButton(btnEnter),
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			wrapMobileButton(btnCopyAddress),
+			layout.NewSpacer(),
+			wrapMobileButton(btnCopySeed),
+			layout.NewSpacer(),
+		),
 		rectSpacer,
 	)
 
@@ -1730,14 +2279,20 @@ func layoutNewAccount() fyne.CanvasObject {
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
-			container.NewStack(
-				formSuccess,
+			container.NewVBox(
 				form,
+				formSuccess,
+				func() fyne.CanvasObject {
+					if isMobile() {
+						return NewSpacer(0, ui.Height*0.4)
+					}
+					return layout.NewSpacer()
+				}(),
 			),
 			layout.NewSpacer(),
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.70))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
 
 	btnCreate.OnTapped = func() {
 		if findAccount() {
@@ -1790,22 +2345,22 @@ func layoutNewAccount() fyne.CanvasObject {
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
+		scrollBox.Offset = fyne.NewPos(0, 0)
 		session.Window.Canvas().Content().Refresh()
 		session.Window.Canvas().Refresh(session.Window.Content())
 	}
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRestore() fyne.CanvasObject {
@@ -1819,7 +2374,11 @@ func layoutRestore() fyne.CanvasObject {
 	session.Password = ""
 	session.PasswordConfirm = ""
 
-	var seed [25]string
+	// Cache network result to avoid repeated calls
+	cachedNetwork := getNetwork()
+
+	// Debouncer for account name validation (300ms)
+	accountDebouncer := NewDebouncer(300 * time.Millisecond)
 
 	scrollBox := container.NewVScroll(nil)
 
@@ -1827,18 +2386,22 @@ func layoutRestore() fyne.CanvasObject {
 	errorText.TextSize = 12
 	errorText.Alignment = fyne.TextAlignCenter
 
+	// Password strength indicator
+	strengthText := canvas.NewText(" ", colors.Gray)
+	strengthText.TextSize = 11
+	strengthText.Alignment = fyne.TextAlignCenter
+
 	btnCreate := widget.NewButton("Recover", nil)
 	btnCreate.Disable()
 
-	linkReturn := widget.NewHyperlinkWithStyle("Return to Login", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkReturn.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.Domain = "app.main"
 		session.Error = ""
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMain())
 		removeOverlays()
-	}
+	})
 
 	btnCopyAddress := widget.NewButton("Copy Address", nil)
 
@@ -1854,16 +2417,25 @@ func layoutRestore() fyne.CanvasObject {
 	wPassword.Password = true
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 		session.Password = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
+		// Update password strength indicator
+		if len(s) > 0 {
+			strength := getPasswordStrength(s)
+			strengthText.Text = getPasswordStrengthText(strength)
+			strengthText.Color = getPasswordStrengthColor(strength)
+			strengthText.Refresh()
+		} else {
+			clearFormText(strengthText)
+		}
 
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 	}
 	wPassword.SetPlaceHolder("Password")
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
@@ -1880,27 +2452,238 @@ func layoutRestore() fyne.CanvasObject {
 	wPasswordConfirm.Password = true
 	wPasswordConfirm.OnChanged = func(s string) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 		session.PasswordConfirm = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
-
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 	}
 	wPasswordConfirm.SetPlaceHolder("Confirm Password")
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
-	recoveryType := widget.NewSelect([]string{"Recovery Words", "Secret Hex Key", "Import File"}, nil)
-	recoveryType.PlaceHolder = "(Recovery Type)"
-	recoveryType.SetSelectedIndex(0)
-	recoveryType.OnChanged = func(s string) {
-		errorText.Text = ""
-		errorText.Refresh()
+	// Card selection for recovery type
+	selectedRecoveryType := 0 // 0=Words, 1=Hex, 2=Import
+
+	// Card backgrounds for selection state
+	cardBgWords := canvas.NewRectangle(colors.Green)
+	cardBgHex := canvas.NewRectangle(colors.Gray)
+	cardBgImport := canvas.NewRectangle(colors.Gray)
+
+	cardBgWords.CornerRadius = 12
+	cardBgHex.CornerRadius = 12
+	cardBgImport.CornerRadius = 12
+
+	// Card labels
+	lblWords := canvas.NewText("Words", colors.DarkMatter)
+	lblWords.TextSize = 14
+	lblWords.Alignment = fyne.TextAlignCenter
+	lblWords.TextStyle = fyne.TextStyle{Bold: true}
+
+	lblHex := canvas.NewText("Hex Key", color.White)
+	lblHex.TextSize = 14
+	lblHex.Alignment = fyne.TextAlignCenter
+	lblHex.TextStyle = fyne.TextStyle{Bold: true}
+
+	lblImport := canvas.NewText("Import", color.White)
+	lblImport.TextSize = 14
+	lblImport.Alignment = fyne.TextAlignCenter
+	lblImport.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Card descriptions
+	descWords := canvas.NewText("25 words", colors.DarkMatter)
+	descWords.TextSize = 11
+	descWords.Alignment = fyne.TextAlignCenter
+
+	descHex := canvas.NewText("64 chars", color.White)
+	descHex.TextSize = 11
+	descHex.Alignment = fyne.TextAlignCenter
+
+	descImport := canvas.NewText(".db file", color.White)
+	descImport.TextSize = 11
+	descImport.Alignment = fyne.TextAlignCenter
+
+	// Card icons - larger size
+	iconWords := canvas.NewImageFromResource(theme.DocumentIcon())
+	iconWords.SetMinSize(fyne.NewSize(32, 32))
+	iconWords.FillMode = canvas.ImageFillContain
+
+	iconHex := canvas.NewImageFromResource(theme.VisibilityOffIcon())
+	iconHex.SetMinSize(fyne.NewSize(32, 32))
+	iconHex.FillMode = canvas.ImageFillContain
+
+	iconImport := canvas.NewImageFromResource(theme.FolderOpenIcon())
+	iconImport.SetMinSize(fyne.NewSize(32, 32))
+	iconImport.FillMode = canvas.ImageFillContain
+
+	// Card dimensions determined by padded content
+
+	// Animate card selection with color pulse
+	animateCardPulse := func(card *canvas.Rectangle, finalColor color.Color) {
+		// Start with bright highlight color
+		highlightColor := color.RGBA{R: 150, G: 255, B: 150, A: 255}
+		card.FillColor = highlightColor
+		card.Refresh()
+
+		// Animate to final color
+		anim := fyne.NewAnimation(150*time.Millisecond, func(progress float32) {
+			// Interpolate from highlight to final
+			hr, hg, hb, _ := highlightColor.RGBA()
+			fr, fg, fb, _ := finalColor.RGBA()
+			r := uint8((float32(hr>>8) * (1 - progress)) + (float32(fr>>8) * progress))
+			g := uint8((float32(hg>>8) * (1 - progress)) + (float32(fg>>8) * progress))
+			b := uint8((float32(hb>>8) * (1 - progress)) + (float32(fb>>8) * progress))
+			card.FillColor = color.RGBA{R: r, G: g, B: b, A: 255}
+			card.Refresh()
+		})
+		anim.Start()
 	}
+
+	// Function to update card styles based on selection
+	updateRecoveryTypeCards := func() {
+		// Reset all to unselected
+		cardBgWords.FillColor = colors.Gray
+		cardBgHex.FillColor = colors.Gray
+		cardBgImport.FillColor = colors.Gray
+		lblWords.Color = color.White
+		lblHex.Color = color.White
+		lblImport.Color = color.White
+		descWords.Color = color.White
+		descHex.Color = color.White
+		descImport.Color = color.White
+
+		// Highlight selected with animation
+		switch selectedRecoveryType {
+		case 0:
+			animateCardPulse(cardBgWords, colors.Green)
+			lblWords.Color = colors.DarkMatter
+			descWords.Color = colors.DarkMatter
+		case 1:
+			animateCardPulse(cardBgHex, colors.Green)
+			lblHex.Color = colors.DarkMatter
+			descHex.Color = colors.DarkMatter
+		case 2:
+			animateCardPulse(cardBgImport, colors.Green)
+			lblImport.Color = colors.DarkMatter
+			descImport.Color = colors.DarkMatter
+		}
+
+		cardBgWords.Refresh()
+		cardBgHex.Refresh()
+		cardBgImport.Refresh()
+		lblWords.Refresh()
+		lblHex.Refresh()
+		lblImport.Refresh()
+		descWords.Refresh()
+		descHex.Refresh()
+		descImport.Refresh()
+	}
+
+	// Handler function for recovery type change (defined later after form is created)
+	var onRecoveryTypeChanged func(int)
+
+	// Create tappable card buttons
+	btnCardWords := widget.NewButton("", func() {
+		if selectedRecoveryType != 0 {
+			selectedRecoveryType = 0
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(0)
+			}
+		}
+	})
+	btnCardWords.Importance = widget.LowImportance
+
+	btnCardHex := widget.NewButton("", func() {
+		if selectedRecoveryType != 1 {
+			selectedRecoveryType = 1
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(1)
+			}
+		}
+	})
+	btnCardHex.Importance = widget.LowImportance
+
+	btnCardImport := widget.NewButton("", func() {
+		if selectedRecoveryType != 2 {
+			selectedRecoveryType = 2
+			updateRecoveryTypeCards()
+			if onRecoveryTypeChanged != nil {
+				onRecoveryTypeChanged(2)
+			}
+		}
+	})
+	btnCardImport.Importance = widget.LowImportance
+
+	// Small spacer for card internal padding
+	cardSpacer := func() fyne.CanvasObject {
+		r := canvas.NewRectangle(color.Transparent)
+		r.SetMinSize(fyne.NewSize(1, 4))
+		return r
+	}
+
+	// Create card containers with background, icon, label, and invisible button overlay
+	cardWords := container.NewStack(
+		cardBgWords,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconWords),
+				cardSpacer(),
+				container.NewCenter(lblWords),
+				container.NewCenter(descWords),
+			),
+		),
+		btnCardWords,
+	)
+
+	cardHex := container.NewStack(
+		cardBgHex,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconHex),
+				cardSpacer(),
+				container.NewCenter(lblHex),
+				container.NewCenter(descHex),
+			),
+		),
+		btnCardHex,
+	)
+
+	cardImport := container.NewStack(
+		cardBgImport,
+		container.NewPadded(
+			container.NewVBox(
+				cardSpacer(),
+				container.NewCenter(iconImport),
+				cardSpacer(),
+				container.NewCenter(lblImport),
+				container.NewCenter(descImport),
+			),
+		),
+		btnCardImport,
+	)
+
+	// Spacer between cards
+	cardGap := canvas.NewRectangle(color.Transparent)
+	cardGap.SetMinSize(fyne.NewSize(8, 1))
+	cardGap2 := canvas.NewRectangle(color.Transparent)
+	cardGap2.SetMinSize(fyne.NewSize(8, 1))
+
+	recoveryTypeControl := container.NewHBox(
+		layout.NewSpacer(),
+		cardWords,
+		cardGap,
+		cardHex,
+		cardGap2,
+		cardImport,
+		layout.NewSpacer(),
+	)
 
 	wAccount := NewMobileEntry()
 	wAccount.OnFocusGained = func() {
@@ -1912,9 +2695,8 @@ func layoutRestore() fyne.CanvasObject {
 	wLanguage.OnChanged = func(s string) {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
-		session.Window.Canvas().Focus(wAccount)
-		errorText.Text = ""
-		errorText.Refresh()
+		safeCanvasFocus(wAccount)
+		clearFormText(errorText)
 	}
 	wLanguage.PlaceHolder = "(Select Language)"
 	wLanguage.Hide()
@@ -1923,59 +2705,91 @@ func layoutRestore() fyne.CanvasObject {
 	wAccount.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	wAccount.Validator = func(s string) (err error) {
 		session.Error = ""
-		errorText.Text = ""
-		errorText.Refresh()
+		clearFormText(errorText)
 
-		if len(s) > 25 {
+		if len(s) > MaxAccountNameLength {
 			err = errors.New("account name is too long")
 			wAccount.SetText(session.Name)
 			wAccount.Refresh()
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+			showFormError(errorText, err.Error())
 			return
 		}
 
-		err = checkDir()
-		if err != nil {
-			session.LastDomain = session.Window.Content()
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutAlert(2))
-			return
-		}
-
-		switch getNetwork() {
-		case NETWORK_TESTNET:
-			session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + s + ".db"
-		case NETWORK_SIMULATOR:
-			session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + s + ".db"
-		default:
-			session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + s + ".db"
-		}
+		// Update session name immediately for form validation
 		session.Name = s
 
-		if findAccount() {
-			err = errors.New("account name already exists")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
-		}
-
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && session.Name != "" {
-
+		// Update button state based on form validity
+		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
+			btnCreate.Enable()
 		} else {
 			btnCreate.Disable()
-			btnCreate.Refresh()
 		}
+		btnCreate.Refresh()
 
 		if s != "" {
-			recoveryType.Disable()
+			btnCardWords.Disable()
+			btnCardHex.Disable()
+			btnCardImport.Disable()
 		} else {
-			recoveryType.Enable()
+			btnCardWords.Enable()
+			btnCardHex.Enable()
+			btnCardImport.Enable()
 		}
 
+		// Debounce filesystem operations to avoid excessive I/O on each keystroke
+		accountDebouncer.Debounce(func() {
+			if s == "" {
+				return
+			}
+
+			err = checkDir()
+			if err != nil {
+				fyne.Do(func() {
+					session.LastDomain = session.Window.Content()
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutAlert(2))
+				})
+				return
+			}
+
+			switch cachedNetwork {
+			case NETWORK_TESTNET:
+				session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + s + ".db"
+			case NETWORK_SIMULATOR:
+				session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + s + ".db"
+			default:
+				session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + s + ".db"
+			}
+
+			if findAccount() {
+				fyne.Do(func() {
+					showFormError(errorText, "account name already exists")
+					btnCreate.Disable()
+					btnCreate.Refresh()
+				})
+			}
+		})
+
 		return nil
+	}
+
+	// Enter key handlers for form submission
+	wPassword.OnSubmitted = func(s string) {
+		safeCanvasFocus(wPasswordConfirm)
+	}
+	wPasswordConfirm.OnSubmitted = func(s string) {
+		if !btnCreate.Disabled() {
+			btnCreate.OnTapped()
+		} else if session.Name == "" {
+			safeCanvasFocus(wAccount)
+		}
+	}
+	wAccount.OnSubmitted = func(s string) {
+		if !btnCreate.Disabled() {
+			btnCreate.OnTapped()
+		} else {
+			safeCanvasFocus(wPassword)
+		}
 	}
 
 	wSpacer := widget.NewLabel(" ")
@@ -1983,6 +2797,16 @@ func layoutRestore() fyne.CanvasObject {
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Network indicator
+	networkName := strings.ToUpper(cachedNetwork)
+	networkColor := colors.Green
+	if cachedNetwork != NETWORK_MAINNET {
+		networkColor = colors.Yellow
+	}
+	networkIndicator := canvas.NewText(networkName, networkColor)
+	networkIndicator.TextSize = 12
+	networkIndicator.Alignment = fyne.TextAlignCenter
 
 	heading2 := canvas.NewText("Success", colors.Green)
 	heading2.TextSize = 22
@@ -1999,834 +2823,182 @@ func layoutRestore() fyne.CanvasObject {
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
 
 	status.Connection.FillColor = colors.Gray
-	status.Cyberdeck.FillColor = colors.Gray
+	status.RemoteAccess.FillColor = colors.Gray
 	status.Gnomon.FillColor = colors.Gray
 	status.Sync.FillColor = colors.Gray
 
 	grid := container.NewVBox()
 	grid.Objects = nil
 
-	word1 := NewMobileEntry()
-	word1.PlaceHolder = "Seed Word 1"
-	word1.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
+	seedEntry := NewMobileEntry()
+	seedEntry.SetPlaceHolder("Recovery Phrase (25 words)")
+	seedEntry.MultiLine = true
+	seedEntry.Wrapping = fyne.TextWrapWord
+	seedEntry.SetMinRowsVisible(6)
+	seedEntry.Password = false
+
+	btnToggleSeed := widget.NewButtonWithIcon("", theme.VisibilityIcon(), nil)
+	btnToggleSeed.OnTapped = func() {
+		seedEntry.Password = !seedEntry.Password
+		if seedEntry.Password {
+			btnToggleSeed.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnToggleSeed.SetIcon(theme.VisibilityIcon())
 		}
-		seed[0] = s
-		word1.Text = s
-		return nil
-	}
-	word1.OnFocusGained = func() {
-		offset := word1.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
+		seedEntry.Refresh()
 	}
 
-	word2 := NewMobileEntry()
-	word2.PlaceHolder = "Seed Word 2"
-	word2.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
+	btnPasteSeed := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), nil)
+	btnPasteSeed.OnTapped = func() {
+		clipboardText := a.Clipboard().Content()
+		if clipboardText != "" {
+			seedEntry.SetText(clipboardText)
 		}
-		seed[1] = s
-		word2.Text = s
+	}
 
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
+	seedInfo := canvas.NewText(" ", colors.Gray)
+	seedInfo.TextSize = 11
+	seedInfo.Alignment = fyne.TextAlignCenter
+
+	// Show word count as user types
+	seedEntry.OnChanged = func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			seedInfo.Text = " "
+			seedInfo.Color = colors.Gray
+		} else {
+			wordCount := len(strings.Fields(s))
+			seedInfo.Text = fmt.Sprintf("%d/25 words", wordCount)
+			if wordCount == 24 || wordCount == 25 {
+				seedInfo.Color = colors.Green
+			} else if wordCount > 25 {
+				seedInfo.Color = colors.Red
+			} else {
+				seedInfo.Color = colors.Gray
+			}
+		}
+		seedInfo.Refresh()
+		seedEntry.Validate()
+	}
+
+	seedEntry.Validator = func(s string) (err error) {
+		clearFormText(errorText)
+
+		s = strings.TrimSpace(s)
+		if s == "" {
+			btnCreate.Disable()
+			return nil
+		}
+
+		words := strings.Fields(s)
+		wordCount := len(words)
+
+		if wordCount != SeedWordCount24 && wordCount != SeedWordCount25 {
+			btnCreate.Disable()
+			return nil // OnChanged handles the count display
+		}
+
+		invalidWords := []string{}
+		for _, word := range words {
+			if !checkSeedWord(word) {
+				invalidWords = append(invalidWords, word)
 			}
 		}
 
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word2.OnFocusGained = func() {
-		offset := word2.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word3 := NewMobileEntry()
-	word3.PlaceHolder = "Seed Word 3"
-	word3.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
+		if len(invalidWords) > 0 {
 			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[2] = s
-		word3.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
+			err = errors.New("invalid seed words detected")
+			if len(invalidWords) <= 3 {
+				showFormError(errorText, fmt.Sprintf("Invalid: %s", strings.Join(invalidWords, ", ")))
+			} else {
+				showFormError(errorText, fmt.Sprintf("%d invalid words", len(invalidWords)))
 			}
+			return err
 		}
 
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
+		btnCreate.Enable()
 		return nil
 	}
-	word3.OnFocusGained = func() {
-		offset := word3.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
 
-	word4 := NewMobileEntry()
-	word4.PlaceHolder = "Seed Word 4"
-	word4.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[3] = s
-		word4.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word4.OnFocusGained = func() {
-		offset := word4.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word5 := NewMobileEntry()
-	word5.PlaceHolder = "Seed Word 5"
-	word5.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[4] = s
-		word5.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word5.OnFocusGained = func() {
-		offset := word5.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word6 := NewMobileEntry()
-	word6.PlaceHolder = "Seed Word 6"
-	word6.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[5] = s
-		word6.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word6.OnFocusGained = func() {
-		offset := word6.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word7 := NewMobileEntry()
-	word7.PlaceHolder = "Seed Word 7"
-	word7.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[6] = s
-		word7.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word7.OnFocusGained = func() {
-		offset := word7.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word8 := NewMobileEntry()
-	word8.PlaceHolder = "Seed Word 8"
-	word8.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[7] = s
-		word8.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word8.OnFocusGained = func() {
-		offset := word8.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word9 := NewMobileEntry()
-	word9.PlaceHolder = "Seed Word 9"
-	word9.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[8] = s
-		word9.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word9.OnFocusGained = func() {
-		offset := word9.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word10 := NewMobileEntry()
-	word10.PlaceHolder = "Seed Word 10"
-	word10.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[9] = s
-		word10.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word10.OnFocusGained = func() {
-		offset := word10.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word11 := NewMobileEntry()
-	word11.PlaceHolder = "Seed Word 11"
-	word11.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[10] = s
-		word11.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word11.OnFocusGained = func() {
-		offset := word11.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word12 := NewMobileEntry()
-	word12.PlaceHolder = "Seed Word 12"
-	word12.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[11] = s
-		word12.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word12.OnFocusGained = func() {
-		offset := word12.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word13 := NewMobileEntry()
-	word13.PlaceHolder = "Seed Word 13"
-	word13.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[12] = s
-		word13.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word13.OnFocusGained = func() {
-		offset := word13.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word14 := NewMobileEntry()
-	word14.PlaceHolder = "Seed Word 14"
-	word14.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[13] = s
-		word14.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word14.OnFocusGained = func() {
-		offset := word14.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word15 := NewMobileEntry()
-	word15.PlaceHolder = "Seed Word 15"
-	word15.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[14] = s
-		word15.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word15.OnFocusGained = func() {
-		offset := word15.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word16 := NewMobileEntry()
-	word16.PlaceHolder = "Seed Word 16"
-	word16.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[15] = s
-		word16.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word16.OnFocusGained = func() {
-		offset := word16.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word17 := NewMobileEntry()
-	word17.PlaceHolder = "Seed Word 17"
-	word17.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[16] = s
-		word17.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word17.OnFocusGained = func() {
-		offset := word17.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word18 := NewMobileEntry()
-	word18.PlaceHolder = "Seed Word 18"
-	word18.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[17] = s
-		word18.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word18.OnFocusGained = func() {
-		offset := word18.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word19 := NewMobileEntry()
-	word19.PlaceHolder = "Seed Word 19"
-	word19.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[18] = s
-		word19.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word19.OnFocusGained = func() {
-		offset := word19.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word20 := NewMobileEntry()
-	word20.PlaceHolder = "Seed Word 20"
-	word20.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[19] = s
-		word20.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word20.OnFocusGained = func() {
-		offset := word20.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word21 := NewMobileEntry()
-	word21.PlaceHolder = "Seed Word 21"
-	word21.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[20] = s
-		word21.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word21.OnFocusGained = func() {
-		offset := word21.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word22 := NewMobileEntry()
-	word22.PlaceHolder = "Seed Word 22"
-	word22.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[21] = s
-		word22.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word22.OnFocusGained = func() {
-		offset := word22.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word23 := NewMobileEntry()
-	word23.PlaceHolder = "Seed Word 23"
-	word23.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[22] = s
-		word23.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word23.OnFocusGained = func() {
-		offset := word23.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word24 := NewMobileEntry()
-	word24.PlaceHolder = "Seed Word 24"
-	word24.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[23] = s
-		word24.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word24.OnFocusGained = func() {
-		offset := word24.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	word25 := NewMobileEntry()
-	word25.PlaceHolder = "Seed Word 25"
-	word25.Validator = func(s string) error {
-		s = strings.TrimSpace(s)
-		if !checkSeedWord(s) {
-			btnCreate.Disable()
-			return errors.New("invalid seed word")
-		}
-		seed[24] = s
-		word25.Text = s
-
-		var list []string
-		for s := range seed {
-			if seed[s] != "" {
-				list = append(list, seed[s])
-			}
-		}
-
-		if len(list) == 25 {
-			btnCreate.Enable()
-		}
-
-		return nil
-	}
-	word25.OnFocusGained = func() {
-		offset := word25.Position().Y
-		scrollBox.Offset.Y = offset + 10
-		scrollBox.Refresh()
-	}
-
-	hexEntry := widget.NewEntry()
+	hexEntry := NewMobileEntry()
 	hexEntry.SetPlaceHolder("Secret Key (64 character hex)")
+	hexEntry.MultiLine = true
+	hexEntry.Wrapping = fyne.TextWrapWord
+	hexEntry.SetMinRowsVisible(2)
+	hexEntry.Password = true
 	hexEntry.Validator = func(s string) (err error) {
-		_, err = hex.DecodeString(s)
-		if len(s) > 64 || err != nil {
-			err = errors.New("invalid hex key")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+		clearFormText(errorText)
+
+		if s == "" {
 			btnCreate.Disable()
-
-			return
+			return nil
 		}
 
-		errorText.Text = ""
-		errorText.Refresh()
-		if s != "" {
-			btnCreate.Enable()
+		_, err = hex.DecodeString(s)
+		if err != nil {
+			showFormError(errorText, "invalid hex characters")
+			btnCreate.Disable()
+			return err
 		}
 
-		return
+		if len(s) != HexKeyLength {
+			showFormError(errorText, fmt.Sprintf("key must be exactly %d characters (%d entered)", HexKeyLength, len(s)))
+			btnCreate.Disable()
+			return errors.New("invalid key length")
+		}
+
+		btnCreate.Enable()
+		return nil
+	}
+
+	btnToggleHex := widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), nil)
+	btnToggleHex.OnTapped = func() {
+		hexEntry.Password = !hexEntry.Password
+		if hexEntry.Password {
+			btnToggleHex.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnToggleHex.SetIcon(theme.VisibilityIcon())
+		}
+		hexEntry.Refresh()
+	}
+
+	btnPasteHex := widget.NewButtonWithIcon("", theme.ContentPasteIcon(), nil)
+	btnPasteHex.OnTapped = func() {
+		clipboardText := a.Clipboard().Content()
+		if clipboardText != "" {
+			hexEntry.SetText(strings.TrimSpace(clipboardText))
+		}
 	}
 
 	hexSpacer := canvas.NewRectangle(color.Transparent)
-	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, 91))
+	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, 60))
 
 	hexForm := container.NewVBox(
 		rectSpacer,
 		hexEntry,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnToggleHex,
+			btnPasteHex,
+			layout.NewSpacer(),
+		),
 		hexSpacer,
 		errorText,
 	)
 
-	wordsForm := container.NewVBox(
-		word1,
+	seedForm := container.NewVBox(
 		rectSpacer,
-		word2,
+		seedEntry,
 		rectSpacer,
-		word3,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnToggleSeed,
+			btnPasteSeed,
+			layout.NewSpacer(),
+		),
 		rectSpacer,
-		word4,
-		rectSpacer,
-		word5,
-		rectSpacer,
-		word6,
-		rectSpacer,
-		word7,
-		rectSpacer,
-		word8,
-		rectSpacer,
-		word9,
-		rectSpacer,
-		word10,
-		rectSpacer,
-		word11,
-		rectSpacer,
-		word12,
-		rectSpacer,
-		word13,
-		rectSpacer,
-		word14,
-		rectSpacer,
-		word15,
-		rectSpacer,
-		word16,
-		rectSpacer,
-		word17,
-		rectSpacer,
-		word18,
-		rectSpacer,
-		word19,
-		rectSpacer,
-		word20,
-		rectSpacer,
-		word21,
-		rectSpacer,
-		word22,
-		rectSpacer,
-		word23,
-		rectSpacer,
-		word24,
-		rectSpacer,
-		word25,
+		seedInfo,
 		rectSpacer,
 		errorText,
 		rectSpacer,
@@ -2836,180 +3008,197 @@ func layoutRestore() fyne.CanvasObject {
 	recoveryForm := container.NewVBox(
 		wLanguage,
 		rectSpacer,
-		rectSpacer,
 		wAccount,
 		wPassword,
+		strengthText,
 		wPasswordConfirm,
 		rectSpacer,
 		rectSpacer,
-		wordsForm,
+		seedForm,
 	)
 
 	importFileText := canvas.NewText(" ", colors.Green)
 	importFileText.TextSize = 12
 	importFileText.Alignment = fyne.TextAlignCenter
 
+	// Button to open file picker for import
+	btnSelectFile := widget.NewButtonWithIcon("Select Wallet File", theme.FolderOpenIcon(), nil)
+	btnSelectFile.OnTapped = func() {
+		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] File dialog: %s\n", err)
+				showFormError(errorText, "could not import wallet file")
+				return
+			}
+
+			if uri == nil {
+				return // Canceled
+			}
+
+			fileName := uri.URI().String()
+			if uri.URI().MimeType() != "text/plain" {
+				logger.Errorf("[Engram] Cannot import file %s\n", fileName)
+				showFormError(errorText, "cannot import file")
+				return
+			}
+
+			if a.Driver().Device().IsMobile() {
+				fileName = uri.URI().Name()
+			} else {
+				fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
+			}
+
+			if !strings.HasSuffix(fileName, ".db") {
+				logger.Errorf("[Engram] Engram requires .db wallet file\n")
+				showFormError(errorText, "invalid wallet file (must be .db)")
+				return
+			}
+
+			filedata, err := readFromURI(uri)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
+				showFormError(errorText, "cannot read file data")
+				return
+			}
+
+			// Ensure directories exist before import
+			if err := checkDir(); err != nil {
+				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
+			filePath := ""
+			switch cachedNetwork {
+			case NETWORK_TESTNET:
+				filePath = filepath.Join(AppPath(), "testnet", fileName)
+			case NETWORK_SIMULATOR:
+				filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
+			default:
+				filePath = filepath.Join(AppPath(), "mainnet", fileName)
+			}
+
+			if _, err = os.Stat(filePath); !os.IsNotExist(err) {
+				logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
+				showFormError(errorText, "wallet file already exists")
+				return
+			}
+
+			err = os.WriteFile(filePath, filedata, 0600)
+			if err != nil {
+				logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
+
+			showFormSuccess(errorText, "Wallet imported! Return to login to access your account.")
+
+			if len(fileName) > MaxDisplayFileLen {
+				fileName = fileName[0:MaxDisplayFileLen] + "..."
+			}
+
+			showFormSuccess(importFileText, fileName)
+
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogFileImport.SetLocation(uri)
+			}
+		}
+
+		dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
+		dialogFileImport.SetView(dialog.ListView)
+		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogFileImport.Show()
+	}
+
 	importFileForm := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
-		errorText,
+		container.NewCenter(btnSelectFile),
 		rectSpacer,
 		rectSpacer,
 		importFileText,
 		rectSpacer,
+		errorText,
 		rectSpacer,
 	)
 
 	form := container.NewHBox(
 		layout.NewSpacer(),
 		container.NewVBox(
-			recoveryType,
+			recoveryTypeControl,
 			rectSpacer,
 			recoveryForm,
 		),
 		layout.NewSpacer(),
 	)
 
-	recoveryType.OnChanged = func(s string) {
-		errorText.Text = ""
-		errorText.Refresh()
+	onRecoveryTypeChanged = func(typeIndex int) {
+		clearFormText(errorText)
 
-		switch s {
-		case "Secret Hex Key":
-			wLanguage.Show()
-			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
-			recoveryForm.Objects[8] = hexForm
-		case "Recovery Words":
+		switch typeIndex {
+		case 1: // Hex Key
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
-			recoveryForm.Objects[8] = wordsForm
-		case "Import File":
+			recoveryForm.Objects[8] = hexForm
+			safeCanvasFocus(hexEntry)
+		case 0: // Recovery Words
+			wLanguage.Hide()
+			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
+			recoveryForm.Objects[8] = seedForm
+			safeCanvasFocus(seedEntry)
+		case 2: // Import File
 			btnCreate.Disable()
-			importFileText.Text = ""
-			importFileText.Refresh()
+			clearFormText(importFileText)
+			clearFormText(errorText)
 			form.Objects[1].(*fyne.Container).Objects[2] = importFileForm
-			dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
-				if err != nil {
-					logger.Errorf("[Engram] File dialog: %s\n", err)
-					errorText.Text = "could not import wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				if uri == nil {
-					return // Canceled
-				}
-
-				fileName := uri.URI().String()
-				if uri.URI().MimeType() != "text/plain" {
-					logger.Errorf("[Engram] Cannot import file %s\n", fileName)
-					errorText.Text = "cannot import file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				if a.Driver().Device().IsMobile() {
-					fileName = uri.URI().Name()
-				} else {
-					fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
-				}
-
-				if !strings.HasSuffix(fileName, ".db") {
-					logger.Errorf("[Engram] Engram requires .db wallet file\n")
-					errorText.Text = "invalid wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				filedata, err := readFromURI(uri)
-				if err != nil {
-					logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
-					errorText.Text = "cannot read file data"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				filePath := ""
-				switch session.Network {
-				case NETWORK_TESTNET:
-					filePath = filepath.Join(AppPath(), "testnet", fileName)
-				case NETWORK_SIMULATOR:
-					filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
-				default:
-					filePath = filepath.Join(AppPath(), "mainnet", fileName)
-				}
-
-				if _, err = os.Stat(filePath); !os.IsNotExist(err) {
-					logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
-					errorText.Text = "wallet file already exists"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				err = os.WriteFile(filePath, filedata, 0600)
-				if err != nil {
-					logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
-					errorText.Text = "error importing wallet file"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-					return
-				}
-
-				errorText.Text = fmt.Sprintf("%s wallet file imported successfully", strings.ToLower(session.Network))
-				errorText.Color = colors.Green
-				errorText.Refresh()
-
-				if len(fileName) > 50 {
-					fileName = fileName[0:50] + "..."
-				}
-
-				importFileText.Text = fileName
-				importFileText.Color = colors.Green
-				importFileText.Refresh()
-
-			}, session.Window)
-
-			if !a.Driver().Device().IsMobile() {
-				// Open file browser in current directory
-				uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
-				if err == nil {
-					dialogFileImport.SetLocation(uri)
-				} else {
-					logger.Errorf("[Engram] Could not open current directory %s\n", err)
-				}
-			}
-
-			dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
-			dialogFileImport.SetView(dialog.ListView)
-			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
-			dialogFileImport.Show()
 		}
 	}
 
-	body := widget.NewLabel("Your account has been successfully recovered. ")
+	body := widget.NewLabel("Your account has been successfully recovered.")
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
+
+	// QR code placeholder for success screen
+	successQR := canvas.NewImageFromImage(nil)
+	successQR.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	successQR.FillMode = canvas.ImageFillContain
+
+	// Address text for success screen
+	successAddress := widget.NewLabel("")
+	successAddress.Wrapping = fyne.TextWrapBreak
+	successAddress.Alignment = fyne.TextAlignCenter
+	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
+
+	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+		fyne.Do(func() {
+			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
+			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			login()
+			// Password will be cleared by login() after successful initialization
+		})
+	})
 
 	formSuccess := container.NewHBox(
 		layout.NewSpacer(),
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
 			heading2,
 			rectSpacer,
 			body,
 			rectSpacer,
+			container.NewCenter(successQR),
+			rectSpacer,
+			successAddress,
 			rectSpacer,
 			container.NewCenter(grid),
 			rectSpacer,
+			wrapMobileButton(btnEnter),
 			rectSpacer,
-			btnCopyAddress,
+			wrapMobileButton(btnCopyAddress),
 			rectSpacer,
 		),
 		layout.NewSpacer(),
@@ -3025,13 +3214,19 @@ func layoutRestore() fyne.CanvasObject {
 				container.NewVBox(
 					form,
 					formSuccess,
+					func() fyne.CanvasObject {
+						if isMobile() {
+							return NewSpacer(0, ui.Height*0.4)
+						}
+						return layout.NewSpacer()
+					}(),
 				),
 				layout.NewSpacer(),
 			),
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	btnCreate.OnTapped = func() {
 		if engram.Disk != nil {
@@ -3041,144 +3236,92 @@ func layoutRestore() fyne.CanvasObject {
 		var err error
 
 		if findAccount() {
-			err = errors.New("account name already exists")
-			errorText.Text = err.Error()
-			errorText.Color = colors.Red
-			errorText.Refresh()
+			showFormError(errorText, "account name already exists")
 			return
-		} else {
-			errorText.Text = ""
-			errorText.Refresh()
 		}
-
-		getNetwork()
+		clearFormText(errorText)
 
 		var language string
 		var temp *walletapi.Wallet_Disk
 
-		if recoveryType.SelectedIndex() == 1 {
+		if selectedRecoveryType == 1 {
+			// Hex key recovery
 			if wAccount.Text == "" {
-				err = errors.New("enter account name")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
-				return
-			}
-
-			if wLanguage.SelectedIndex() < 0 {
-				err = errors.New("select seed language")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
-				go func() {
-					wLanguage.FocusGained()
-					time.Sleep(time.Second)
-					wLanguage.FocusLost()
-				}()
+				showFormError(errorText, "enter account name")
 				return
 			}
 
 			if wPassword.Text == "" {
-				err = errors.New("enter and confirm a password")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter and confirm a password")
 				return
 			}
 
 			if session.Password != session.PasswordConfirm {
-				err = errors.New("passwords do not match")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "passwords do not match")
 				return
 			}
 
 			if hexEntry.Text == "" {
-				err = errors.New("enter a valid hex key")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter a valid hex key")
 				return
 			}
 
-			if len(hexEntry.Text) > 64 {
-				err = errors.New("key must be less than 65 chars")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+			if len(hexEntry.Text) != HexKeyLength {
+				showFormError(errorText, fmt.Sprintf("key must be exactly %d characters", HexKeyLength))
 				return
 			}
 
 			hexKey, err := hex.DecodeString(hexEntry.Text)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "invalid hex characters")
 				return
 			}
 
 			temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 
-			language = wLanguage.Selected
+			// Default to English for hex key recovery
+			language = "English"
 
 		} else {
+			// Seed phrase recovery
 			if wAccount.Text == "" {
-				err = errors.New("enter account name")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter account name")
 				return
 			}
 
 			if wPassword.Text == "" {
-				err = errors.New("enter and confirm a password")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "enter and confirm a password")
 				return
 			}
 
 			if session.Password != session.PasswordConfirm {
-				err = errors.New("passwords do not match")
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, "passwords do not match")
 				return
 			}
 
-			var words string
+			words := strings.TrimSpace(seedEntry.Text)
 
-			for i := 0; i < 25; i++ {
-				words += seed[i] + " "
-			}
-
+			// Auto-detect language from seed words
 			language, _, err = mnemonics.Words_To_Key(words)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 
 			temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
 			if err != nil {
-				errorText.Text = err.Error()
-				errorText.Color = colors.Red
-				errorText.Refresh()
+				showFormError(errorText, err.Error())
 				return
 			}
 		}
 
 		engram.Disk = temp
 
-		if session.Network == NETWORK_MAINNET {
+		if cachedNetwork == NETWORK_MAINNET {
 			engram.Disk.SetNetwork(true)
 		} else {
 			engram.Disk.SetNetwork(false)
@@ -3188,25 +3331,63 @@ func layoutRestore() fyne.CanvasObject {
 
 		address := engram.Disk.GetAddress().String()
 
+		// Generate QR code for success screen
+		qr, err := qrcode.New(address, qrcode.Highest)
+		if err == nil {
+			qr.BackgroundColor = colors.DarkMatter
+			qr.ForegroundColor = colors.Green
+			successQR.Image = qr.Image(int(ui.Width * 0.45))
+			successQR.Refresh()
+		}
+
+		// Show address text
+		successAddress.SetText(address)
+
 		btnCopyAddress.OnTapped = func() {
 			a.Clipboard().SetContent(address)
 		}
 
 		engram.Disk.Get_Balance_Rescan()
-		engram.Disk.Save_Wallet()
-		engram.Disk.Close_Encrypted_Wallet()
+		if err := engram.Disk.Save_Wallet(); err != nil {
+			logger.Errorf("[Register] Failed to save wallet after creation: %s\n", err)
+		}
 
-		session.WalletOpen = false
-		engram.Disk = nil
-		session.Path = ""
-		session.Name = ""
+		// Wallet remains open for immediate transition via "Enter" button
+		session.WalletOpen = true
+		beginWalletSession()
+
+		// Reset exit flag so Gnomon can start in this session
+		globals.Exit_In_Progress = false
+
+		// Delete Gnomon database to ensure clean sync state after recovery
+		gnomonPath := filepath.Join(AppPath(), "datashards", "gnomon")
+		switch session.Network {
+		case NETWORK_TESTNET:
+			gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_testnet")
+		case NETWORK_SIMULATOR:
+			gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
+		}
+		os.RemoveAll(gnomonPath)
+
+		// FIX: Initialize settings after recovery so daemon/gnomon connections work
+		initSettings()
+
 		tx = Transfers{}
+
+		// Clear sensitive password data from memory and UI
+		wPassword.SetText("")
+		wPasswordConfirm.SetText("")
+		seedEntry.SetText("")
+		hexEntry.SetText("")
+		// Password kept for login() call via Enter button
+		session.PasswordConfirm = ""
 
 		btnCreate.Hide()
 		form.Hide()
 		form.Refresh()
 		formSuccess.Show()
 		formSuccess.Refresh()
+		btnEnter.Refresh()
 		grid.Refresh()
 		scrollBox.Refresh()
 		session.Window.Canvas().Content().Refresh()
@@ -3217,7 +3398,7 @@ func layoutRestore() fyne.CanvasObject {
 		rectSpacer,
 		rectSpacer,
 		heading,
-		rectSpacer,
+		networkIndicator,
 		rectSpacer,
 	)
 
@@ -3227,11 +3408,11 @@ func layoutRestore() fyne.CanvasObject {
 	footer := container.NewCenter(
 		rect1,
 		container.NewVBox(
-			btnCreate,
+			wrapMobileButton(btnCreate),
 			rectSpacer,
 			container.NewHBox(
 				layout.NewSpacer(),
-				linkReturn,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			wSpacer,
@@ -3239,34 +3420,19 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	layout := container.NewBorder(
-		container.NewVBox(
-			header,
-			scrollBox,
-			rectSpacer,
-		),
+		header,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutAssetExplorer() fyne.CanvasObject {
 	session.Domain = "app.explorer"
 
-	var data []string
-	var listData binding.StringList
-	var listBox *widget.List
-
 	frame := &iframe{}
-	rectLeft := canvas.NewRectangle(color.Transparent)
-	rectLeft.SetMinSize(fyne.NewSize(ui.Width*0.40, 35))
-	rectRight := canvas.NewRectangle(color.Transparent)
-	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
-	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.45))
-	rectWidth := canvas.NewRectangle(color.Transparent)
-	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 	heading := canvas.NewText("A S S E T    E X P L O R E R", colors.Gray)
 	heading.TextSize = 16
@@ -3276,373 +3442,14 @@ func layoutAssetExplorer() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
 
-	results := canvas.NewText("", colors.Green)
-	results.TextSize = 14
-
-	listData = binding.BindStringList(&data)
-	listBox = widget.NewListWithData(listData,
-		func() fyne.CanvasObject {
-			return container.NewStack(
-				container.NewHBox(
-					container.NewStack(
-						rectLeft,
-						widget.NewLabel(""),
-					),
-					container.NewStack(
-						rectRight,
-						widget.NewLabel(""),
-					),
-				),
-			)
-		},
-		func(di binding.DataItem, co fyne.CanvasObject) {
-			dat := di.(binding.String)
-			str, err := dat.Get()
-			if err != nil {
-				return
-			}
-
-			split := strings.Split(str, ";;;")
-
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
-			//co.(*fyne.Container).Objects[3].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
-		})
-
-	menu := widget.NewSelect([]string{"My Assets", "Search By SCID"}, nil)
-	menu.PlaceHolder = "(Select One)"
-
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	entrySCID := widget.NewEntry()
-	entrySCID.PlaceHolder = "Search by SCID"
-	entrySCID.Disable()
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	btnSearch := widget.NewButton("Search", nil)
-	btnSearch.OnTapped = func() {
-
-	}
-
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
+		session.Window.SetContent(layoutFilesAndContracts())
 		removeOverlays()
-	}
+	})
 
-	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
-	linkClearHistory.OnTapped = func() {
-		shard, err := GetShard()
-		if err != nil {
-			return
-		}
-
-		store, err := graviton.NewDiskStore(shard)
-		if err != nil {
-			return
-		}
-
-		ss, err := store.LoadSnapshot(0)
-
-		if err != nil {
-			return
-		}
-
-		tree, err := ss.GetTree("Explorer History")
-		if err != nil {
-			return
-		}
-
-		c := tree.Cursor()
-
-		for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
-			DeleteKey(tree.GetName(), k)
-		}
-
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutAssetExplorer())
-	}
-
-	btnMyAssets := widget.NewButton("My Assets", nil)
-	btnMyAssets.OnTapped = func() {
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMyAssets())
-	}
-
-	layoutExplorer := container.NewStack(
-		rectWidth,
-		container.NewHBox(
-			layout.NewSpacer(),
-			container.NewVBox(
-				rectSpacer,
-				container.NewHBox(
-					results,
-					layout.NewSpacer(),
-					linkClearHistory,
-				),
-				rectSpacer,
-				rectSpacer,
-				entrySCID,
-				rectSpacer,
-				rectSpacer,
-				container.NewStack(
-					rectList,
-					listBox,
-				),
-				rectSpacer,
-				rectSpacer,
-				btnMyAssets,
-			),
-			layout.NewSpacer(),
-		),
-	)
-
-	listing := layoutExplorer
-
-	var assetData []string
-
-	found := 0
-	assetData = nil
-
-	results.Text = fmt.Sprintf("  Results:  %d", found)
-	results.Color = colors.Green
-	results.Refresh()
-
-	listData.Set(nil)
-
-	if session.Offline {
-		results.Text = "  Disabled in offline mode."
-		results.Color = colors.Gray
-		results.Refresh()
-	} else if gnomon.Index == nil {
-		results.Text = "  Gnomon is inactive."
-		results.Color = colors.Gray
-		results.Refresh()
-	}
-
-	entrySCID.OnChanged = func(s string) {
-		if entrySCID.Text != "" && len(s) == 64 {
-			showLoadingOverlay()
-
-			var result []*structures.SCIDVariable
-			switch gnomon.Index.DBType {
-			case "gravdb":
-				result = gnomon.Index.GravDBBackend.GetSCIDVariableDetailsAtTopoheight(s, engram.Disk.Get_Daemon_TopoHeight())
-			case "boltdb":
-				result = gnomon.Index.BBSBackend.GetSCIDVariableDetailsAtTopoheight(s, engram.Disk.Get_Daemon_TopoHeight())
-			}
-
-			if len(result) == 0 {
-				_, err := getTxData(s)
-				if err != nil {
-					return
-				}
-			}
-
-			err := StoreEncryptedValue("Explorer History", []byte(s), []byte(""))
-			if err != nil {
-				logger.Errorf("[Asset Explorer] Error saving search result: %s\n", err)
-				return
-			}
-
-			scid := crypto.HashHexToHash(s)
-
-			bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(scid, -1, engram.Disk.GetAddress().String())
-			if err != nil {
-				bal = 0
-			}
-
-			title, desc, _, _, _ := getContractHeader(scid)
-
-			if title == "" {
-				title = scid.String()
-			}
-
-			if len(title) > 18 {
-				title = title[0:18] + "..."
-			}
-
-			if desc == "" {
-				desc = "N/A"
-			}
-
-			if len(desc) > 40 {
-				desc = desc[0:40] + "..."
-			}
-
-			assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
-			listData.Set(assetData)
-			found += 1
-
-			/*
-				overlay := session.Window.Canvas().Overlays()
-				overlay.Add(
-					container.NewStack(
-						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
-					),
-				)
-				overlay.Add(
-					container.NewStack(
-						&iframe{},
-						layoutAssetManager(s),
-					),
-				)
-				overlay.Top().Show()
-
-				entrySCID.Text = ""
-				entrySCID.Refresh()
-
-				results.Text = fmt.Sprintf("  Results:  %d", found)
-				results.Color = colors.Green
-				results.Refresh()
-			*/
-
-			entrySCID.SetText("")
-			session.LastDomain = session.Window.Content()
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutAssetManager(s))
-			removeOverlays()
-		}
-	}
-
-	go func() {
-		if engram.Disk != nil && gnomon.Index != nil {
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
-				if session.Domain != "app.explorer" {
-					break
-				}
-				entrySCID.Disable()
-				results.Text = "  Gnomon is syncing..."
-				results.Color = colors.Yellow
-
-				fyne.Do(func() {
-					results.Refresh()
-				})
-
-				time.Sleep(time.Second * 1)
-			}
-
-			fyne.Do(func() {
-				entrySCID.Enable()
-				results.Text = "  Loading previous scan history..."
-				results.Color = colors.Yellow
-				results.Refresh()
-			})
-
-			shard, err := GetShard()
-			if err != nil {
-				return
-			}
-
-			store, err := graviton.NewDiskStore(shard)
-			if err != nil {
-				return
-			}
-
-			ss, err := store.LoadSnapshot(0)
-
-			if err != nil {
-				return
-			}
-
-			tree, err := ss.GetTree("Explorer History")
-			if err != nil {
-				return
-			}
-
-			c := tree.Cursor()
-
-			for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
-				scid := crypto.HashHexToHash(string(k))
-
-				bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(scid, -1, engram.Disk.GetAddress().String())
-				if err != nil {
-					bal = 0
-				}
-
-				title, desc, _, _, _ := getContractHeader(scid)
-
-				if title == "" {
-					title = scid.String()
-				}
-
-				if len(title) > 18 {
-					title = title[0:18] + "..."
-				}
-
-				if desc == "" {
-					desc = "N/A"
-				}
-
-				if len(desc) > 40 {
-					desc = desc[0:40] + "..."
-				}
-
-				assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
-				listData.Set(assetData)
-				found += 1
-			}
-		}
-
-		listData.Set(assetData)
-
-		listBox.OnSelected = func(id widget.ListItemID) {
-			split := strings.Split(assetData[id], ";;;")
-			/*
-				overlay := session.Window.Canvas().Overlays()
-				overlay.Add(
-					container.NewStack(
-						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
-					),
-				)
-				overlay.Add(
-					container.NewStack(
-						&iframe{},
-						layoutAssetManager(split[4]),
-					),
-				)
-				overlay.Top().Show()
-				listBox.UnselectAll()
-			*/
-
-			listBox.UnselectAll()
-			session.LastDomain = session.Window.Content()
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutAssetManager(split[4]))
-		}
-
-		fyne.Do(func() {
-			results.Text = fmt.Sprintf("  Search History:  %d", found)
-			results.Color = colors.Green
-			results.Refresh()
-			listBox.Refresh()
-		})
-	}()
+	content := createAssetExplorerTabContent()
 
 	top := container.NewVBox(
 		rectSpacer,
@@ -3653,7 +3460,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
-			listing,
+			content,
 		),
 	)
 
@@ -3661,22 +3468,13 @@ func layoutAssetExplorer() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -3758,11 +3556,6 @@ func layoutMyAssets() fyne.CanvasObject {
 			//co.(*fyne.Container).Objects[3].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
 		})
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	entrySCID := widget.NewEntry()
 	entrySCID.PlaceHolder = "Search by SCID"
 
@@ -3783,14 +3576,15 @@ func layoutMyAssets() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Asset Explorer", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAssetExplorer())
 		removeOverlays()
-	}
+	})
 
 	btnRescan := widget.NewButton("Rescan Blockchain", nil)
 	btnRescan.Disable()
@@ -4123,10 +3917,10 @@ func layoutMyAssets() fyne.CanvasObject {
 
 			results.Color = colors.Green
 
-			fyne.Do(func() {
+			uiDo(func() {
 				results.Refresh()
 				labelLastScan.Refresh()
-				listData.Set(assetData)
+				_ = listData.Set(assetData)
 			})
 
 			listBox.OnSelected = func(id widget.ListItemID) {
@@ -4150,7 +3944,7 @@ func layoutMyAssets() fyne.CanvasObject {
 					listBox.UnselectAll()
 				*/
 
-				fyne.Do(func() {
+				uiDo(func() {
 					listBox.UnselectAll()
 					session.LastDomain = session.Window.Content()
 					session.Window.SetContent(layoutTransition())
@@ -4158,7 +3952,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				})
 			}
 
-			fyne.Do(func() {
+			uiDo(func() {
 				listBox.Refresh()
 				btnRescan.Enable()
 			})
@@ -4182,22 +3976,12 @@ func layoutMyAssets() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -4288,11 +4072,6 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 	selectRingSize.SetSelectedIndex(3)
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	entryAddress := widget.NewEntry()
 	entryAddress.PlaceHolder = "Username or Address"
 
@@ -4313,6 +4092,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	sc := widget.NewLabel(scid)
 	sc.Wrapping = fyne.TextWrap(fyne.TextWrapWord)
@@ -4410,12 +4191,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			go func() {
 				exists, err := checkUsername(s, -1)
 				if err != nil && exists == "" {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Disable()
 						entryAddress.SetValidationError(errors.New("invalid username or address"))
 					})
 				} else {
-					fyne.Do(func() {
+					uiDo(func() {
 						entryAddress.SetValidationError(nil)
 						btnSend.Enable()
 					})
@@ -4499,6 +4280,10 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				sHeight := walletapi.Get_Daemon_Height()
 
 				for session.Domain == "app.manager" {
+					if !safeWalletOpen() {
+						return
+					}
+
 					var zeroscid crypto.Hash
 					_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
@@ -4511,7 +4296,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					fyne.Do(func() {
+					uiDo(func() {
 						entryAddress.Text = ""
 						entryAddress.Refresh()
 						entryAmount.Text = ""
@@ -4526,8 +4311,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-					fyne.Do(func() {
+					uiDo(func() {
+						btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 						btnSend.Refresh()
 					})
 				}
@@ -4540,13 +4325,13 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 					}
 					balance.Text = "  " + globals.FormatMoney(bal)
 
-					fyne.Do(func() {
+					uiDo(func() {
 						balance.Refresh()
 					})
 				}
 
 				if bal != zerobal {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Text = "Send Asset"
 						btnSend.Enable()
 						btnSend.Refresh()
@@ -4559,7 +4344,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 						selectRingSize.Enable()
 					})
 				} else {
-					fyne.Do(func() {
+					uiDo(func() {
 						btnSend.Text = "You do not own this asset"
 						btnSend.Disable()
 						btnSend.Refresh()
@@ -5193,17 +4978,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
@@ -5266,11 +5042,6 @@ func layoutTransfers() fyne.CanvasObject {
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.53))
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -5288,14 +5059,15 @@ func layoutTransfers() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	var pendingList []string
 
@@ -5418,7 +5190,11 @@ func layoutTransfers() fyne.CanvasObject {
 					}
 
 					go func() {
-						fyne.Do(func() {
+						generation := currentWalletGeneration()
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
 							btnClear.Disable()
 							btnSend.Text = "Confirming..."
 							btnSend.Refresh()
@@ -5428,11 +5204,18 @@ func layoutTransfers() fyne.CanvasObject {
 						sHeight := walletapi.Get_Daemon_Height()
 
 						for session.Domain == "app.transfers" {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
 							var zeroscid crypto.Hash
 							_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
 							if result.TXID == txid.String() {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Transfer Successful!"
 									btnSend.Refresh()
 								})
@@ -5442,7 +5225,10 @@ func layoutTransfers() fyne.CanvasObject {
 
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Transfer failed..."
 									btnSend.Disable()
 									btnSend.Refresh()
@@ -5452,7 +5238,10 @@ func layoutTransfers() fyne.CanvasObject {
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 									btnSend.Refresh()
 								})
@@ -5463,14 +5252,14 @@ func layoutTransfers() fyne.CanvasObject {
 					}()
 
 					pendingList = pendingList[:0]
-					fyne.Do(func() {
-						data.Reload()
+					uiDo(func() {
+						_ = data.Reload()
 						btnSend.Disable()
 						btnClear.Disable()
 					})
 				}
 			} else {
-				fyne.Do(func() {
+				uiDo(func() {
 					btnSubmit.Text = "Invalid Password..."
 					btnSubmit.Disable()
 					btnSubmit.Refresh()
@@ -5528,7 +5317,7 @@ func layoutTransfers() fyne.CanvasObject {
 			),
 		)
 
-		session.Window.Canvas().Focus(entryPassword)
+		safeCanvasFocus(entryPassword)
 	}
 
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
@@ -5555,9 +5344,9 @@ func layoutTransfers() fyne.CanvasObject {
 			scrollBox,
 		),
 		wSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
-		btnClear,
+		wrapMobileButton(btnClear),
 		rectSpacer,
 		rectSpacer,
 	)
@@ -5591,22 +5380,13 @@ func layoutTransfers() fyne.CanvasObject {
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -5660,7 +5440,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	labelAmount.Alignment = fyne.TextAlignLeading
 	labelAmount.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelService := canvas.NewText("   SERVICE  ADDRESS", colors.Gray)
+	labelService := canvas.NewText("   PAYMENT  REQUEST", colors.Gray)
 	labelService.TextSize = 14
 	labelService.Alignment = fyne.TextAlignLeading
 	labelService.TextStyle = fyne.TextStyle{Bold: true}
@@ -5705,11 +5485,6 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	labelSeparator5.Wrapping = fyne.TextWrapOff
 	labelSeparator5.ParseMarkdown("---")
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -5727,6 +5502,8 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	details := tx.Pending[index]
 
@@ -5894,17 +5671,8 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
@@ -5936,39 +5704,45 @@ func layoutTransition() fyne.CanvasObject {
 	frame := &iframe{}
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	res.transitionMu.Lock()
+	defer res.transitionMu.Unlock()
 
-	if res.loading == nil {
-		res.loading, _ = x.NewAnimatedGifFromResource(resourceLoadingGif)
-		res.loading.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
-		res.loading.Resize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	if res.cachedTransition == nil {
+		rect := canvas.NewRectangle(color.Transparent)
+		rect.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+
+		if res.loading == nil {
+			res.loading, _ = x.NewAnimatedGifFromResource(resourceLoadingGif)
+		}
+		if res.loading != nil {
+			res.loading.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+			res.loading.Resize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+		}
+
+		res.cachedTransition = container.NewStack(
+			frame,
+			container.NewCenter(
+				rect,
+				res.loading,
+			),
+		)
 	}
 
-	res.loading.Start()
+	if res.loading != nil {
+		res.loading.Start()
+	}
 
-	layout := container.NewStack(
-		frame,
-		container.NewCenter(
-			rect,
-			res.loading,
-		),
-	)
-
-	return NewVScroll(layout)
+	return NewVScroll(res.cachedTransition)
 }
 
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 10))
 	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.65))
-	frame := &iframe{}
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	heading := canvas.NewText("My Settings", colors.Green)
+	heading := canvas.NewText("Settings", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -5985,97 +5759,285 @@ func layoutSettings() fyne.CanvasObject {
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = 14
 
-	labelGnomon := canvas.NewText("GNOMON", colors.Gray)
-	labelGnomon.TextStyle = fyne.TextStyle{Bold: true}
-	labelGnomon.TextSize = 14
-
-	textGnomon := widget.NewRichTextWithText("Gnomon scans and indexes blockchain data in order to unlock more features, like native asset tracking.")
-	textGnomon.Wrapping = fyne.TextWrapWord
-
-	textCyberdeck := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
-	textCyberdeck.Wrapping = fyne.TextWrapWord
+	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
+	textRemoteAccess.Wrapping = fyne.TextWrapWord
 
 	btnRestore := widget.NewButton("Restore Defaults", nil)
 	btnDelete := widget.NewButton("Clear Local Data", nil)
 
-	entryAddress := widget.NewEntry()
-	entryAddress.Validator = func(s string) (err error) {
-		/*
-			_, err := net.ResolveTCPAddr("tcp", s)
-		*/
-		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
-		test := regexp.MustCompile(regex)
-
-		// Trim off http, https, wss, ws to validate regex on 'actual' uri for connection. If none match, s is just s as normal
-		var ssplit string
-		if strings.HasPrefix(s, "https") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "https://")
-		} else if strings.HasPrefix(s, "http") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "http://")
-		} else if strings.HasPrefix(s, "wss") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "wss://")
-		} else if strings.HasPrefix(s, "ws") {
-			ssplit = strings.TrimPrefix(strings.ToLower(s), "ws://")
-		} else {
-			// s is s
-			ssplit = s
-		}
-
-		if test.MatchString(ssplit) {
-			entryAddress.SetValidationError(nil)
-			setDaemon(s)
-		} else {
-			err = errors.New("invalid host name")
-			entryAddress.SetValidationError(err)
-		}
-
-		return
+	type NodeItem struct {
+		Address string
+		Status  string
 	}
-	entryAddress.PlaceHolder = "0.0.0.0:10102"
-	entryAddress.SetText(getDaemon())
-	entryAddress.Refresh()
 
-	selectNodes := widget.NewSelect(nil, nil)
-	selectNodes.PlaceHolder = "Select Public Node ..."
-	switch session.Network {
-	case NETWORK_TESTNET:
-		selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-	case NETWORK_SIMULATOR:
-		selectNodes.Options = []string{"127.0.0.1:20000"}
-		selectNodes.PlaceHolder = "Select Simulator Node ..."
-	default:
-		selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
+	mainnetNodes := []NodeItem{
+		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
+		{Address: "127.0.0.1:10102", Status: "unknown"},
 	}
-	selectNodes.OnChanged = func(s string) {
-		if s != "" {
-			err := setDaemon(s)
-			if err == nil {
-				entryAddress.Text = s
-				entryAddress.Refresh()
+	testnetNodes := []NodeItem{
+		{Address: "69.30.234.163:40402", Status: "unknown"},
+		{Address: "testnet.derofoundation.co:40402", Status: "unknown"},
+		{Address: "127.0.0.1:40402", Status: "unknown"},
+	}
+	simulatorNodes := []NodeItem{
+		{Address: "127.0.0.1:20000", Status: "unknown"},
+	}
+
+	getNodesKey := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "testnet_nodes"
+		case NETWORK_SIMULATOR:
+			return "simulator_nodes"
+		default:
+			return "mainnet_nodes"
+		}
+	}
+
+	getDefaultNodes := func(network string) []NodeItem {
+		switch network {
+		case NETWORK_TESTNET:
+			return testnetNodes
+		case NETWORK_SIMULATOR:
+			return simulatorNodes
+		default:
+			return mainnetNodes
+		}
+	}
+
+	loadNodesForNetwork := func(network string) []NodeItem {
+		nodesKey := getNodesKey(network)
+		if data, err := GetValue("settings", []byte(nodesKey)); err == nil && len(data) > 0 {
+			var savedNodes []NodeItem
+			if err := json.Unmarshal(data, &savedNodes); err == nil && len(savedNodes) > 0 {
+				return savedNodes
 			}
-			selectNodes.ClearSelected()
+		}
+		return getDefaultNodes(network)
+	}
+
+	currentNetwork := getNetwork()
+	nodeData := loadNodesForNetwork(currentNetwork)
+
+	nodeContainer := container.NewVBox()
+
+	var updateNodeContainer func()
+
+	updateNodeContainer = func() {
+		nodeContainer.Objects = nil
+
+		for i := range nodeData {
+			i := i // capture loop variable
+			item := &nodeData[i]
+
+			var iconResource fyne.Resource
+			switch item.Status {
+			case "connected":
+				iconResource = theme.ConfirmIcon()
+			case "failed":
+				iconResource = theme.CancelIcon()
+			}
+
+			rowIcon := widget.NewIcon(iconResource)
+
+			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				if len(nodeData) <= 1 {
+					return
+				}
+
+				removedAddress := item.Address
+				wasConnected := item.Status == "connected" || getDaemon() == removedAddress
+
+				nodeData = append(nodeData[:i], nodeData[i+1:]...)
+
+				if wasConnected {
+					newIndex := i - 1
+					if newIndex < 0 {
+						newIndex = 0
+					}
+					if newIndex >= len(nodeData) {
+						newIndex = len(nodeData) - 1
+					}
+					nodeData[newIndex].Status = "connected"
+					setDaemon(nodeData[newIndex].Address)
+
+					for j := range nodeData {
+						if j != newIndex {
+							nodeData[j].Status = "unknown"
+						}
+					}
+				}
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				updateNodeContainer()
+			})
+			removeBtn.Importance = widget.MediumImportance
+			if len(nodeData) <= 1 {
+				removeBtn.Disable()
+			}
+
+			addressLabel := widget.NewLabel(item.Address)
+			addressLabel.Truncation = fyne.TextTruncateEllipsis
+
+			row := container.NewBorder(
+				nil, nil, nil,
+				container.NewHBox(rowIcon, wrapMobileButton(removeBtn)),
+				addressLabel,
+			)
+
+			tapBtn := widget.NewButton("", func() {
+				if testNodeConnection(item.Address) {
+					item.Status = "connected"
+					setDaemon(item.Address)
+
+					for j := range nodeData {
+						if j != i {
+							nodeData[j].Status = "unknown"
+						}
+					}
+
+					if data, err := json.Marshal(nodeData); err == nil {
+						StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+					}
+				} else {
+					item.Status = "failed"
+				}
+				updateNodeContainer()
+			})
+			tapBtn.Importance = widget.LowImportance
+			tapBtn.Alignment = widget.ButtonAlignLeading
+			tapBtn.Text = ""
+
+			clickableRow := container.NewMax(
+				wrapMobileButton(tapBtn),
+				row,
+			)
+
+			nodeContainer.Add(clickableRow)
+		}
+		nodeContainer.Refresh()
+	}
+
+	currentDaemon := getDaemon()
+	for i := range nodeData {
+		if nodeData[i].Address == currentDaemon {
+			nodeData[i].Status = "connected"
 		}
 	}
+	updateNodeContainer()
+
+	getNodePlaceholder := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "hostname:40402"
+		case NETWORK_SIMULATOR:
+			return "hostname:20000"
+		default:
+			return "hostname:10102"
+		}
+	}
+
+	entryCustomNode := widget.NewEntry()
+	entryCustomNode.PlaceHolder = getNodePlaceholder(currentNetwork)
+
+	showNodeError := func(err error) {
+		entryCustomNode.Validator = func(s string) error {
+			return err
+		}
+		entryCustomNode.SetValidationError(err)
+		entryCustomNode.FocusGained()
+		entryCustomNode.FocusLost()
+	}
+
+	clearNodeError := func() {
+		entryCustomNode.Validator = nil
+		entryCustomNode.SetValidationError(nil)
+		entryCustomNode.Refresh()
+	}
+
+	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
+		nodeAddress = strings.ReplaceAll(nodeAddress, " ", "")
+		if nodeAddress != "" {
+			// Check for duplicate
+			for _, node := range nodeData {
+				if node.Address == nodeAddress {
+					showNodeError(errors.New("node already exists"))
+					return
+				}
+			}
+
+			if testNodeConnectionTimeout(nodeAddress, 500*time.Millisecond) {
+				clearNodeError()
+
+				for i := range nodeData {
+					nodeData[i].Status = "unknown"
+				}
+
+				nodeData = append(nodeData, NodeItem{
+					Address: nodeAddress,
+					Status:  "connected",
+				})
+				setDaemon(nodeAddress)
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				entryCustomNode.Text = ""
+				entryCustomNode.Refresh()
+				updateNodeContainer()
+			} else {
+				showNodeError(errors.New("node unreachable"))
+			}
+		}
+	})
+	btnAddNode.Importance = widget.MediumImportance
+	btnAddNode.Disable()
+
+	entryCustomNode.OnChanged = func(s string) {
+		clearNodeError()
+		s = strings.TrimSpace(s)
+		if s != "" {
+			btnAddNode.Enable()
+		} else {
+			btnAddNode.Disable()
+		}
+	}
+
+	entrySection := container.NewBorder(nil, nil, nil, wrapMobileButton(btnAddNode), entryCustomNode)
+	entryWrapper := container.NewStack(
+		canvas.NewRectangle(color.Transparent),
+		entrySection,
+	)
+	entryWrapper.Resize(fyne.NewSize(ui.Width*0.9, 35))
 
 	labelScan := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	labelScan.Wrapping = fyne.TextWrapWord
 
 	entryScan := widget.NewEntry()
 	entryScan.PlaceHolder = "# of Latest Blocks (Optional)"
-	entryScan.Validator = func(s string) (err error) {
-		blocks, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			entryScan.SetValidationError(err)
-		} else {
-			entryScan.SetValidationError(nil)
-			if blocks > 0 {
-				session.TrackRecentBlocks = blocks
-			} else {
-				session.TrackRecentBlocks = 0
-			}
+	entryScan.Validator = func(s string) error {
+		if s == "" {
+			return nil
 		}
-
-		return
+		_, err := strconv.ParseInt(s, 10, 64)
+		return err
+	}
+	entryScan.OnChanged = func(s string) {
+		if s == "" {
+			session.TrackRecentBlocks = 0
+			return
+		}
+		if blocks, err := strconv.ParseInt(s, 10, 64); err == nil && blocks > 0 {
+			session.TrackRecentBlocks = blocks
+		} else {
+			session.TrackRecentBlocks = 0
+		}
 	}
 
 	if session.TrackRecentBlocks > 0 {
@@ -6084,97 +6046,67 @@ func layoutSettings() fyne.CanvasObject {
 		entryScan.Refresh()
 	}
 
-	radioNetwork := widget.NewRadioGroup([]string{NETWORK_MAINNET, NETWORK_TESTNET, NETWORK_SIMULATOR}, nil)
-	radioNetwork.Required = true
-	radioNetwork.Horizontal = false
-	radioNetwork.OnChanged = func(s string) {
-		if s == NETWORK_TESTNET {
-			setNetwork(s)
-			selectNodes.Options = []string{"testnetexplorer.derofoundation.org:40402", "127.0.0.1:40402"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
-		} else if s == NETWORK_SIMULATOR {
-			setNetwork(s)
-			selectNodes.Options = []string{"127.0.0.1:20000"}
-			selectNodes.PlaceHolder = "Select Simulator Node ..."
-		} else {
-			setNetwork(NETWORK_MAINNET)
-			selectNodes.Options = []string{"node.derofoundation.org:11012", "127.0.0.1:10102"}
-			selectNodes.PlaceHolder = "Select Public Node ..."
+	tabsNetwork := container.NewAppTabs(
+		container.NewTabItem(NETWORK_MAINNET, container.NewVBox()),
+		container.NewTabItem(NETWORK_TESTNET, container.NewVBox()),
+		container.NewTabItem(NETWORK_SIMULATOR, container.NewVBox()),
+	)
+
+	tabsNetwork.OnSelected = func(tab *container.TabItem) {
+		s := tab.Text
+		if s != NETWORK_TESTNET && s != NETWORK_SIMULATOR {
+			s = NETWORK_MAINNET
+		}
+		setNetwork(s)
+
+		nodeData = loadNodesForNetwork(s)
+
+		for i := range nodeData {
+			if nodeData[i].Address == getDaemon() {
+				nodeData[i].Status = "connected"
+			} else {
+				nodeData[i].Status = "unknown"
+			}
 		}
 
-		// Change globals.Config mainnet/testnet to match network
 		globals.InitNetwork()
 
-		selectNodes.Refresh()
+		entryCustomNode.PlaceHolder = getNodePlaceholder(s)
+		clearNodeError()
+
+		updateNodeContainer()
 	}
 
 	net, _ := GetValue("settings", []byte("network"))
-
-	if string(net) == NETWORK_TESTNET {
-		radioNetwork.SetSelected(NETWORK_TESTNET)
-	} else if string(net) == NETWORK_SIMULATOR {
-		radioNetwork.SetSelected(NETWORK_SIMULATOR)
-	} else {
-		radioNetwork.SetSelected(NETWORK_MAINNET)
+	switch string(net) {
+	case NETWORK_TESTNET:
+		tabsNetwork.SelectTabIndex(1)
+	case NETWORK_SIMULATOR:
+		tabsNetwork.SelectTabIndex(2)
+	default:
+		tabsNetwork.SelectTabIndex(0)
 	}
-
-	radioNetwork.Refresh()
 
 	entryUser := widget.NewEntry()
 	entryUser.PlaceHolder = "Username"
-	entryUser.SetText(cyberdeck.RPC.user)
+	entryUser.SetText(remoteAccess.RPC.user)
 
 	entryPass := widget.NewEntry()
 	entryPass.PlaceHolder = "Password"
 	entryPass.Password = true
-	entryPass.SetText(cyberdeck.RPC.pass)
+	entryPass.SetText(remoteAccess.RPC.pass)
 
 	entryUser.OnChanged = func(s string) {
-		cyberdeck.RPC.user = s
+		remoteAccess.RPC.user = s
+		StoreValue("settings", []byte("rpc_user"), []byte(s))
 	}
 
 	entryPass.OnChanged = func(s string) {
-		cyberdeck.RPC.pass = s
+		remoteAccess.RPC.pass = s
+		StoreValue("settings", []byte("rpc_pass"), []byte(s))
 	}
 
-	checkGnomon := widget.NewCheck("Enable Gnomon", nil)
-	checkGnomon.OnChanged = func(b bool) {
-		if b {
-			StoreValue("settings", []byte("gnomon"), []byte("1"))
-			checkGnomon.Checked = true
-			gnomon.Active = 1
-		} else {
-			StoreValue("settings", []byte("gnomon"), []byte("0"))
-			checkGnomon.Checked = false
-			gnomon.Active = 0
-		}
-	}
-
-	gmn, err := GetValue("settings", []byte("gnomon"))
-	if err != nil {
-		gnomon.Active = 1
-		StoreValue("settings", []byte("gnomon"), []byte("1"))
-		checkGnomon.Checked = true
-	}
-
-	if string(gmn) == "1" {
-		checkGnomon.Checked = true
-	} else {
-		checkGnomon.Checked = false
-	}
-
-	labelBack := widget.NewHyperlinkWithStyle("Return to Login", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	labelBack.OnTapped = func() {
-		network := radioNetwork.Selected
-		if network == NETWORK_TESTNET {
-			setNetwork(network)
-		} else if network == NETWORK_SIMULATOR {
-			setNetwork(network)
-		} else {
-			setNetwork(NETWORK_MAINNET)
-		}
-		setDaemon(entryAddress.Text)
-
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		initSettings()
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
@@ -6182,55 +6114,81 @@ func layoutSettings() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMain())
 		removeOverlays()
-	}
+	})
 
 	btnRestore.OnTapped = func() {
-		setNetwork(NETWORK_MAINNET)
-		setDaemon(DEFAULT_REMOTE_DAEMON)
-		setAuthMode("true")
-		setGnomon("1")
+		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
+		restoreLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
+			if confirmed {
+				return
+			}
 
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutSettings())
-		removeOverlays()
+			setNetwork(NETWORK_MAINNET)
+			setDaemon(DEFAULT_REMOTE_DAEMON)
+			setAuthMode("true")
+			setGnomon("1")
+
+			// Clear saved nodes for all networks
+			StoreValue("settings", []byte("mainnet_nodes"), []byte{})
+			StoreValue("settings", []byte("testnet_nodes"), []byte{})
+			StoreValue("settings", []byte("simulator_nodes"), []byte{})
+
+			// Regenerate RPC credentials
+			remoteAccess.RPC.user = newRPCUsername()
+			remoteAccess.RPC.pass = newRPCPassword()
+			StoreValue("settings", []byte("rpc_user"), []byte(remoteAccess.RPC.user))
+			StoreValue("settings", []byte("rpc_pass"), []byte(remoteAccess.RPC.pass))
+
+			resizeWindow(ui.MaxWidth, ui.MaxHeight)
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutSettings())
+			removeOverlays()
+		}, session.Window)
 	}
 
 	statusText := canvas.NewText("", colors.Account)
 	statusText.TextSize = 12
 
 	btnDelete.OnTapped = func() {
-		err := cleanGnomonData()
-		if err != nil {
-			if parseError, ok := err.(*os.PathError); !ok {
-				err = fmt.Errorf("error clearing local %s data", session.Network)
-			} else {
-				err = parseError.Err
+		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
+		clearLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
+			if confirmed {
+				return
 			}
 
-			statusText.Color = colors.Red
-			statusText.Text = err.Error()
-			statusText.Refresh()
-			return
-		}
+			err := cleanGnomonData()
+			if err != nil {
+				if parseError, ok := err.(*os.PathError); !ok {
+					err = fmt.Errorf("error clearing local %s data", session.Network)
+				} else {
+					err = parseError.Err
+				}
 
-		statusText.Color = colors.Green
-		statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
-		statusText.Refresh()
+				statusText.Color = colors.Red
+				statusText.Text = err.Error()
+				statusText.Refresh()
+				return
+			}
+
+			statusText.Color = colors.Green
+			statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
+			statusText.Refresh()
+		}, session.Window)
 	}
 
 	formSettings := container.NewVBox(
 		labelNetwork,
 		rectSpacer,
-		radioNetwork,
+		tabsNetwork,
 		widget.NewLabel(""),
 		labelNode,
 		rectSpacer,
 		rectSpacer,
-		selectNodes,
+		entryWrapper,
 		rectSpacer,
-		entryAddress,
-		rectSpacer,
+		nodeContainer,
 		rectSpacer,
 		labelScan,
 		rectSpacer,
@@ -6238,25 +6196,20 @@ func layoutSettings() fyne.CanvasObject {
 		widget.NewLabel(""),
 		labelSecurity,
 		rectSpacer,
-		textCyberdeck,
+		textRemoteAccess,
 		rectSpacer,
 		entryUser,
 		rectSpacer,
 		entryPass,
 		rectSpacer,
 		widget.NewLabel(""),
-		labelGnomon,
-		rectSpacer,
-		textGnomon,
-		rectSpacer,
-		checkGnomon,
 		rectSpacer,
 		statusText,
 		rectSpacer,
 		rectSpacer,
-		btnDelete,
+		wrapMobileButton(btnDelete),
 		rectSpacer,
-		btnRestore,
+		wrapMobileButton(btnRestore),
 	)
 
 	scrollBox := container.NewVScroll(
@@ -6270,7 +6223,7 @@ func layoutSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.68))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -6292,7 +6245,1382 @@ func layoutSettings() fyne.CanvasObject {
 	footer := container.NewVBox(
 		container.NewHBox(
 			layout.NewSpacer(),
-			labelBack,
+			btnBack,
+			layout.NewSpacer(),
+		),
+		widget.NewLabel(" "),
+	)
+
+	c := container.NewBorder(
+		features,
+		footer,
+		nil,
+		nil,
+	)
+
+	return NewVScroll(c)
+}
+
+// layoutAppSettings creates the centralized settings page with 3 tabs:
+// Remote Access, TELA, and Advanced
+func layoutAppSettings() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	previousDomain := session.Domain // Save before overwriting
+	session.Domain = "app.appsettings"
+
+	frame := &iframe{}
+
+	rectScroll := canvas.NewRectangle(color.Transparent)
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+
+	heading := canvas.NewText("SETTINGS", colors.Green)
+	heading.TextSize = 22
+	heading.Alignment = fyne.TextAlignCenter
+	heading.TextStyle = fyne.TextStyle{Bold: true}
+
+	rectWidth := canvas.NewRectangle(color.Transparent)
+	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 1))
+
+	// Remote Access Tab Content
+	go refreshXSWDList()
+
+	wSpacer := widget.NewLabel(" ")
+
+	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
+	title.TextStyle = fyne.TextStyle{Bold: true}
+	title.TextSize = 16
+
+	rect := canvas.NewRectangle(color.Transparent)
+	rect.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.20))
+
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 0))
+
+	rpcLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	rpcLabel.TextSize = 11
+	rpcLabel.Alignment = fyne.TextAlignCenter
+	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	wsLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	wsLabel.TextSize = 11
+	wsLabel.Alignment = fyne.TextAlignCenter
+	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelConnections := canvas.NewText("  C O N N E C T I O N S  ", colors.Gray)
+	labelConnections.TextSize = 11
+	labelConnections.Alignment = fyne.TextAlignCenter
+	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
+
+	sep1 := canvas.NewRectangle(colors.Gray)
+	sep1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+
+	line1 := container.NewVBox(
+		layout.NewSpacer(),
+		sep1,
+		layout.NewSpacer(),
+	)
+
+	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+
+	line2 := container.NewVBox(
+		layout.NewSpacer(),
+		sep2,
+		layout.NewSpacer(),
+	)
+	_ = line1
+	_ = line2
+
+	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	shortShard.TextStyle = fyne.TextStyle{Bold: true}
+	shortShard.TextSize = 12
+
+	linkColor := colors.Green
+
+	if remoteAccess.RPC.server == nil {
+		session.Link = "Blocked"
+		linkColor = colors.Gray
+	}
+
+	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
+
+	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	serverStatus.TextSize = 12
+	serverStatus.Alignment = fyne.TextAlignCenter
+	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
+
+	linkCenter := container.NewCenter(
+		remoteAccess.RPC.status,
+	)
+
+	remoteAccess.RPC.userText = widget.NewEntry()
+	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.OnChanged = func(s string) {
+		if len(s) > 1 {
+			remoteAccess.RPC.user = s
+		}
+	}
+
+	remoteAccess.RPC.passText = widget.NewEntry()
+	remoteAccess.RPC.passText.Password = true
+	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.OnChanged = func(s string) {
+		if len(s) > 1 {
+			remoteAccess.RPC.pass = s
+		}
+	}
+
+	remoteAccess.RPC.portText = widget.NewEntry()
+	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
+		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
+		test := regexp.MustCompile(regex)
+		if test.MatchString(s) {
+			remoteAccess.RPC.portText.SetValidationError(nil)
+		} else {
+			err = errors.New("invalid host name")
+			remoteAccess.RPC.portText.SetValidationError(err)
+		}
+		return
+	}
+	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
+
+	linkColor = colors.Green
+
+	if remoteAccess.WS.server == nil {
+		session.Link = "Blocked"
+		linkColor = colors.Gray
+	}
+
+	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
+
+	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
+
+	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle.OnTapped = func() {
+		switch session.Network {
+		case NETWORK_TESTNET:
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
+			} else {
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
+			}
+		case NETWORK_SIMULATOR:
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
+			} else {
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
+			}
+		default:
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
+			} else {
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
+			}
+		}
+
+		toggleRPCServer(remoteAccess.RPC.port)
+		if remoteAccess.RPC.server != nil {
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
+			deckChoice.Disable()
+			remoteAccess.RPC.portText.Disable()
+		} else {
+			deckChoice.Enable()
+			remoteAccess.RPC.portText.Enable()
+		}
+	}
+
+	if remoteAccess.WS.portText == nil {
+		remoteAccess.WS.portText = widget.NewEntry()
+		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.Validator = func(s string) (err error) {
+			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
+			test := regexp.MustCompile(regex)
+			if test.MatchString(s) {
+				remoteAccess.WS.portText.SetValidationError(nil)
+			} else {
+				err = errors.New("invalid host name")
+				remoteAccess.WS.portText.SetValidationError(err)
+			}
+			return
+		}
+	}
+
+	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle.OnTapped = func() {
+		if remoteAccess.WS.portText.Validate() != nil {
+			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
+		} else {
+			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
+			if err != nil {
+				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
+				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
+			} else {
+				remoteAccess.WS.port = remoteAccess.WS.portText.Text
+			}
+		}
+
+		remoteAccess.EPOCH.err = nil
+		toggleXSWD(remoteAccess.WS.port)
+		if remoteAccess.WS.server != nil {
+			setRemoteAccessDual(remoteAccess.WS.port, "WS") // Use dual storage for consistency
+			remoteAccess.WS.portText.Disable()
+			deckChoice.Disable()
+			if remoteAccess.EPOCH.enabled {
+				err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
+				if err != nil {
+					logger.Errorf("[EPOCH] Connecting: %s\n", err)
+					remoteAccess.EPOCH.err = err
+				} else {
+					remoteAccess.EPOCH.err = nil
+					setRemoteAccess(epoch.GetPort(), "EPOCH")
+				}
+			}
+		} else {
+			stopEPOCH()
+			remoteAccess.WS.portText.Enable()
+			deckChoice.Enable()
+		}
+	}
+
+	if session.Offline {
+		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Disable()
+		remoteAccess.RPC.portText.Disable()
+		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Disable()
+		remoteAccess.WS.portText.Disable()
+	} else {
+		if remoteAccess.RPC.server != nil {
+			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.userText.Disable()
+			remoteAccess.RPC.passText.Disable()
+			remoteAccess.RPC.portText.Disable()
+			deckChoice.Disable()
+		} else {
+			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.userText.Enable()
+			remoteAccess.RPC.passText.Enable()
+			remoteAccess.RPC.portText.Enable()
+		}
+
+		if remoteAccess.WS.server != nil {
+			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.portText.Disable()
+			deckChoice.Disable()
+		} else {
+			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.portText.Enable()
+		}
+	}
+
+	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
+	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
+
+	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkCopy.OnTapped = func() {
+		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
+	}
+
+	linkPermissions := widget.NewHyperlinkWithStyle("Advanced", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkPermissions.OnTapped = func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutXSWDPermissions())
+		removeOverlays()
+	}
+
+	remoteAccess.WS.list = widget.NewList(
+		func() int {
+			return len(remoteAccess.WS.apps)
+		},
+		func() fyne.CanvasObject {
+			return container.NewVBox(
+				widget.NewLabel(""),
+			)
+		},
+		func(li widget.ListItemID, co fyne.CanvasObject) {
+			app := remoteAccess.WS.apps[li]
+			fyne.Do(func() {
+				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
+			})
+		},
+	)
+
+	remoteAccess.WS.list.OnSelected = func(id widget.ListItemID) {
+		remoteAccess.WS.list.UnselectAll()
+		remoteAccess.WS.list.FocusLost()
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutXSWDAppManager(&remoteAccess.WS.apps[id]))
+		removeOverlays()
+	}
+
+	xswdForm := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			wsLabel,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		container.NewCenter(
+			layout.NewSpacer(),
+			container.NewCenter(
+				container.NewVBox(
+					rectWidth90,
+					rectSpacer,
+					container.NewCenter(
+						remoteAccess.WS.status,
+					),
+					rectSpacer,
+					serverStatus,
+					wSpacer,
+					wrapMobileButton(remoteAccess.WS.toggle),
+					rectSpacer,
+					container.NewHBox(
+						layout.NewSpacer(),
+						linkPermissions,
+						layout.NewSpacer(),
+					),
+				),
+			),
+		),
+		container.NewStack(
+			rectWidth90,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				container.NewHBox(
+					layout.NewSpacer(),
+					line1,
+					layout.NewSpacer(),
+					labelConnections,
+					layout.NewSpacer(),
+					line2,
+					layout.NewSpacer(),
+				),
+				rectSpacer,
+				rectSpacer,
+				container.NewCenter(
+					container.NewStack(
+						rect,
+						remoteAccess.WS.list,
+					),
+				),
+			),
+		),
+		layout.NewSpacer(),
+	)
+
+	rpcForm := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			rpcLabel,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		container.NewCenter(
+			layout.NewSpacer(),
+			container.NewCenter(
+				container.NewVBox(
+					rectWidth90,
+					rectSpacer,
+					linkCenter,
+					rectSpacer,
+					serverStatus,
+					wSpacer,
+					wrapMobileButton(remoteAccess.RPC.toggle),
+					wSpacer,
+					remoteAccess.RPC.portText,
+					rectSpacer,
+					remoteAccess.RPC.userText,
+					rectSpacer,
+					remoteAccess.RPC.passText,
+					wSpacer,
+					container.NewHBox(
+						layout.NewSpacer(),
+						linkCopy,
+						layout.NewSpacer(),
+					),
+				),
+			),
+			layout.NewSpacer(),
+		),
+	)
+
+	deckFeatures := container.NewStack()
+	if remoteAccess.RPC.server != nil {
+		deckFeatures.Add(rpcForm)
+		deckChoice.SetSelectedIndex(1)
+	} else {
+		deckFeatures.Add(xswdForm)
+		deckChoice.SetSelectedIndex(0)
+	}
+
+	deckChoice.OnChanged = func(s string) {
+		if s == "Remote Procedure Calls (RPC)" {
+			deckFeatures.Objects[0] = rpcForm
+		} else {
+			deckFeatures.Objects[0] = xswdForm
+		}
+	}
+
+	remoteAccessContent := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewVBox(
+				title,
+			),
+		),
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewStack(
+				rectWidth90,
+				deckChoice,
+			),
+		),
+		container.NewBorder(
+			deckFeatures,
+			nil,
+			nil,
+			nil,
+		),
+	)
+
+	// TELA Tab Content
+	telaTitle := canvas.NewText("T E L A", colors.Gray)
+	telaTitle.TextStyle = fyne.TextStyle{Bold: true}
+	telaTitle.TextSize = 16
+
+	// Port Start entry
+	entryPortStart := widget.NewEntry()
+	entryPortStart.SetPlaceHolder(strconv.Itoa(tela.DEFAULT_PORT_START))
+	// Load Port Start setting from dual storage
+	if portStart, found := getTELADual("Port Start"); found {
+		entryPortStart.SetText(portStart)
+		logger.Printf("[Engram] TELA Port Start loaded from storage: %s", portStart)
+	} else {
+		logger.Printf("[Engram] TELA Port Start not found in storage, using default")
+	}
+	entryPortStart.Validator = func(s string) (err error) {
+		if s == "" {
+			return nil
+		}
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return fmt.Errorf("invalid port")
+		}
+		return tela.SetPortStart(i)
+	}
+	entryPortStart.OnChanged = func(s string) {
+		if s != "" {
+			setTELADual("Port Start", []byte(s))
+		}
+	}
+
+	// Min Likes entry
+	entryMinLikes := widget.NewEntry()
+	entryMinLikes.SetPlaceHolder("30")
+	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
+		entryMinLikes.SetText(string(storedMinLikes))
+	} else {
+		entryMinLikes.SetText("30")
+	}
+	entryMinLikes.Validator = func(s string) (err error) {
+		if s == "" {
+			return nil
+		}
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return fmt.Errorf("invalid percent")
+		}
+		if i < 0 || i > 100 {
+			return fmt.Errorf("must be 0 to 100")
+		}
+		return nil
+	}
+	entryMinLikes.OnChanged = func(s string) {
+		if s != "" {
+			StoreEncryptedValue("TELA Settings", []byte("Min Likes"), []byte(s))
+		}
+	}
+
+	// Exclusions entry
+	entryExclusions := widget.NewEntry()
+	entryExclusions.SetPlaceHolder("dURL Exclusions (exclude1,exclude2)")
+	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
+		entryExclusions.SetText(string(storedExclusions))
+	}
+	entryExclusions.OnChanged = func(s string) {
+		if s != "" {
+			StoreEncryptedValue("TELA Settings", []byte("Exclusions"), []byte(s))
+		} else {
+			DeleteKey("TELA Settings", []byte("Exclusions"))
+		}
+	}
+
+	// Restrictive Mode checkbox
+	wRestrictiveMode := widget.NewCheck("Restrictive Mode", nil)
+	// Load Restrictive Mode setting from dual storage
+	restrictiveModeEnabled := false // Default to OFF (unrestrictive mode)
+	if restrictiveMode, found := getTELADual("Restrictive Mode"); found {
+		if restrictiveMode == "false" {
+			restrictiveModeEnabled = false
+			logger.Printf("[Engram] TELA Restrictive Mode loaded from storage: Disabled")
+		} else {
+			restrictiveModeEnabled = true
+			logger.Printf("[Engram] TELA Restrictive Mode loaded from storage: Enabled")
+		}
+	} else {
+		// Also check the old "Mode" key for backward compatibility
+		if storedTelaMode, err := GetEncryptedValue("TELA Settings", []byte("Mode")); err == nil {
+			if string(storedTelaMode) == "Unrestrictive" {
+				restrictiveModeEnabled = false
+				logger.Printf("[Engram] TELA Restrictive Mode loaded from legacy Mode key: Disabled")
+			} else {
+				restrictiveModeEnabled = true
+				logger.Printf("[Engram] TELA Restrictive Mode loaded from legacy Mode key: Enabled")
+			}
+		} else {
+			// Default to unrestricted mode
+			restrictiveModeEnabled = false
+			logger.Printf("[Engram] TELA Restrictive Mode using default: Disabled")
+		}
+	}
+	wRestrictiveMode.SetChecked(restrictiveModeEnabled)
+	wRestrictiveMode.OnChanged = func(b bool) {
+		if b {
+			// For restrictive mode, save the key
+			setTELADual("Restrictive Mode", []byte("true"))
+			logger.Printf("[Engram] TELA Restrictive Mode enabled (saved true)")
+		} else {
+			// For unrestricted mode, delete both keys since unrestrictive is the default
+			if engram.Disk != nil {
+				DeleteKey("TELA Settings", []byte("Restrictive Mode"))
+				DeleteKey("TELA Settings", []byte("Mode"))
+			}
+			DeleteKey("TELASettingsUnencrypted", []byte("Restrictive Mode"))
+			DeleteKey("TELASettingsUnencrypted", []byte("Mode"))
+			logger.Printf("[Engram] TELA Restrictive Mode disabled (deleted keys)")
+		}
+	}
+
+	// Allow Content Updates dropdown
+	wAllowUpdates := widget.NewSelect([]string{xswd.Deny.String(), xswd.Allow.String()}, nil)
+	// Load Allow Updates setting from dual storage
+	if allowUpdates, found := getTELADual("Allow Updates"); found {
+		if allowUpdates == "Allow" {
+			wAllowUpdates.SetSelectedIndex(1)
+			logger.Printf("[Engram] TELA Allow Updates loaded from storage: Allow")
+		} else {
+			wAllowUpdates.SetSelectedIndex(0)
+			logger.Printf("[Engram] TELA Allow Updates loaded from storage: Deny")
+		}
+	} else {
+		// Fallback to current tela state
+		if tela.UpdatesAllowed() {
+			wAllowUpdates.SetSelectedIndex(1)
+			logger.Printf("[Engram] TELA Allow Updates using tela state: Allow")
+		} else {
+			wAllowUpdates.SetSelectedIndex(0)
+			logger.Printf("[Engram] TELA Allow Updates using tela state: Deny")
+		}
+	}
+	wAllowUpdates.OnChanged = func(s string) {
+		if s == xswd.Allow.String() {
+			tela.AllowUpdates(true)
+			setTELADual("Allow Updates", []byte("Allow"))
+			logger.Printf("[Engram] TELA Allow Updates set to Allow")
+		} else {
+			tela.AllowUpdates(false)
+			setTELADual("Allow Updates", []byte("Deny"))
+			logger.Printf("[Engram] TELA Allow Updates set to Deny")
+		}
+	}
+
+	// Rescan Recheck dropdown
+	wRescanRecheck := widget.NewSelect([]string{"No", "Yes"}, nil)
+	if storedRescanRecheck, err := GetEncryptedValue("TELA Settings", []byte("Rescan Recheck")); err == nil {
+		if string(storedRescanRecheck) == "Yes" {
+			wRescanRecheck.SetSelectedIndex(1)
+		} else {
+			wRescanRecheck.SetSelectedIndex(0)
+		}
+	} else {
+		wRescanRecheck.SetSelectedIndex(0)
+	}
+	wRescanRecheck.OnChanged = func(s string) {
+		StoreEncryptedValue("TELA Settings", []byte("Rescan Recheck"), []byte(s))
+	}
+
+	// Sort By dropdown
+	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
+	wSortBy := widget.NewSelect(sortByOptions, nil)
+	if storedSortBy, err := GetEncryptedValue("TELA Settings", []byte("Sort By")); err == nil {
+		wSortBy.SetSelected(string(storedSortBy))
+	} else {
+		wSortBy.SetSelected(sortByOptions[0])
+	}
+	wSortBy.OnChanged = func(s string) {
+		if s != "" {
+			StoreEncryptedValue("TELA Settings", []byte("Sort By"), []byte(s))
+		}
+	}
+
+	// Reset Defaults button
+	btnResetDefaults := widget.NewButton("Reset Default Settings", func() {
+		wRestrictiveMode.SetChecked(true)
+		wAllowUpdates.SetSelectedIndex(0)
+		wRescanRecheck.SetSelectedIndex(0)
+		wSortBy.SetSelectedIndex(0)
+		entryPortStart.SetText(strconv.Itoa(tela.DEFAULT_PORT_START))
+		entryMinLikes.SetText("30")
+		entryExclusions.SetText("")
+	})
+
+	// Delete Search Data button
+	btnDeleteSearchData := widget.NewButton("Delete Search Data", func() {
+		verificationOverlay(
+			false,
+			"TELA BROWSER",
+			"Delete stored search data?",
+			"Confirm",
+			func(b bool) {
+				if b {
+					DeleteKey("TELA Search", []byte("SCIDs"))
+					DeleteKey("TELA Search", []byte("Searched SCIDs"))
+					DeleteKey("TELA Search", []byte("Last Scan"))
+					DeleteKey("TELA Search", []byte("Last Indexed Height"))
+					DeleteKey("TELA Search", []byte("CandidateCache"))
+					DeleteKey("TELA Search", []byte("NegativeCache"))
+					DeleteKey("TELA Search", []byte("IndexCache"))
+				}
+			},
+		)
+	})
+
+	// Shutdown TELA button
+	btnShutdownTela := widget.NewButton("Shutdown TELA", func() {
+		verificationOverlay(
+			false,
+			"TELA BROWSER",
+			"Shutdown all active TELA servers?",
+			"Confirm",
+			func(b bool) {
+				if b {
+					tela.ShutdownTELA()
+				}
+			},
+		)
+	})
+
+	// Clear History button
+	btnClearHistory := widget.NewButton("Clear History", func() {
+		verificationOverlay(
+			false,
+			"TELA BROWSER",
+			"Clear browsing history?",
+			"Confirm",
+			func(b bool) {
+				if b {
+					shard, err := GetShard()
+					if err != nil {
+						return
+					}
+
+					store, err := graviton.NewDiskStore(shard)
+					if err != nil {
+						return
+					}
+
+					ss, err := store.LoadSnapshot(0)
+					if err != nil {
+						return
+					}
+
+					tree, err := ss.GetTree("TELA History")
+					if err != nil {
+						return
+					}
+
+					c := tree.Cursor()
+
+					for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
+						DeleteKey(tree.GetName(), k)
+					}
+				}
+			},
+		)
+	})
+
+	telaContent := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewVBox(
+				telaTitle,
+			),
+		),
+		rectSpacer,
+		wrapMobileButton(btnShutdownTela),
+		rectSpacer,
+		rectSpacer,
+		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Restrictive Mode"), nil, wRestrictiveMode),
+		rectSpacer,
+		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Allow Content Updates"), wAllowUpdates, nil),
+		rectSpacer,
+		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Rescan Recheck"), wRescanRecheck, nil),
+		rectSpacer,
+		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Sort By"), wSortBy, nil),
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### Start Port Range"),
+		entryPortStart,
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### Search Min Likes %"),
+		entryMinLikes,
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### Search Exclusions"),
+		entryExclusions,
+		rectSpacer,
+		rectSpacer,
+		wrapMobileButton(btnResetDefaults),
+		rectSpacer,
+		wrapMobileButton(btnDeleteSearchData),
+		rectSpacer,
+		wrapMobileButton(btnClearHistory),
+	)
+
+	// Advanced Tab Content
+	advancedTitle := canvas.NewText("A D V A N C E D", colors.Gray)
+	advancedTitle.TextStyle = fyne.TextStyle{Bold: true}
+	advancedTitle.TextSize = 16
+
+	// GNOMON Section
+	gnomonTitle := canvas.NewText("GNOMON", colors.Gray)
+	gnomonTitle.TextSize = 11
+	gnomonTitle.Alignment = fyne.TextAlignCenter
+	gnomonTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	gnomonDescription := widget.NewRichTextFromMarkdown("Gnomon scans and indexes blockchain data in order to unlock more features, like native asset tracking.")
+	gnomonDescription.Wrapping = fyne.TextWrapWord
+
+	checkGnomon := widget.NewCheck("Enable Gnomon", func(b bool) {
+		if b {
+			StoreValue("settings", []byte("gnomon"), []byte("1"))
+			gnomon.Active = 1
+		} else {
+			StoreValue("settings", []byte("gnomon"), []byte("0"))
+			gnomon.Active = 0
+		}
+	})
+
+	gmn, err := GetValue("settings", []byte("gnomon"))
+	if err != nil || string(gmn) == "1" {
+		gnomon.Active = 1
+		checkGnomon.SetChecked(true)
+		if err != nil {
+			StoreValue("settings", []byte("gnomon"), []byte("1"))
+		}
+	} else {
+		gnomon.Active = 0
+		checkGnomon.SetChecked(false)
+	}
+
+	// EPOCH STATISTICS Section
+	epochTitle := canvas.NewText("EPOCH STATISTICS", colors.Gray)
+	epochTitle.TextSize = 11
+	epochTitle.Alignment = fyne.TextAlignCenter
+	epochTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	spacerEpoch := canvas.NewRectangle(color.Transparent)
+	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
+
+	wEpoch := widget.NewSelect([]string{"Session", "Total"}, nil)
+	wEpoch.SetSelected("Session")
+
+	epochSession, _ := epoch.GetSession(time.Second * 4)
+
+	labelEpochHashes := widget.NewRichTextFromMarkdown("### Hashes")
+	labelEpochHashes.Wrapping = fyne.TextWrapWord
+
+	epochHashes := fmt.Sprintf("%.1fK", float64(epochSession.Hashes)/1000)
+	textEpochHashes := widget.NewRichTextFromMarkdown(epochHashes)
+	textEpochHashes.Wrapping = fyne.TextWrapWord
+
+	labelEpochBlocks := widget.NewRichTextFromMarkdown("### Miniblocks")
+	labelEpochBlocks.Wrapping = fyne.TextWrapWord
+
+	epochBlocks := fmt.Sprintf("%d", epochSession.MiniBlocks)
+	textEpochBlocks := widget.NewRichTextFromMarkdown(epochBlocks)
+	textEpochBlocks.Wrapping = fyne.TextWrapWord
+
+	wEpoch.OnChanged = func(s string) {
+		epochSession, _ := epoch.GetSession(time.Second * 4)
+		if s == "Total" {
+			total := epoch.GetSessionEPOCH_Result{
+				Hashes:     remoteAccess.EPOCH.total.Hashes,
+				MiniBlocks: remoteAccess.EPOCH.total.MiniBlocks,
+			}
+
+			if epoch.IsActive() {
+				total.Hashes += epochSession.Hashes
+				total.MiniBlocks += epochSession.MiniBlocks
+			}
+
+			textEpochHashes.ParseMarkdown(epoch.HashesToString(total.Hashes))
+			textEpochBlocks.ParseMarkdown(fmt.Sprintf("%d", total.MiniBlocks))
+
+			return
+		}
+
+		textEpochHashes.ParseMarkdown(epoch.HashesToString(epochSession.Hashes))
+		textEpochBlocks.ParseMarkdown(fmt.Sprintf("%d", epochSession.MiniBlocks))
+	}
+
+	// SCANNING Section
+	scanningTitle := canvas.NewText("SCANNING", colors.Gray)
+	scanningTitle.TextSize = 11
+	scanningTitle.Alignment = fyne.TextAlignCenter
+	scanningTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	scanningDescription := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
+	scanningDescription.Wrapping = fyne.TextWrapWord
+
+	entryTrackBlocks := widget.NewEntry()
+	entryTrackBlocks.SetPlaceHolder("# of Latest Blocks (Optional)")
+	entryTrackBlocks.Validator = func(s string) (err error) {
+		if s == "" {
+			return nil
+		}
+		_, parseErr := strconv.ParseInt(s, 10, 64)
+		return parseErr
+	}
+	entryTrackBlocks.OnChanged = func(s string) {
+		if s == "" {
+			session.TrackRecentBlocks = 0
+			return
+		}
+		if blocks, err := strconv.ParseInt(s, 10, 64); err == nil && blocks > 0 {
+			session.TrackRecentBlocks = blocks
+		} else {
+			session.TrackRecentBlocks = 0
+		}
+	}
+
+	if session.TrackRecentBlocks > 0 {
+		blocks := strconv.FormatInt(session.TrackRecentBlocks, 10)
+		entryTrackBlocks.SetText(blocks)
+	}
+
+	// MAINTENANCE Section
+	maintenanceTitle := canvas.NewText("MAINTENANCE", colors.Gray)
+	maintenanceTitle.TextSize = 11
+	maintenanceTitle.Alignment = fyne.TextAlignCenter
+	maintenanceTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	btnClearLocalData := widget.NewButton("Clear Local Data", func() {
+		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
+		clearLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
+			if confirmed {
+				return
+			}
+
+			err := cleanGnomonData()
+			if err != nil {
+				if parseError, ok := err.(*os.PathError); !ok {
+					err = fmt.Errorf("error clearing local %s data", session.Network)
+				} else {
+					err = parseError.Err
+				}
+
+				// Show error dialog
+				errorDialog := dialog.NewError(err, session.Window)
+				errorDialog.SetOnClosed(func() {})
+				errorDialog.Show()
+				return
+			}
+
+			// Show success notification
+			successDialog := dialog.NewInformation("Success", fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network)), session.Window)
+			successDialog.SetOnClosed(func() {})
+			successDialog.Show()
+		}, session.Window)
+	})
+
+	btnRestoreDefaults := widget.NewButton("Restore Defaults", func() {
+		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
+		restoreLabel.Wrapping = fyne.TextWrapWord
+		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
+			if confirmed {
+				return
+			}
+
+			// Reset all settings to defaults
+			setNetwork(NETWORK_MAINNET)
+			setDaemon(DEFAULT_REMOTE_DAEMON)
+			setAuthMode("true")
+			setGnomon("1")
+			remoteAccess.RPC.user = "username"
+			remoteAccess.RPC.pass = "password"
+			remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
+
+			// Show success notification
+			successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
+			successDialog.SetOnClosed(func() {})
+			successDialog.Show()
+		}, session.Window)
+	})
+
+	btnExportDebugLog := widget.NewButton("Export Debug Log", func() {
+		debugLogPath := getDebugLogPath()
+		data, err := os.ReadFile(debugLogPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				dialog.ShowInformation("Debug Log", "No debug log file found yet.", session.Window)
+				return
+			}
+
+			logger.Errorf("[Engram] Could not read debug log %s: %s\n", debugLogPath, err)
+			dialog.ShowError(fmt.Errorf("could not read debug log"), session.Window)
+			return
+		}
+
+		dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] File dialog: %s\n", err)
+				dialog.ShowError(fmt.Errorf("could not export debug log"), session.Window)
+				return
+			}
+
+			if uri == nil {
+				return
+			}
+
+			if _, err = writeToURI(data, uri); err != nil {
+				logger.Errorf("[Engram] Exporting debug log %s: %s\n", debugLogPath, err)
+				dialog.ShowError(fmt.Errorf("could not export debug log"), session.Window)
+				return
+			}
+
+			dialog.ShowInformation("Debug Log", "Debug log exported successfully.", session.Window)
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogFileSave.SetLocation(uri)
+			}
+		}
+
+		dialogFileSave.SetView(dialog.ListView)
+		dialogFileSave.SetFileName(debugLogFileName)
+		dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogFileSave.Show()
+	})
+
+	// DATASHARD Section components
+	labelDatashard := canvas.NewText("DATASHARD", colors.Gray)
+	labelDatashard.TextSize = 11
+	labelDatashard.Alignment = fyne.TextAlignCenter
+	labelDatashard.TextStyle = fyne.TextStyle{Bold: true}
+
+	headerDatashard := canvas.NewText("DATASHARD  ID", colors.Gray)
+	headerDatashard.TextSize = 16
+	headerDatashard.Alignment = fyne.TextAlignCenter
+	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
+
+	address := engram.Disk.GetAddress().String()
+	shardID := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
+
+	textDatashard := widget.NewRichTextFromMarkdown("### " + shardID)
+	textDatashard.Wrapping = fyne.TextWrapWord
+
+	textDatashardDesc := widget.NewRichTextFromMarkdown("Datashards hold encrypted data and stores it locally on your device. Each datashard is unique and can only be decrypted by the account it is associated with. Examples of data stored include:")
+	textDatashardDesc.Wrapping = fyne.TextWrapWord
+
+	textDatashardDesc2 := widget.NewRichTextFromMarkdown("* Datapad entries\n* Saved search history\n* Asset scan results\n* Account settings")
+	textDatashardDesc2.Wrapping = fyne.TextWrapWord
+
+	btnClearDatashard := widget.NewButton("Delete Datashard", nil)
+	btnClearDatashard.OnTapped = func() {
+		header := canvas.NewText("DATASHARD  DELETION  REQUESTED", colors.Gray)
+		header.TextSize = 14
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+
+		subHeader := canvas.NewText("Are you sure?", colors.Account)
+		subHeader.TextSize = 22
+		subHeader.Alignment = fyne.TextAlignCenter
+		subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkClose.OnTapped = func() {
+			session.Datapad = ""
+			session.DatapadChanged = false
+			removeOverlays()
+		}
+
+		btnSubmit := widget.NewButton("Delete Datashard", nil)
+
+		btnSubmit.OnTapped = func() {
+			err := cleanWalletData()
+			removeOverlays()
+			fyne.Do(func() {
+				if err != nil {
+					dialog.ShowError(fmt.Errorf("failed to delete datashard: %v", err), session.Window)
+				} else {
+					dialog.ShowInformation("Success", "Datashard deleted successfully!\n\nAll local data has been cleared.\nTELA scan will perform a fresh scan on next open.", session.Window)
+				}
+			})
+		}
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+		overlay := session.Window.Canvas().Overlays()
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
+						),
+						rectSpacer,
+						rectSpacer,
+						subHeader,
+						widget.NewLabel(""),
+						wrapMobileButton(btnSubmit),
+						rectSpacer,
+						rectSpacer,
+						container.NewHBox(
+							layout.NewSpacer(),
+							linkClose,
+							layout.NewSpacer(),
+						),
+						rectSpacer,
+						rectSpacer,
+					),
+				),
+			),
+		)
+	}
+
+	// Create EPOCH statistics section (conditionally hidden when offline)
+	epochSection := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			epochTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		container.NewStack(
+			container.NewHBox(
+				layout.NewSpacer(),
+				container.NewStack(
+					rectWidth90,
+					container.NewVBox(
+						rectSpacer,
+						wEpoch,
+						container.NewHBox(
+							container.NewStack(
+								spacerEpoch,
+								labelEpochHashes,
+							),
+							container.NewStack(
+								spacerEpoch,
+								textEpochHashes,
+							),
+						),
+						container.NewHBox(
+							container.NewStack(
+								spacerEpoch,
+								labelEpochBlocks,
+							),
+							container.NewStack(
+								spacerEpoch,
+								textEpochBlocks,
+							),
+						),
+					),
+				),
+				layout.NewSpacer(),
+			),
+		),
+	)
+
+	if session.Offline {
+		epochSection.Hide()
+	}
+
+	advancedContent := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewVBox(
+				advancedTitle,
+			),
+		),
+		rectSpacer,
+		rectSpacer,
+
+		// GNOMON Section
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			gnomonTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		gnomonDescription,
+		rectSpacer,
+		checkGnomon,
+
+		// EPOCH STATISTICS Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			epochTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		container.NewStack(
+			container.NewHBox(
+				layout.NewSpacer(),
+				container.NewStack(
+					rectWidth90,
+					container.NewVBox(
+						rectSpacer,
+						wEpoch,
+						container.NewHBox(
+							container.NewStack(
+								spacerEpoch,
+								labelEpochHashes,
+							),
+							container.NewStack(
+								spacerEpoch,
+								textEpochHashes,
+							),
+						),
+						container.NewHBox(
+							container.NewStack(
+								spacerEpoch,
+								labelEpochBlocks,
+							),
+							container.NewStack(
+								spacerEpoch,
+								textEpochBlocks,
+							),
+						),
+					),
+				),
+				layout.NewSpacer(),
+			),
+		),
+
+		// SCANNING Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			scanningTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		scanningDescription,
+		rectSpacer,
+		entryTrackBlocks,
+
+		// DATASHARD Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			labelDatashard,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		container.NewStack(
+			container.NewHBox(
+				layout.NewSpacer(),
+				container.NewStack(
+					rectWidth90,
+					container.NewVBox(
+						rectSpacer,
+						container.NewCenter(headerDatashard),
+						rectSpacer,
+						textDatashard,
+						rectSpacer,
+						textDatashardDesc,
+						rectSpacer,
+						textDatashardDesc2,
+						rectSpacer,
+						wrapMobileButton(btnClearDatashard),
+					),
+				),
+				layout.NewSpacer(),
+			),
+		),
+
+		// MAINTENANCE Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			maintenanceTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		wrapMobileButton(btnClearLocalData),
+		rectSpacer,
+		wrapMobileButton(btnRestoreDefaults),
+		rectSpacer,
+		wrapMobileButton(btnExportDebugLog),
+		rectSpacer,
+	)
+
+	// Create the tab container with width constraint
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Remote", remoteAccessContent),
+		container.NewTabItem("TELA", telaContent),
+		container.NewTabItem("Advanced", advancedContent),
+	)
+
+	// Select default tab based on how we navigated here
+	if previousDomain == "app.tela.settings" {
+		tabs.SelectIndex(1) // TELA tab
+	} else {
+		tabs.SelectIndex(0) // Default to Remote Access
+	}
+
+	// Wrap tabs in a container with fixed width
+	tabsContainer := container.NewStack(
+		rectWidth,
+		tabs,
+	)
+
+	// Back button to return to previous screen (dashboard or TELA)
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		// Return to TELA if user came from there, otherwise dashboard
+		if previousDomain == "app.tela" || previousDomain == "app.tela.manager" || previousDomain == "app.tela.settings" {
+			session.Window.SetContent(layoutTELA())
+		} else {
+			session.Window.SetContent(layoutDashboard())
+		}
+		removeOverlays()
+	})
+
+	// Main content area matching layoutSettings pattern
+	formSettings := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		tabsContainer,
+	)
+
+	scrollBox := container.NewVScroll(
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectScroll,
+				formSettings,
+			),
+			layout.NewSpacer(),
+		),
+	)
+
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+
+	gridItem1 := container.NewCenter(
+		container.NewVBox(
+			rectSpacer,
+			heading,
+			scrollBox,
+			rectSpacer,
+			rectSpacer,
+		),
+	)
+
+	features := container.NewCenter(
+		layout.NewSpacer(),
+		gridItem1,
+		layout.NewSpacer(),
+	)
+
+	footer := container.NewVBox(
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnBack,
 			layout.NewSpacer(),
 		),
 		widget.NewLabel(" "),
@@ -6310,6 +7638,11 @@ func layoutSettings() fyne.CanvasObject {
 		c,
 	)
 
+	// Register with navigation stack (app settings allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
+
 	return NewVScroll(layout)
 }
 
@@ -6323,11 +7656,6 @@ func layoutMessages() fyne.CanvasObject {
 	title := canvas.NewText("M Y    C O N T A C T S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
-
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	checkLimit := widget.NewCheck(" Show only recent messages", nil)
 	checkLimit.OnChanged = func(b bool) {
@@ -6348,31 +7676,12 @@ func layoutMessages() fyne.CanvasObject {
 		checkLimit.Checked = true
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(fyne.NewSize(10, 10))
@@ -6400,17 +7709,30 @@ func layoutMessages() fyne.CanvasObject {
 		height = 0
 	}
 
-	data := getMessages(height)
+	threadSummaries := getMessageThreadSnapshot()
+	data := []string{}
+	if len(threadSummaries) > 0 {
+		for _, thread := range threadSummaries {
+			label := thread.Label
+			if label == "" {
+				label = resolveAddressDisplay(thread.ContactKey)
+			}
+			if label == "" && thread.ContactKey == "" {
+				continue
+			}
+			data = append(data, thread.ContactKey+"~~~"+label)
+		}
+	}
+	if len(data) == 0 {
+		data = getMessages(height)
+	}
 	temp := data
 
 	list := binding.BindStringList(&data)
 
 	msgbox.List = widget.NewListWithData(list,
 		func() fyne.CanvasObject {
-			c := container.NewVBox(
-				widget.NewLabel(""),
-			)
-			return c
+			return widget.NewLabel("")
 		},
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
@@ -6418,28 +7740,41 @@ func layoutMessages() fyne.CanvasObject {
 			if err != nil {
 				return
 			}
-			dataItem := strings.Split(str, "~~~")
+			dataItem := strings.SplitN(str, "~~~", 4)
+			if len(dataItem) < 2 {
+				return
+			}
 			short := dataItem[0]
-			address := short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+			address := short
+			if len(short) > DEFAULT_USERADDR_SHORTEN_LENGTH {
+				address = short[len(short)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+			}
 			username := dataItem[1]
+			if username == "" {
+				username = resolveAddressDisplay(dataItem[0])
+			}
 			// If a username is longer than what *would* be a 'short' address of ...xyzxyzxyzx (e.g. 13), then shorten as well to be similar sizing
 			if len(username) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
 				username = "..." + username[len(username)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 			}
 
+			label := co.(*widget.Label)
 			if username == "" {
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText("..." + address)
+				label.SetText("..." + address)
 			} else {
-				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(username)
+				label.SetText(username)
 			}
-			co.(*fyne.Container).Objects[0].(*widget.Label).Wrapping = fyne.TextWrapWord
-			co.(*fyne.Container).Objects[0].(*widget.Label).TextStyle.Bold = false
-			co.(*fyne.Container).Objects[0].(*widget.Label).Alignment = fyne.TextAlignLeading
+			label.Wrapping = fyne.TextWrapWord
+			label.TextStyle.Bold = false
+			label.Alignment = fyne.TextAlignLeading
 		})
 
 	msgbox.List.OnSelected = func(id widget.ListItemID) {
 		msgbox.List.UnselectAll()
 		split := strings.Split(data[id], "~~~")
+		if len(split) < 2 {
+			return
+		}
 		if split[1] == "" {
 			messages.Contact = split[0]
 		} else {
@@ -6452,36 +7787,9 @@ func layoutMessages() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	searchList := []string{}
-
-	entrySearch := widget.NewEntry()
-	entrySearch.PlaceHolder = "Search for a Contact"
-	entrySearch.OnChanged = func(s string) {
-		s = strings.ToLower(s)
-		searchList = []string{}
-		if s == "" {
-			data = temp
-			list.Reload()
-		} else {
-			for _, d := range temp {
-				tempd := strings.ToLower(d)
-				split := strings.Split(tempd, "~~~")
-
-				if split[1] == "" {
-					if strings.Contains(split[0], s) {
-						searchList = append(searchList, d)
-					}
-				} else {
-					if strings.Contains(split[1], s) {
-						searchList = append(searchList, d)
-					}
-				}
-			}
-
-			data = searchList
-			list.Reload()
-		}
-	}
+	rebuildBtn := widget.NewButton("Rebuild Message History", func() {
+		rebuildMessageHistory()
+	})
 
 	btnSend := widget.NewButton("New Message", func() {
 		_, err := globals.ParseValidateAddress(messages.Contact)
@@ -6500,33 +7808,58 @@ func layoutMessages() fyne.CanvasObject {
 	})
 	btnSend.Disable()
 
-	entryDest := widget.NewEntry()
-	entryDest.MultiLine = false
-	entryDest.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
-	entryDest.PlaceHolder = "Username or Address"
-	entryDest.Validator = func(s string) error {
-		if len(s) > 0 {
-			_, err := globals.ParseValidateAddress(s)
-			if err != nil {
-				btnSend.Disable()
-				//_, err := engram.Disk.NameToAddress(s)
-				_, err = checkUsername(s, -1)
-				if err != nil {
-					btnSend.Disable()
-					return errors.New("invalid username or address")
-				} else {
-					messages.Contact = s
-					btnSend.Enable()
-					return nil
-				}
-			} else {
-				btnSend.Enable()
-				messages.Contact = s
-				return nil
+	contactInput := widget.NewEntry()
+	contactInput.MultiLine = false
+	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	contactInput.PlaceHolder = "Search username or address"
+
+	validateContactInput := func(value string) bool {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return false
+		}
+
+		if _, err := globals.ParseValidateAddress(value); err == nil {
+			return true
+		}
+
+		_, err := checkUsername(value, -1)
+		return err == nil
+	}
+
+	filterContacts := func(query string) {
+		query = strings.ToLower(strings.TrimSpace(query))
+		searchList := []string{}
+		if query == "" {
+			data = temp
+			list.Reload()
+			return
+		}
+
+		for _, d := range temp {
+			tempd := strings.ToLower(d)
+			split := strings.SplitN(tempd, "~~~", 4)
+			if len(split) < 2 {
+				continue
+			}
+
+			if strings.Contains(split[0], query) || strings.Contains(split[1], query) {
+				searchList = append(searchList, d)
 			}
 		}
 
-		return errors.New("invalid username or address")
+		data = searchList
+		list.Reload()
+	}
+
+	contactInput.OnChanged = func(s string) {
+		filterContacts(s)
+		messages.Contact = strings.TrimSpace(s)
+		if validateContactInput(s) {
+			btnSend.Enable()
+		} else {
+			btnSend.Disable()
+		}
 	}
 
 	messageForm := container.NewVBox(
@@ -6539,7 +7872,7 @@ func layoutMessages() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		entrySearch,
+		contactInput,
 		rectSpacer,
 		rectSpacer,
 		container.NewStack(
@@ -6547,9 +7880,9 @@ func layoutMessages() fyne.CanvasObject {
 			msgbox.List,
 		),
 		rectSpacer,
-		entryDest,
-		rectSpacer,
 		btnSend,
+		rectSpacer,
+		rebuildBtn,
 		rectSpacer,
 		checkLimit,
 	)
@@ -6600,22 +7933,11 @@ func layoutMessages() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -6637,7 +7959,7 @@ func layoutMessages() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutPM() fyne.CanvasObject {
@@ -6649,24 +7971,18 @@ func layoutPM() fyne.CanvasObject {
 
 	getPrimaryUsername()
 
-	contactAddress := ""
+	selectedKey, selectedLabel := resolveMessageContact(messages.Contact, -1)
+	contactAddress := messages.Contact
+	if selectedLabel != "" {
+		contactAddress = selectedLabel
+	} else if display := resolveAddressDisplay(selectedKey); display != "" {
+		contactAddress = display
+	} else if display := resolveAddressDisplay(strings.TrimSpace(messages.Contact)); display != "" {
+		contactAddress = display
+	}
 
-	// So message contact sizes are not overblown from UI
-	_, err := globals.ParseValidateAddress(messages.Contact)
-	if err != nil {
-		//_, err := engram.Disk.NameToAddress(messages.Contact)
-		_, err := checkUsername(messages.Contact, -1)
-		if err == nil {
-			contactAddress = messages.Contact
-		}
-	} /* else {
-		short := messages.Contact[len(messages.Contact)-10:]
-		contactAddress = "..." + short
-	}*/
-
-	// Safety, even though valid addresses are sized enough but usernames may not be
-	if len(messages.Contact) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
-		short := messages.Contact[len(messages.Contact)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
+	if len(contactAddress) > DEFAULT_USERADDR_SHORTEN_LENGTH+3 {
+		short := contactAddress[len(contactAddress)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 		contactAddress = "..." + short
 	}
 
@@ -6684,36 +8000,12 @@ func layoutPM() fyne.CanvasObject {
 	lastActive.Alignment = fyne.TextAlignCenter
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	linkBack := widget.NewHyperlinkWithStyle("Back to Messages", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMessages())
 		removeOverlays()
-	}
+	})
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(fyne.NewSize(10, 10))
@@ -6760,17 +8052,79 @@ func layoutPM() fyne.CanvasObject {
 		height = 0
 	}
 
-	data := getMessagesFromUser(messages.Contact, height)
+	messageRecords := getCachedThreadMessages(messages.Contact, height)
+	if len(messageRecords) == 0 {
+		records := getMessageCacheSnapshot()
+		if len(records) == 0 {
+			records = scanMessageTransfers(height)
+		}
+		for _, message := range records {
+			if height > 0 && message.Entry.Height < height {
+				continue
+			}
+			if messageMatchesContact(message, messages.Contact) {
+				messageRecords = append(messageRecords, message)
+			}
+		}
+	}
+	originalMessageRecords := make([]MessageRecord, len(messageRecords))
+	copy(originalMessageRecords, messageRecords)
+	renderThread := func(filtered []MessageRecord) {
+		messages.Data = nil
+		chats.Objects = nil
+		if len(filtered) == 0 {
+			empty := widget.NewLabel("No messages found.")
+			empty.Alignment = fyne.TextAlignCenter
+			chats.Add(empty)
+			chats.Refresh()
+			chatbox.Refresh()
+			return
+		}
 
-	for d := range data {
-		if data[d].Incoming {
-			if data[d].Payload_RPC.Has(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-				if data[d].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string) == "" {
+		renderedMessages := make([]RenderedThreadMessage, 0, len(filtered))
+		useCachedRender := len(filtered) == len(originalMessageRecords)
+		if useCachedRender {
+			if cached, ok := getRenderedThreadCache(messages.Contact, height); ok {
+				renderedMessages = cached
+			} else {
+				useCachedRender = false
+			}
+		}
 
+		if !useCachedRender {
+			for d := range filtered {
+				if filtered[d].Entry.Incoming {
+					replyback := messageReplyback(filtered[d].Entry)
+					if replyback != "" {
+						t := filtered[d].Entry.Time
+						time := string(t.Format(time.RFC822))
+						comment := filtered[d].Comment
+						links := getTextURL(comment)
+
+						for i := range links {
+							if comment == links[i] {
+								if len(links[i]) > 25 {
+									comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
+								} else {
+									comment = `[ ` + links[i] + ` ](` + links[i] + `)`
+								}
+							} else {
+								linkText := ""
+								split := strings.Split(comment, links[i])
+								if len(links[i]) > 25 {
+									linkText = links[i][0:25] + "..."
+								} else {
+									linkText = links[i]
+								}
+								comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
+							}
+						}
+						renderedMessages = append(renderedMessages, RenderedThreadMessage{Sender: replyback, Comment: comment, Timestamp: time, IsIncoming: true})
+					}
 				} else {
-					t := data[d].Time
+					t := filtered[d].Entry.Time
 					time := string(t.Format(time.RFC822))
-					comment := data[d].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
+					comment := filtered[d].Comment
 					links := getTextURL(comment)
 
 					for i := range links {
@@ -6791,123 +8145,147 @@ func layoutPM() fyne.CanvasObject {
 							comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
 						}
 					}
-					messages.Data = append(messages.Data, data[d].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)+";;;;"+comment+";;;;"+time)
+					renderedMessages = append(renderedMessages, RenderedThreadMessage{Sender: engram.Disk.GetAddress().String(), Comment: comment, Timestamp: time, IsIncoming: false})
 				}
 			}
-		} else {
-			t := data[d].Time
-			time := string(t.Format(time.RFC822))
-			comment := data[d].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
-			links := getTextURL(comment)
-
-			for i := range links {
-				if comment == links[i] {
-					if len(links[i]) > 25 {
-						comment = `[ ` + links[i][0:25] + "..." + ` ](` + links[i] + `)`
-					} else {
-						comment = `[ ` + links[i] + ` ](` + links[i] + `)`
-					}
-				} else {
-					linkText := ""
-					split := strings.Split(comment, links[i])
-					if len(links[i]) > 25 {
-						linkText = links[i][0:25] + "..."
-					} else {
-						linkText = links[i]
-					}
-					comment = `` + split[0] + `[link]` + split[1] + "\n\n›" + `[ ` + linkText + ` ](` + links[i] + `)`
-				}
+			if len(filtered) == len(originalMessageRecords) {
+				setRenderedThreadCache(messages.Contact, height, renderedMessages)
 			}
-			messages.Data = append(messages.Data, engram.Disk.GetAddress().String()+";;;;"+comment+";;;;"+time)
 		}
-	}
 
-	if len(data) > 0 {
-		for m := range messages.Data {
-			var sender string
-			split := strings.Split(messages.Data[m], ";;;;")
-			mdata := widget.NewRichTextFromMarkdown("")
-			mdata.Wrapping = fyne.TextWrapWord
-			datetime := canvas.NewText("", colors.Green)
-			datetime.TextSize = 11
-			boxColor := colors.Flint
-			rect := canvas.NewRectangle(boxColor)
-			rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
-			rect.CornerRadius = 5.0
-			rect5 := canvas.NewRectangle(color.Transparent)
-			rect5.SetMinSize(fyne.NewSize(5, 5))
+		if len(renderedMessages) > 0 {
+			newObjects := make([]fyne.CanvasObject, 0, len(renderedMessages))
+			newData := make([]string, 0, len(renderedMessages))
+			for _, rendered := range renderedMessages {
+				mdata := widget.NewRichTextFromMarkdown("")
+				mdata.Wrapping = fyne.TextWrapWord
+				datetime := canvas.NewText("", colors.Green)
+				datetime.TextSize = 11
+				boxColor := colors.Flint
+				rect := canvas.NewRectangle(boxColor)
+				rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
+				rect.CornerRadius = 5.0
+				rect5 := canvas.NewRectangle(color.Transparent)
+				rect5.SetMinSize(fyne.NewSize(5, 5))
 
-			//uname, err := engram.Disk.NameToAddress(split[0])
-			uname, err := checkUsername(split[0], -1)
-			if err != nil {
-				sender = split[0]
-			} else {
-				sender = uname
-			}
-
-			if sender == engram.Disk.GetAddress().String() {
-				rect.FillColor = colors.DarkGreen
-				mdata.ParseMarkdown(split[1])
-				datetime.Text = split[2]
-				e = container.NewBorder(
-					nil,
-					container.NewVBox(
-						container.NewHBox(
-							layout.NewSpacer(),
-							datetime,
+				if !rendered.IsIncoming {
+					rect.FillColor = colors.DarkGreen
+					mdata.ParseMarkdown(rendered.Comment)
+					datetime.Text = rendered.Timestamp
+					e = container.NewBorder(
+						nil,
+						container.NewVBox(
+							container.NewHBox(
+								layout.NewSpacer(),
+								datetime,
+								rect5,
+							),
 							rect5,
 						),
-						rect5,
-					),
-					rectOutbound,
-					container.NewStack(
-						rect,
-						container.NewVBox(
-							mdata,
+						rectOutbound,
+						container.NewStack(
+							rect,
+							container.NewVBox(
+								mdata,
+							),
 						),
-					),
-				)
-			} else {
-				rect.FillColor = colors.Flint
-				mdata.ParseMarkdown(split[1])
-				datetime.Text = split[2]
-				e = container.NewBorder(
-					nil,
-					container.NewVBox(
-						container.NewHBox(
+					)
+				} else {
+					rect.FillColor = colors.Flint
+					mdata.ParseMarkdown(rendered.Comment)
+					datetime.Text = rendered.Timestamp
+					e = container.NewBorder(
+						nil,
+						container.NewVBox(
+							container.NewHBox(
+								rect5,
+								datetime,
+								layout.NewSpacer(),
+							),
 							rect5,
-							datetime,
-							layout.NewSpacer(),
 						),
-						rect5,
-					),
-					container.NewStack(
-						rect,
-						container.NewVBox(
-							mdata,
+						container.NewStack(
+							rect,
+							container.NewVBox(
+								mdata,
+							),
 						),
-					),
-					rectOutbound,
-				)
-			}
+						rectOutbound,
+					)
+				}
 
+				newData = append(newData, rendered.Sender+";;;;"+rendered.Comment+";;;;"+rendered.Timestamp)
+				newObjects = append(newObjects, e)
+			}
+			messages.Data = newData
+			chats.Objects = newObjects
 			lastActive.Text = "Last Updated:  " + time.Now().Format(time.RFC822)
 			lastActive.Refresh()
-
-			chats.Add(e)
 			chats.Refresh()
 			chatbox.Refresh()
 			chatbox.ScrollToBottom()
 		}
 	}
 
+	renderThread(messageRecords)
+	threadSearch := widget.NewEntry()
+	threadSearch.PlaceHolder = "Search within this thread"
+	threadSearch.OnChanged = func(s string) {
+		query := strings.ToLower(strings.TrimSpace(s))
+		if query == "" {
+			renderThread(originalMessageRecords)
+			return
+		}
+
+		filtered := make([]MessageRecord, 0)
+		for _, message := range originalMessageRecords {
+			if strings.Contains(strings.ToLower(message.Comment), query) {
+				filtered = append(filtered, message)
+			}
+		}
+
+		renderThread(filtered)
+	}
+
 	btnSend := widget.NewButton("Send", nil)
 	btnSend.Disable()
+	labelLimit := canvas.NewText("", colors.Gray)
+	labelLimit.TextSize = 11
+	labelLimit.Alignment = fyne.TextAlignLeading
+	updateMessageLimit := func(message string, sender string) {
+		if sender == "" && engram.Disk != nil {
+			sender = engram.Disk.GetAddress().String()
+		}
+
+		args := rpc.Arguments{
+			{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: uint64(1337)},
+			{Name: rpc.RPC_VALUE_TRANSFER, DataType: rpc.DataUint64, Value: uint64(1)},
+			{Name: rpc.RPC_EXPIRY, DataType: rpc.DataTime, Value: time.Now().Add(time.Hour).UTC()},
+			{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: message},
+			{Name: rpc.RPC_NEEDS_REPLYBACK_ADDRESS, DataType: rpc.DataString, Value: sender},
+		}
+
+		packed, err := args.MarshalBinary()
+		if err != nil {
+			labelLimit.Text = fmt.Sprintf("%d chars", len(message))
+			labelLimit.Refresh()
+			return
+		}
+
+		remaining := transaction.PAYLOAD0_LIMIT - len(packed)
+		if remaining < 0 {
+			remaining = 0
+		}
+
+		labelLimit.Text = fmt.Sprintf("%d chars, ~%d bytes left", len(message), remaining)
+		labelLimit.Refresh()
+	}
 
 	entry := widget.NewEntry()
 	entry.MultiLine = false
 	entry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	entry.PlaceHolder = "Message"
+	updateMessageLimit("", session.Username)
 	entry.OnChanged = func(s string) {
 		messages.Message = s
 		contact := messages.Contact
@@ -6925,6 +8303,7 @@ func layoutPM() fyne.CanvasObject {
 			removeOverlays()
 			return
 		}
+		updateMessageLimit(messages.Message, session.Username)
 
 		err = checkMessagePack(messages.Message, session.Username, contact)
 		if err != nil {
@@ -6983,15 +8362,22 @@ func layoutPM() fyne.CanvasObject {
 		btnSend.Text = "Confirming..."
 		btnSend.Disable()
 		btnSend.Refresh()
+		sentMessage := messages.Message
 		messages.Message = ""
 		entry.Text = ""
 		entry.Refresh()
+		updateMessageLimit("", session.Username)
 
 		go func() {
+			generation := currentWalletGeneration()
 			walletapi.WaitNewHeightBlock()
 			sHeight := walletapi.Get_Daemon_Height()
 			var success bool
 			for session.Domain == "app.messages.contact" {
+				if !isWalletGenerationActive(generation) {
+					return
+				}
+
 				var zeroscid crypto.Hash
 				_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
 
@@ -7003,30 +8389,41 @@ func layoutPM() fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					fyne.Do(func() {
-						btnSend.Text = "Failed to send message..."
-						btnSend.Disable()
-						btnSend.Refresh()
-					})
-
+					btnSend.Text = "Failed to send message..."
+					btnSend.Disable()
+					btnSend.Refresh()
 					break
 				}
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					fyne.Do(func() {
-						btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-						btnSend.Refresh()
-					})
+					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+					btnSend.Refresh()
 				}
 
 				// If success, reload page w/ latest content. Otherwise retain the Failure message for UX relay
 				if success {
-					fyne.Do(func() {
-						session.Window.SetContent(layoutTransition())
-						session.Window.SetContent(layoutPM())
+					refreshMessageHistoryAsync(false)
+					uiDo(func() {
+						if !isWalletGenerationActive(generation) {
+							return
+						}
+						messageRecords = append(messageRecords, MessageRecord{
+							Entry: rpc.Entry{
+								TXID:     txid.String(),
+								Time:     time.Now(),
+								Incoming: false,
+							},
+							ContactKey: messages.Contact,
+							Label:      messages.Contact,
+							Comment:    sentMessage,
+						})
+						originalMessageRecords = append(originalMessageRecords, messageRecords[len(messageRecords)-1])
+						renderThread(messageRecords)
+						btnSend.Text = "Send"
+						btnSend.Disable()
+						btnSend.Refresh()
 					})
-
 					break
 				} else {
 					time.Sleep(time.Second * 1)
@@ -7046,12 +8443,16 @@ func layoutPM() fyne.CanvasObject {
 		rectSpacer,
 		lastActive,
 		rectSpacer,
+		threadSearch,
+		rectSpacer,
 		rectSpacer,
 		container.NewStack(
 			subframe,
 			chatbox,
 		),
 		rectSpacer,
+		rectSpacer,
+		labelLimit,
 		rectSpacer,
 		entry,
 		rectSpacer,
@@ -7111,22 +8512,11 @@ func layoutPM() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -7148,17 +8538,17 @@ func layoutPM() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
-func layoutCyberdeck() fyne.CanvasObject {
-	session.Domain = "app.cyberdeck"
+func layoutRemoteAccess() fyne.CanvasObject {
+	session.Domain = "app.remoteaccess"
 
 	go refreshXSWDList()
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("C Y B E R D E C K", colors.Gray)
+	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
@@ -7188,11 +8578,6 @@ func layoutCyberdeck() fyne.CanvasObject {
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep1 := canvas.NewRectangle(colors.Gray)
 	sep1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -7210,6 +8595,8 @@ func layoutCyberdeck() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkBack.OnTapped = func() {
@@ -7225,14 +8612,14 @@ func layoutCyberdeck() fyne.CanvasObject {
 
 	linkColor := colors.Green
 
-	if cyberdeck.RPC.server == nil {
+	if remoteAccess.RPC.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.RPC.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.RPC.status.TextSize = 22
-	cyberdeck.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	serverStatus.TextSize = 12
@@ -7240,134 +8627,146 @@ func layoutCyberdeck() fyne.CanvasObject {
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
 
 	linkCenter := container.NewCenter(
-		cyberdeck.RPC.status,
+		remoteAccess.RPC.status,
 	)
 
-	cyberdeck.RPC.userText = widget.NewEntry()
-	cyberdeck.RPC.userText.PlaceHolder = "Username"
-	cyberdeck.RPC.userText.OnChanged = func(s string) {
+	remoteAccess.RPC.userText = widget.NewEntry()
+	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.user = s
+			remoteAccess.RPC.user = s
 		}
 	}
 
-	cyberdeck.RPC.passText = widget.NewEntry()
-	cyberdeck.RPC.passText.Password = true
-	cyberdeck.RPC.passText.PlaceHolder = "Password"
-	cyberdeck.RPC.passText.OnChanged = func(s string) {
+	remoteAccess.RPC.passText = widget.NewEntry()
+	remoteAccess.RPC.passText.Password = true
+	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.OnChanged = func(s string) {
 		if len(s) > 1 {
-			cyberdeck.RPC.pass = s
+			remoteAccess.RPC.pass = s
+			StoreValue("settings", []byte("rpc_pass"), []byte(s))
 		}
 	}
 
-	cyberdeck.RPC.portText = widget.NewEntry()
-	cyberdeck.RPC.portText.PlaceHolder = "0.0.0.0:10103"
-	cyberdeck.RPC.portText.Validator = func(s string) (err error) {
+	remoteAccess.RPC.portText = widget.NewEntry()
+	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
 		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 		test := regexp.MustCompile(regex)
 		if test.MatchString(s) {
-			cyberdeck.RPC.portText.SetValidationError(nil)
+			remoteAccess.RPC.portText.SetValidationError(nil)
 		} else {
 			err = errors.New("invalid host name")
-			cyberdeck.RPC.portText.SetValidationError(err)
+			remoteAccess.RPC.portText.SetValidationError(err)
 		}
 
 		return
 	}
-	cyberdeck.RPC.portText.SetText(getCyberdeck("RPC"))
+	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
 
 	linkColor = colors.Green
 
-	if cyberdeck.WS.server == nil {
+	if remoteAccess.WS.server == nil {
 		session.Link = "Blocked"
 		linkColor = colors.Gray
 	}
 
-	cyberdeck.WS.status = canvas.NewText(session.Link, linkColor)
-	cyberdeck.WS.status.TextSize = 22
-	cyberdeck.WS.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
+	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
 
-	cyberdeck.RPC.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.RPC.toggle.OnTapped = func() {
+	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle.OnTapped = func() {
 		switch session.Network {
 		case NETWORK_TESTNET:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_TESTNET_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		case NETWORK_SIMULATOR:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_SIMULATOR_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		default:
-			if cyberdeck.RPC.portText.Validate() != nil {
-				cyberdeck.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
-				cyberdeck.RPC.portText.SetText(cyberdeck.RPC.port)
+			if remoteAccess.RPC.portText.Validate() != nil {
+				remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+				remoteAccess.RPC.portText.SetText(remoteAccess.RPC.port)
 			} else {
-				cyberdeck.RPC.port = cyberdeck.RPC.portText.Text
+				remoteAccess.RPC.port = remoteAccess.RPC.portText.Text
 			}
 		}
 
-		toggleRPCServer(cyberdeck.RPC.port)
-		if cyberdeck.RPC.server != nil {
-			setCyberdeck(cyberdeck.RPC.port, "RPC")
+		toggleRPCServer(remoteAccess.RPC.port)
+		if remoteAccess.RPC.server != nil {
+			setRemoteAccess(remoteAccess.RPC.port, "RPC")
 			deckChoice.Disable()
-			cyberdeck.RPC.portText.Disable()
+			remoteAccess.RPC.portText.Disable()
 		} else {
 			deckChoice.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 	}
 
-	if cyberdeck.WS.portText == nil {
-		cyberdeck.WS.portText = widget.NewEntry()
-		cyberdeck.WS.portText.PlaceHolder = "0.0.0.0:44326"
-		cyberdeck.WS.portText.Validator = func(s string) (err error) {
+	if remoteAccess.WS.portText == nil {
+		remoteAccess.WS.portText = widget.NewEntry()
+		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
 			if test.MatchString(s) {
-				cyberdeck.WS.portText.SetValidationError(nil)
+				remoteAccess.WS.portText.SetValidationError(nil)
 			} else {
 				err = errors.New("invalid host name")
-				cyberdeck.WS.portText.SetValidationError(err)
+				remoteAccess.WS.portText.SetValidationError(err)
 			}
 
 			return
 		}
+
+		remoteAccess.WS.portText.OnChanged = func(s string) {
+			if remoteAccess.WS.portText.Validate() == nil {
+				remoteAccess.WS.port = s
+				setRemoteAccessDual(s, "WS") // Use dual storage instead of setRemoteAccess()
+
+				// CRITICAL FIX: Save WebSocket enabled state to storage
+				remoteAccess.WS.global.enabled = true
+				setPermissions()
+			}
+		}
 	}
 
-	cyberdeck.WS.toggle = widget.NewButton("Turn On", nil)
-	cyberdeck.WS.toggle.OnTapped = func() {
-		if cyberdeck.WS.portText.Validate() != nil {
-			cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-			cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle.OnTapped = func() {
+		if remoteAccess.WS.portText.Validate() != nil {
+			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 		} else {
-			_, err := net.ResolveTCPAddr("tcp", cyberdeck.WS.port)
+			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
 			if err != nil {
-				logger.Errorf("[Cyberdeck] XSWD port: %s\n", err)
-				cyberdeck.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-				cyberdeck.WS.portText.SetText(cyberdeck.WS.port)
+				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
+				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 			} else {
-				cyberdeck.WS.port = cyberdeck.WS.portText.Text
+				remoteAccess.WS.port = remoteAccess.WS.portText.Text
 			}
 		}
 
-		cyberdeck.EPOCH.err = nil
-		toggleXSWD(cyberdeck.WS.port)
-		if cyberdeck.WS.server != nil {
-			setCyberdeck(cyberdeck.WS.port, "WS")
-			cyberdeck.WS.portText.Disable()
+		remoteAccess.EPOCH.err = nil
+		toggleXSWD(remoteAccess.WS.port)
+		if remoteAccess.WS.server != nil {
+			setRemoteAccessDual(remoteAccess.WS.port, "WS") // Use dual storage for consistency
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
-			if cyberdeck.EPOCH.enabled {
+			if remoteAccess.EPOCH.enabled {
 				/*
-					if cyberdeck.EPOCH.allowWithAddress {
+					if remoteAccess.EPOCH.allowWithAddress {
 						// If address is defined by dApp, GetWork will be started and stopped upon each WS call
 						logger.Printf("[EPOCH] dApp addresses are enabled\n")
 						return
@@ -7377,69 +8776,69 @@ func layoutCyberdeck() fyne.CanvasObject {
 				err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
 				if err != nil {
 					logger.Errorf("[EPOCH] Connecting: %s\n", err)
-					cyberdeck.EPOCH.err = err
+					remoteAccess.EPOCH.err = err
 				} else {
-					cyberdeck.EPOCH.err = nil
-					setCyberdeck(epoch.GetPort(), "EPOCH")
+					remoteAccess.EPOCH.err = nil
+					setRemoteAccess(epoch.GetPort(), "EPOCH")
 				}
 			}
 		} else {
 			stopEPOCH()
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.portText.Enable()
 			deckChoice.Enable()
 		}
 	}
 
 	if session.Offline {
-		cyberdeck.RPC.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.RPC.toggle.Disable()
-		cyberdeck.RPC.portText.Disable()
-		cyberdeck.WS.toggle.Text = "Disabled in Offline Mode"
-		cyberdeck.WS.toggle.Disable()
-		cyberdeck.WS.portText.Disable()
+		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Disable()
+		remoteAccess.RPC.portText.Disable()
+		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Disable()
+		remoteAccess.WS.portText.Disable()
 	} else {
-		if cyberdeck.RPC.server != nil {
-			cyberdeck.RPC.status.Text = "Allowed"
-			cyberdeck.RPC.status.Color = colors.Green
-			cyberdeck.RPC.toggle.Text = "Turn Off"
-			cyberdeck.RPC.userText.Disable()
-			cyberdeck.RPC.passText.Disable()
-			cyberdeck.RPC.portText.Disable()
+		if remoteAccess.RPC.server != nil {
+			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.userText.Disable()
+			remoteAccess.RPC.passText.Disable()
+			remoteAccess.RPC.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.RPC.status.Text = "Blocked"
-			cyberdeck.RPC.status.Color = colors.Gray
-			cyberdeck.RPC.toggle.Text = "Turn On"
-			cyberdeck.RPC.userText.Enable()
-			cyberdeck.RPC.passText.Enable()
-			cyberdeck.RPC.portText.Enable()
+			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.userText.Enable()
+			remoteAccess.RPC.passText.Enable()
+			remoteAccess.RPC.portText.Enable()
 		}
 
-		if cyberdeck.WS.server != nil {
-			cyberdeck.WS.status.Text = "Allowed"
-			cyberdeck.WS.status.Color = colors.Green
-			cyberdeck.WS.toggle.Text = "Turn Off"
-			cyberdeck.WS.portText.Disable()
+		if remoteAccess.WS.server != nil {
+			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			cyberdeck.WS.status.Text = "Blocked"
-			cyberdeck.WS.status.Color = colors.Gray
-			cyberdeck.WS.toggle.Text = "Turn On"
-			cyberdeck.WS.portText.Enable()
+			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.portText.Enable()
 		}
 	}
 
-	cyberdeck.RPC.userText.SetText(cyberdeck.RPC.user)
-	cyberdeck.RPC.passText.SetText(cyberdeck.RPC.pass)
+	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
+	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
 
 	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopy.OnTapped = func() {
-		a.Clipboard().SetContent(cyberdeck.RPC.user + ":" + cyberdeck.RPC.pass)
+		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
 	}
 
 	linkPermissions := widget.NewHyperlinkWithStyle("Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkPermissions.OnTapped = func() {
-		//if cyberdeck.WS.server != nil {
+		//if remoteAccess.WS.server != nil {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutXSWDPermissions())
@@ -7450,7 +8849,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 	/*
 		linkApps := widget.NewHyperlinkWithStyle("View Connections", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 		linkApps.OnTapped = func() {
-			if cyberdeck.WS.server != nil {
+			if remoteAccess.WS.server != nil {
 				session.LastDomain = session.Window.Content()
 				session.Window.SetContent(layoutTransition())
 				session.Window.SetContent(layoutXSWDConnections())
@@ -7459,9 +8858,9 @@ func layoutCyberdeck() fyne.CanvasObject {
 		}
 	*/
 
-	cyberdeck.WS.list = widget.NewList(
+	remoteAccess.WS.list = widget.NewList(
 		func() int {
-			return len(cyberdeck.WS.apps)
+			return len(remoteAccess.WS.apps)
 		},
 		func() fyne.CanvasObject {
 			return container.NewVBox(
@@ -7470,7 +8869,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 			)
 		},
 		func(li widget.ListItemID, co fyne.CanvasObject) {
-			app := cyberdeck.WS.apps[li]
+			app := remoteAccess.WS.apps[li]
 
 			fyne.Do(func() {
 				co.(*fyne.Container).Objects[0].(*widget.Label).SetText(app.Name)
@@ -7479,12 +8878,12 @@ func layoutCyberdeck() fyne.CanvasObject {
 		},
 	)
 
-	cyberdeck.WS.list.OnSelected = func(id widget.ListItemID) {
-		cyberdeck.WS.list.UnselectAll()
-		cyberdeck.WS.list.FocusLost()
+	remoteAccess.WS.list.OnSelected = func(id widget.ListItemID) {
+		remoteAccess.WS.list.UnselectAll()
+		remoteAccess.WS.list.FocusLost()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutXSWDAppManager(&cyberdeck.WS.apps[id]))
+		session.Window.SetContent(layoutXSWDAppManager(&remoteAccess.WS.apps[id]))
 		removeOverlays()
 	}
 
@@ -7507,12 +8906,12 @@ func layoutCyberdeck() fyne.CanvasObject {
 					rectWidth90,
 					rectSpacer,
 					container.NewCenter(
-						cyberdeck.WS.status,
+						remoteAccess.WS.status,
 					),
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.WS.toggle,
+					remoteAccess.WS.toggle,
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -7541,7 +8940,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 				container.NewCenter(
 					container.NewStack(
 						rect,
-						cyberdeck.WS.list,
+						remoteAccess.WS.list,
 					),
 				),
 			),
@@ -7571,13 +8970,13 @@ func layoutCyberdeck() fyne.CanvasObject {
 					rectSpacer,
 					serverStatus,
 					wSpacer,
-					cyberdeck.RPC.toggle,
+					remoteAccess.RPC.toggle,
 					wSpacer,
-					cyberdeck.RPC.portText,
+					remoteAccess.RPC.portText,
 					rectSpacer,
-					cyberdeck.RPC.userText,
+					remoteAccess.RPC.userText,
 					rectSpacer,
-					cyberdeck.RPC.passText,
+					remoteAccess.RPC.passText,
 					wSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
@@ -7591,7 +8990,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 	)
 
 	deckFeatures := container.NewStack()
-	if cyberdeck.RPC.server != nil {
+	if remoteAccess.RPC.server != nil {
 		deckFeatures.Add(rpcForm)
 		deckChoice.SetSelectedIndex(1)
 	} else {
@@ -7648,17 +9047,8 @@ func layoutCyberdeck() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
@@ -7690,7 +9080,7 @@ func layoutCyberdeck() fyne.CanvasObject {
 
 // Layout details of an app connected through web socket
 func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
-	session.Domain = "app.cyberdeck.manager"
+	session.Domain = "app.remoteaccess.manager"
 
 	frame := &iframe{}
 
@@ -7845,11 +9235,6 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		eventItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("No Events"), nil))
 	}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -7867,14 +9252,15 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Cyberdeck", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutCyberdeck())
-	}
+		session.Window.SetContent(layoutAppSettings())
+	})
 
 	image := canvas.NewImageFromResource(resourceWebsocketPng)
 	image.SetMinSize(fyne.NewSize(ui.Width*0.25, ui.Width*0.25))
@@ -7911,12 +9297,12 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 
 	btnRemove := widget.NewButton("Remove", nil)
 	btnRemove.OnTapped = func() {
-		if cyberdeck.WS.server != nil && len(cyberdeck.WS.apps) > 0 {
-			cyberdeck.WS.server.RemoveApplication(ad)
+		if remoteAccess.WS.server != nil && len(remoteAccess.WS.apps) > 0 {
+			remoteAccess.WS.server.RemoveApplication(ad)
 			removeOverlays()
 			session.LastDomain = session.Window.Content()
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutCyberdeck())
+			session.Window.SetContent(layoutRemoteAccess())
 		}
 	}
 
@@ -7993,7 +9379,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 						labelSeparator6,
 						rectSpacer,
 						rectSpacer,
-						btnRemove,
+						wrapMobileButton(btnRemove),
 						rectSpacer,
 						rectSpacer,
 					),
@@ -8014,22 +9400,13 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -8054,7 +9431,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 
 // Layout XSWD permissions settings
 func layoutXSWDPermissions() fyne.CanvasObject {
-	session.Domain = "app.cyberdeck.permissions"
+	session.Domain = "app.remoteaccess.permissions"
 
 	wSpacer := widget.NewLabel(" ")
 
@@ -8102,6 +9479,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	wMode := widget.NewCheck("Restrictive Mode", nil)
 
+	// Simple/Advanced Mode Toggle
+	wSimpleMode := widget.NewCheck("Simple Mode (Recommended)", nil)
+	wSimpleMode.Checked = IsSimpleMode()
+
 	wConnection := widget.NewSelect([]string{xswd.Ask.String(), xswd.Allow.String()}, nil)
 
 	wGlobalPermissions := widget.NewSelect([]string{"Off", "Apply"}, nil)
@@ -8111,14 +9492,14 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	wEpochAddress := widget.NewSelect([]string{"My Address", "dApp Chooses"}, nil)
 
 	/*
-		if cyberdeck.EPOCH.enabled {
+		if remoteAccess.EPOCH.enabled {
 			wEpoch.SetSelectedIndex(1)
 		} else {
 			wEpoch.SetSelectedIndex(0)
 			wEpochAddress.Disable()
 		}
 
-		if cyberdeck.EPOCH.allowWithAddress {
+		if remoteAccess.EPOCH.allowWithAddress {
 			wEpochAddress.SetSelectedIndex(1)
 		} else {
 			wEpochAddress.SetSelectedIndex(0)
@@ -8126,23 +9507,23 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 		wEpoch.OnChanged = func(s string) {
 			if s == xswd.Allow.String() {
-				cyberdeck.EPOCH.enabled = true
+				remoteAccess.EPOCH.enabled = true
 				wEpochAddress.Enable()
 				return
 			}
 
-			cyberdeck.EPOCH.enabled = false
+			remoteAccess.EPOCH.enabled = false
 			wEpochAddress.SetSelectedIndex(0)
 			wEpochAddress.Disable()
 		}
 
 		wEpochAddress.OnChanged = func(s string) {
 			if s == "dApp Chooses" {
-				cyberdeck.EPOCH.allowWithAddress = true
+				remoteAccess.EPOCH.allowWithAddress = true
 				return
 			}
 
-			cyberdeck.EPOCH.allowWithAddress = false
+			remoteAccess.EPOCH.allowWithAddress = false
 		}
 	*/
 
@@ -8199,7 +9580,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		entryEpochWork.Disable()
 		entryEpochHash.Disable()
 		wEpochPower.Disable()
-	} else if cyberdeck.WS.server != nil {
+	} else if remoteAccess.WS.server != nil {
 		wEpoch.Disable()
 		wEpochAddress.Disable()
 		entryEpochWork.Disable()
@@ -8207,11 +9588,11 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		wEpochPower.Disable()
 	}
 
-	if cyberdeck.WS.advanced {
+	if remoteAccess.WS.advanced {
 		wMode.SetChecked(false)
-		if cyberdeck.WS.global.enabled {
+		if remoteAccess.WS.global.enabled {
 			wGlobalPermissions.SetSelectedIndex(1)
-			if cyberdeck.WS.global.connect {
+			if remoteAccess.WS.global.connect {
 				wConnection.SetSelectedIndex(1)
 			} else {
 				wConnection.SetSelectedIndex(0)
@@ -8232,8 +9613,8 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	wMode.OnChanged = func(b bool) {
-		cyberdeck.WS.advanced = !b // inverse as check box is for restrictive mode on/off
-		if cyberdeck.WS.advanced {
+		remoteAccess.WS.advanced = !b // inverse as check box is for restrictive mode on/off
+		if remoteAccess.WS.advanced {
 			wGlobalPermissions.Enable()
 		} else {
 			wGlobalPermissions.SetSelectedIndex(0) // calling this here resets and disables wConnection
@@ -8243,14 +9624,15 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	wConnection.OnChanged = func(s string) {
 		if s == xswd.Allow.String() {
-			cyberdeck.WS.global.connect = true
+			remoteAccess.WS.global.connect = true
 		} else {
-			cyberdeck.WS.global.connect = false
+			remoteAccess.WS.global.connect = false
 		}
 	}
 
 	formItems := container.NewVBox()
 
+	// Permission options for select widgets
 	permissions := []string{
 		xswd.Ask.String(),
 		xswd.AlwaysAllow.String(),
@@ -8262,58 +9644,140 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		xswd.AlwaysDeny.String(),
 	}
 
-	// Permissions select on changed func
+	// onChanged handler for Advanced Mode individual permissions
 	onChanged := func(n string) func(s string) {
 		return func(s string) {
-			cyberdeck.WS.Lock()
-			defer cyberdeck.WS.Unlock()
+			remoteAccess.WS.Lock()
+			defer remoteAccess.WS.Unlock()
 
 			switch s {
 			case xswd.Ask.String():
-				cyberdeck.WS.global.permissions[n] = xswd.Ask
+				remoteAccess.WS.global.permissions[n] = xswd.Ask
 			case xswd.AlwaysAllow.String():
-				cyberdeck.WS.global.permissions[n] = xswd.AlwaysAllow
+				remoteAccess.WS.global.permissions[n] = xswd.AlwaysAllow
 			case xswd.AlwaysDeny.String():
-				cyberdeck.WS.global.permissions[n] = xswd.AlwaysDeny
+				remoteAccess.WS.global.permissions[n] = xswd.AlwaysDeny
 			default:
-				cyberdeck.WS.global.permissions[n] = xswd.Ask
+				remoteAccess.WS.global.permissions[n] = xswd.Ask
 			}
+
+			// Save updated permissions to storage
+			setPermissions()
 		}
 	}
 
-	stored, methods := getPermissions()
-	for _, name := range methods {
-		n := name
-		permission := widget.NewSelect([]string{}, nil)
-		if engramCanStoreMethod(n) {
-			permission.SetOptions(permissions)
-		} else {
-			permission.SetOptions(noStorePermissions)
-		}
+	// Build Simple Mode UI (6 grouped permissions)
+	buildSimpleUI := func() {
+		formItems.Objects = []fyne.CanvasObject{}
 
-		if cyberdeck.WS.global.enabled {
-			permission.SetSelected(stored[n].String())
-			permission.OnChanged = onChanged(n)
-		} else {
-			permission.SetSelectedIndex(0)
-			permission.Disable()
+		for _, group := range permissionGroups {
+			if !group.SimpleMode {
+				continue // Skip hidden groups
+			}
+
+			// Group header with description
+			header := widget.NewRichTextFromMarkdown("### " + group.Name)
+			desc := canvas.NewText(group.Description, colors.Gray)
+			desc.TextSize = 11
+
+			// Permission selector
+			permSelect := widget.NewSelect(permissions, nil)
+
+			// Set current value from storage
+			currentPerm := GetGroupPermission(group.Name)
+			permSelect.SetSelected(currentPerm.String())
+
+			// Disable if WebSocket is not enabled
+			if !remoteAccess.WS.global.enabled {
+				permSelect.SetSelectedIndex(0)
+				permSelect.Disable()
+			}
+
+			// OnChanged handler
+			permSelect.OnChanged = func(g string) func(s string) {
+				return func(s string) {
+					var perm xswd.Permission
+					switch s {
+					case xswd.AlwaysAllow.String():
+						perm = xswd.AlwaysAllow
+					case xswd.AlwaysDeny.String():
+						perm = xswd.AlwaysDeny
+					default:
+						perm = xswd.Ask
+					}
+					SetGroupPermission(g, perm)
+					logger.Printf("[Engram] Set group '%s' permission to %s", g, s)
+				}
+			}(group.Name)
+
+			// Add to form
+			groupContainer := container.NewVBox(
+				header,
+				desc,
+				permSelect,
+				rectSpacer,
+			)
+			formItems.Add(groupContainer)
 		}
-		formItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### "+n), permission))
+	}
+
+	// Build Advanced Mode UI (all individual permissions)
+	buildAdvancedUI := func() {
+		formItems.Objects = []fyne.CanvasObject{}
+
+		stored, methods := getPermissions()
+		for _, name := range methods {
+			n := name
+			permission := widget.NewSelect([]string{}, nil)
+			if engramCanStoreMethod(n) {
+				permission.SetOptions(permissions)
+			} else {
+				permission.SetOptions(noStorePermissions)
+			}
+
+			if remoteAccess.WS.global.enabled {
+				permission.SetSelected(stored[n].String())
+				permission.OnChanged = onChanged(n)
+			} else {
+				permission.SetSelectedIndex(0)
+				permission.Disable()
+			}
+			formItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### "+n), permission))
+		}
+	}
+
+	// Simple/Advanced Mode Toggle Handler
+	wSimpleMode.OnChanged = func(checked bool) {
+		SetSimpleMode(checked)
+		if checked {
+			buildSimpleUI()
+		} else {
+			buildAdvancedUI()
+		}
+		formItems.Refresh()
+		logger.Printf("[Engram] Switched to %s mode", map[bool]string{true: "Simple", false: "Advanced"}[checked])
+	}
+
+	// Build initial UI based on current mode
+	if IsSimpleMode() {
+		buildSimpleUI()
+	} else {
+		buildAdvancedUI()
 	}
 
 	statusText := "Disabled"
 	statusColor := colors.Gray
-	if cyberdeck.WS.global.enabled {
+	if remoteAccess.WS.global.enabled {
 		statusText = "Enabled"
 		statusColor = colors.Green
 	}
 
-	cyberdeck.WS.global.status = canvas.NewText(statusText, statusColor)
-	cyberdeck.WS.global.status.TextSize = 22
-	cyberdeck.WS.global.status.TextStyle = fyne.TextStyle{Bold: true}
+	remoteAccess.WS.global.status = canvas.NewText(statusText, statusColor)
+	remoteAccess.WS.global.status.TextSize = 22
+	remoteAccess.WS.global.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnDefaults.OnTapped = func() {
-		if !cyberdeck.WS.global.enabled {
+		if !remoteAccess.WS.global.enabled {
 			return
 		}
 
@@ -8335,10 +9799,31 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		btnSubmit := widget.NewButton("Restore Defaults", nil)
 		btnSubmit.OnTapped = func() {
 			wConnection.SetSelectedIndex(0)
-			for _, obj := range formItems.Objects {
-				obj.(*fyne.Container).Objects[1].(*widget.Select).SetSelectedIndex(0)
+
+			if IsSimpleMode() {
+				// Restore Simple Mode defaults
+				for _, group := range permissionGroups {
+					if !group.SimpleMode {
+						continue
+					}
+					defaultPerm := getSimpleDefault(group.Category)
+					SetGroupPermission(group.Name, defaultPerm)
+				}
+				// Rebuild UI to show defaults
+				buildSimpleUI()
+			} else {
+				// Restore Advanced Mode defaults
+				remoteAccess.WS.Lock()
+				remoteAccess.WS.global.permissions = SetDefaultPermissions()
+				remoteAccess.WS.Unlock()
+				setPermissions()
+				// Rebuild UI
+				buildAdvancedUI()
 			}
+
+			formItems.Refresh()
 			removeOverlays()
+			logger.Printf("[Engram] Restored default permissions in %s mode", map[bool]string{true: "Simple", false: "Advanced"}[IsSimpleMode()])
 		}
 
 		span := canvas.NewRectangle(color.Transparent)
@@ -8366,7 +9851,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						wrapMobileButton(btnSubmit),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
@@ -8386,42 +9871,50 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		if s != "Apply" {
 			setPermissions()
 			btnDefaults.Disable()
-			cyberdeck.WS.global.status.Text = "Disabled"
-			cyberdeck.WS.global.status.Color = colors.Gray
-			cyberdeck.WS.global.status.Refresh()
-			cyberdeck.WS.global.enabled = false
+			remoteAccess.WS.global.status.Text = "Disabled"
+			remoteAccess.WS.global.status.Color = colors.Gray
+			remoteAccess.WS.global.status.Refresh()
+			remoteAccess.WS.global.enabled = false
 			wConnection.SetSelectedIndex(0)
 			wConnection.Disable()
+
+			// Disable all select widgets in formItems (works for both Simple and Advanced modes)
 			for _, obj := range formItems.Objects {
-				obj.(*fyne.Container).Objects[1].(*widget.Select).OnChanged = nil
-				obj.(*fyne.Container).Objects[1].(*widget.Select).SetSelectedIndex(0)
-				obj.(*fyne.Container).Objects[1].(*widget.Select).Disable()
+				if container, ok := obj.(*fyne.Container); ok {
+					for _, child := range container.Objects {
+						if selectWidget, ok := child.(*widget.Select); ok {
+							selectWidget.OnChanged = nil
+							selectWidget.SetSelectedIndex(0)
+							selectWidget.Disable()
+						}
+					}
+				}
 			}
 		} else {
-			cyberdeck.WS.global.status.Text = "Enabled"
-			cyberdeck.WS.global.status.Color = colors.Green
-			cyberdeck.WS.global.status.Refresh()
-			cyberdeck.WS.global.enabled = true
+			remoteAccess.WS.global.status.Text = "Enabled"
+			remoteAccess.WS.global.status.Color = colors.Green
+			remoteAccess.WS.global.status.Refresh()
+			remoteAccess.WS.global.enabled = true
 			wConnection.Enable()
 			btnDefaults.Enable()
+
 			go func() {
-				stored, _ := getPermissions()
-				for _, obj := range formItems.Objects {
+				if IsSimpleMode() {
+					// Rebuild Simple Mode UI with enabled selects
 					fyne.Do(func() {
-						name := obj.(*fyne.Container).Objects[0].(*widget.RichText).String()
-						obj.(*fyne.Container).Objects[1].(*widget.Select).SetSelected(stored[name].String())
-						obj.(*fyne.Container).Objects[1].(*widget.Select).Enable()
-						obj.(*fyne.Container).Objects[1].(*widget.Select).OnChanged = onChanged(name)
+						buildSimpleUI()
+						formItems.Refresh()
+					})
+				} else {
+					// Rebuild Advanced Mode UI with enabled selects
+					fyne.Do(func() {
+						buildAdvancedUI()
+						formItems.Refresh()
 					})
 				}
 			}()
 		}
 	}
-
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
@@ -8440,18 +9933,19 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Cyberdeck", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		setPermissions()
 		removeOverlays()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutCyberdeck())
-	}
+		session.Window.SetContent(layoutAppSettings())
+	})
 
-	// Initialized in layoutCyberdeck()
-	cyberdeck.WS.portText.SetText(getCyberdeck("WS"))
+	// Initialized in layoutRemoteAccess()
+	remoteAccess.WS.portText.SetText(getRemoteAccess("WS"))
 
 	center := container.NewVScroll(
 		container.NewStack(
@@ -8479,7 +9973,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 						rectWidth90,
 						rectSpacer,
 						container.NewCenter(
-							cyberdeck.WS.global.status,
+							remoteAccess.WS.global.status,
 						),
 						rectSpacer,
 						container.NewCenter(
@@ -8500,7 +9994,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 								container.NewCenter(wMode),
 							),
 							rectSpacer,
-							cyberdeck.WS.portText,
+							remoteAccess.WS.portText,
 							rectSpacer,
 							labelConnection,
 							rectSpacer,
@@ -8566,6 +10060,8 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							wSpacer,
 							labelMethods,
 							rectSpacer,
+							container.NewCenter(wSimpleMode),
+							rectSpacer,
 							container.NewCenter(
 								formItems,
 							),
@@ -8576,7 +10072,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				),
 				container.NewCenter(
 					container.NewVBox(
-						btnDefaults,
+						wrapMobileButton(btnDefaults),
 						rectWidth90,
 					),
 				),
@@ -8590,22 +10086,13 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -8639,11 +10126,6 @@ func layoutIdentity() fyne.CanvasObject {
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -8661,6 +10143,8 @@ func layoutIdentity() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	frame := &iframe{}
 
@@ -8679,13 +10163,12 @@ func layoutIdentity() fyne.CanvasObject {
 		shortShard,
 	)
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
+		session.Window.SetContent(layoutAccount())
 		removeOverlays()
-	}
+	})
 
 	//entryReg := NewMobileEntry()
 	entryReg := widget.NewEntry()
@@ -8723,7 +10206,11 @@ func layoutIdentity() fyne.CanvasObject {
 					logger.Errorf("[Username] %s\n", err)
 				} else {
 					go func() {
-						fyne.Do(func() {
+						generation := currentWalletGeneration()
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
 							entryReg.Text = ""
 							entryReg.Refresh()
 						})
@@ -8732,13 +10219,20 @@ func layoutIdentity() fyne.CanvasObject {
 						sHeight := walletapi.Get_Daemon_Height()
 
 						for {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
 							if session.Domain == "app.Identity" {
 								//vars, _, _, err := gnomon.Index.RPC.GetSCVariables("0000000000000000000000000000000000000000000000000000000000000001", engram.Disk.Get_Daemon_TopoHeight(), nil, []string{session.NewUser}, nil, false)
 								usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 								if err != nil {
 									logger.Errorf("[Username] Error querying usernames: %s\n", err)
 
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = "Error querying usernames"
 										btnReg.Refresh()
 									})
@@ -8751,7 +10245,10 @@ func layoutIdentity() fyne.CanvasObject {
 										logger.Printf("[Username] Successfully registered username: %s\n", session.NewUser)
 										_ = tx
 
-										fyne.Do(func() {
+										uiDo(func() {
+											if !isWalletGenerationActive(generation) {
+												return
+											}
 											btnReg.Text = "Registration successful!"
 											btnReg.Refresh()
 											session.NewUser = ""
@@ -8764,7 +10261,10 @@ func layoutIdentity() fyne.CanvasObject {
 
 								// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 								if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = "Unable to register..."
 										btnReg.Refresh()
 									})
@@ -8774,7 +10274,10 @@ func layoutIdentity() fyne.CanvasObject {
 
 								// If daemon height has incremented, print retry counters into button space
 								if walletapi.Get_Daemon_Height()-sHeight > 0 {
-									fyne.Do(func() {
+									uiDo(func() {
+										if !isWalletGenerationActive(generation) {
+											return
+										}
 										btnReg.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 										btnReg.Refresh()
 									})
@@ -8911,7 +10414,7 @@ func layoutIdentity() fyne.CanvasObject {
 		rectSpacer,
 		entryReg,
 		rectSpacer,
-		btnReg,
+		wrapMobileButton(btnReg),
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
@@ -8944,22 +10447,13 @@ func layoutIdentity() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -9015,11 +10509,6 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -9037,11 +10526,12 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Identity", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
-	}
+	})
 
 	valueUsername := canvas.NewText(username, colors.Green)
 	valueUsername.TextSize = 22
@@ -9112,16 +10602,24 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 				btnSend.Text = "Confirming..."
 				btnSend.Refresh()
 				go func() {
+					generation := currentWalletGeneration()
 					walletapi.WaitNewHeightBlock()
 					sHeight := walletapi.Get_Daemon_Height()
 
 					for {
+						if !isWalletGenerationActive(generation) {
+							return
+						}
+
 						found := false
 						if session.Domain == "app.Identity" {
 							usernames, err := queryUsernames(engram.Disk.GetAddress().String())
 							if err != nil {
 								logger.Errorf("[Username] Error querying usernames: %s\n", err)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Error querying usernames"
 									btnSend.Refresh()
 									btnSetPrimary.Enable()
@@ -9138,7 +10636,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 							if !found {
 								logger.Printf("[TransferOwnership] %s was successfully transferred to: %s\n", username, address)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									session.Window.SetContent(layoutTransition())
 									session.Window.SetContent(layoutIdentity())
 									removeOverlays()
@@ -9150,7 +10651,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 							if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
 								logger.Errorf("[TransferOwnership] %s was unsuccessful in transferring to: %s\n", username, address)
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = "Unable to transfer..."
 									btnSend.Refresh()
 									btnSetPrimary.Enable()
@@ -9161,7 +10665,10 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 							// If daemon height has incremented, print retry counters into button space
 							if walletapi.Get_Daemon_Height()-sHeight > 0 {
-								fyne.Do(func() {
+								uiDo(func() {
+									if !isWalletGenerationActive(generation) {
+										return
+									}
 									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 									btnSend.Refresh()
 								})
@@ -9250,22 +10757,13 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -9309,6 +10807,7 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 				hashes.Text = fmt.Sprintf("%d", session.RegHashes)
 				hashes.Refresh()
 			})
+			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 
@@ -9486,7 +10985,10 @@ func layoutHistory() fyne.CanvasObject {
 	var zeroscid crypto.Hash
 	var listData binding.StringList
 	var listBox *widget.List
-	var txid string
+	var cachedTransfers []rpc.Entry
+	var historyNormalRows []string
+	var historyCoinbaseRows []string
+	var historyMessageRows []string
 
 	view := ""
 
@@ -9550,276 +11052,217 @@ func layoutHistory() fyne.CanvasObject {
 			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
 		})
 
-	menu := widget.NewSelect([]string{"Normal", "Coinbase", "Messages"}, nil)
-	menu.PlaceHolder = "(Select Transaction Type)"
-
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.60))
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	label := canvas.NewText(view, colors.Account)
 	label.TextSize = 15
 	label.TextStyle = fyne.TextStyle{Bold: true}
+	findCachedTransfer := func(txid string) rpc.Entry {
+		for i := range cachedTransfers {
+			if cachedTransfers[i].TXID == txid {
+				return cachedTransfers[i]
+			}
+		}
+		return rpc.Entry{}
+	}
 
-	menu.OnChanged = func(s string) {
-		switch s {
-		case "Normal":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+	ensureHistoryRows := func() {
+		if transfers, normalRows, coinbaseRows, messageRows, ok := getHistoryRowCache(); ok {
+			cachedTransfers = transfers
+			historyNormalRows = normalRows
+			historyCoinbaseRows = coinbaseRows
+			historyMessageRows = messageRows
+			return
+		}
 
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var height string
-						var direction string
-						var stamp string
+		entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+		cachedTransfers = append([]rpc.Entry(nil), entries...)
+		messages := scanMessageTransfers(0)
+		historyNormalRows, historyCoinbaseRows, historyMessageRows = buildHistoryRows(entries, messages)
+		setHistoryRowCache(cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows)
+	}
 
-						entries[e].ProcessPayload()
+	// Function to load Normal transactions
+	loadNormal := func() {
+		listBox.UnselectAll()
+		results.Text = "  Scanning..."
+		results.Refresh()
+		data = nil
+		_ = listData.Set(nil)
 
-						if !entries[e].Coinbase {
-							timefmt := entries[e].Time
-							//stamp = string(timefmt.Format(time.RFC822))
-							stamp = timefmt.Format("2006-01-02")
-							height = strconv.FormatUint(entries[e].Height, 10)
-							amount := ""
-							txid = entries[e].TXID
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyNormalRows...)
 
-							if !entries[e].Incoming {
-								direction = "Sent"
-								amount = "(" + globals.FormatMoney(entries[e].Amount) + ")"
-							} else {
-								direction = "Received"
-								amount = globals.FormatMoney(entries[e].Amount)
-							}
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
 
-							count += 1
-							data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-						}
-					}
+			_ = listData.Set(data)
 
-					results.Text = fmt.Sprintf("  Results:  %d", count)
+			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				result := findCachedTransfer(split[4])
 
-					listData.Set(data)
+				if result.TXID == "" {
+					label.Text = "---"
+				} else {
+					label.Text = result.TXID
+				}
 
-					listBox.OnSelected = func(id widget.ListItemID) {
-						//var zeroscid crypto.Hash
-						split := strings.Split(data[id], ";;;")
-						var zeroscid crypto.Hash
-						_, result := engram.Disk.Get_Payments_TXID(zeroscid, split[4])
+				fyne.Do(func() {
+					label.Refresh()
+				})
 
-						if result.TXID == "" {
-							label.Text = "---"
-						} else {
-							label.Text = result.TXID
-						}
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4], result))
+				listBox.UnselectAll()
+			}
 
-						fyne.Do(func() {
-							label.Refresh()
-						})
-
-						overlay := session.Window.Canvas().Overlays()
-						overlay.Add(
-							container.NewStack(
-								&iframe{},
-								canvas.NewRectangle(colors.DarkMatter),
-							),
-						)
-						overlay.Add(layoutHistoryDetail(split[4]))
-						listBox.UnselectAll()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
+			fyne.Do(func() {
 				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
+			})
+		}()
+	}
+
+	// Function to load Coinbase transactions
+	loadCoinbase := func() {
+		listBox.UnselectAll()
+		results.Text = "  Scanning..."
+		results.Refresh()
+		data = nil
+		_ = listData.Set(nil)
+
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyCoinbaseRows...)
+
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
+
+			_ = listData.Set(data)
+
+			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				result := findCachedTransfer(split[4])
+
+				if result.TXID == "" {
+					label.Text = "---"
+				} else {
+					label.Text = result.TXID
+				}
+
+				fyne.Do(func() {
+					label.Refresh()
+				})
+
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4], result))
+				listBox.UnselectAll()
 			}
+
+			fyne.Do(func() {
+				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
+			})
+		}()
+	}
+
+	// Function to load Messages
+	loadMessages := func() {
+		listBox.UnselectAll()
+		results.Text = "  Scanning..."
+		results.Refresh()
+		data = nil
+		_ = listData.Set(nil)
+
+		go func() {
+			ensureHistoryRows()
+			data = append([]string(nil), historyMessageRows...)
+
+			results.Text = fmt.Sprintf("  Results:  %d", len(data))
+
+			_ = listData.Set(data)
+
+			listBox.OnSelected = func(id widget.ListItemID) {
+				split := strings.Split(data[id], ";;;")
+				result := findCachedTransfer(split[4])
+				overlay := session.Window.Canvas().Overlays()
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutHistoryDetail(split[4], result))
+				listBox.UnselectAll()
+				listBox.Refresh()
+			}
+
+			fyne.Do(func() {
+				results.Refresh()
+				listBox.Refresh()
+				listBox.ScrollToBottom()
+			})
+		}()
+	}
+
+	// Create tab content containers (needed for proper tab rendering)
+	normalTabContent := container.NewVBox()
+	coinbaseTabContent := container.NewVBox()
+	messagesTabContent := container.NewVBox()
+
+	// Create tabs
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Normal", normalTabContent),
+		container.NewTabItem("Coinbase", coinbaseTabContent),
+		container.NewTabItem("Messages", messagesTabContent),
+	)
+	tabs.SetTabLocation(container.TabLocationTop)
+
+	// Handle tab changes
+	tabs.OnChanged = func(tab *container.TabItem) {
+		switch tab.Text {
+		case "Normal":
+			loadNormal()
 		case "Coinbase":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
-
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var height string
-						var direction string
-						var stamp string
-
-						entries[e].ProcessPayload()
-
-						if entries[e].Coinbase {
-							direction = "Network"
-							timefmt := entries[e].Time
-							stamp = timefmt.Format("2006-01-02")
-							height = strconv.FormatUint(entries[e].Height, 10)
-							amount := globals.FormatMoney(entries[e].Amount)
-							txid = entries[e].TXID
-
-							count += 1
-							data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-						}
-					}
-
-					results.Text = fmt.Sprintf("  Results:  %d", count)
-
-					listData.Set(data)
-
-					listBox.OnSelected = func(id widget.ListItemID) {
-						listBox.UnselectAll()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				fyne.Do(func() {
-					results.Refresh()
-				})
-			}
+			loadCoinbase()
 		case "Messages":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
-
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var stamp string
-						var direction string
-						var comment string
-
-						entries[e].ProcessPayload()
-
-						timefmt := entries[e].Time
-						//stamp = string(timefmt.Format(time.RFC822))
-						stamp = timefmt.Format("2006-01-02")
-
-						temp := entries[e].Incoming
-						if !temp {
-							direction = "Sent    "
-						} else {
-							direction = "Received"
-						}
-						if entries[e].Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-							contact := ""
-							username := ""
-							if entries[e].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-								contact = entries[e].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)
-								if len(contact) > 10 {
-									username = contact[0:10] + ".."
-								} else {
-									username = contact
-								}
-							}
-
-							comment = entries[e].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
-							if len(comment) > 10 {
-								comment = comment[0:10] + ".."
-							}
-
-							txid = entries[e].TXID
-							count += 1
-							data = append(data, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+txid+";;;"+contact)
-						}
-					}
-
-					results.Text = fmt.Sprintf("  Results:  %d", count)
-
-					listData.Set(data)
-
-					listBox.OnSelected = func(id widget.ListItemID) {
-						split := strings.Split(data[id], ";;;")
-						overlay := session.Window.Canvas().Overlays()
-						overlay.Add(
-							container.NewStack(
-								&iframe{},
-								canvas.NewRectangle(colors.DarkMatter),
-							),
-						)
-						overlay.Add(layoutHistoryDetail(split[4]))
-						listBox.UnselectAll()
-						listBox.Refresh()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				fyne.Do(func() {
-					results.Refresh()
-				})
-			}
-		default:
-
+			loadMessages()
 		}
 	}
+
+	// Load Normal by default
+	loadNormal()
 
 	center := container.NewStack(
 		rectWidth,
 		container.NewHBox(
 			layout.NewSpacer(),
 			container.NewVBox(
-				menu,
+				tabs,
 				rectSpacer,
 				results,
 				rectSpacer,
@@ -9848,22 +11291,13 @@ func layoutHistory() fyne.CanvasObject {
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -9886,7 +11320,7 @@ func layoutHistory() fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
-func layoutHistoryDetail(txid string) fyne.CanvasObject {
+func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
@@ -10003,11 +11437,6 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	labelSeparator11.Wrapping = fyne.TextWrapOff
 	labelSeparator11.ParseMarkdown("---")
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -10025,11 +11454,18 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	var zeroscid crypto.Hash
 	_, details := engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	details = enrichMessageEntry(details)
 
-	stamp := string(details.Time.Format(time.RFC822))
+	transferTime := transfer.Time
+	if transferTime.IsZero() {
+		transferTime = details.Time
+	}
+	stamp := string(transferTime.Format(time.RFC822))
 	height := strconv.FormatUint(details.Height, 10)
 
 	valueMember := widget.NewRichTextFromMarkdown(" ")
@@ -10052,10 +11488,8 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	valuePayload := widget.NewRichTextFromMarkdown("--")
 	valuePayload.Wrapping = fyne.TextWrapBreak
 
-	if details.Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-		if details.Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string) != "" {
-			valuePayload.ParseMarkdown("" + details.Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string))
-		}
+	if comment := messageComment(details); comment != "" {
+		valuePayload.ParseMarkdown("" + comment)
 	}
 
 	valueAmount := canvas.NewText("", colors.Account)
@@ -10065,7 +11499,17 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 	valueDirection := canvas.NewText("", colors.Account)
 	valueDirection.TextSize = 22
 	valueDirection.TextStyle = fyne.TextStyle{Bold: true}
-	if details.Incoming {
+	if details.Coinbase {
+		valueDirection.Text = "  Received"
+		labelMember.Text = "  SOURCE"
+		valueMember.ParseMarkdown("  Network (Mining Reward)")
+		valueAmount.Color = colors.Green
+		amount := details.Amount
+		if amount < 0 {
+			amount = -amount
+		}
+		valueAmount.Text = "  + " + globals.FormatMoney(amount)
+	} else if details.Incoming {
 		valueDirection.Text = "  Received"
 		labelMember.Text = "  SENDER  ADDRESS"
 		if details.Sender == "" || details.Sender == engram.Disk.GetAddress().String() {
@@ -10167,13 +11611,12 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 		}
 	}
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		overlay := session.Window.Canvas().Overlays()
 		overlay.Top().Hide()
 		overlay.Remove(overlay.Top())
 		overlay.Remove(overlay.Top())
-	}
+	})
 
 	linkAddress := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkAddress.OnTapped = func() {
@@ -10381,17 +11824,8 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
@@ -10421,7 +11855,7 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 
 func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
-	title := canvas.NewText("D A T A P A D", colors.Gray)
+	title := canvas.NewText("S E C U R E   N O T E S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
@@ -10429,11 +11863,6 @@ func layoutDatapad() fyne.CanvasObject {
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
-
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	entryNewPad := widget.NewEntry()
 	entryNewPad.MultiLine = false
@@ -10455,7 +11884,7 @@ func layoutDatapad() fyne.CanvasObject {
 		}
 	}
 
-	entryNewPad.PlaceHolder = "Datapad Name"
+	entryNewPad.PlaceHolder = "Note Name"
 	entryNewPad.Validator = func(s string) error {
 		session.Datapad = s
 		if len(s) > 0 {
@@ -10485,6 +11914,11 @@ func layoutDatapad() fyne.CanvasObject {
 	entryNewPad.OnChanged = func(s string) {
 		entryNewPad.Validate()
 	}
+	entryNewPad.OnSubmitted = func(_ string) {
+		if entryNewPad.Validate() == nil {
+			btnAdd.OnTapped()
+		}
+	}
 
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
@@ -10503,23 +11937,24 @@ func layoutDatapad() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	frame := &iframe{}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(10, 4))
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, 350))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, 0))
 
 	var padData []string
 
@@ -10550,6 +11985,14 @@ func layoutDatapad() fyne.CanvasObject {
 		if string(k) != "" {
 			padData = append(padData, string(k))
 		}
+	}
+
+	if len(padData) > 0 {
+		listHeight := float32(len(padData) * 42)
+		if listHeight > 280 {
+			listHeight = 280
+		}
+		rectListBox.SetMinSize(fyne.NewSize(ui.Width, listHeight))
 	}
 
 	padList := binding.BindStringList(&padData)
@@ -10596,21 +12039,16 @@ func layoutDatapad() fyne.CanvasObject {
 
 	shardForm := container.NewVBox(
 		rectSpacer,
-		rectSpacer,
-		rectSpacer,
 		container.NewCenter(container.NewVBox(title, rectSpacer)),
 		rectSpacer,
+		entryNewPad,
+		rectSpacer,
+		wrapMobileButton(btnAdd),
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
 			padBox,
 		),
-		rectSpacer,
-		entryNewPad,
-		rectSpacer,
-		btnAdd,
-		rectSpacer,
-		rectSpacer,
 		rectSpacer,
 		rectSpacer,
 	)
@@ -10627,22 +12065,13 @@ func layoutDatapad() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -10685,11 +12114,6 @@ func layoutPad() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	selectOptions := widget.NewSelect([]string{"Clear", "Export (Plaintext)", "Import From File", "Delete"}, nil)
 	selectOptions.PlaceHolder = "Select an Option ..."
 
@@ -10714,7 +12138,7 @@ func layoutPad() fyne.CanvasObject {
 		errorText.Refresh()
 
 		if s == "Clear" {
-			header := canvas.NewText("DATAPAD  RESET  REQUESTED", colors.Gray)
+			header := canvas.NewText("SECURE NOTES  RESET  REQUESTED", colors.Gray)
 			header.TextSize = 14
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
@@ -10787,7 +12211,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -10924,7 +12348,7 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileImport.Show()
 		} else if s == "Delete" {
-			header := canvas.NewText("DATAPAD  DELETION  REQUESTED", colors.Gray)
+			header := canvas.NewText("SECURE NOTES  DELETION  REQUESTED", colors.Gray)
 			header.TextSize = 14
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
@@ -10986,7 +12410,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -11062,11 +12486,12 @@ func layoutPad() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Datapad", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		if session.DatapadChanged {
-			header := canvas.NewText("DATAPAD  CHANGE  DETECTED", colors.Gray)
+			header := canvas.NewText("SECURE NOTES  CHANGE  DETECTED", colors.Gray)
 			header.TextSize = 14
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
@@ -11124,7 +12549,7 @@ func layoutPad() fyne.CanvasObject {
 							rectSpacer,
 							subHeader,
 							widget.NewLabel(""),
-							btnSubmit,
+							wrapMobileButton(btnSubmit),
 							rectSpacer,
 							rectSpacer,
 							container.NewHBox(
@@ -11146,7 +12571,7 @@ func layoutPad() fyne.CanvasObject {
 			overlay.Remove(overlay.Top())
 			overlay.Remove(overlay.Top())
 		}
-	}
+	})
 
 	top := container.NewVBox(
 		rectSpacer,
@@ -11156,9 +12581,11 @@ func layoutPad() fyne.CanvasObject {
 		),
 		rectSpacer,
 		container.NewCenter(
-			container.NewStack(
-				rectWidth90,
-				selectOptions,
+			container.NewHBox(
+				wrapMobileButton(widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") })),
+				wrapMobileButton(widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") })),
+				wrapMobileButton(widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") })),
+				wrapMobileButton(widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") })),
 			),
 		),
 		rectSpacer,
@@ -11175,7 +12602,7 @@ func layoutPad() fyne.CanvasObject {
 				rectSpacer,
 				errorText,
 				rectSpacer,
-				btnSave,
+				wrapMobileButton(btnSave),
 				rectSpacer,
 			),
 		),
@@ -11185,17 +12612,8 @@ func layoutPad() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
@@ -11230,227 +12648,163 @@ func layoutAccount() fyne.CanvasObject {
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(10, 0))
 
 	title := canvas.NewText("M Y    A C C O U N T", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
-	heading := canvas.NewText(engram.Disk.GetAddress().String()[0:5]+"..."+engram.Disk.GetAddress().String()[len(engram.Disk.GetAddress().String())-10:len(engram.Disk.GetAddress().String())], colors.Green)
+	addressStr := engram.Disk.GetAddress().String()
+	heading := canvas.NewText("", colors.Green)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+
+	var addressToggleBtn *widget.Button
+	addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		session.AddressHidden = !session.AddressHidden
+		if session.AddressHidden {
+			heading.Text = "dE...••••••••"
+			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
+		} else {
+			heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+			addressToggleBtn.SetIcon(theme.VisibilityIcon())
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
+		}
+		heading.Refresh()
+	})
+	addressToggleBtn.Importance = widget.LowImportance
+
+	if session.AddressHidden {
+		heading.Text = "dE...••••••••"
+		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+	} else {
+		heading.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+		addressToggleBtn.SetIcon(theme.VisibilityIcon())
+	}
 
 	labelPassword := canvas.NewText("N E W    P A S S W O R D", colors.Gray)
 	labelPassword.TextStyle = fyne.TextStyle{Bold: true}
 	labelPassword.TextSize = 11
 	labelPassword.Alignment = fyne.TextAlignCenter
 
-	labelDatashard := canvas.NewText("D A T A S H A R D", colors.Gray)
-	labelDatashard.TextStyle = fyne.TextStyle{Bold: true}
-	labelDatashard.TextSize = 11
-	labelDatashard.Alignment = fyne.TextAlignCenter
-
-	headerDatashard := canvas.NewText("DATASHARD  ID", colors.Gray)
-	headerDatashard.TextSize = 16
-	headerDatashard.Alignment = fyne.TextAlignCenter
-	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
-
-	address := engram.Disk.GetAddress().String()
-	shardID := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
-
-	textDatashard := widget.NewRichTextFromMarkdown("### " + shardID)
-	textDatashard.Wrapping = fyne.TextWrapWord
-
-	textDatashardDesc := widget.NewRichTextFromMarkdown("Datashards hold encrypted data and stores it locally on your device. Each datashard is unique and can only be decrypted by the account it is associated with. Examples of data stored include:")
-	textDatashardDesc.Wrapping = fyne.TextWrapWord
-
-	textDatashardDesc2 := widget.NewRichTextFromMarkdown("* Datapad entries\n* Saved search history\n* Asset scan results\n* Account settings")
-	textDatashardDesc2.Wrapping = fyne.TextWrapWord
-
-	menuLabel := canvas.NewText("  M O R E    O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	labelRecovery := canvas.NewText("A C C O U N T    O P T I O N S", colors.Gray)
-	labelRecovery.TextSize = 11
-	labelRecovery.Alignment = fyne.TextAlignCenter
-	labelRecovery.TextStyle = fyne.TextStyle{Bold: true}
-
-	labelEpoch := canvas.NewText("E P O C H", colors.Gray)
-	labelEpoch.TextSize = 11
-	labelEpoch.Alignment = fyne.TextAlignCenter
-	labelEpoch.TextStyle = fyne.TextStyle{Bold: true}
-
-	spacerEpoch := canvas.NewRectangle(color.Transparent)
-	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
-
-	wEpoch := widget.NewSelect([]string{"Session", "Total"}, nil)
-	wEpoch.SetSelected("Session")
-
-	epochSession, _ := epoch.GetSession(time.Second * 4)
-
-	labelEpochHashes := widget.NewRichTextFromMarkdown("### Hashes")
-	labelEpochHashes.Wrapping = fyne.TextWrapWord
-
-	epochHashes := fmt.Sprintf("%.1fK", float64(epochSession.Hashes)/1000)
-	textEpochHashes := widget.NewRichTextFromMarkdown(epochHashes)
-	textEpochHashes.Wrapping = fyne.TextWrapWord
-
-	labelEpochBlocks := widget.NewRichTextFromMarkdown("### Miniblocks")
-	labelEpochBlocks.Wrapping = fyne.TextWrapWord
-
-	epochBlocks := fmt.Sprintf("%d", epochSession.MiniBlocks)
-	textEpochBlocks := widget.NewRichTextFromMarkdown(epochBlocks)
-	textEpochBlocks.Wrapping = fyne.TextWrapWord
-
-	wEpoch.OnChanged = func(s string) {
-		epochSession, _ := epoch.GetSession(time.Second * 4)
-		if s == "Total" {
-			total := epoch.GetSessionEPOCH_Result{
-				Hashes:     cyberdeck.EPOCH.total.Hashes,
-				MiniBlocks: cyberdeck.EPOCH.total.MiniBlocks,
-			}
-
-			if epoch.IsActive() {
-				total.Hashes += epochSession.Hashes
-				total.MiniBlocks += epochSession.MiniBlocks
-			}
-
-			textEpochHashes.ParseMarkdown(epoch.HashesToString(total.Hashes))
-			textEpochBlocks.ParseMarkdown(fmt.Sprintf("%d", total.MiniBlocks))
-
-			return
-		}
-
-		textEpochHashes.ParseMarkdown(epoch.HashesToString(epochSession.Hashes))
-		textEpochBlocks.ParseMarkdown(fmt.Sprintf("%d", epochSession.MiniBlocks))
-	}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-
-	formEpoch := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		container.NewStack(
-			container.NewHBox(
-				layout.NewSpacer(),
-				line1,
-				layout.NewSpacer(),
-				labelEpoch,
-				layout.NewSpacer(),
-				line2,
-				layout.NewSpacer(),
-			),
-		),
-		container.NewStack(
-			container.NewHBox(
-				layout.NewSpacer(),
-				container.NewStack(
-					rectWidth90,
-					container.NewVBox(
-						rectSpacer,
-						wEpoch,
-						container.NewHBox(
-							container.NewStack(
-								spacerEpoch,
-								labelEpochHashes,
-							),
-							container.NewStack(
-								spacerEpoch,
-								textEpochHashes,
-							),
-						),
-						container.NewHBox(
-							container.NewStack(
-								spacerEpoch,
-								labelEpochBlocks,
-							),
-							container.NewStack(
-								spacerEpoch,
-								textEpochBlocks,
-							),
-						),
-					),
-				),
-				layout.NewSpacer(),
-			),
-		),
-	)
-
-	if session.Offline {
-		formEpoch.Hide()
-	}
-
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	linkCopyAddress := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopyAddress.OnTapped = func() {
 		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
 	}
 
-	btnClear := widget.NewButton("Delete Datashard", nil)
-	btnClear.OnTapped = func() {
-		header := canvas.NewText("DATASHARD  DELETION  REQUESTED", colors.Gray)
+	linkIdentity := widget.NewHyperlinkWithStyle("Identity Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkIdentity.OnTapped = func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutIdentity())
+		removeOverlays()
+	}
+
+	linkServiceAddress := widget.NewHyperlinkWithStyle("Payment Request", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkServiceAddress.OnTapped = func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutServiceAddress())
+		removeOverlays()
+	}
+
+	btnIdentity := widget.NewButtonWithIcon("Identity", theme.AccountIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutIdentity())
+		removeOverlays()
+	})
+
+	btnServiceAddress := widget.NewButtonWithIcon("Payment", theme.ComputerIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutServiceAddress())
+		removeOverlays()
+	})
+
+	buttonsRow := container.NewHBox(
+		layout.NewSpacer(),
+		wrapMobileButton(btnServiceAddress),
+		rectSpacer,
+		wrapMobileButton(btnIdentity),
+		layout.NewSpacer(),
+	)
+
+	errorText := canvas.NewText(" ", colors.Green)
+	errorText.TextSize = 12
+	errorText.Alignment = fyne.TextAlignCenter
+
+	// Recovery Words Link
+	linkRecoveryWords := widget.NewHyperlinkWithStyle("Recovery Words", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRecoveryWords.OnTapped = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+		overlay := session.Window.Canvas().Overlays()
+
+		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
 		header.TextSize = 14
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Are you sure?", colors.Account)
+		subHeader := canvas.NewText("Confirm Password", colors.Account)
 		subHeader.TextSize = 22
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-		linkClose.OnTapped = func() {
-			session.Datapad = ""
-			session.DatapadChanged = false
-			removeOverlays()
-		}
+		btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+			overlay := session.Window.Canvas().Overlays()
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		})
 
-		btnSubmit := widget.NewButton("Delete Datashard", nil)
+		btnConfirm := widget.NewButton("Submit", nil)
+		btnConfirm.Disable()
 
-		btnSubmit.OnTapped = func() {
-			err := cleanWalletData()
-			if err != nil {
-				btnSubmit.Text = "Error deleting datashard"
-				btnSubmit.Disable()
-				btnSubmit.Refresh()
+		entryPassword := NewReturnEntry()
+		entryPassword.Password = true
+		entryPassword.PlaceHolder = "Password"
+		entryPassword.OnChanged = func(s string) {
+			if s == "" {
+				btnConfirm.Text = "Submit"
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
 			} else {
-				btnSubmit.Text = "Deletion successful!"
-				btnSubmit.Disable()
-				btnSubmit.Refresh()
-				removeOverlays()
+				btnConfirm.Text = "Submit"
+				btnConfirm.Enable()
+				btnConfirm.Refresh()
 			}
 		}
 
+		btnConfirm.OnTapped = func() {
+			if engram.Disk.Check_Password(entryPassword.Text) {
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutRecovery())
+			} else {
+				btnConfirm.Text = "Invalid Password..."
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
+			}
+		}
+
+		entryPassword.OnReturn = btnConfirm.OnTapped
+
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-		overlay := session.Window.Canvas().Overlays()
 
 		overlay.Add(
 			container.NewStack(
@@ -11465,19 +12819,272 @@ func layoutAccount() fyne.CanvasObject {
 				container.NewCenter(
 					container.NewVBox(
 						span,
-						container.NewCenter(
-							header,
-						),
+						container.NewCenter(header),
 						rectSpacer,
 						rectSpacer,
 						subHeader,
 						widget.NewLabel(""),
-						btnSubmit,
+						container.NewCenter(
+							container.NewStack(
+								span,
+								entryPassword,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						wrapMobileButton(btnConfirm),
 						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
 							layout.NewSpacer(),
-							linkClose,
+							btnBack,
+							layout.NewSpacer(),
+						),
+						rectSpacer,
+						rectSpacer,
+					),
+				),
+			),
+		)
+
+		safeCanvasFocus(entryPassword)
+	}
+
+	// Recovery Hex Keys Link
+	linkRecoveryHex := widget.NewHyperlinkWithStyle("Recovery Hex Keys", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRecoveryHex.OnTapped = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+		overlay := session.Window.Canvas().Overlays()
+
+		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
+		header.TextSize = 14
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+
+		subHeader := canvas.NewText("Confirm Password", colors.Account)
+		subHeader.TextSize = 22
+		subHeader.Alignment = fyne.TextAlignCenter
+		subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+			overlay := session.Window.Canvas().Overlays()
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		})
+
+		btnConfirm := widget.NewButton("Submit", nil)
+		btnConfirm.Disable()
+
+		entryPassword := NewReturnEntry()
+		entryPassword.Password = true
+		entryPassword.PlaceHolder = "Password"
+		entryPassword.OnChanged = func(s string) {
+			if s == "" {
+				btnConfirm.Text = "Submit"
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
+			} else {
+				btnConfirm.Text = "Submit"
+				btnConfirm.Enable()
+				btnConfirm.Refresh()
+			}
+		}
+
+		btnConfirm.OnTapped = func() {
+			if engram.Disk.Check_Password(entryPassword.Text) {
+				overlay.Add(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(colors.DarkMatter),
+					),
+				)
+				overlay.Add(layoutRecoveryHex())
+			} else {
+				btnConfirm.Text = "Invalid Password..."
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
+			}
+		}
+
+		entryPassword.OnReturn = btnConfirm.OnTapped
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(header),
+						rectSpacer,
+						rectSpacer,
+						subHeader,
+						widget.NewLabel(""),
+						container.NewCenter(
+							container.NewStack(
+								span,
+								entryPassword,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						wrapMobileButton(btnConfirm),
+						rectSpacer,
+						rectSpacer,
+						container.NewHBox(
+							layout.NewSpacer(),
+							btnBack,
+							layout.NewSpacer(),
+						),
+						rectSpacer,
+						rectSpacer,
+					),
+				),
+			),
+		)
+
+		safeCanvasFocus(entryPassword)
+	}
+
+	// Change Password Link
+	linkChangePassword := widget.NewHyperlinkWithStyle("Change Password", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkChangePassword.OnTapped = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+		overlay := session.Window.Canvas().Overlays()
+
+		header := canvas.NewText("ACCOUNT  AUTHORIZATION  REQUEST", colors.Gray)
+		header.TextSize = 14
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+
+		subHeader := canvas.NewText("Change Password", colors.Account)
+		subHeader.TextSize = 22
+		subHeader.Alignment = fyne.TextAlignCenter
+		subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+			overlay := session.Window.Canvas().Overlays()
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		})
+
+		btnChange := widget.NewButton("Submit", nil)
+		btnChange.Disable()
+
+		curPass := widget.NewEntry()
+		curPass.Password = true
+		curPass.PlaceHolder = "Current Password"
+		curPass.OnChanged = func(s string) {
+			btnChange.Text = "Submit"
+			btnChange.Enable()
+			btnChange.Refresh()
+		}
+
+		newPass := widget.NewEntry()
+		newPass.Password = true
+		newPass.PlaceHolder = "New Password"
+		newPass.OnChanged = func(s string) {
+			btnChange.Text = "Submit"
+			btnChange.Enable()
+			btnChange.Refresh()
+		}
+
+		confirm := widget.NewEntry()
+		confirm.Password = true
+		confirm.PlaceHolder = "Confirm Password"
+		confirm.OnChanged = func(s string) {
+			btnChange.Text = "Submit"
+			btnChange.Enable()
+			btnChange.Refresh()
+		}
+
+		btnChange.OnTapped = func() {
+			if engram.Disk.Check_Password(curPass.Text) {
+				if newPass.Text == confirm.Text && newPass.Text != "" {
+					err := engram.Disk.Set_Encrypted_Wallet_Password(newPass.Text)
+					if err != nil {
+						btnChange.Text = "Error changing password"
+						btnChange.Disable()
+						btnChange.Refresh()
+					} else {
+						curPass.Text = ""
+						curPass.Refresh()
+						newPass.Text = ""
+						newPass.Refresh()
+						confirm.Text = ""
+						confirm.Refresh()
+						btnChange.Text = "Password Updated"
+						btnChange.Disable()
+						btnChange.Refresh()
+						if err := engram.Disk.Save_Wallet(); err != nil {
+							logger.Errorf("[Settings] Failed to save wallet after password change: %s\n", err)
+						}
+					}
+				} else {
+					btnChange.Text = "Passwords do not match"
+					btnChange.Disable()
+					btnChange.Refresh()
+				}
+			} else {
+				btnChange.Text = "Incorrect password entered"
+				btnChange.Disable()
+				btnChange.Refresh()
+			}
+		}
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(header),
+						rectSpacer,
+						rectSpacer,
+						subHeader,
+						widget.NewLabel(""),
+						container.NewCenter(
+							container.NewStack(
+								span,
+								curPass,
+							),
+						),
+						widget.NewLabel(""),
+						widget.NewSeparator(),
+						widget.NewLabel(""),
+						newPass,
+						rectSpacer,
+						confirm,
+						rectSpacer,
+						rectSpacer,
+						btnChange,
+						widget.NewLabel(""),
+						container.NewHBox(
+							layout.NewSpacer(),
+							btnBack,
 							layout.NewSpacer(),
 						),
 						rectSpacer,
@@ -11488,454 +13095,84 @@ func layoutAccount() fyne.CanvasObject {
 		)
 	}
 
-	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
-	errorText.Alignment = fyne.TextAlignCenter
-
-	optionsList := []string{"Recovery Words (Seed)", "Recovery Hex Keys", "Change Password", "Export Wallet File"}
-	selectOptions := widget.NewSelect(optionsList, nil)
-	selectOptions.PlaceHolder = "(Select one)"
-
-	selectOptions.OnChanged = func(s string) {
+	// Export Wallet Link
+	linkExportWallet := widget.NewHyperlinkWithStyle("Export Wallet", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkExportWallet.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
-
-		if s == "Recovery Words (Seed)" {
-			overlay := session.Window.Canvas().Overlays()
-
-			header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
-			header.TextSize = 14
-			header.Alignment = fyne.TextAlignCenter
-			header.TextStyle = fyne.TextStyle{Bold: true}
-
-			subHeader := canvas.NewText("Confirm Password", colors.Account)
-			subHeader.TextSize = 22
-			subHeader.Alignment = fyne.TextAlignCenter
-			subHeader.TextStyle = fyne.TextStyle{Bold: true}
-
-			linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-			linkClose.OnTapped = func() {
-				overlay := session.Window.Canvas().Overlays()
-				overlay.Top().Hide()
-				overlay.Remove(overlay.Top())
-				overlay.Remove(overlay.Top())
-				selectOptions.ClearSelected()
-			}
-
-			btnConfirm := widget.NewButton("Submit", nil)
-
-			entryPassword := NewReturnEntry()
-			entryPassword.Password = true
-			entryPassword.PlaceHolder = "Password"
-			entryPassword.OnChanged = func(s string) {
-				if s == "" {
-					btnConfirm.Text = "Submit"
-					btnConfirm.Disable()
-					btnConfirm.Refresh()
-				} else {
-					btnConfirm.Text = "Submit"
-					btnConfirm.Enable()
-					btnConfirm.Refresh()
-				}
-			}
-
-			btnConfirm.OnTapped = func() {
-				selectOptions.ClearSelected()
-				if engram.Disk.Check_Password(entryPassword.Text) {
-					overlay.Add(
-						container.NewStack(
-							&iframe{},
-							canvas.NewRectangle(colors.DarkMatter),
-						),
-					)
-
-					overlay.Add(
-						layoutRecovery(),
-					)
-				} else {
-					btnConfirm.Text = "Invalid Password..."
-					btnConfirm.Disable()
-					btnConfirm.Refresh()
-				}
-			}
-
-			entryPassword.OnReturn = btnConfirm.OnTapped
-
-			btnConfirm.Disable()
-
-			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
-				),
-			)
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					container.NewCenter(
-						container.NewVBox(
-							span,
-							container.NewCenter(
-								header,
-							),
-							rectSpacer,
-							rectSpacer,
-							subHeader,
-							widget.NewLabel(""),
-							container.NewCenter(
-								container.NewStack(
-									span,
-									entryPassword,
-								),
-							),
-							rectSpacer,
-							rectSpacer,
-							btnConfirm,
-							rectSpacer,
-							rectSpacer,
-							container.NewHBox(
-								layout.NewSpacer(),
-								linkClose,
-								layout.NewSpacer(),
-							),
-							rectSpacer,
-							rectSpacer,
-						),
-					),
-				),
-			)
-
-			session.Window.Canvas().Focus(entryPassword)
-
-		} else if s == "Recovery Hex Keys" {
-			overlay := session.Window.Canvas().Overlays()
-
-			header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
-			header.TextSize = 14
-			header.Alignment = fyne.TextAlignCenter
-			header.TextStyle = fyne.TextStyle{Bold: true}
-
-			subHeader := canvas.NewText("Confirm Password", colors.Account)
-			subHeader.TextSize = 22
-			subHeader.Alignment = fyne.TextAlignCenter
-			subHeader.TextStyle = fyne.TextStyle{Bold: true}
-
-			linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-			linkClose.OnTapped = func() {
-				overlay := session.Window.Canvas().Overlays()
-				overlay.Top().Hide()
-				overlay.Remove(overlay.Top())
-				overlay.Remove(overlay.Top())
-				selectOptions.SetSelected("(Select One)")
-			}
-
-			btnConfirm := widget.NewButton("Submit", nil)
-
-			entryPassword := NewReturnEntry()
-			entryPassword.Password = true
-			entryPassword.PlaceHolder = "Password"
-			entryPassword.OnChanged = func(s string) {
-				if s == "" {
-					btnConfirm.Text = "Submit"
-					btnConfirm.Disable()
-					btnConfirm.Refresh()
-				} else {
-					btnConfirm.Text = "Submit"
-					btnConfirm.Enable()
-					btnConfirm.Refresh()
-				}
-			}
-
-			btnConfirm.OnTapped = func() {
-				selectOptions.ClearSelected()
-				if engram.Disk.Check_Password(entryPassword.Text) {
-					overlay.Add(
-						container.NewStack(
-							&iframe{},
-							canvas.NewRectangle(colors.DarkMatter),
-						),
-					)
-
-					overlay.Add(
-						layoutRecoveryHex(),
-					)
-				} else {
-					btnConfirm.Text = "Invalid Password..."
-					btnConfirm.Disable()
-					btnConfirm.Refresh()
-				}
-			}
-
-			entryPassword.OnReturn = btnConfirm.OnTapped
-
-			btnConfirm.Disable()
-
-			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
-				),
-			)
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					container.NewCenter(
-						container.NewVBox(
-							span,
-							container.NewCenter(
-								header,
-							),
-							rectSpacer,
-							rectSpacer,
-							subHeader,
-							widget.NewLabel(""),
-							container.NewCenter(
-								container.NewStack(
-									span,
-									entryPassword,
-								),
-							),
-							rectSpacer,
-							rectSpacer,
-							btnConfirm,
-							rectSpacer,
-							rectSpacer,
-							container.NewHBox(
-								layout.NewSpacer(),
-								linkClose,
-								layout.NewSpacer(),
-							),
-							rectSpacer,
-							rectSpacer,
-						),
-					),
-				),
-			)
-
-			session.Window.Canvas().Focus(entryPassword)
-
-		} else if s == "Change Password" {
-			overlay := session.Window.Canvas().Overlays()
-
-			header := canvas.NewText("ACCOUNT  AUTHORIZATION  REQUEST", colors.Gray)
-			header.TextSize = 14
-			header.Alignment = fyne.TextAlignCenter
-			header.TextStyle = fyne.TextStyle{Bold: true}
-
-			subHeader := canvas.NewText("Change Password", colors.Account)
-			subHeader.TextSize = 22
-			subHeader.Alignment = fyne.TextAlignCenter
-			subHeader.TextStyle = fyne.TextStyle{Bold: true}
-
-			linkClose := widget.NewHyperlinkWithStyle("Close", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-			linkClose.OnTapped = func() {
-				overlay := session.Window.Canvas().Overlays()
-				overlay.Top().Hide()
-				overlay.Remove(overlay.Top())
-				overlay.Remove(overlay.Top())
-				selectOptions.ClearSelected()
-			}
-
-			btnChange := widget.NewButton("Submit", nil)
-			btnChange.Disable()
-
-			curPass := widget.NewEntry()
-			curPass.Password = true
-			curPass.PlaceHolder = "Current Password"
-			curPass.OnChanged = func(s string) {
-				btnChange.Text = "Submit"
-				btnChange.Enable()
-				btnChange.Refresh()
-			}
-
-			newPass := widget.NewEntry()
-			newPass.Password = true
-			newPass.PlaceHolder = "New Password"
-			newPass.OnChanged = func(s string) {
-				btnChange.Text = "Submit"
-				btnChange.Enable()
-				btnChange.Refresh()
-			}
-
-			confirm := widget.NewEntry()
-			confirm.Password = true
-			confirm.PlaceHolder = "Confirm Password"
-			confirm.OnChanged = func(s string) {
-				btnChange.Text = "Submit"
-				btnChange.Enable()
-				btnChange.Refresh()
-			}
-
-			btnChange.OnTapped = func() {
-				if engram.Disk.Check_Password(curPass.Text) {
-					if newPass.Text == confirm.Text && newPass.Text != "" {
-						err := engram.Disk.Set_Encrypted_Wallet_Password(newPass.Text)
-						if err != nil {
-							btnChange.Text = "Error changing password"
-							btnChange.Disable()
-							btnChange.Refresh()
-						} else {
-							curPass.Text = ""
-							curPass.Refresh()
-							newPass.Text = ""
-							newPass.Refresh()
-							confirm.Text = ""
-							confirm.Refresh()
-							btnChange.Text = "Password Updated"
-							btnChange.Disable()
-							btnChange.Refresh()
-							engram.Disk.Save_Wallet()
-						}
-					} else {
-						btnChange.Text = "Passwords do not match"
-						btnChange.Disable()
-						btnChange.Refresh()
-					}
-				} else {
-					btnChange.Text = "Incorrect password entered"
-					btnChange.Disable()
-					btnChange.Refresh()
-				}
-			}
-
-			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
-				),
-			)
-
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					container.NewCenter(
-						container.NewVBox(
-							span,
-							container.NewCenter(
-								header,
-							),
-							rectSpacer,
-							rectSpacer,
-							subHeader,
-							widget.NewLabel(""),
-							container.NewCenter(
-								container.NewStack(
-									span,
-									curPass,
-								),
-							),
-							widget.NewLabel(""),
-							widget.NewSeparator(),
-							widget.NewLabel(""),
-							newPass,
-							rectSpacer,
-							confirm,
-							rectSpacer,
-							rectSpacer,
-							btnChange,
-							widget.NewLabel(""),
-							container.NewHBox(
-								layout.NewSpacer(),
-								linkClose,
-								layout.NewSpacer(),
-							),
-							rectSpacer,
-							rectSpacer,
-						),
-					),
-				),
-			)
-
-		} else if s == "Export Wallet File" {
-			verificationOverlay(
-				true,
-				"",
-				"",
-				"",
-				func(b bool) {
-					if b {
-						go func() {
-							dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
-								if err != nil {
-									logger.Errorf("[Engram] File dialog: %s\n", err)
-									fyne.Do(func() {
-										errorText.Text = "could not export wallet file"
-										errorText.Color = colors.Red
-										errorText.Refresh()
-									})
-
-									return
-								}
-
-								if uri == nil {
-									return // Canceled
-								}
-
-								data, err := os.ReadFile(session.Path)
-								if err != nil {
-									logger.Errorf("[Engram] Reading wallet file %s: %s\n", session.Path, err)
-									fyne.Do(func() {
-										errorText.Text = "error reading wallet file"
-										errorText.Color = colors.Red
-										errorText.Refresh()
-									})
-
-									return
-								}
-
-								_, err = writeToURI(data, uri)
-								if err != nil {
-									logger.Errorf("[Engram] Exporting %s: %s\n", session.Path, err)
-									fyne.Do(func() {
-										errorText.Text = "error exporting wallet file"
-										errorText.Color = colors.Red
-										errorText.Refresh()
-									})
-
-									return
-								}
-
+		verificationOverlay(
+			true,
+			"",
+			"",
+			"",
+			func(b bool) {
+				if b {
+					go func() {
+						dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
+							if err != nil {
+								logger.Errorf("[Engram] File dialog: %s\n", err)
 								fyne.Do(func() {
-									errorText.Text = "exported wallet file successfully"
-									errorText.Color = colors.Green
+									errorText.Text = "could not export wallet file"
+									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
+								return
+							}
 
-							}, session.Window)
+							if uri == nil {
+								return // Canceled
+							}
 
-							if !a.Driver().Device().IsMobile() {
-								// Open file browser in current directory
-								uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
-								if err == nil {
-									dialogFileSave.SetLocation(uri)
-								} else {
-									logger.Errorf("[Engram] Could not open current directory %s\n", err)
-								}
+							data, err := os.ReadFile(session.Path)
+							if err != nil {
+								logger.Errorf("[Engram] Reading wallet file %s: %s\n", session.Path, err)
+								fyne.Do(func() {
+									errorText.Text = "error reading wallet file"
+									errorText.Color = colors.Red
+									errorText.Refresh()
+								})
+								return
+							}
+
+							_, err = writeToURI(data, uri)
+							if err != nil {
+								logger.Errorf("[Engram] Exporting %s: %s\n", session.Path, err)
+								fyne.Do(func() {
+									errorText.Text = "error exporting wallet file"
+									errorText.Color = colors.Red
+									errorText.Refresh()
+								})
+								return
 							}
 
 							fyne.Do(func() {
-								dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
-								dialogFileSave.SetView(dialog.ListView)
-								dialogFileSave.SetFileName(filepath.Base(session.Path))
-								dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
-								dialogFileSave.Show()
+								errorText.Text = "exported wallet file successfully"
+								errorText.Color = colors.Green
+								errorText.Refresh()
 							})
-						}()
-					}
-				},
-			)
-		}
+						}, session.Window)
+
+						if !a.Driver().Device().IsMobile() {
+							// Open file browser in current directory
+							uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+							if err == nil {
+								dialogFileSave.SetLocation(uri)
+							} else {
+								logger.Errorf("[Engram] Could not open current directory %s\n", err)
+							}
+						}
+
+						fyne.Do(func() {
+							dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
+							dialogFileSave.SetView(dialog.ListView)
+							dialogFileSave.SetFileName(filepath.Base(session.Path))
+							dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+							dialogFileSave.Show()
+						})
+					}()
+				}
+			},
+		)
 	}
 
 	var imageQR *canvas.Image
@@ -11964,139 +13201,47 @@ func layoutAccount() fyne.CanvasObject {
 					),
 				),
 				rectSpacer,
-				heading,
+				container.NewCenter(
+					container.NewHBox(
+						heading,
+						addressToggleBtn,
+					),
+				),
 				container.NewHBox(
 					layout.NewSpacer(),
 					linkCopyAddress,
 					layout.NewSpacer(),
 				),
 				rectSpacer,
+				buttonsRow,
 				rectSpacer,
 				container.NewStack(
 					container.NewCenter(
 						imageQR,
 					),
 				),
-				widget.NewLabel(""),
-				container.NewStack(
-					container.NewHBox(
-						layout.NewSpacer(),
-						line1,
-						layout.NewSpacer(),
-						labelRecovery,
-						layout.NewSpacer(),
-						line2,
-						layout.NewSpacer(),
-					),
-				),
-				rectSpacer,
-				rectSpacer,
 				container.NewStack(
 					container.NewHBox(
 						layout.NewSpacer(),
 						container.NewVBox(
-							selectOptions,
-							rectWidth90,
+							linkRecoveryWords,
+							linkRecoveryHex,
+							linkChangePassword,
+							linkExportWallet,
 							errorText,
 						),
 						layout.NewSpacer(),
 					),
 				),
-				formEpoch,
-				rectSpacer,
-				rectSpacer,
-				container.NewStack(
-					container.NewHBox(
-						layout.NewSpacer(),
-						line1,
-						layout.NewSpacer(),
-						labelDatashard,
-						layout.NewSpacer(),
-						line2,
-						layout.NewSpacer(),
-					),
-				),
-				rectSpacer,
-				rectSpacer,
-				container.NewStack(
-					container.NewHBox(
-						layout.NewSpacer(),
-						container.NewStack(
-							rectWidth90,
-							container.NewVBox(
-								container.NewStack(
-									layout.NewSpacer(),
-									headerDatashard,
-									layout.NewSpacer(),
-								),
-								rectSpacer,
-								container.NewStack(
-									layout.NewSpacer(),
-									textDatashard,
-									layout.NewSpacer(),
-								),
-								rectSpacer,
-								rectSpacer,
-								widget.NewSeparator(),
-								rectSpacer,
-								rectSpacer,
-								container.NewStack(
-									layout.NewSpacer(),
-									textDatashardDesc,
-									layout.NewSpacer(),
-								),
-								rectSpacer,
-								container.NewStack(
-									layout.NewSpacer(),
-									textDatashardDesc2,
-									layout.NewSpacer(),
-								),
-							),
-						),
-						layout.NewSpacer(),
-					),
-				),
-				rectSpacer,
-				rectSpacer,
-				container.NewStack(
-					container.NewHBox(
-						layout.NewSpacer(),
-						container.NewStack(
-							rectWidth90,
-							btnClear,
-						),
-						layout.NewSpacer(),
-					),
-				),
-				widget.NewLabel(""),
 			),
 		),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				btnBack,
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 		),
 	)
 
@@ -12176,7 +13321,7 @@ func layoutRecovery() fyne.CanvasObject {
 			layout.NewSpacer(),
 			container.NewStack(
 				rectHeader,
-				btnCopySeed,
+				wrapMobileButton(btnCopySeed),
 			),
 			layout.NewSpacer(),
 		),
@@ -12188,7 +13333,7 @@ func layoutRecovery() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
@@ -12302,7 +13447,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 			form,
 		),
 	)
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.74))
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	keys := engram.Disk.Get_Keys()
 	key := fmt.Sprintf("0000000000000000000000000000000000000000000000%s", keys.Secret.Text(16))
@@ -12380,6 +13525,10 @@ func layoutRecoveryHex() fyne.CanvasObject {
 }
 
 func layoutFrame() fyne.CanvasObject {
+	return layoutFrameWithWallet("")
+}
+
+func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 	entry := widget.NewEntry()
 	layout := container.NewStack(entry)
 
@@ -12400,7 +13549,6 @@ func layoutFrame() fyne.CanvasObject {
 		ui.Height = ui.MaxHeight
 		ui.Padding = ui.MaxWidth * 0.05
 		if fyne.IsHorizontal(lastOrientation) {
-			// Smaller if horizontal for swipe scroll
 			ui.MaxWidth = ui.MaxWidth * 0.7
 			ui.Width = ui.MaxWidth * 0.7
 			ui.Padding = ui.MaxWidth * 0.15
@@ -12408,12 +13556,16 @@ func layoutFrame() fyne.CanvasObject {
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMain())
+
+		if singleWalletName != "" {
+			session.Window.SetContent(layoutSingleWalletLogin(singleWalletName))
+		} else {
+			session.Window.SetContent(layoutMain())
+		}
 
 		frameWidth := ui.MaxWidth
 		frameHeight := ui.MaxHeight
 
-		// Mobile loop checking if orientation has changed
 		for a.Driver() != nil {
 			currentOrientation := a.Driver().Device().Orientation()
 			if lastOrientation != currentOrientation {
@@ -12447,7 +13599,7 @@ func layoutFrame() fyne.CanvasObject {
 				lastOrientation = currentOrientation
 				resizeWindow(ui.MaxWidth, ui.MaxHeight)
 			}
-			time.Sleep(time.Second / 2)
+			time.Sleep(time.Second)
 		}
 	}()
 
@@ -12855,11 +14007,6 @@ func layoutFileManager() fyne.CanvasObject {
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	entryAddress := widget.NewEntry()
 	entryAddress.PlaceHolder = "Username or Address"
 
@@ -12880,6 +14027,8 @@ func layoutFileManager() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
 	labelSeparator.Wrapping = fyne.TextWrapOff
@@ -12897,15 +14046,14 @@ func layoutFileManager() fyne.CanvasObject {
 	labelSeparator4.Wrapping = fyne.TextWrapOff
 	labelSeparator4.ParseMarkdown("---")
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		capture := session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		session.Domain = "app.wallet"
 		session.LastDomain = capture
-	}
+	})
 
 	selectType := widget.NewSelect([]string{"Sign Files", "Verify Signed Files"}, nil)
 	selectType.SetSelected("Sign Files")
@@ -12929,9 +14077,11 @@ func layoutFileManager() fyne.CanvasObject {
 				dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
 					if err != nil {
 						logger.Errorf("[Engram] File dialog: %s\n", err)
-						errorText.Text = "could not open signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not open signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
@@ -12942,27 +14092,33 @@ func layoutFileManager() fyne.CanvasObject {
 					uc, err := storage.Reader(files[0])
 					if err != nil {
 						logger.Errorf("[Engram] Cannot create reader for %s: %s\n", inputFileName, err)
-						errorText.Text = "could not access file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not access file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
 					filedata, err := readFromURI(uc)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
-						errorText.Text = "could not read file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not read file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
 					_, err = writeToURI(engram.Disk.SignData(filedata), uri)
 					if err != nil {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
-						errorText.Text = "could not write signed file"
-						errorText.Color = colors.Red
-						errorText.Refresh()
+						uiDo(func() {
+							errorText.Text = "could not write signed file"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
 						return
 					}
 
@@ -12971,17 +14127,19 @@ func layoutFileManager() fyne.CanvasObject {
 
 					logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
 
-					errorText.Text = "signed file successfully"
-					errorText.Color = colors.Green
-					errorText.Refresh()
+					uiDo(func() {
+						errorText.Text = "signed file successfully"
+						errorText.Color = colors.Green
+						errorText.Refresh()
 
-					signedResults = append(signedResults, outputFile)
-					signedData.Set(signedResults)
-					signedList.Refresh()
+						signedResults = append(signedResults, outputFile)
+						_ = signedData.Set(signedResults)
+						signedList.Refresh()
 
-					signedLen := len(signedResults)
-					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
-					labelResults.Refresh()
+						signedLen := len(signedResults)
+						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+						labelResults.Refresh()
+					})
 
 				}, session.Window)
 
@@ -13076,7 +14234,7 @@ func layoutFileManager() fyne.CanvasObject {
 						errorText.Refresh()
 
 						verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
-						verifiedData.Set(verifiedResults)
+						_ = verifiedData.Set(verifiedResults)
 						verifiedList.Refresh()
 
 						verifiedLen := len(verifiedResults)
@@ -13221,22 +14379,13 @@ func layoutFileManager() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -13368,11 +14517,6 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -13390,19 +14534,20 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
 	labelSeparator.Wrapping = fyne.TextWrapOff
 	labelSeparator.ParseMarkdown("---")
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		capture := session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		session.LastDomain = capture
-	}
+	})
 
 	// Handle drag & drop files for smart contracts
 	session.Window.SetOnDropped(func(p fyne.Position, files []fyne.URI) {
@@ -13542,22 +14687,13 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -13583,6 +14719,1060 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	)
 
 	return NewVScroll(layout)
+}
+
+func layoutFilesAndContracts() fyne.CanvasObject {
+	session.Domain = "app.filescontracts"
+
+	frame := &iframe{}
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.35))
+
+	rectWidth100 := canvas.NewRectangle(color.Transparent)
+	rectWidth100.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
+
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+
+	header := canvas.NewText("F I L E S  &  C O N T R A C T S", colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Back button to return to dashboard
+	btnBack := wrapMobileButton(newSizedIconButton(theme.NavigateBackIcon(), func() {
+		removeOverlays()
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDashboard())
+		removeOverlays()
+	}))
+
+	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
+	labelResults := canvas.NewText("   RESULTS", colors.Gray)
+	labelResults.TextSize = 14
+	labelResults.Alignment = fyne.TextAlignLeading
+	labelResults.TextStyle = fyne.TextStyle{Bold: true}
+
+	signedResults := []string{}
+	signedData := binding.BindStringList(&signedResults)
+	signedList := widget.NewListWithData(signedData,
+		func() fyne.CanvasObject {
+			return container.NewStack(
+				container.NewHBox(
+					container.NewStack(
+						rectWidth90,
+						widget.NewLabel(""),
+					),
+				),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+
+			split := strings.Split(str, "/")
+			pos := len(split) - 1
+			name := strings.Split(split[pos], ";;;")
+
+			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(name[0])
+		},
+	)
+
+	verifiedResults := []string{}
+	verifiedData := binding.BindStringList(&verifiedResults)
+	verifiedList := widget.NewListWithData(verifiedData,
+		func() fyne.CanvasObject {
+			return container.NewStack(
+				container.NewHBox(
+					container.NewStack(
+						rectWidth90,
+						widget.NewLabel(""),
+					),
+				),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+
+			split := strings.Split(str, "/")
+			pos := len(split) - 1
+			name := strings.Split(split[pos], ";;;")
+
+			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(name[0])
+		},
+	)
+
+	browseErrorText := canvas.NewText(" ", colors.Green)
+	browseErrorText.TextSize = 12
+	browseErrorText.Alignment = fyne.TextAlignCenter
+
+	dialogBrowseFiles := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
+		if err != nil {
+			logger.Errorf("[Engram] Open file dialog: %s\n", err)
+			browseErrorText.Text = "could not open file"
+			browseErrorText.Color = colors.Red
+			browseErrorText.Refresh()
+			return
+		}
+
+		if uc == nil {
+			return
+		}
+
+		if session.Domain == "app.filescontracts" {
+			inputFileName := uc.URI().Name()
+			outputFileName := inputFileName + ".signed"
+
+			dialogFileSign := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
+				if err != nil {
+					logger.Errorf("[Engram] Save file dialog: %s\n", err)
+					uiDo(func() {
+						browseErrorText.Text = "could not open signed file"
+						browseErrorText.Color = colors.Red
+						browseErrorText.Refresh()
+					})
+
+					return
+				}
+
+				if uri == nil {
+					return // Canceled
+				}
+
+				filedata, err := readFromURI(uc)
+				if err != nil {
+					logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
+					uiDo(func() {
+						browseErrorText.Text = "could not read file"
+						browseErrorText.Color = colors.Red
+						browseErrorText.Refresh()
+					})
+
+					return
+				}
+
+				_, err = writeToURI(engram.Disk.SignData(filedata), uri)
+				if err != nil {
+					logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
+					uiDo(func() {
+						browseErrorText.Text = "could not write signed file"
+						browseErrorText.Color = colors.Red
+						browseErrorText.Refresh()
+					})
+
+					return
+				}
+
+				outputFile := uri.URI().Name()
+				if a.Driver().Device().IsMobile() {
+					outputFile = outputFileName
+				}
+
+				logger.Printf("[Engram] Successfully signed file: %s\n", outputFile)
+
+				uiDo(func() {
+					browseErrorText.Text = "signed file successfully"
+					browseErrorText.Color = colors.Green
+					browseErrorText.Refresh()
+
+					signedResults = append(signedResults, outputFile)
+					_ = signedData.Set(signedResults)
+					signedList.Refresh()
+
+					signedLen := len(signedResults)
+					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+					labelResults.Refresh()
+				})
+
+			}, session.Window)
+
+			if !a.Driver().Device().IsMobile() {
+				uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+				if err == nil {
+					dialogFileSign.SetLocation(uri)
+				} else {
+					logger.Errorf("[Engram] Could not open current directory %s\n", err)
+				}
+			}
+
+			uiDo(func() {
+				dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
+				dialogFileSign.SetView(dialog.ListView)
+				dialogFileSign.SetFileName(outputFileName)
+				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+				dialogFileSign.SetConfirmText("Save Sign")
+				dialogFileSign.Show()
+			})
+		}
+	}, session.Window)
+
+	if !a.Driver().Device().IsMobile() {
+		uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+		if err == nil {
+			dialogBrowseFiles.SetLocation(uri)
+		} else {
+			logger.Errorf("[Engram] Could not open current directory %s\n", err)
+		}
+	}
+
+	dialogBrowseFiles.Resize(fyne.NewSize(ui.Width, ui.Height))
+	dialogBrowseFiles.SetView(dialog.ListView)
+
+	signedList.OnSelected = func(id widget.ListItemID) {
+		browseErrorText.Text = ""
+		browseErrorText.Refresh()
+	}
+
+	verifiedList.OnSelected = func(id widget.ListItemID) {
+		browseErrorText.Text = ""
+		browseErrorText.Refresh()
+
+		split := strings.Split(verifiedResults[id], ";;;")
+		filepath := strings.Split(split[0], "/")
+		filename := filepath[len(filepath)-1]
+		filename = strings.Replace(filename, ".signed", "", -1)
+
+		rectSpan := canvas.NewRectangle(color.Transparent)
+		rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
+
+		detailHeader := canvas.NewText("S I G N A T U R E    D E T A I L", colors.Gray)
+		detailHeader.TextSize = 16
+		detailHeader.Alignment = fyne.TextAlignCenter
+		detailHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		labelStatus := canvas.NewText("   VERIFICATION   STATUS", colors.Gray)
+		labelStatus.TextSize = 12
+		labelStatus.TextStyle = fyne.TextStyle{Bold: true}
+		labelStatus.Alignment = fyne.TextAlignCenter
+
+		valueStatus := canvas.NewText("   Verified", colors.Green)
+		valueStatus.TextSize = 22
+		valueStatus.TextStyle = fyne.TextStyle{Bold: true}
+		valueStatus.Alignment = fyne.TextAlignCenter
+
+		labelFilename := canvas.NewText("   FILENAME", colors.Gray)
+		labelFilename.TextSize = 14
+		labelFilename.TextStyle = fyne.TextStyle{Bold: true}
+
+		valueFilename := widget.NewRichTextFromMarkdown(filename)
+		valueFilename.Wrapping = fyne.TextWrapBreak
+
+		labelSigner := canvas.NewText("   SIGNER   ADDRESS", colors.Gray)
+		labelSigner.TextSize = 14
+		labelSigner.TextStyle = fyne.TextStyle{Bold: true}
+
+		valueSigner := widget.NewRichTextFromMarkdown(split[1])
+		valueSigner.Wrapping = fyne.TextWrapBreak
+
+		labelSeparator := widget.NewRichTextFromMarkdown("")
+		labelSeparator.Wrapping = fyne.TextWrapOff
+		labelSeparator.ParseMarkdown("---")
+
+		labelSeparator2 := widget.NewRichTextFromMarkdown("")
+		labelSeparator2.Wrapping = fyne.TextWrapOff
+		labelSeparator2.ParseMarkdown("---")
+
+		labelSeparator3 := widget.NewRichTextFromMarkdown("")
+		labelSeparator3.Wrapping = fyne.TextWrapOff
+		labelSeparator3.ParseMarkdown("---")
+
+		linkHide := widget.NewHyperlinkWithStyle("Hide Details", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkHide.OnTapped = func() {
+			removeOverlays()
+		}
+
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewHBox(
+					layout.NewSpacer(),
+					container.NewVBox(
+						rectSpan,
+						rectSpacer,
+						detailHeader,
+						rectSpacer,
+						rectSpacer,
+						container.NewHBox(
+							layout.NewSpacer(),
+							container.NewVBox(
+								valueStatus,
+								rectSpacer,
+								labelStatus,
+							),
+							layout.NewSpacer(),
+						),
+						rectSpacer,
+						rectSpacer,
+						labelSeparator,
+						rectSpacer,
+						rectSpacer,
+						labelFilename,
+						rectSpacer,
+						valueFilename,
+						rectSpacer,
+						rectSpacer,
+						labelSeparator2,
+						rectSpacer,
+						rectSpacer,
+						labelSigner,
+						rectSpacer,
+						valueSigner,
+						rectSpacer,
+						rectSpacer,
+						labelSeparator3,
+						rectSpacer,
+						rectSpacer,
+						container.NewHBox(
+							layout.NewSpacer(),
+							linkHide,
+							layout.NewSpacer(),
+						),
+						rectSpacer,
+						rectSpacer,
+					),
+					layout.NewSpacer(),
+				),
+			),
+		)
+	}
+
+	btnSignFile := widget.NewButton("Sign File", nil)
+	btnSignFile.OnTapped = func() {
+		dialogBrowseFiles.Show()
+	}
+
+	btnVerifyFile := widget.NewButton("Verify Signature", nil)
+	btnVerifyFile.OnTapped = func() {
+		dialogVerify := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] Open file dialog: %s\n", err)
+				browseErrorText.Text = "could not open file"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			if uc == nil {
+				return
+			}
+
+			fileName := uc.URI().Name()
+			if !strings.HasSuffix(fileName, ".signed") {
+				browseErrorText.Text = "verifying requires a .signed file"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			filedata, err := readFromURI(uc)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", fileName, err)
+				browseErrorText.Text = "could not read file"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			fileName = strings.TrimSuffix(fileName, ".signed")
+			signer, message, err := engram.Disk.CheckSignature(filedata)
+			if err != nil {
+				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
+				browseErrorText.Text = "signature verification failed"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
+			if isASCII(string(message)) {
+				fmt.Println(string(message))
+			}
+
+			browseErrorText.Text = "verified file successfully"
+			browseErrorText.Color = colors.Green
+			browseErrorText.Refresh()
+
+			verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
+			verifiedData.Set(verifiedResults)
+			verifiedList.Refresh()
+
+			verifiedLen := len(verifiedResults)
+			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Refresh()
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogVerify.SetLocation(uri)
+			} else {
+				logger.Errorf("[Engram] Could not open current directory %s\n", err)
+			}
+		}
+
+		dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogVerify.SetView(dialog.ListView)
+		dialogVerify.Show()
+	}
+
+	browseTabContent := container.NewVBox(
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnSignFile,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			btnVerifyFile,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		browseErrorText,
+		rectSpacer,
+		rectSpacer,
+		labelResults,
+		rectSpacer,
+		container.NewStack(
+			rectBox,
+			container.NewVBox(
+				widget.NewLabel("   Signed Files:"),
+				signedList,
+				widget.NewLabel("   Verified Files:"),
+				verifiedList,
+			),
+		),
+	)
+
+	// ==================== TAB 2: SMART CONTRACTS (Contract Builder) ====================
+	contractErrorText := canvas.NewText("", colors.Red)
+	contractErrorText.TextSize = 12
+	contractErrorText.Alignment = fyne.TextAlignCenter
+
+	dialogBrowseSC := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
+		contractErrorText.Text = ""
+		if uc != nil {
+			filename := uc.URI().Name()
+			if uc.URI().MimeType() != "text/plain" {
+				logger.Errorf("[Engram] Cannot open file %s in contract builder\n", filename)
+				contractErrorText.Text = "cannot open file"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				return
+			}
+
+			if filepath.Ext(filename) != ".bas" {
+				contractErrorText.Text = "requires a .bas file"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				return
+			}
+
+			filedata, err := readFromURI(uc)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", filename, err)
+				contractErrorText.Text = "cannot read file data"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				return
+			}
+
+			if !isASCII(string(filedata)) {
+				contractErrorText.Text = "invalid file data"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				return
+			}
+
+			removeOverlays()
+			capture := session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filename, ".bas"), string(filedata)))
+			session.LastDomain = capture
+		}
+	}, session.Window)
+
+	if !a.Driver().Device().IsMobile() {
+		uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+		if err == nil {
+			dialogBrowseSC.SetLocation(uri)
+		} else {
+			logger.Errorf("[Engram] Could not open current directory %s\n", err)
+		}
+	}
+
+	dialogBrowseSC.Resize(fyne.NewSize(ui.Width, ui.Height))
+	dialogBrowseSC.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
+	dialogBrowseSC.SetView(dialog.ListView)
+
+	btnBrowseSC := widget.NewButton("Browse .bas Files", nil)
+	btnBrowseSC.OnTapped = func() {
+		dialogBrowseSC.Show()
+	}
+
+	btnEditor := widget.NewButton("Open Editor", nil)
+	btnEditor.OnTapped = func() {
+		removeOverlays()
+		capture := session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutContractEditor("", ""))
+		session.LastDomain = capture
+	}
+
+	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
+	labelAction.TextSize = 12
+	labelAction.Alignment = fyne.TextAlignLeading
+	labelAction.TextStyle = fyne.TextStyle{Bold: true}
+
+	entryClone := widget.NewEntry()
+	entryClone.SetPlaceHolder("Clone SCID (64 characters)")
+	if session.Offline {
+		entryClone.Disable()
+		entryClone.SetText("Cloning disabled in offline mode")
+	}
+
+	entryClone.OnChanged = func(s string) {
+		if len(s) == 64 {
+			removeOverlays()
+			capture := session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+
+			code, err := getContractCode(s)
+			if err != nil {
+				logger.Errorf("[Engram] Clone SC: %s\n", err)
+				contractErrorText.Text = "cannot get contract for clone"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				session.Window.SetContent(layoutFilesAndContracts())
+				return
+			}
+
+			if code == "" {
+				contractErrorText.Text = "contract does not exist"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+				session.Window.SetContent(layoutFilesAndContracts())
+				return
+			}
+
+			session.Window.SetContent(layoutContractEditor("", code))
+			session.LastDomain = capture
+		} else {
+			if s == "" {
+				contractErrorText.Text = ""
+				contractErrorText.Refresh()
+			} else {
+				contractErrorText.Text = "not a valid scid"
+				contractErrorText.Color = colors.Red
+				contractErrorText.Refresh()
+			}
+		}
+	}
+
+	contractsTabContent := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		entryClone,
+		contractErrorText,
+		rectSpacer,
+		wrapMobileButton(btnBrowseSC),
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			labelAction,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		rectSpacer,
+		wrapMobileButton(btnEditor),
+	)
+
+	// ==================== TAB 3: ASSETS (Asset Explorer) ====================
+	assetTabContent := createAssetExplorerTabContent()
+
+	assetTab := container.NewTabItem("Assets", assetTabContent)
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Browse", browseTabContent),
+		container.NewTabItem("SCIDs", contractsTabContent),
+		assetTab,
+	)
+	tabs.SetTabLocation(container.TabLocationTop)
+
+	// Handle drag & drop for both tabs
+	session.Window.SetOnDropped(func(p fyne.Position, files []fyne.URI) {
+		if session.Domain != "app.filescontracts" {
+			return
+		}
+
+		if len(files) > 1 {
+			browseErrorText.Text = "single file only"
+			browseErrorText.Color = colors.Red
+			browseErrorText.Refresh()
+			return
+		}
+
+		uri, err := storage.Reader(files[0])
+		if err != nil {
+			browseErrorText.Text = "could not read dropped file"
+			browseErrorText.Color = colors.Red
+			browseErrorText.Refresh()
+			return
+		}
+
+		filename := files[0].Name()
+		ext := filepath.Ext(filename)
+
+		if ext == ".signed" {
+			// Verify signed file
+			filedata, err := readFromURI(uri)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", filename, err)
+				browseErrorText.Text = "cannot read file data"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			filename = strings.TrimSuffix(filename, ".signed")
+			signer, message, err := engram.Disk.CheckSignature(filedata)
+			if err != nil {
+				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", filename, err)
+				browseErrorText.Text = "signature verification failed"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			logger.Printf("[Engram] %s signed by: %s\n", filename, signer.String())
+			if isASCII(string(message)) {
+				fmt.Println(string(message))
+			}
+
+			browseErrorText.Text = "verified file successfully"
+			browseErrorText.Color = colors.Green
+			browseErrorText.Refresh()
+
+			verifiedResults = append(verifiedResults, filename+";;;"+signer.String())
+			verifiedData.Set(verifiedResults)
+			verifiedList.Refresh()
+
+			verifiedLen := len(verifiedResults)
+			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Refresh()
+
+			// Switch to Browse Files tab
+			tabs.SelectIndex(0)
+
+		} else if ext == ".bas" {
+			// Open contract editor
+			filedata, err := readFromURI(uri)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", filename, err)
+				browseErrorText.Text = "cannot read file data"
+				browseErrorText.Color = colors.Red
+				browseErrorText.Refresh()
+				return
+			}
+
+			uiDo(func() {
+				removeOverlays()
+				capture := session.Window.Content()
+				session.Window.SetContent(layoutTransition())
+				session.Window.SetContent(layoutContractEditor(strings.TrimSuffix(filepath.Base(filename), ".bas"), string(filedata)))
+				session.LastDomain = capture
+			})
+		} else {
+			browseErrorText.Text = "unsupported file type"
+			browseErrorText.Color = colors.Red
+			browseErrorText.Refresh()
+		}
+	})
+
+	// Main layout
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		header,
+	)
+
+	center := container.NewStack(
+		rectWidth100,
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectWidth90,
+				container.NewVBox(
+					tabs,
+				),
+			),
+			layout.NewSpacer(),
+		),
+	)
+
+	bottom := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			container.NewCenter(
+				layout.NewSpacer(),
+				btnBack,
+				layout.NewSpacer(),
+			),
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+		),
+	)
+
+	body := container.NewVBox(
+		top,
+		center,
+	)
+
+	layout := container.NewStack(
+		frame,
+		container.NewBorder(
+			body,
+			bottom,
+			nil,
+			nil,
+		),
+	)
+
+	return NewVScroll(layout)
+}
+
+func createAssetExplorerTabContent() fyne.CanvasObject {
+	var data []string
+	var listData binding.StringList
+	var listBox *widget.List
+
+	rectLeft := canvas.NewRectangle(color.Transparent)
+	rectLeft.SetMinSize(fyne.NewSize(ui.Width*0.40, 35))
+	rectRight := canvas.NewRectangle(color.Transparent)
+	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
+	rectList := canvas.NewRectangle(color.Transparent)
+	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.45))
+	rectWidth := canvas.NewRectangle(color.Transparent)
+	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+
+	results := canvas.NewText("", colors.Green)
+	results.TextSize = 14
+
+	listData = binding.BindStringList(&data)
+	listBox = widget.NewListWithData(listData,
+		func() fyne.CanvasObject {
+			return container.NewStack(
+				container.NewHBox(
+					container.NewStack(
+						rectLeft,
+						widget.NewLabel(""),
+					),
+					container.NewStack(
+						rectRight,
+						widget.NewLabel(""),
+					),
+				),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+
+			split := strings.Split(str, ";;")
+
+			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
+		})
+
+	entrySCID := widget.NewEntry()
+	entrySCID.PlaceHolder = "Search by SCID"
+	entrySCID.Disable()
+
+	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
+	linkClearHistory.OnTapped = func() {
+		shard, err := GetShard()
+		if err != nil {
+			return
+		}
+
+		store, err := graviton.NewDiskStore(shard)
+		if err != nil {
+			return
+		}
+
+		ss, err := store.LoadSnapshot(0)
+
+		if err != nil {
+			return
+		}
+
+		tree, err := ss.GetTree("Explorer History")
+		if err != nil {
+			return
+		}
+
+		c := tree.Cursor()
+
+		for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
+			DeleteKey(tree.GetName(), k)
+		}
+
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAssetExplorer())
+	}
+
+	btnMyAssets := widget.NewButton("My Assets", func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutMyAssets())
+	})
+
+	listing := container.NewStack(
+		rectWidth,
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewVBox(
+				rectSpacer,
+				container.NewHBox(
+					results,
+					layout.NewSpacer(),
+					linkClearHistory,
+				),
+				rectSpacer,
+				rectSpacer,
+				entrySCID,
+				rectSpacer,
+				rectSpacer,
+				container.NewStack(
+					rectList,
+					listBox,
+				),
+				rectSpacer,
+				rectSpacer,
+				wrapMobileButton(btnMyAssets),
+			),
+			layout.NewSpacer(),
+		),
+	)
+
+	var assetData []string
+
+	found := 0
+	assetData = nil
+
+	results.Text = fmt.Sprintf("  Results:  %d", found)
+	results.Color = colors.Green
+	results.Refresh()
+
+	listData.Set(nil)
+
+	if session.Offline {
+		results.Text = "  Disabled in offline mode."
+		results.Color = colors.Gray
+		results.Refresh()
+	} else if gnomon.Index == nil {
+		results.Text = "  Gnomon is inactive."
+		results.Color = colors.Gray
+		results.Refresh()
+	} else {
+		entrySCID.Enable()
+	}
+
+	entrySCID.OnChanged = func(s string) {
+		if entrySCID.Text != "" && len(s) == 64 {
+			showLoadingOverlay()
+
+			var result []*structures.SCIDVariable
+			switch gnomon.Index.DBType {
+			case "gravdb":
+				result = gnomon.Index.GravDBBackend.GetSCIDVariableDetailsAtTopoheight(s, engram.Disk.Get_Daemon_TopoHeight())
+			case "boltdb":
+				result = gnomon.Index.BBSBackend.GetSCIDVariableDetailsAtTopoheight(s, engram.Disk.Get_Daemon_TopoHeight())
+			}
+
+			if len(result) == 0 {
+				_, err := getTxData(s)
+				if err != nil {
+					return
+				}
+			}
+
+			err := StoreEncryptedValue("Explorer History", []byte(s), []byte(""))
+			if err != nil {
+				logger.Errorf("[Asset Explorer] Error saving search result: %s\n", err)
+				return
+			}
+
+			scid := crypto.HashHexToHash(s)
+
+			bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(scid, -1, engram.Disk.GetAddress().String())
+			if err != nil {
+				bal = 0
+			}
+
+			title, desc, _, _, _ := getContractHeader(scid)
+
+			if title == "" {
+				title = scid.String()
+			}
+
+			if len(title) > 18 {
+				title = title[0:18] + "..."
+			}
+
+			if desc == "" {
+				desc = "N/A"
+			}
+
+			if len(desc) > 40 {
+				desc = desc[0:40] + "..."
+			}
+
+			assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
+			listData.Set(assetData)
+			found += 1
+
+			entrySCID.SetText("")
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutAssetManager(s))
+			removeOverlays()
+		}
+	}
+
+	go func() {
+		if engram.Disk != nil && gnomon.Index != nil {
+			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+				if session.Domain != "app.explorer" && session.Domain != "app.filescontracts" {
+					break
+				}
+				entrySCID.Disable()
+				results.Text = "  Gnomon is syncing..."
+				results.Color = colors.Yellow
+
+				fyne.Do(func() {
+					results.Refresh()
+				})
+
+				time.Sleep(time.Second * 1)
+			}
+
+			fyne.Do(func() {
+				entrySCID.Enable()
+				results.Text = "  Loading previous scan history..."
+				results.Color = colors.Yellow
+				results.Refresh()
+			})
+
+			shard, err := GetShard()
+			if err != nil {
+				return
+			}
+
+			store, err := graviton.NewDiskStore(shard)
+			if err != nil {
+				return
+			}
+
+			ss, err := store.LoadSnapshot(0)
+
+			if err != nil {
+				return
+			}
+
+			tree, err := ss.GetTree("Explorer History")
+			if err != nil {
+				return
+			}
+
+			c := tree.Cursor()
+
+			for k, _, err := c.First(); err == nil; k, _, err = c.Next() {
+				scid := crypto.HashHexToHash(string(k))
+
+				bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(scid, -1, engram.Disk.GetAddress().String())
+				if err != nil {
+					bal = 0
+				}
+
+				title, desc, _, _, _ := getContractHeader(scid)
+
+				if title == "" {
+					title = scid.String()
+				}
+
+				if len(title) > 18 {
+					title = title[0:18] + "..."
+				}
+
+				if desc == "" {
+					desc = "N/A"
+				}
+
+				if len(desc) > 40 {
+					desc = desc[0:40] + "..."
+				}
+
+				assetData = append(data, globals.FormatMoney(bal)+";;;"+title+";;;"+desc+";;;;;;"+scid.String())
+				listData.Set(assetData)
+				found += 1
+			}
+		}
+
+		listData.Set(assetData)
+
+		listBox.OnSelected = func(id widget.ListItemID) {
+			split := strings.Split(assetData[id], ";;;")
+			listBox.UnselectAll()
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutAssetManager(split[4]))
+		}
+
+		fyne.Do(func() {
+			results.Text = fmt.Sprintf("  Search History:  %d", found)
+			results.Color = colors.Green
+			results.Refresh()
+			listBox.Refresh()
+		})
+	}()
+
+	return container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			listing,
+		),
+	)
 }
 
 func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
@@ -13784,11 +15974,6 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		entryDescription,
 	)
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -13806,13 +15991,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
 	labelSeparator.Wrapping = fyne.TextWrapOff
 	labelSeparator.ParseMarkdown("---")
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Contract Builder", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		if unsavedChanges {
 			verificationOverlay(
 				false,
@@ -13835,7 +16021,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			session.Window.SetContent(layoutContractBuilder(""))
 			session.LastDomain = capture
 		}
-	}
+	})
 
 	selectEditor.OnChanged = func(s string) {
 		errorText.Text = ""
@@ -14721,22 +16907,13 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -14765,6 +16942,17 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 }
 
 func layoutTELA() fyne.CanvasObject {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf("[TELA-LAYOUT] PANIC recovered in layoutTELA(): %v\n", r)
+			session.Domain = "app.wallet"
+			if session.Window != nil {
+				session.Window.SetContent(layoutDashboard())
+			}
+		}
+	}()
+
+	logger.Printf("[TELA-LAYOUT] layoutTELA() starting...\n")
 	session.Domain = "app.tela"
 
 	var history []string
@@ -14779,6 +16967,12 @@ func layoutTELA() fyne.CanvasObject {
 	var servingData binding.StringList
 	var servingList *widget.List
 
+	var favorites []string
+	var favoritesData binding.StringList
+	var favoritesList *widget.List
+	var refreshFavoritesList func()
+	var refreshAppsList func()
+
 	frame := &iframe{}
 	rectLeft := canvas.NewRectangle(color.Transparent)
 	rectLeft.SetMinSize(fyne.NewSize(ui.Width*0.40, 35))
@@ -14787,13 +16981,20 @@ func layoutTELA() fyne.CanvasObject {
 	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
 
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.36))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+
+	// Mobile detection at 360px breakpoint for responsive layout
+	isMobile := ui.Width <= 360
+	if isMobile {
+		rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.52))
+		rectSpacer.SetMinSize(fyne.NewSize(6, 2))
+	}
 
 	heading := canvas.NewText("T E L A    B R O W S E R", colors.Gray)
 	heading.TextSize = 16
@@ -14809,6 +17010,205 @@ func layoutTELA() fyne.CanvasObject {
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = 12
 	errorText.Alignment = fyne.TextAlignCenter
+
+	var telaSearch []INDEXwithRatings
+
+	telaListHeartWidth := float32(34)
+	if isMobile {
+		telaListHeartWidth = 40
+	}
+
+	parseTelaListEntry := func(raw string) (name, scid string) {
+		split := strings.Split(raw, ";;;")
+		if len(split) > 0 {
+			name = split[0]
+		}
+		if len(split) > 1 {
+			scid = split[1]
+		}
+		return
+	}
+
+	normalizeSearch := func(s string) string {
+		return strings.ToLower(strings.TrimSpace(s))
+	}
+
+	findTelaSearchEntry := func(scid string) *INDEXwithRatings {
+		for i := range telaSearch {
+			if telaSearch[i].SCID == scid {
+				return &telaSearch[i]
+			}
+		}
+
+		return nil
+	}
+
+	isTelaActive := func(scid string) bool {
+		for _, serv := range tela.GetServerInfo() {
+			if serv.SCID == scid {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	newTelaListItem := func() fyne.CanvasObject {
+		heartBtn := widget.NewButtonWithIcon("", resourceHeartOutlineSvg, nil)
+		heartBtn.Importance = widget.LowImportance
+
+		activeBg := canvas.NewRectangle(color.Transparent)
+		activeBg.SetMinSize(fyne.NewSize(0, scaleSize(36)))
+
+		heartSpacer := canvas.NewRectangle(color.Transparent)
+		heartSpacer.SetMinSize(fyne.NewSize(telaListHeartWidth, scaleSize(34)))
+		heartWrap := container.NewCenter(container.NewStack(heartSpacer, container.NewCenter(heartBtn)))
+
+		nameLabel := widget.NewLabel("")
+		nameLabel.Alignment = fyne.TextAlignLeading
+		nameLabel.Truncation = fyne.TextTruncateEllipsis
+		nameLabel.Wrapping = fyne.TextWrapOff
+
+		activeLabel := canvas.NewText("", colors.Green)
+		activeLabel.TextSize = 11
+		activeLabel.TextStyle = fyne.TextStyle{Bold: true}
+		activeLabel.Alignment = fyne.TextAlignTrailing
+		activeWrap := container.NewPadded(activeLabel)
+
+		return container.NewStack(
+			activeBg,
+			container.NewBorder(
+				nil,
+				nil,
+				heartWrap,
+				activeWrap,
+				container.NewPadded(nameLabel),
+			),
+		)
+	}
+
+	updateTelaFavoriteButton := func(btn *widget.Button, scid string) {
+		if engram.Disk == nil {
+			btn.SetIcon(resourceHeartOutlineMutedSvg)
+			btn.Disable()
+			btn.OnTapped = nil
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsTELAFavorite(walletAddress, scid) {
+			btn.SetIcon(resourceFavsPng)
+		} else {
+			btn.SetIcon(resourceHeartOutlineSvg)
+		}
+		btn.Enable()
+	}
+
+	toggleTelaFavorite := func(scid string) {
+		if engram.Disk == nil {
+			errorText.Text = "No wallet connected"
+			errorText.Color = colors.Gray
+			errorText.Refresh()
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsTELAFavorite(walletAddress, scid) {
+			if err := RemoveTELAFavorite(walletAddress, scid); err != nil {
+				errorText.Text = "Error removing favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			errorText.Text = "Removed from favorites"
+			errorText.Color = colors.Green
+		} else {
+			entry := findTelaSearchEntry(scid)
+			if entry == nil {
+				errorText.Text = "Could not load TELA metadata"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			if err := AddTELAFavorite(walletAddress, scid, entry.NameHdr, entry.DescrHdr, entry.IconHdr, entry.ratings.Average); err != nil {
+				errorText.Text = "Error adding favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+
+			errorText.Text = "Added to favorites"
+			errorText.Color = colors.Green
+		}
+
+		errorText.Refresh()
+		if refreshFavoritesList != nil {
+			refreshFavoritesList()
+		}
+		searchList.Refresh()
+		favoritesList.Refresh()
+	}
+
+	configureTelaListRow := func(raw string, co fyne.CanvasObject) {
+		row, ok := co.(*fyne.Container)
+		if !ok || len(row.Objects) < 2 {
+			return
+		}
+
+		activeBg, ok := row.Objects[0].(*canvas.Rectangle)
+		if !ok {
+			return
+		}
+
+		var heartBtn *widget.Button
+		var nameLabel *widget.Label
+		var activeLabel *canvas.Text
+
+		var walk func(fyne.CanvasObject)
+		walk = func(obj fyne.CanvasObject) {
+			switch v := obj.(type) {
+			case *widget.Button:
+				if heartBtn == nil {
+					heartBtn = v
+				}
+			case *widget.Label:
+				if nameLabel == nil {
+					nameLabel = v
+				}
+			case *canvas.Text:
+				if activeLabel == nil {
+					activeLabel = v
+				}
+			case *fyne.Container:
+				for _, child := range v.Objects {
+					walk(child)
+				}
+			}
+		}
+
+		walk(row.Objects[1])
+		if heartBtn == nil || nameLabel == nil || activeLabel == nil {
+			return
+		}
+
+		name, scid := parseTelaListEntry(raw)
+		nameLabel.SetText(name)
+		if isTelaActive(scid) {
+			activeLabel.Text = "LIVE"
+			activeBg.FillColor = color.NRGBA{R: 20, G: 120, B: 70, A: 48}
+		} else {
+			activeLabel.Text = ""
+			activeBg.FillColor = color.Transparent
+		}
+		activeBg.Refresh()
+		activeLabel.Refresh()
+		updateTelaFavoriteButton(heartBtn, scid)
+		heartBtn.OnTapped = func() {
+			toggleTelaFavorite(scid)
+		}
+	}
 
 	historyData = binding.BindStringList(&history)
 	historyList = widget.NewListWithData(historyData,
@@ -14836,15 +17236,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	searchData = binding.BindStringList(&searching)
 	searchList = widget.NewListWithData(searchData,
-		func() fyne.CanvasObject {
-			return container.NewStack(
-				container.NewVBox(
-					container.NewStack(
-						widget.NewLabel(""),
-					),
-				),
-			)
-		},
+		newTelaListItem,
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
 			str, err := dat.Get()
@@ -14852,9 +17244,7 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			split := strings.Split(str, ";;;")
-
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*widget.Label).SetText(split[0])
+			configureTelaListRow(str, co)
 		},
 	)
 
@@ -14882,16 +17272,30 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			split := strings.Split(str, ";;;")
+			if len(split) < 2 {
+				return
+			}
 
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			fyne.Do(func() {
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			})
 		},
 	)
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
+	favoritesData = binding.BindStringList(&favorites)
+	favoritesList = widget.NewListWithData(favoritesData,
+		newTelaListItem,
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+
+			configureTelaListRow(str, co)
+		},
+	)
 
 	entryHistory := widget.NewEntry()
 	entryHistory.PlaceHolder = "Search History"
@@ -14960,17 +17364,26 @@ func layoutTELA() fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
 	var isSearching bool
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.Domain = "app.wallet" // break any loops now
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
+
+	btnSettingsTela := newSizedIconButton(theme.SettingsIcon(), func() {
+		session.Domain = "app.tela.settings" // Mark as coming from TELA
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAppSettings())
+		removeOverlays()
+	})
 
 	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	linkClearHistory.OnTapped = func() {
@@ -15018,8 +17431,92 @@ func layoutTELA() fyne.CanvasObject {
 		)
 	}
 
-	wSelect := widget.NewSelect([]string{"History", "Active", "Search", "Settings"}, nil)
+	var forceFreshScan bool
+
+	wSelect := widget.NewSelect([]string{"Search", "Favorites", "History"}, nil)
 	wSelect.SetSelectedIndex(0)
+
+	btnRescanTela := newSizedIconButton(theme.ViewRefreshIcon(), func() {
+		rescanLabel := widget.NewLabel("Force Full Rescan?\n\nThis will clear all cached results, reset the Gnomon index, and perform a complete fresh scan. This may take several minutes.")
+		rescanLabel.Wrapping = fyne.TextWrapWord
+
+		dlg := dialog.NewCustomWithoutButtons("TELA BROWSER", rescanLabel, session.Window)
+
+		btnConfirm := widget.NewButtonWithIcon("Rescan", theme.ViewRefreshIcon(), func() {
+			dlg.Hide()
+			clearAllTELACache()
+			forceFreshScan = true
+			generation := currentWalletGeneration()
+
+			results.Text = "  Resetting Gnomon index..."
+			results.Color = colors.Yellow
+			uiDo(func() {
+				if !isWalletGenerationActive(generation) {
+					return
+				}
+				results.Refresh()
+			})
+
+			go func() {
+				if err := resetGnomonIndex(); err != nil {
+					logger.Errorf("[TELA] Could not reset gnomon index: %s\n", err)
+					return
+				}
+
+				for i := 0; i < 60; i++ {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
+					time.Sleep(time.Second)
+					if gnomon.Index != nil {
+						break
+					}
+				}
+
+				uiDo(func() {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
+					wSelect.SetSelected("Search")
+				})
+			}()
+		})
+
+		btnCancel := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
+			dlg.Hide()
+		})
+
+		dlg.SetButtons([]fyne.CanvasObject{wrapMobileButton(btnConfirm), btnCancel})
+		dlg.Show()
+	})
+
+	activateTelaSearch := func() {}
+
+	btnTela := widget.NewButtonWithIcon("Apps", resourceBrowserGlobeSvg, func() {
+		if wSelect.Selected == "Search" {
+			activateTelaSearch()
+			return
+		}
+		wSelect.SetSelected("Search")
+	})
+	btnTela.Importance = widget.LowImportance
+
+	btnFavorites := widget.NewButtonWithIcon("", resourceFavsPng, func() {
+		wSelect.SetSelected("Favorites")
+	})
+	btnFavorites.Importance = widget.LowImportance
+
+	btnHistory := widget.NewButtonWithIcon("History", theme.DocumentIcon(), func() {
+		wSelect.SetSelected("History")
+	})
+	btnHistory.Importance = widget.LowImportance
+
+	// Horizontal button row (like dashboard)
+	tabButtons := container.NewHBox(
+		btnTela,
+		btnFavorites,
+		btnHistory,
+	)
 
 	btnShutdown := widget.NewButton("Shutdown TELA", nil)
 
@@ -15027,10 +17524,137 @@ func layoutTELA() fyne.CanvasObject {
 	var lastScan, searchExclusions, sortBy string
 	var minLikes float64
 	var telaSCIDs []string
-	var telaSearch []INDEXwithRatings
 	var sAll = map[string]bool{}
+	var telaStartupWaitMu sync.Mutex
+	telaStartupWaiting := false
 
-	getSearchResults := func() {
+	// Initialize TELA settings from storage
+	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
+		if f, err := strconv.ParseFloat(string(storedMinLikes), 64); err == nil {
+			minLikes = f
+		}
+	} else {
+		minLikes = 30
+	}
+
+	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
+		searchExclusions = string(storedExclusions)
+	}
+
+	if storedRescanRecheck, err := GetEncryptedValue("TELA Settings", []byte("Rescan Recheck")); err == nil {
+		if string(storedRescanRecheck) == "Yes" {
+			rescanRecheck = true
+		}
+	}
+
+	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
+	if storedSortBy, err := GetEncryptedValue("TELA Settings", []byte("Sort By")); err == nil {
+		sortBy = string(storedSortBy)
+	} else {
+		sortBy = sortByOptions[0]
+	}
+
+	restrictiveMode = false // Default OFF (unrestrictive)
+	// First check new "Restrictive Mode" key (set by Settings page)
+	if restrictiveModeValue, found := getTELADual("Restrictive Mode"); found {
+		if restrictiveModeValue == "true" {
+			restrictiveMode = true
+		}
+	} else {
+		// Fallback to legacy "Mode" key for backward compatibility
+		if storedTelaMode, err := GetEncryptedValue("TELA Settings", []byte("Mode")); err == nil {
+			if string(storedTelaMode) == "Restrictive" {
+				restrictiveMode = true
+			}
+		}
+	}
+
+	var getSearchResults func()
+	getSearchResults = func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[TELA-SEARCH] getSearchResults PANIC recovered: %v\n", r)
+				isSearching = false
+			}
+		}()
+		logger.Printf("[TELA-SEARCH] getSearchResults() starting...\n")
+		scanStart := time.Now()
+		scanCtx, scanCancel := context.WithCancel(context.Background())
+		defer scanCancel()
+		var syncWaitSeconds int
+		var storedSCIDsCount int
+		var allCandidates int
+		var scannedCandidates int64
+		var versionHits int64
+		var indexInfoCalls int64
+		var retryCount int64
+		var preDispatchSkips int64
+		var negCacheSkips int64
+		var prefilterPassed int64
+		var prefilterDropped int64
+		var uiRefreshCount int64
+		var progressWriteCount int64
+		var interruptReason string
+		var phasePrefilterMs int64
+		var phaseScanMs int64
+		var phaseFinalizeMs int64
+		cacheHitMode := "full"
+		fullScanReason := "cold_start"
+		cacheIntegrity := "ok"
+		var heightDelta int64
+		var storedIndexedHeight int64
+
+		currentDaemonHeight := func() int64 {
+			if engram.Disk == nil {
+				return 0
+			}
+
+			return int64(engram.Disk.Get_Daemon_Height())
+		}
+
+		isGnomonCaughtUp := func() bool {
+			if gnomon.Index == nil {
+				return false
+			}
+
+			daemonHeight := currentDaemonHeight()
+			if daemonHeight <= 0 {
+				return gnomon.Index.LastIndexedHeight > 0
+			}
+
+			return gnomon.Index.LastIndexedHeight >= daemonHeight
+		}
+
+		deviceClass := "desktop"
+		workerPoolSize := runtime.NumCPU()
+		uiRefreshInterval := 250 * time.Millisecond
+		progressCheckpointInterval := 2 * time.Second
+		if a.Driver().Device().IsMobile() {
+			deviceClass = "mobile"
+			workerPoolSize = runtime.NumCPU() / 2
+			if workerPoolSize < 6 {
+				workerPoolSize = 6
+			}
+			if workerPoolSize > 12 {
+				workerPoolSize = 12
+			}
+			uiRefreshInterval = 500 * time.Millisecond
+			progressCheckpointInterval = 4 * time.Second
+		} else {
+			workerPoolSize = runtime.NumCPU() * 2
+			if workerPoolSize < 16 {
+				workerPoolSize = 16
+			}
+			if workerPoolSize > 64 {
+				workerPoolSize = 64
+			}
+		}
+
+		saveProgress := func(position, total int, scid, state string) {
+			saveScanProgress(position, total, scid, state)
+			atomic.AddInt64(&progressWriteCount, 1)
+		}
+
 		fyne.Do(func() {
 			entrySearch.Disable()
 			entryAddSCID.Disable()
@@ -15041,7 +17665,59 @@ func layoutTELA() fyne.CanvasObject {
 
 		isSearching = true
 
-		// Already scanned
+		// Handle force fresh scan - clear all caches and proceed
+		if forceFreshScan {
+			logger.Printf("[TELA] Force fresh scan requested - clearing all caches\n")
+			telaSearch = []INDEXwithRatings{}
+			telaSCIDs = []string{}
+			sAll = map[string]bool{}
+			forceFreshScan = false
+			clearScanProgress()
+			fullScanReason = "force_fresh_scan"
+		}
+
+		// Check for existing progress and handle resume scenarios
+		progress := loadScanProgress()
+		resumePosition := 0
+
+		if progress.State == "completed" && !isScanProgressStale(progress, 24) {
+			// Use cached results - progress is valid, already scanned
+		} else if progress.State == "interrupted" && !isScanProgressStale(progress, 24) {
+			// Resume from interrupted scan
+			resumePosition = progress.Position
+			results.Text = fmt.Sprintf("  Resuming scan from position %d...", resumePosition)
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
+		} else if progress.State == "interrupted" && isScanProgressStale(progress, 24) {
+			// Clear stale interrupted progress
+			clearScanProgress()
+		}
+
+		if gnomon.Index != nil {
+			if storedHeightRaw, err := GetEncryptedValue("TELA Search", []byte("Last Indexed Height")); err == nil {
+				if parsedHeight, parseErr := strconv.ParseInt(string(storedHeightRaw), 10, 64); parseErr == nil {
+					storedIndexedHeight = parsedHeight
+					heightDelta = gnomon.Index.LastIndexedHeight - storedIndexedHeight
+					if heightDelta < 0 {
+						heightDelta = 0
+					}
+				} else {
+					cacheIntegrity = "missing_height"
+				}
+			} else {
+				cacheIntegrity = "missing_height"
+			}
+		}
+		if rescanRecheck {
+			fullScanReason = "rescan_recheck"
+		} else if heightDelta > 0 {
+			cacheHitMode = "delta"
+			fullScanReason = "height_delta"
+		}
+
+		// Already scanned (skip if force fresh scan was just triggered)
 		if len(telaSearch) > 0 {
 			searching = telaSearchDisplayAll(telaSearch, sortBy)
 			searchData.Set(searching)
@@ -15076,6 +17752,10 @@ func layoutTELA() fyne.CanvasObject {
 
 		defer func() {
 			isSearching = false
+			fyne.Do(func() {
+				entrySearch.Enable()
+				entryAddSCID.Enable()
+			})
 			if !session.Offline && gnomon.Index != nil {
 				if btnShutdown.Disabled() {
 					fyne.Do(func() {
@@ -15086,20 +17766,140 @@ func layoutTELA() fyne.CanvasObject {
 		}()
 
 		if gnomon.Index == nil {
+			results.Text = "  Gnomon is starting..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
 			return
 		}
 
-		for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+		hasTelaCache := func() bool {
+			if raw, err := GetEncryptedValue("TELA Search", []byte("SCIDs")); err == nil && len(raw) > 0 {
+				var cachedSCIDs []string
+				if json.Unmarshal(raw, &cachedSCIDs) == nil && len(cachedSCIDs) > 0 {
+					return true
+				}
+			}
+			if raw, err := GetEncryptedValue("TELA Search", []byte("IndexCache")); err == nil && len(raw) > 0 {
+				var cachedINDEXes indexCache
+				if json.Unmarshal(raw, &cachedINDEXes) == nil && len(cachedINDEXes) > 0 {
+					return true
+				}
+			}
+			if raw, err := GetEncryptedValue("TELA Search", []byte("CandidateCache")); err == nil && len(raw) > 0 {
+				var cachedCandidates telaCandidateCache
+				if json.Unmarshal(raw, &cachedCandidates) == nil {
+					for _, meta := range cachedCandidates {
+						if meta.Result == telaCandidateValidIndex {
+							return true
+						}
+					}
+				}
+			}
+			return false
+		}
+
+		gnomonReadyForTela := func() bool {
+			if gnomon.Index == nil {
+				return false
+			}
+			if hasTelaCache() {
+				return true
+			}
+			// Double-check after cache check to avoid race
+			if gnomon.Index == nil {
+				return false
+			}
+			// Check if backends are initialized
+			if (gnomon.Index.DBType == "gravdb" && gnomon.Index.GravDBBackend == nil) ||
+				(gnomon.Index.DBType == "boltdb" && gnomon.Index.BBSBackend == nil) {
+				return false
+			}
+
+			allOwnersAndSCIDs := gnomon.GetAllOwnersAndSCIDs()
+			if len(allOwnersAndSCIDs) <= 1 {
+				return false
+			}
+
+			return isGnomonCaughtUp()
+		}
+
+		for !gnomonReadyForTela() {
+			syncWaitSeconds++
+			// Check if user navigated away
 			if !strings.Contains(session.Domain, ".tela") {
+				interruptReason = "navigated_away"
+				saveProgress(0, 0, "", "interrupted")
 				return
+			}
+
+			// Check if Gnomon index became nil (stopped unexpectedly)
+			if gnomon.Index == nil {
+				interruptReason = "gnomon_nil_while_syncing"
+				results.Text = "  Gnomon stopped unexpectedly"
+				results.Color = colors.Red
+				fyne.Do(func() {
+					results.Refresh()
+				})
+				saveProgress(0, 0, "", "interrupted")
+				return
+			}
+
+			// Check connection health - wait for reconnect if disconnected
+			if !walletapi.Connected {
+				interruptReason = "connection_lost_syncing"
+				results.Text = "  Connection lost, waiting for reconnect..."
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					results.Refresh()
+				})
+
+				// Wait for connection to restore (up to 30 seconds)
+				reconnectAttempts := 0
+				for !walletapi.Connected && reconnectAttempts < 30 {
+					time.Sleep(time.Second)
+					reconnectAttempts++
+
+					// Check if user navigated away while waiting
+					if !strings.Contains(session.Domain, ".tela") {
+						saveProgress(0, 0, "", "interrupted")
+						return
+					}
+				}
+
+				// If still disconnected after 30 seconds, mark as interrupted
+				if !walletapi.Connected {
+					interruptReason = "connection_timeout_syncing"
+					results.Text = "  Connection timeout"
+					results.Color = colors.Red
+					fyne.Do(func() {
+						results.Refresh()
+					})
+					saveProgress(0, 0, "", "interrupted")
+					return
+				}
+
+				// Connection restored - continue syncing
+				results.Text = "  Connection restored, resuming sync..."
+				results.Color = colors.Yellow
 			}
 
 			fyne.Do(func() {
 				entrySearch.Disable()
 				entryAddSCID.Disable()
 			})
-			results.Text = "  Gnomon is syncing..."
+			results.Text = "  Gnomon is starting..."
 			results.Color = colors.Yellow
+
+			// Save syncing state for progress tracking
+			var daemonHeight int
+			if engram.Disk != nil {
+				daemonHeight = int(engram.Disk.Get_Daemon_Height())
+			}
+			if gnomon.Index != nil {
+				saveProgress(int(gnomon.Index.LastIndexedHeight), daemonHeight, "", "syncing")
+			}
 
 			fyne.Do(func() {
 				results.Refresh()
@@ -15108,21 +17908,56 @@ func layoutTELA() fyne.CanvasObject {
 			time.Sleep(time.Second)
 		}
 
+		allowTelaIndexMutations := isGnomonCaughtUp()
+
+		if gnomon.Index != nil && gnomon.Index.LastIndexedHeight < currentDaemonHeight() {
+			results.Text = "  Gnomon still syncing, using available TELA data..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
+		}
+
+		indexCacheStore := loadTelaIndexCache()
+		candidateCache := loadTelaCandidateCache()
+		currentScanHeight := storedIndexedHeight
+		var candidateCacheMu sync.RWMutex
+		if gnomon.Index != nil {
+			currentScanHeight = gnomon.Index.LastIndexedHeight
+		}
 		if !restrictiveMode {
-			storedAllSCIDs, err := GetEncryptedValue("TELA Search", []byte("Searched SCIDs"))
-			if err != nil {
-				// Nothing stored, scan for SCIDs
-				sAll = map[string]bool{}
-				logger.Debugf("[Engram] Could not get stored TELA Searched SCIDs: %s\n", err)
-			} else {
-				json.Unmarshal(storedAllSCIDs, &sAll)
+			sAll = candidateCache.negativeSet()
+			if len(sAll) == 0 {
+				sAll = loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
 			}
+		}
+
+		setCandidateCache := func(scid, result string) {
+			candidateCacheMu.Lock()
+			candidateCache.set(scid, result, currentScanHeight)
+			candidateCacheMu.Unlock()
+		}
+		isNegativeSCID := func(scid string) bool {
+			candidateCacheMu.RLock()
+			defer candidateCacheMu.RUnlock()
+			return sAll[scid]
+		}
+		setNegativeSCID := func(scid string, negative bool) {
+			candidateCacheMu.Lock()
+			if negative {
+				sAll[scid] = true
+			} else {
+				delete(sAll, scid)
+			}
+			candidateCacheMu.Unlock()
 		}
 
 		storedSCIDs, err := GetEncryptedValue("TELA Search", []byte("SCIDs"))
 		if err != nil {
 			// Nothing stored, scan for SCIDs
-			telaSCIDs = []string{}
+			telaSCIDs = candidateCache.validSCIDs()
+			cacheIntegrity = "missing_scids"
+			fullScanReason = "no_scid_cache"
 			logger.Debugf("[Engram] Could not get stored TELA SCIDs: %s\n", err)
 		} else {
 			// Have stored SCIDs
@@ -15135,31 +17970,141 @@ func layoutTELA() fyne.CanvasObject {
 				results.Refresh()
 			})
 
-			for i, sc := range telaSCIDs {
-				if index, err := tela.GetINDEXInfo(sc, session.Daemon); err == nil {
-					if gnomon.GetAllSCIDVariableDetails(sc) == nil {
-						results.Text = fmt.Sprintf("  Adding... (%d / %d)", i, len(telaSCIDs))
-						results.Color = colors.Yellow
-						fyne.Do(func() {
-							results.Refresh()
-						})
-
-						gnomon.AddSCIDToIndex(sc)
-					}
-
-					if !restrictiveMode {
-						_, ratings, err := getLikesRatio(sc, index.DURL, searchExclusions, minLikes)
-						if err != nil {
-							continue
-						}
-
-						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
-					}
+			// Batch-fetch INDEX data for cached SCIDs missing from indexCacheStore
+			// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket
+			var cacheMissed []string
+			for _, sc := range telaSCIDs {
+				if _, ok := indexCacheStore[sc]; !ok {
+					cacheMissed = append(cacheMissed, sc)
 				}
 			}
+			if len(cacheMissed) > 0 {
+				results.Text = fmt.Sprintf("  Fetching INDEX data... (%d SCIDs)", len(cacheMissed))
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					results.Refresh()
+				})
 
-			// If recheck is false, run a rescan that pulls in any new contracts when first OnChanged to Search
-			if rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) {
+				fetched, invalid, fetchErr := batchFetchINDEXes(scanCtx, cacheMissed, 50)
+				if fetchErr != nil {
+					logger.Printf("[TELA] Batch INDEX fetch for cached SCIDs: %v\n", fetchErr)
+				}
+				for scid, index := range fetched {
+					indexCacheStore[scid] = index
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
+				}
+				for scid := range invalid {
+					setCandidateCache(scid, telaCandidateInvalidIndex)
+					setNegativeSCID(scid, true)
+				}
+				atomic.AddInt64(&indexInfoCalls, int64(len(cacheMissed)))
+			}
+
+			cachedAdded := int64(0)
+			var cachedMu sync.Mutex
+			cachedWorkers := workerPoolSize / 2
+			if cachedWorkers < 8 {
+				cachedWorkers = 8
+			}
+			if cachedWorkers > 24 {
+				cachedWorkers = 24
+			}
+			cachedSlots := make(chan struct{}, cachedWorkers)
+			var cachedWg sync.WaitGroup
+
+			for i, sc := range telaSCIDs {
+				if !walletapi.Connected {
+					break
+				}
+
+				cachedSlots <- struct{}{}
+				cachedWg.Add(1)
+				go func(idx int, scid string) {
+					defer func() {
+						<-cachedSlots
+						cachedWg.Done()
+					}()
+
+					var index tela.INDEX
+					if cached, ok := indexCacheStore[scid]; ok {
+						index = cached
+					} else {
+						// Not in cache and batch fetch didn't find it — skip
+						return
+					}
+
+					if len(index.DOCs) < 1 {
+						setCandidateCache(scid, telaCandidateNoDocs)
+						setNegativeSCID(scid, true)
+						return
+					}
+
+					if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
+						if atomic.AddInt64(&cachedAdded, 1)%8 == 0 {
+							results.Text = fmt.Sprintf("  Adding... (%d / %d)", idx+1, len(telaSCIDs))
+							results.Color = colors.Yellow
+							fyne.Do(func() {
+								results.Refresh()
+							})
+						}
+						gnomon.AddSCIDToIndex(scid)
+					}
+
+					if restrictiveMode {
+						setCandidateCache(scid, telaCandidateValidIndex)
+						return
+					}
+
+					_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
+					if err != nil {
+						setCandidateCache(scid, telaCandidateExcludedByURL)
+						return
+					}
+
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
+
+					cachedMu.Lock()
+					telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+					cachedMu.Unlock()
+				}(i, sc)
+			}
+
+			cachedWg.Wait()
+			storedSCIDsCount = len(telaSCIDs)
+
+			if !allowTelaIndexMutations {
+				cacheHitMode = "cached_syncing"
+				fullScanReason = ""
+				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searchData.Set(searching)
+
+				results.Text = fmt.Sprintf("  TELA cache loaded while Gnomon syncs: %d", len(telaSearch))
+				results.Color = colors.Yellow
+				fyne.Do(func() {
+					entrySearch.Enable()
+					entryAddSCID.Enable()
+				})
+
+				if last, err := GetEncryptedValue("TELA Search", []byte("Last Scan")); err == nil {
+					lastScan = string(last)
+					labelLastScan.Text = fmt.Sprintf("  %s", lastScan)
+					labelLastScan.Color = colors.Yellow
+				}
+
+				fyne.Do(func() {
+					results.Refresh()
+					labelLastScan.Refresh()
+				})
+
+				logger.Printf("[TELA] Deferring full scan until Gnomon catches up; showing cached results only\n")
+				return
+			}
+
+			if !rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) && heightDelta == 0 {
+				cacheHitMode = "cached_only"
+				fullScanReason = ""
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
 				searchData.Set(searching)
 
@@ -15187,39 +18132,320 @@ func layoutTELA() fyne.CanvasObject {
 					errorText.Refresh()
 				})
 
+				logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), versionHits, indexInfoCalls, retryCount, len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+
 				return
+			}
+			if heightDelta > 0 {
+				fullScanReason = "height_delta"
 			}
 		}
 
 		var wg sync.WaitGroup
 
+		hasCachedTelaData := hasTelaCache()
 		var all = map[string]string{}
 		if restrictiveMode {
 			for _, sc := range telaSCIDs {
 				all[sc] = ""
 			}
 		} else {
+			// Guard against uninitialized backends
+			if gnomon.Index == nil ||
+				(gnomon.Index.DBType == "gravdb" && gnomon.Index.GravDBBackend == nil) ||
+				(gnomon.Index.DBType == "boltdb" && gnomon.Index.BBSBackend == nil) {
+				results.Text = "  Gnomon is initializing..."
+				results.Color = colors.Yellow
+				uiDo(func() {
+					results.Refresh()
+				})
+				go func() {
+					time.Sleep(2 * time.Second)
+					if strings.Contains(session.Domain, ".tela") {
+						uiDo(func() {
+							getSearchResults()
+						})
+					}
+				}()
+				return
+			}
 			all = gnomon.GetAllOwnersAndSCIDs()
 		}
 
-		allLen := len(all)
-		scanned := 0
-		workers := make(chan struct{}, runtime.NumCPU())
-
-		for sc := range all {
-			workers <- struct{}{}
-			if gnomon.Index == nil || !strings.Contains(session.Domain, ".tela") {
-				break
-			}
-
-			scanned++
-			results.Text = fmt.Sprintf("  Scanning... (%d / %d)", scanned, allLen)
+		if !restrictiveMode && !hasCachedTelaData && len(all) <= 1 {
+			results.Text = "  Gnomon is preparing SCIDs..."
 			results.Color = colors.Yellow
-
-			fyne.Do(func() {
+			uiDo(func() {
 				results.Refresh()
 			})
 
+			go func() {
+				time.Sleep(2 * time.Second)
+				if strings.Contains(session.Domain, ".tela") {
+					go getSearchResults()
+				}
+			}()
+			return
+		}
+
+		allSCIDs := make([]string, 0, len(all))
+		for sc := range all {
+			allSCIDs = append(allSCIDs, sc)
+		}
+		sort.Strings(allSCIDs)
+
+		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
+			candidateSet := map[string]bool{}
+			candidateCacheMu.RLock()
+			validCandidateSCIDs := candidateCache.validSCIDs()
+			candidateCacheMu.RUnlock()
+			for _, sc := range validCandidateSCIDs {
+				candidateSet[sc] = true
+			}
+			deltaSCIDs := make([]string, 0)
+			for _, sc := range allSCIDs {
+				heights := gnomon.GetSCIDInteractionHeight(sc)
+				if len(heights) == 0 {
+					deltaSCIDs = append(deltaSCIDs, sc)
+					candidateSet[sc] = true
+					continue
+				}
+				for _, h := range heights {
+					if h > storedIndexedHeight {
+						deltaSCIDs = append(deltaSCIDs, sc)
+						candidateSet[sc] = true
+						break
+					}
+				}
+			}
+			if len(candidateSet) > 0 {
+				allSCIDs = make([]string, 0, len(candidateSet))
+				for sc := range candidateSet {
+					allSCIDs = append(allSCIDs, sc)
+				}
+				sort.Strings(allSCIDs)
+			} else if len(deltaSCIDs) > 0 {
+				allSCIDs = deltaSCIDs
+			}
+		}
+
+		prefilterAllowed := map[string]bool{}
+		if !restrictiveMode {
+			candidates := make([]string, 0, len(allSCIDs))
+			for _, sc := range allSCIDs {
+				if !rescanRecheck && isNegativeSCID(sc) {
+					prefilterAllowed[sc] = false
+					continue
+				}
+				candidates = append(candidates, sc)
+			}
+
+			results.Text = fmt.Sprintf("  Prefiltering... (%d candidates)", len(candidates))
+			results.Color = colors.Yellow
+			uiDo(func() {
+				results.Refresh()
+			})
+
+			prefilterStart := time.Now()
+			poolSize := 3
+			pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
+			if poolErr != nil {
+				logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
+				// Fallback: use Gnomon's single connection
+				if gnomon.Index != nil && gnomon.Index.RPC != nil && gnomon.Index.RPC.RPC != nil {
+					pool = []*jrpc2.Client{gnomon.Index.RPC.RPC}
+					poolCleanup = func() {} // Don't close Gnomon's connection
+				}
+			}
+
+			var passed map[string]bool
+			var batchStats batchPrefilterStats
+			var batchErr error
+			if len(pool) > 0 {
+				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, 200, 3, pool, func(completed, total int) {
+					results.Text = fmt.Sprintf("  Prefiltering... (%d / %d)", completed, total)
+					results.Color = colors.Yellow
+					uiDo(func() {
+						results.Refresh()
+					})
+				})
+				logger.Printf("[TELA] Prefilter returned, cleaning up %d pool connections...\n", len(pool))
+				poolCleanup()
+				logger.Printf("[TELA] Pool cleanup done\n")
+			} else {
+				batchErr = fmt.Errorf("no RPC connections available")
+			}
+			phasePrefilterMs = time.Since(prefilterStart).Milliseconds()
+			logger.Printf("[TELA] Prefilter phase took %dms, passed=%d err=%v\n", phasePrefilterMs, len(passed), batchErr)
+			if batchErr != nil {
+				logger.Printf("[TELA] Batch prefilter error: %v\n", batchErr)
+				for _, sc := range candidates {
+					prefilterAllowed[sc] = true
+				}
+			} else {
+				atomic.AddInt64(&retryCount, batchStats.Retries)
+				atomic.AddInt64(&prefilterPassed, batchStats.VersionHits)
+				atomic.AddInt64(&versionHits, batchStats.VersionHits)
+				atomic.AddInt64(&prefilterDropped, batchStats.Dropped)
+
+				// Only mark SCIDs as negative if prefilter had meaningful results.
+				// If prefilter passed 0 candidates, it might be due to network issues or
+				// daemon problems, not because all SCIDs are invalid TELA apps.
+				// Marking all as negative would prevent valid TELA apps from being found later.
+				prefilterSuccessRate := float64(len(passed)) / float64(len(candidates)+1)
+				shouldMarkNegative := len(passed) > 0 && prefilterSuccessRate > 0.01 // At least 1% passed
+
+				if !shouldMarkNegative && len(candidates) > 0 {
+					logger.Printf("[TELA] Prefilter passed 0/%d candidates - skipping negative cache update to allow retry\n", len(candidates))
+				}
+
+				for _, sc := range candidates {
+					prefilterAllowed[sc] = passed[sc]
+					if shouldMarkNegative && !passed[sc] {
+						setCandidateCache(sc, telaCandidateNotTela)
+						setNegativeSCID(sc, true)
+					} else {
+						setNegativeSCID(sc, false)
+					}
+				}
+			}
+		}
+
+		// Batch-fetch INDEX data for prefilter-passed SCIDs not yet in indexCacheStore.
+		// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket.
+		indexFetchFailed := make(map[string]bool) // Track SCIDs whose INDEX fetch failed due to network errors
+		if !restrictiveMode {
+			var indexNeeded []string
+			for scid, allowed := range prefilterAllowed {
+				if allowed {
+					if _, ok := indexCacheStore[scid]; !ok {
+						indexNeeded = append(indexNeeded, scid)
+					}
+				}
+			}
+			if len(indexNeeded) > 0 {
+				logger.Printf("[TELA] Batch INDEX fetch starting for %d SCIDs...\n", len(indexNeeded))
+				results.Text = fmt.Sprintf("  Fetching INDEX data... (%d SCIDs)", len(indexNeeded))
+				results.Color = colors.Yellow
+				uiDo(func() {
+					results.Refresh()
+				})
+
+				fetched, invalid, fetchErr := batchFetchINDEXes(scanCtx, indexNeeded, 50)
+				logger.Printf("[TELA] Batch INDEX fetch done: fetched=%d err=%v\n", len(fetched), fetchErr)
+				if fetchErr != nil {
+					logger.Printf("[TELA] Batch INDEX fetch for scan: %v\n", fetchErr)
+					// Mark SCIDs as failed due to network error - these should NOT be marked as negative
+					// They will be retried on the next scan
+					for _, scid := range indexNeeded {
+						if _, ok := fetched[scid]; !ok {
+							indexFetchFailed[scid] = true
+						}
+					}
+				}
+				for scid, index := range fetched {
+					indexCacheStore[scid] = index
+					setCandidateCache(scid, telaCandidateValidIndex)
+					setNegativeSCID(scid, false)
+				}
+				for scid := range invalid {
+					setCandidateCache(scid, telaCandidateInvalidIndex)
+					setNegativeSCID(scid, true)
+				}
+				atomic.AddInt64(&indexInfoCalls, int64(len(indexNeeded)))
+			}
+		}
+
+		allLen := len(allSCIDs)
+		allCandidates = allLen
+		resumeTarget := resumePosition
+		scanned := int64(resumePosition) // Progress counter, starts from resume position
+		scannedCandidates = scanned
+		workers := make(chan struct{}, workerPoolSize)
+		interrupted := false
+		var scanMu sync.Mutex
+		lastUIRefresh := time.Now().Add(-uiRefreshInterval)
+		lastProgressSave := time.Now()
+		seenSCIDs := make(map[string]bool, len(telaSCIDs))
+		for _, scid := range telaSCIDs {
+			seenSCIDs[scid] = true
+		}
+
+		scanPhaseStart := time.Now()
+
+		for i := resumeTarget; i < allLen; i++ {
+			sc := allSCIDs[i]
+
+			// Check for interrupted conditions
+			if gnomon.Index == nil || !strings.Contains(session.Domain, ".tela") {
+				if gnomon.Index == nil {
+					interruptReason = "gnomon_nil_during_scan"
+				} else {
+					interruptReason = "navigated_away"
+				}
+				interrupted = true
+				break
+			}
+
+			// Check connection during scan
+			if !walletapi.Connected {
+				interruptReason = "connection_lost_during_scan"
+				results.Text = "  Connection lost during scan"
+				results.Color = colors.Red
+				uiDo(func() {
+					results.Refresh()
+				})
+				interrupted = true
+				break
+			}
+
+			scanMu.Lock()
+			alreadySeen := seenSCIDs[sc]
+			scanMu.Unlock()
+			if !restrictiveMode && !rescanRecheck && isNegativeSCID(sc) {
+				atomic.AddInt64(&negCacheSkips, 1)
+			}
+			if !restrictiveMode && !rescanRecheck && (isNegativeSCID(sc) || alreadySeen || !prefilterAllowed[sc]) {
+				atomic.AddInt64(&preDispatchSkips, 1)
+				scanned = atomic.AddInt64(&scannedCandidates, 1)
+				continue
+			}
+
+			scanned = atomic.AddInt64(&scannedCandidates, 1)
+			now := time.Now()
+			if now.Sub(lastUIRefresh) >= uiRefreshInterval || scanned >= int64(allLen) {
+				lastUIRefresh = now
+				results.Text = fmt.Sprintf("  Scanning... (%d / %d)", scanned, allLen)
+				results.Color = colors.Yellow
+				uiDo(func() {
+					results.Refresh()
+				})
+				atomic.AddInt64(&uiRefreshCount, 1)
+			}
+
+			if now.Sub(lastProgressSave) >= progressCheckpointInterval {
+				saveProgress(int(scanned), allLen, sc, "scanning")
+				lastProgressSave = now
+
+				scanMu.Lock()
+				scidsSnapshot := make([]string, len(telaSCIDs))
+				copy(scidsSnapshot, telaSCIDs)
+				scanMu.Unlock()
+
+				if storeSCIDs, err := json.Marshal(scidsSnapshot); err == nil {
+					if err := StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs); err != nil {
+						logger.Printf("[TELA] Failed storing checkpoint SCIDs: %v\n", err)
+					} else {
+						logger.Printf("[TELA] Checkpoint saved %d SCIDs\n", len(scidsSnapshot))
+					}
+				}
+
+				if err := saveTelaIndexCache(indexCacheStore); err != nil {
+					logger.Printf("[TELA] Failed storing checkpoint INDEX cache: %v\n", err)
+				}
+			}
+
+			workers <- struct{}{}
 			wg.Add(1)
 			go func(scid string) {
 				defer func() {
@@ -15227,49 +18453,121 @@ func layoutTELA() fyne.CanvasObject {
 					wg.Done()
 				}()
 
-				// Restrictive mode rechecks everytime, if rescan recheck is disabled SCIDs that have already been scanned won't be rechecked for faster list population
-				if !restrictiveMode && !rescanRecheck && (sAll[scid] || scidExist(telaSCIDs, scid)) {
+				// Check if Gnomon was stopped
+				if gnomon.Index == nil {
 					return
 				}
 
-				vs, _, err := gnomon.Index.GetSCIDValuesByKey([]*structures.SCIDVariable{}, scid, "telaVersion", gnomon.Index.ChainHeight)
-				if err != nil {
-					return
-				}
+				if restrictiveMode || prefilterAllowed[scid] {
+					// Skip SCIDs whose INDEX fetch failed due to network errors - don't mark as negative
+					// They will be retried on the next scan
+					if indexFetchFailed[scid] {
+						return
+					}
 
-				if vs != nil {
-					if index, err := tela.GetINDEXInfo(scid, session.Daemon); err == nil {
-						if len(index.DOCs) > 0 {
-							if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
-								return
-							}
+					var index tela.INDEX
+					if cached, ok := indexCacheStore[scid]; ok {
+						index = cached
+					} else {
+						// INDEX not in cache - this SCID passed prefilter but wasn't fetched
+						// This could happen if batch fetch was skipped or failed silently
+						// Don't mark as negative, just skip for now
+						return
+					}
 
-							if gnomon.GetAllSCIDVariableDetails(scid) == nil {
-								gnomon.AddSCIDToIndex(scid)
-							}
+					if len(index.DOCs) > 0 {
+						if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
+							return
+						}
 
-							// In restrictive mode, the list is initialzed from telaSCIDs
-							if !restrictiveMode {
+						if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
+							gnomon.AddSCIDToIndex(scid)
+						}
+
+						// In restrictive mode, the list is initialzed from telaSCIDs
+						scanMu.Lock()
+						if !restrictiveMode {
+							if !seenSCIDs[scid] {
+								seenSCIDs[scid] = true
 								telaSCIDs = append(telaSCIDs, scid)
 							}
-
-							_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
-							if err != nil {
-								return
-							}
-
-							telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
 						}
+						scanMu.Unlock()
+
+						_, ratings, err := getLikesRatio(scid, index.DURL, searchExclusions, minLikes)
+						if err != nil {
+							setCandidateCache(scid, telaCandidateExcludedByURL)
+							return
+						}
+
+						setCandidateCache(scid, telaCandidateValidIndex)
+						setNegativeSCID(scid, false)
+
+						scanMu.Lock()
+						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
+						scanMu.Unlock()
+					} else {
+						setCandidateCache(scid, telaCandidateNoDocs)
+						setNegativeSCID(scid, true)
 					}
 				}
 			}(sc)
 		}
 
 		if !strings.Contains(session.Domain, ".tela") {
-			return
+			interrupted = true
 		}
 
 		wg.Wait()
+		phaseScanMs = time.Since(scanPhaseStart).Milliseconds()
+
+		if interrupted {
+			scanMu.Lock()
+			scidsSnapshot := make([]string, len(telaSCIDs))
+			copy(scidsSnapshot, telaSCIDs)
+			scanMu.Unlock()
+
+			if storeSCIDs, err := json.Marshal(scidsSnapshot); err == nil {
+				if err := StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs); err != nil {
+					logger.Printf("[TELA] Failed storing interrupted SCIDs: %v\n", err)
+				} else {
+					logger.Printf("[TELA] Saved %d SCIDs before interruption\n", len(scidsSnapshot))
+				}
+			}
+
+			if err := saveTelaIndexCache(indexCacheStore); err != nil {
+				logger.Printf("[TELA] Failed storing interrupted INDEX cache: %v\n", err)
+			}
+
+			candidateCacheMu.RLock()
+			candidateCacheSnapshot := make(telaCandidateCache, len(candidateCache))
+			for scid, meta := range candidateCache {
+				candidateCacheSnapshot[scid] = meta
+			}
+			candidateCacheMu.RUnlock()
+			if err := saveTelaCandidateCache(candidateCacheSnapshot); err != nil {
+				logger.Printf("[TELA] Failed storing interrupted candidate cache: %v\n", err)
+			}
+
+			if !restrictiveMode {
+				if err := saveStringSetToEncryptedStorage("TELA Search", "NegativeCache", sAll); err != nil {
+					logger.Printf("[TELA] Failed storing interrupted negative cache: %v\n", err)
+				}
+			}
+
+			saveProgress(int(atomic.LoadInt64(&scannedCandidates)), allLen, "", "interrupted")
+			results.Text = "  Scan interrupted"
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+				entrySearch.Enable()
+				entryAddSCID.Enable()
+			})
+			logger.Printf("[TELA] Search metrics: outcome=interrupted reason=%s elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", interruptReason, time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+			return
+		}
+
+		finalizeStart := time.Now()
 
 		searching = telaSearchDisplayAll(telaSearch, sortBy)
 		searchData.Set(searching)
@@ -15283,19 +18581,53 @@ func layoutTELA() fyne.CanvasObject {
 
 		timeNow := time.Now().Format(time.RFC822)
 		StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow))
-		if storeSCIDs, err := json.Marshal(telaSCIDs); err == nil {
-			StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs)
+		if gnomon.Index != nil {
+			if err := StoreEncryptedValue("TELA Search", []byte("Last Indexed Height"), []byte(strconv.FormatInt(gnomon.Index.LastIndexedHeight, 10))); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing Last Indexed Height: %v\n", err)
+			}
+		}
+		if allLen > 0 && atomic.LoadInt64(&scannedCandidates) >= int64(allLen) {
+			saveProgress(allLen, allLen, "", "completed")
+		} else {
+			saveProgress(int(atomic.LoadInt64(&scannedCandidates)), allLen, "", "interrupted")
+			logger.Printf("[Gnomon] Scan ended before completion: %d/%d\n", atomic.LoadInt64(&scannedCandidates), allLen)
 		}
 
-		if !restrictiveMode && !rescanRecheck {
-			for sc := range all {
-				sAll[sc] = true
+		if storeSCIDs, err := json.Marshal(telaSCIDs); err == nil {
+			if err := StoreEncryptedValue("TELA Search", []byte("SCIDs"), storeSCIDs); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing SCIDs cache: count=%d bytes=%d err=%v\n", len(telaSCIDs), len(storeSCIDs), err)
 			}
+		} else {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed marshaling SCIDs cache: count=%d err=%v\n", len(telaSCIDs), err)
+		}
 
-			if sAllSCIDs, err := json.Marshal(sAll); err == nil {
-				StoreEncryptedValue("TELA Search", []byte("Searched SCIDs"), sAllSCIDs)
+		if !restrictiveMode {
+			if err := saveStringSetToEncryptedStorage("TELA Search", "NegativeCache", sAll); err != nil {
+				cacheIntegrity = "write_failed"
+				logger.Printf("[TELA] Failed storing negative cache: entries=%d err=%v\n", len(sAll), err)
 			}
-		} else if restrictiveMode && len(searching) < 1 {
+		}
+
+		if err := saveTelaIndexCache(indexCacheStore); err != nil {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed storing INDEX cache: entries=%d err=%v\n", len(indexCacheStore), err)
+		}
+
+		candidateCacheMu.RLock()
+		candidateCacheSnapshot := make(telaCandidateCache, len(candidateCache))
+		for scid, meta := range candidateCache {
+			candidateCacheSnapshot[scid] = meta
+		}
+		candidateCacheMu.RUnlock()
+		if err := saveTelaCandidateCache(candidateCacheSnapshot); err != nil {
+			cacheIntegrity = "write_failed"
+			logger.Printf("[TELA] Failed storing candidate cache: entries=%d err=%v\n", len(candidateCacheSnapshot), err)
+		}
+
+		if restrictiveMode && len(searching) < 1 {
 			errorText.Text = "TELA is in restrictive mode"
 			errorText.Color = colors.Yellow
 			errorText.Refresh()
@@ -15310,14 +18642,34 @@ func layoutTELA() fyne.CanvasObject {
 			entrySearch.Enable()
 			entryAddSCID.Enable()
 		})
+		phaseFinalizeMs = time.Since(finalizeStart).Milliseconds()
+
+		logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
 	}
 
 	entrySearch.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
+		normalizedInput := normalizeSearch(s)
 
 		if s == "" {
-			go getSearchResults()
+			if wSelect.Selected == "Favorites" {
+				refreshFavoritesList()
+				favoritesList.Refresh()
+				if engram.Disk == nil {
+					results.Text = "  No wallet connected."
+					results.Color = colors.Gray
+				} else if len(favorites) == 0 {
+					results.Text = "  No favorites yet."
+					results.Color = colors.Gray
+				} else {
+					results.Text = fmt.Sprintf("  Favorites:  %d", len(favorites))
+					results.Color = colors.Green
+				}
+				results.Refresh()
+			} else {
+				go getSearchResults()
+			}
 			if !a.Driver().Device().IsMobile() {
 				entrySearch.HideCompletion()
 			}
@@ -15332,6 +18684,28 @@ func layoutTELA() fyne.CanvasObject {
 			} else {
 				entrySearch.HideCompletion()
 			}
+		}
+
+		if wSelect.Selected == "Favorites" {
+			var queryResult []string
+			for _, data := range favorites {
+				for _, split := range strings.Split(data, ";;;") {
+					if strings.Contains(normalizeSearch(split), normalizedInput) {
+						queryResult = append(queryResult, data)
+						break
+					}
+				}
+			}
+
+			sort.Strings(queryResult)
+			favoritesData.Set(queryResult)
+			favoritesList.Refresh()
+			results.Text = fmt.Sprintf("  Favorites:  %d", len(queryResult))
+			results.Color = colors.Green
+			results.Refresh()
+			entrySearch.Enable()
+
+			return
 		}
 
 		var queryResult []INDEXwithRatings
@@ -15366,7 +18740,7 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					for _, split := range data {
-						if strings.Contains(split, s) {
+						if strings.Contains(normalizeSearch(split), normalizedInput) {
 							queryResult = append(queryResult, ind)
 							break
 						}
@@ -15386,7 +18760,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		switch query[0] {
+		switch normalizeSearch(query[0]) {
 		case "name":
 			for _, ind := range telaSearch {
 				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
@@ -15394,7 +18768,7 @@ func layoutTELA() fyne.CanvasObject {
 					continue
 				}
 
-				if strings.Contains(ind.NameHdr, query[1]) {
+				if strings.Contains(normalizeSearch(ind.NameHdr), normalizeSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
@@ -15405,14 +18779,17 @@ func layoutTELA() fyne.CanvasObject {
 					continue
 				}
 
-				if strings.Contains(ind.DURL, query[1]) {
+				if strings.Contains(normalizeSearch(ind.DURL), normalizeSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
 		case "my":
-			for _, ind := range telaSearch {
-				if ind.Author == engram.Disk.GetAddress().String() {
-					queryResult = append(queryResult, ind)
+			if engram.Disk != nil {
+				walletAddr := engram.Disk.GetAddress().String()
+				for _, ind := range telaSearch {
+					if ind.Author == walletAddr {
+						queryResult = append(queryResult, ind)
+					}
 				}
 			}
 		case "author":
@@ -15490,6 +18867,9 @@ func layoutTELA() fyne.CanvasObject {
 				errorText.Refresh()
 				return
 			}
+			_ = DeleteKey("TELA Search", []byte("NegativeCache"))
+			_ = DeleteKey("TELA Search", []byte("IndexCache"))
+			_ = DeleteKey("TELA Search", []byte("CandidateCache"))
 
 			telaSCIDs = bootstrapIndex.DOCs
 			errorText.Text = "bootstrap initialized"
@@ -15502,6 +18882,11 @@ func layoutTELA() fyne.CanvasObject {
 
 	// Refresh the active server list
 	refreshServerList := func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[Engram] refreshServerList panic recovered: %v\n", r)
+			}
+		}()
 		time.Sleep(time.Second * 2)
 		var serversRunning []string
 		for _, serv := range tela.GetServerInfo() {
@@ -15509,13 +18894,64 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		sort.Strings(serversRunning)
-		servingData.Set(serversRunning)
-		servingList.Refresh()
-		if !isSearching && wSelect.Selected == "Active" {
-			results.Text = fmt.Sprintf("  Active Servers:  %d", len(serversRunning))
-			results.Color = colors.Green
-			results.Refresh()
+		fyne.Do(func() {
+			servingData.Set(serversRunning)
+			servingList.Refresh()
+			if refreshAppsList != nil {
+				refreshAppsList()
+			}
+			if !isSearching && wSelect.Selected == "Search" && len(serversRunning) > 0 {
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			}
+		})
+	}
+
+	refreshFavoritesList = func() {
+		if engram.Disk != nil {
+			walletAddress := engram.Disk.GetAddress().String()
+			favs, err := GetTELAFavorites(walletAddress)
+			if err != nil || len(favs) == 0 {
+				favorites = []string{}
+				fyne.Do(func() {
+					favoritesData.Set(favorites)
+				})
+			} else {
+				favorites = []string{}
+				for scid, favData := range favs {
+					favorites = append(favorites, favData.Name+";;;"+scid)
+				}
+				sort.Strings(favorites)
+				fyne.Do(func() {
+					favoritesData.Set(favorites)
+				})
+			}
 		}
+	}
+
+	refreshAppsList = func() {
+		if len(telaSearch) == 0 {
+			return
+		}
+
+		updated := telaSearchDisplayAll(telaSearch, sortBy)
+		fyne.Do(func() {
+			searching = updated
+			searchData.Set(searching)
+			searchList.Refresh()
+			if !isSearching && wSelect.Selected == "Search" {
+				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			}
+		})
+	}
+
+	refreshTELA := func() {
+		go refreshServerList()
+		refreshFavoritesList()
+		refreshAppsList()
 	}
 
 	btnShutdown.OnTapped = func() {
@@ -15524,7 +18960,7 @@ func layoutTELA() fyne.CanvasObject {
 			verificationOverlay(
 				false,
 				"TELA BROWSER",
-				"Rescan blockchain?",
+				"Rescan blockchain? This will clear cached results and rescan all TELA apps.",
 				"Confirm",
 				func(b bool) {
 					if b {
@@ -15532,12 +18968,11 @@ func layoutTELA() fyne.CanvasObject {
 							return
 						}
 
+						clearAllTELACache()
 						telaSearch = []INDEXwithRatings{}
 						telaSCIDs = []string{}
-						if rescanRecheck {
-							DeleteKey("TELA Search", []byte("SCIDs"))
-							DeleteKey("TELA Search", []byte("Searched SCIDs"))
-						}
+						sAll = map[string]bool{}
+						forceFreshScan = true
 						errorText.Text = ""
 						errorText.Refresh()
 						go getSearchResults()
@@ -15564,130 +18999,6 @@ func layoutTELA() fyne.CanvasObject {
 		go refreshServerList()
 	}
 
-	entrySpacer := canvas.NewRectangle(color.Transparent)
-	entrySpacer.SetMinSize(fyne.NewSize(140, 0))
-
-	entryPort := widget.NewEntry()
-	entryPort.SetText(strconv.Itoa(tela.PortStart()))
-	entryPort.Validator = func(s string) (err error) {
-		i, err := strconv.Atoi(s)
-		if err != nil {
-			return fmt.Errorf("invalid port")
-		}
-
-		return tela.SetPortStart(i)
-	}
-
-	entryMinLikes := widget.NewEntry()
-	entryMinLikes.SetPlaceHolder("Likes %")
-	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
-		if f, err := strconv.ParseFloat(string(storedMinLikes), 64); err == nil {
-			minLikes = f
-			entryMinLikes.SetText(string(storedMinLikes))
-		}
-	} else {
-		minLikes = 30
-		entryMinLikes.SetText("30")
-	}
-
-	entryMinLikes.Validator = func(s string) (err error) {
-		i, err := strconv.Atoi(s)
-		if err != nil {
-			return fmt.Errorf("invalid percent")
-		}
-
-		if i < 0 || i > 100 {
-			err = fmt.Errorf("must be 0 to 100")
-			return
-		}
-
-		// Clear search results but keep scids
-		telaSearch = []INDEXwithRatings{}
-
-		minLikes = float64(i)
-		StoreEncryptedValue("TELA Settings", []byte("Min Likes"), []byte(s))
-
-		return
-	}
-
-	entryExclusions := widget.NewEntry()
-	entryExclusions.SetPlaceHolder("dURL Exclusions (exclude1,exclude2)")
-	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
-		searchExclusions = string(storedExclusions)
-		entryExclusions.SetText(searchExclusions)
-	}
-
-	entryExclusions.OnChanged = func(s string) {
-		if s != "" {
-			StoreEncryptedValue("TELA Settings", []byte("Exclusions"), []byte(s))
-		} else {
-			DeleteKey("TELA Settings", []byte("Exclusions"))
-		}
-
-		// Clear search results but keep scids
-		telaSearch = []INDEXwithRatings{}
-
-		searchExclusions = s
-	}
-
-	wUpdates := widget.NewSelect([]string{xswd.Deny.String(), xswd.Allow.String()}, nil)
-	if tela.UpdatesAllowed() {
-		wUpdates.SetSelectedIndex(1)
-	} else {
-		wUpdates.SetSelectedIndex(0)
-	}
-
-	wUpdates.OnChanged = func(s string) {
-		if s == xswd.Allow.String() {
-			tela.AllowUpdates(true)
-		} else {
-			tela.AllowUpdates(false)
-		}
-	}
-
-	if storedRescanRecheck, err := GetEncryptedValue("TELA Settings", []byte("Rescan Recheck")); err == nil {
-		if string(storedRescanRecheck) == "Yes" {
-			rescanRecheck = true
-		} else {
-			rescanRecheck = false
-		}
-	}
-
-	wRescanRecheck := widget.NewSelect([]string{"No", "Yes"}, nil)
-	if rescanRecheck {
-		wRescanRecheck.SetSelectedIndex(1)
-	} else {
-		wRescanRecheck.SetSelectedIndex(0)
-	}
-
-	wRescanRecheck.OnChanged = func(s string) {
-		if s == "Yes" {
-			rescanRecheck = true
-		} else {
-			rescanRecheck = false
-		}
-
-		StoreEncryptedValue("TELA Settings", []byte("Rescan Recheck"), []byte(s))
-	}
-
-	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
-	wSortBy := widget.NewSelect(sortByOptions, nil)
-	if storedSortBy, err := GetEncryptedValue("TELA Settings", []byte("Sort By")); err == nil {
-		sortBy = string(storedSortBy)
-	} else {
-		sortBy = sortByOptions[0]
-	}
-
-	wSortBy.SetSelected(sortBy)
-	wSortBy.OnChanged = func(s string) {
-		if s != "" {
-			// Clear search results but keep scids
-			telaSearch = []INDEXwithRatings{}
-			sortBy = s
-			StoreEncryptedValue("TELA Settings", []byte("Sort By"), []byte(s))
-		}
-	}
-
 	historyBox := container.NewStack(
 		rectList,
 		historyList,
@@ -15703,228 +19014,99 @@ func layoutTELA() fyne.CanvasObject {
 		servingList,
 	)
 
-	linkSpacer := canvas.NewRectangle(color.Transparent)
-	linkSpacer.SetMinSize(fyne.NewSize(0, 40))
-
-	wMode := widget.NewCheck("Restrictive Mode", nil)
-	wMode.SetChecked(true)
-	restrictiveMode = true
-	if storedTelaMode, err := GetEncryptedValue("TELA Settings", []byte("Mode")); err == nil {
-		switch string(storedTelaMode) {
-		case "Unrestrictive":
-			wMode.SetChecked(false)
-			restrictiveMode = false
-		default:
-			// in restrictive mode
-		}
-	}
-
-	linkResetDefaults := widget.NewHyperlinkWithStyle("Reset Default Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkResetDefaults.OnTapped = func() {
-		verificationOverlay(
-			false,
-			"TELA BROWSER",
-			"Reset to default settings?",
-			"Confirm",
-			func(b bool) {
-				if b {
-					wMode.SetChecked(true)
-					wUpdates.SetSelectedIndex(0)
-					wRescanRecheck.SetSelectedIndex(0)
-					wSortBy.SetSelectedIndex(0)
-					entryPort.SetText(strconv.Itoa(tela.DEFAULT_PORT_START))
-					entryMinLikes.SetText("30")
-					entryExclusions.SetText("")
-				}
-			},
-		)
-	}
-
-	linkSearchClear := widget.NewHyperlinkWithStyle("Delete Search Data", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkSearchClear.OnTapped = func() {
-		verificationOverlay(
-			false,
-			"TELA BROWSER",
-			"Delete stored search data?",
-			"Confirm",
-			func(b bool) {
-				if b {
-					telaSearch = []INDEXwithRatings{}
-					telaSCIDs = []string{}
-					DeleteKey("TELA Search", []byte("SCIDs"))
-					DeleteKey("TELA Search", []byte("Searched SCIDs"))
-					DeleteKey("TELA Search", []byte("Last Scan"))
-					linkSearchClear.Hide()
-				}
-			},
-		)
-	}
-
-	wMode.OnChanged = func(b bool) {
-		if b {
-			restrictiveMode = true
-			DeleteKey("TELA Settings", []byte("Mode"))
-			return
-		}
-
-		go func() {
-			unrestrictedPermission, err := AskPermissionForRequestE("TELA Unresctricted Mode", "TELA R OFF")
-			if err != nil {
-				logger.Errorf("[Engram] TELA unrestricted mode: %s\n", err)
-				errorText.Text = "error requesting permission"
-				errorText.Color = colors.Red
-
-				fyne.Do(func() {
-					errorText.Refresh()
-				})
-
-				return
-			}
-
-			if unrestrictedPermission != xswd.Allow {
-				wMode.SetChecked(true)
-				return
-			}
-
-			StoreEncryptedValue("TELA Settings", []byte("Mode"), []byte("Unrestrictive"))
-			restrictiveMode = false
-			telaSearch = []INDEXwithRatings{}
-			telaSCIDs = []string{}
-			DeleteKey("TELA Search", []byte("SCIDs"))
-			DeleteKey("TELA Search", []byte("Searched SCIDs"))
-			DeleteKey("TELA Search", []byte("Last Scan"))
-		}()
-	}
-
-	settingsBox := container.NewVScroll(
-		container.NewStack(
-			rectList,
-			container.NewBorder(
-				nil,
-				nil,
-				nil,
-				layout.NewSpacer(),
-				container.NewVBox(
-					container.NewBorder(
-						nil,
-						nil,
-						nil,
-						nil,
-						container.NewCenter(wMode),
-					),
-					rectSpacer,
-					container.NewBorder(
-						nil,
-						nil,
-						widget.NewRichTextFromMarkdown("### Allow Content Updates"),
-						wUpdates,
-					),
-					container.NewBorder(
-						nil,
-						nil,
-						widget.NewRichTextFromMarkdown("### Rescan Recheck"),
-						wRescanRecheck,
-					),
-					container.NewBorder(
-						nil,
-						nil,
-						widget.NewRichTextFromMarkdown("### Sort By"),
-						wSortBy,
-					),
-					container.NewBorder(
-						nil,
-						nil,
-						widget.NewRichTextFromMarkdown("### Start Port Range"),
-						container.NewStack(
-							entrySpacer,
-							entryPort,
-						),
-					),
-					container.NewBorder(
-						nil,
-						nil,
-						widget.NewRichTextFromMarkdown("### Search Min Likes %"),
-						container.NewStack(
-							entrySpacer,
-							entryMinLikes,
-						),
-					),
-					container.NewBorder(
-						widget.NewRichTextFromMarkdown("### Search Exclusions"),
-						nil,
-						nil,
-						nil,
-						entryExclusions,
-					),
-					rectSpacer,
-					rectSpacer,
-					container.NewStack(
-						linkSpacer,
-						linkResetDefaults,
-					),
-					rectSpacer,
-					container.NewStack(
-						linkSpacer,
-						linkSearchClear,
-					),
-					rectSpacer,
-				),
-			),
-		),
+	favoritesBox := container.NewStack(
+		rectList,
+		favoritesList,
 	)
-	settingsBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.36))
-
-	headerSpacer := canvas.NewRectangle(color.Transparent)
-	headerSpacer.SetMinSize(fyne.NewSize(0, 35))
 
 	layoutBrowser := container.NewStack(
 		rectWidth,
 		container.NewHBox(
 			layout.NewSpacer(),
 			container.NewVBox(
-				rectSpacer,
-				container.NewHBox(
-					results,
-					layout.NewSpacer(),
-					headerSpacer,
-					linkClearHistory,
-				),
-				rectSpacer,
-				rectSpacer,
 				entryHistory,
+				entrySearch,
+				entryServeSCID,
 				errorText,
-				rectSpacer,
-				wSelect,
-				rectSpacer,
+				tabButtons,
+				results,
+				favoritesBox,
 				historyBox,
-				rectSpacer,
-				rectSpacer,
-				rectSpacer,
-				btnShutdown,
+				searchBox,
+				servingBox,
 			),
 			layout.NewSpacer(),
 		),
 	)
 
-	var historyFound = true
+	// Hide all alternative views initially
+	entrySearch.Hide()
+	entryServeSCID.Hide()
+	favoritesBox.Hide()
+	historyBox.Hide()
+	searchBox.Hide()
+	servingBox.Hide()
+
+	results.Show()
+	results.Text = "  Loading TELA dapps..."
+	results.Color = colors.Yellow
+	results.Refresh()
+
+	if engram.Disk != nil {
+		walletAddress := engram.Disk.GetAddress().String()
+		if favs, _ := GetTELAFavorites(walletAddress); favs != nil && len(favs) > 0 {
+			go preIndexFavorites(favs)
+		}
+	}
+
+	go func() {
+		fyne.Do(func() {
+			wSelect.SetSelected("Search")
+		})
+	}()
+
 	var historyResults []string
+	var historyMu sync.Mutex
+	var historyLoading bool
 
 	getHistoryResults := func() {
-		if !historyFound {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[Engram] getHistoryResults panic recovered: %v\n", r)
+			}
+		}()
+		historyMu.Lock()
+		if historyLoading {
+			historyMu.Unlock()
 			return
 		}
+		historyLoading = true
+		historyMu.Unlock()
 
-		historyFound = false
 		historyResults = nil
 		historyData.Set(nil)
 		defer func() {
-			historyFound = true
+			historyMu.Lock()
+			historyLoading = false
+			historyMu.Unlock()
 		}()
 
-		if engram.Disk != nil && gnomon.Index != nil {
-			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
+		disk := engram.Disk
+		idx := gnomon.Index
+		if disk != nil && idx != nil {
+			for {
 				if !strings.Contains(session.Domain, ".tela") {
 					return
+				}
+
+				disk = engram.Disk
+				idx = gnomon.Index
+				if disk == nil || idx == nil {
+					return
+				}
+
+				if idx.LastIndexedHeight >= int64(disk.Get_Daemon_Height()) {
+					break
 				}
 
 				results.Text = "  Gnomon is syncing..."
@@ -16014,10 +19196,12 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
+		normalizedInput := normalizeSearch(s)
+
 		var queryResult []string
 		for _, data := range history {
 			for _, split := range strings.Split(data, ";;;") {
-				if strings.Contains(split, s) {
+				if strings.Contains(normalizeSearch(split), normalizedInput) {
 					queryResult = append(queryResult, data)
 					break
 				}
@@ -16038,120 +19222,157 @@ func layoutTELA() fyne.CanvasObject {
 		})
 	}
 
+	activateTelaSearch = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+
+		entryHistory.Hide()
+		entrySearch.Show()
+		entryServeSCID.Hide()
+		favoritesBox.Hide()
+		historyBox.Hide()
+		searchBox.Show()
+		servingBox.Hide()
+		results.Show()
+
+		entrySearch.SetPlaceHolder("Search TELA")
+		if refreshAppsList != nil {
+			refreshAppsList()
+		}
+		if gnomon.Index == nil {
+			if engram.Disk != nil {
+				generation := currentWalletGeneration()
+				enableGnomon, _ := getGnomon()
+				if enableGnomon == "1" && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+					go startGnomon()
+				}
+			}
+			results.Text = "  Gnomon is inactive. Waiting..."
+			results.Color = colors.Gray
+			results.Refresh()
+
+			telaStartupWaitMu.Lock()
+			if telaStartupWaiting {
+				telaStartupWaitMu.Unlock()
+				// If another startup is in progress, check if gnomon is now ready
+				if gnomon.Index != nil {
+					// Gnomon became ready during another startup, proceed with search
+					go getSearchResults()
+				} else {
+					searchList.Refresh()
+				}
+				return
+			}
+			telaStartupWaiting = true
+			telaStartupWaitMu.Unlock()
+
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Errorf("[Engram] TELA startup wait panic recovered: %v\n", r)
+					}
+				}()
+				generation := currentWalletGeneration()
+				defer func() {
+					telaStartupWaitMu.Lock()
+					telaStartupWaiting = false
+					telaStartupWaitMu.Unlock()
+				}()
+				for i := 0; i < 60; i++ {
+					if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+						return
+					}
+					time.Sleep(time.Second)
+					if !strings.Contains(session.Domain, ".tela") {
+						return
+					}
+					if gnomon.Index != nil {
+						uiDo(func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+							results.Text = "  Starting TELA scan..."
+							results.Color = colors.Yellow
+							results.Refresh()
+						})
+						if isWalletGenerationActive(generation) {
+							go getSearchResults()
+						}
+						return
+					}
+				}
+			}()
+		} else if len(searching) > 0 {
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+			results.Color = colors.Green
+			results.Refresh()
+		} else if len(telaSearch) > 0 {
+			searching = telaSearchDisplayAll(telaSearch, sortBy)
+			_ = searchData.Set(searching)
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+			results.Color = colors.Green
+			results.Refresh()
+		} else {
+			generation := currentWalletGeneration()
+			if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+				go getSearchResults()
+			}
+		}
+
+		searchList.Refresh()
+	}
+
 	wSelect.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
-		if !session.Offline {
-			btnShutdown.Enable()
-		}
+
+		// Hide all first
+		entryHistory.Hide()
+		entrySearch.Hide()
+		entryServeSCID.Hide()
+		favoritesBox.Hide()
+		historyBox.Hide()
+		searchBox.Hide()
+		servingBox.Hide()
 
 		switch s {
-		case "Active":
-			servingData.Set(nil)
-
-			var serversRunning []string
-			for _, serv := range tela.GetServerInfo() {
-				serversRunning = append(serversRunning, serv.Name+";;;"+serv.Address+";;;;;;"+serv.SCID)
+		case "Favorites":
+			results.Show()
+			entrySearch.Show()
+			entrySearch.SetPlaceHolder("Search favorites...")
+			refreshFavoritesList()
+			if engram.Disk == nil {
+				results.Text = "  No wallet connected."
+				results.Color = colors.Gray
+			} else if len(favorites) == 0 {
+				results.Text = "  No favorites yet."
+				results.Color = colors.Gray
+			} else {
+				results.Text = fmt.Sprintf("  Favorites:  %d", len(favorites))
+				results.Color = colors.Green
 			}
-
-			sort.Strings(serversRunning)
-			servingData.Set(serversRunning)
-
-			if !isSearching {
-				if session.Offline {
-					results.Text = "  Disabled in offline mode."
-					results.Color = colors.Gray
-					results.Refresh()
-				} else {
-					results.Text = fmt.Sprintf("  Active Servers:  %d", len(serversRunning))
-					results.Color = colors.Green
-					results.Refresh()
-				}
-			}
-
-			labelLastScan.Text = ""
-			labelLastScan.Refresh()
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[3] = labelLastScan
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[4] = entryServeSCID
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[9] = servingBox
-			btnShutdown.Text = "Shutdown TELA"
-			btnShutdown.Refresh()
+			results.Refresh()
+			favoritesBox.Show()
+			favoritesList.Refresh()
 		case "History":
+			results.Show()
 			if gnomon.Index == nil {
 				results.Text = "  Gnomon is inactive."
 				results.Color = colors.Gray
 				results.Refresh()
 			}
 
-			if isSearching {
-				linkClearHistory.Hide()
-			} else {
+			generation := currentWalletGeneration()
+			if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
 				go getHistoryResults()
-				linkClearHistory.Show()
 			}
 
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[3] = linkClearHistory
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[4] = entryHistory
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[9] = historyBox
-			btnShutdown.Text = "Shutdown TELA"
-			btnShutdown.Refresh()
+			entryHistory.Show()
+			historyBox.Show()
+			historyList.Refresh()
 			servingList.UnselectAll()
 		case "Search":
-			if gnomon.Index == nil {
-				results.Text = "  Gnomon is inactive."
-				results.Color = colors.Gray
-				results.Refresh()
-			}
-
-			go getSearchResults()
-
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[3] = labelLastScan
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[4] = entrySearch
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[9] = searchBox
-			btnShutdown.Text = "Rescan Blockchain"
-			btnShutdown.Refresh()
-			if isSearching {
-				btnShutdown.Disable()
-			}
-		case "Settings":
-			if !isSearching {
-				if session.Offline {
-					results.Text = "  Disabled in offline mode."
-					results.Color = colors.Gray
-					results.Refresh()
-				} else {
-					results.Text = fmt.Sprintf("  Active Servers:  %d", len(tela.GetServerInfo()))
-					results.Color = colors.Green
-					results.Refresh()
-					linkResetDefaults.Show()
-					if gnomon.Index != nil {
-						wRescanRecheck.Enable()
-						entryMinLikes.Enable()
-						entryExclusions.Enable()
-					}
-
-					if _, err := GetEncryptedValue("TELA Search", []byte("SCIDs")); err == nil {
-						linkSearchClear.Show()
-					} else {
-						linkSearchClear.Hide()
-					}
-				}
-			} else {
-				wRescanRecheck.Disable()
-				entryMinLikes.Disable()
-				entryExclusions.Disable()
-				linkResetDefaults.Hide()
-				linkSearchClear.Hide()
-			}
-
-			labelLastScan.Text = ""
-			labelLastScan.Refresh()
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[3] = labelLastScan
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[4] = entryAddSCID
-			layoutBrowser.Objects[1].(*fyne.Container).Objects[1].(*fyne.Container).Objects[9] = settingsBox
-			btnShutdown.Text = "Shutdown TELA"
-			btnShutdown.Refresh()
-			servingList.UnselectAll()
+			activateTelaSearch()
 		}
 	}
 
@@ -16159,23 +19380,18 @@ func layoutTELA() fyne.CanvasObject {
 		results.Text = "  Disabled in offline mode."
 		results.Color = colors.Gray
 		results.Refresh()
-		wUpdates.Disable()
 		entryServeSCID.Disable()
 		entryAddSCID.Disable()
-		wRescanRecheck.Disable()
-		entryExclusions.Disable()
-		entryMinLikes.Disable()
-		entryPort.Disable()
 		btnShutdown.Disable()
 	} else if gnomon.Index == nil {
 		results.Text = "  Gnomon is inactive."
 		results.Color = colors.Gray
 		results.Refresh()
 		entryAddSCID.Disable()
-		wRescanRecheck.Disable()
-		entryExclusions.Disable()
-		entryMinLikes.Disable()
 	}
+
+	// Note: activateTelaSearch() is called via wSelect.SetSelected("Search") above
+	// We don't call it again here to avoid double execution which causes race conditions on Android
 
 	entryServeSCID.OnChanged = func(s string) {
 		errorText.Text = ""
@@ -16253,10 +19469,21 @@ func layoutTELA() fyne.CanvasObject {
 
 						return // If url is not valid, scid won't be saved in history
 					} else {
+						pushTELANavigation(s)
+
 						err = fyne.CurrentApp().OpenURL(url)
 						if err != nil {
+							logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
 							errorText.Text = "error could not open browser"
 							errorText.Color = colors.Red
+
+							if isMobileDevice() {
+								fyne.Do(func() {
+									dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+								})
+							}
+						} else if isMobileDevice() {
+							logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
 						}
 					}
 
@@ -16323,10 +19550,18 @@ func layoutTELA() fyne.CanvasObject {
 
 							return
 						} else {
+							pushTELANavigation(s)
+
 							err = fyne.CurrentApp().OpenURL(url)
 							if err != nil {
 								errorText.Text = "error could not open browser"
 								errorText.Color = colors.Red
+
+								if isMobileDevice() {
+									fyne.Do(func() {
+										dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+									})
+								}
 							}
 						}
 
@@ -16367,7 +19602,10 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
-	go getHistoryResults()
+	generation := currentWalletGeneration()
+	if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+		go getHistoryResults()
+	}
 
 	historyList.OnSelected = func(id widget.ListItemID) {
 		errorText.Text = ""
@@ -16384,19 +19622,28 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		historyList.UnselectAll()
 		historyList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	searchList.OnSelected = func(id widget.ListItemID) {
@@ -16414,19 +19661,28 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[1], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
+		scid := split[1]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
 		}
 
 		searchList.UnselectAll()
 		searchList.FocusLost()
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
 	}
 
 	servingList.OnSelected = func(id widget.ListItemID) {
@@ -16444,17 +19700,70 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		index, err := tela.GetINDEXInfo(split[3], session.Daemon)
-		if err != nil {
-			logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
-			errorText.Text = "invalid INDEX scid"
+		scid := split[3]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+		}
+
+		servingList.UnselectAll()
+		servingList.FocusLost()
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTELAManager(index, refreshTELA))
+	}
+
+	favoritesList.OnSelected = func(id widget.ListItemID) {
+		errorText.Text = ""
+		errorText.Refresh()
+
+		if id < 0 || id >= len(favorites) {
+			return
+		}
+
+		showLoadingOverlay()
+		defer removeOverlays()
+
+		split := strings.Split(favorites[id], ";;;")
+		if len(split) < 2 || len(split[1]) != 64 {
+			logger.Errorf("[Engram] TELA Invalid SCID from favorites\n")
+			errorText.Text = "invalid TELA scid"
 			errorText.Color = colors.Red
 			errorText.Refresh()
 			return
 		}
 
-		servingList.UnselectAll()
-		servingList.FocusLost()
+		scid := split[1]
+		var index tela.INDEX
+		var err error
+
+		cache := loadTelaIndexCache()
+		if cached, ok := cache[scid]; ok && len(cached.DOCs) > 0 {
+			index = cached
+		} else {
+			index, err = tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Engram] GetINDEXInfo from favorites: %s\n", err)
+				errorText.Text = "invalid INDEX scid"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+		}
+
+		favoritesList.UnselectAll()
+		favoritesList.FocusLost()
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTELAManager(index, refreshServerList))
 	}
@@ -16474,23 +19783,17 @@ func layoutTELA() fyne.CanvasObject {
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(3),
+					btnRescanTela,
+					btnBack,
+					btnSettingsTela,
+				),
 			),
 			rectSpacer,
 			rectSpacer,
@@ -16509,12 +19812,28 @@ func layoutTELA() fyne.CanvasObject {
 		),
 	)
 
-	return NewVScroll(layout)
+	// Create TELA background with semi-transparent overlay using DarkMatter theme
+	bgOverlay := canvas.NewRectangle(color.RGBA{21, 23, 30, 255}) // Full opacity DarkMatter
+	bgOverlay.SetMinSize(fyne.NewSize(ui.Width, ui.Height))
+
+	layoutWithBg := container.NewStack(
+		// res.telaBg, // Background image - temporarily disabled for color testing
+		bgOverlay, // Background color only
+		layout,
+	)
+
+	return NewVScroll(layoutWithBg)
 }
 
 // Layout details of a TELA INDEX
 func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	session.Domain = "app.tela.manager"
+
+	var cachedData *TELAFavoriteData
+	if engram.Disk != nil {
+		walletAddress := engram.Disk.GetAddress().String()
+		cachedData, _ = GetTELAFavoriteData(walletAddress, index.SCID)
+	}
 
 	frame := &iframe{}
 
@@ -16634,11 +19953,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	// labelSeparator6.Wrapping = fyne.TextWrapOff
 	// labelSeparator6.ParseMarkdown("---")
 
-	menuLabel := canvas.NewText("  M O R E   O P T I O N S  ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
@@ -16656,9 +19970,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		sep2,
 		layout.NewSpacer(),
 	)
+	_ = line1
+	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to TELA", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		capture := session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -16666,24 +19981,35 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		session.Domain = "app.tela"
 		session.LastDomain = capture
 		go callback()
-	}
+	})
 
 	image := canvas.NewImageFromResource(resourceTelaIcon)
 	image.SetMinSize(fyne.NewSize(ui.Width*0.3, ui.Width*0.3))
 	image.FillMode = canvas.ImageFillContain
 
-	_, _, iconURLHdr, _, _ := getContractHeader(crypto.HashHexToHash(index.SCID))
-	if iconURLHdr == "" && index.IconHdr != "" {
-		iconURLHdr = index.IconHdr
-	}
-
-	if iconURLHdr != "" {
-		if img, err := handleImageURL(index.NameHdr, iconURLHdr, fyne.NewSize(ui.Width*0.3, ui.Width*0.3)); err == nil {
-			image = img
+	go func() {
+		var iconURL string
+		if cachedData != nil && cachedData.IconURL != "" && time.Now().Unix()-cachedData.LastUpdated < 3600 {
+			iconURL = cachedData.IconURL
 		} else {
-			logger.Errorf("[Engram] Could not validate icon image: %s\n", err)
+			_, _, iconURLHdr, _, _ := getContractHeader(crypto.HashHexToHash(index.SCID))
+			if iconURLHdr == "" && index.IconHdr != "" {
+				iconURLHdr = index.IconHdr
+			}
+			iconURL = iconURLHdr
 		}
-	}
+
+		if iconURL != "" {
+			if img, err := handleImageURL(index.NameHdr, iconURL, fyne.NewSize(ui.Width*0.3, ui.Width*0.3)); err == nil {
+				fyne.Do(func() {
+					image.Resource = img.Resource
+					image.Refresh()
+				})
+			} else {
+				logger.Errorf("[Engram] Could not validate icon image: %s\n", err)
+			}
+		}
+	}()
 
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = 12
@@ -16722,11 +20048,22 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			errorText.Color = colors.Red
 			errorText.Refresh()
 		} else {
+			pushTELANavigation(index.SCID)
+
 			err = fyne.CurrentApp().OpenURL(url)
 			if err != nil {
+				logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
 				errorText.Text = "error could not open browser"
 				errorText.Color = colors.Red
+
+				if isMobileDevice() {
+					fyne.Do(func() {
+						dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+					})
+				}
 				errorText.Refresh()
+			} else if isMobileDevice() {
+				logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
 			}
 		}
 	}
@@ -16756,123 +20093,164 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		} else {
 			showLoadingOverlay()
 
-			if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
-				url, err := url.Parse(link)
-				if err != nil {
-					logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-					errorText.Text = "error could parse URL"
-					errorText.Color = colors.Red
-					errorText.Refresh()
-				} else {
-					err = fyne.CurrentApp().OpenURL(url)
+			go func() {
+				// Start the TELA server
+				if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
+					// Server started successfully, get the URL
+					url, err := url.Parse(link)
 					if err != nil {
-						errorText.Text = "error could not open browser"
+						logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+						errorText.Text = "error could parse URL"
 						errorText.Color = colors.Red
 						errorText.Refresh()
-					}
-				}
+					} else {
+						pushTELANavigation(index.SCID)
 
-				textStatus.Text = "Running"
-				textStatus.Color = colors.Green
-				textStatus.Refresh()
-				btnServer.Text = "Shutdown Application"
-				btnServer.Refresh()
-				linkOpenInBrowser.Show()
-
-				err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
-				if err != nil {
-					logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
-				}
-			} else {
-				if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
-					removeOverlays()
-
-					go func() {
-						// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
-						telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
-						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
+						// Open the URL in browser
+						err = fyne.CurrentApp().OpenURL(url)
 						if err != nil {
-							logger.Errorf("[Engram] Open TELA link: %s\n", err)
-							fyne.Do(func() {
+							logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+							errorText.Text = "error could not open browser"
+							errorText.Color = colors.Red
+
+							if isMobileDevice() {
+								fyne.Do(func() {
+									dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+								})
+							}
+						} else {
+							logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+						}
+					}
+				} else {
+					// Check if this is an update conflict
+					if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
+						removeOverlays()
+
+						generation := currentWalletGeneration()
+						go func() {
+							if !isWalletGenerationActive(generation) {
+								return
+							}
+
+							// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
+							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
+							linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							if err != nil {
+								logger.Errorf("[Engram] Open TELA link: %s\n", err)
 								errorText.Text = "error could not open TELA"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
 
-							return
-						}
+								return
+							}
 
-						if linkPermission != xswd.Allow {
-							return
-						}
+							if linkPermission != xswd.Allow {
+								removeOverlays()
+								return
+							}
 
-						link, err := serveTELAUpdates(index.SCID)
-						if err != nil {
-							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-							fyne.Do(func() {
+							// Serve the updated content
+							link, err := serveTELAUpdates(index.SCID)
+							if err != nil {
+								logger.Errorf("[Engram] Error serving TELA: %s\n", err)
 								errorText.Text = telaErrorToString(err)
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
-							return
-						}
+								return
+							}
 
-						url, err := url.Parse(link)
-						if err != nil {
-							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-							fyne.Do(func() {
+							url, err := url.Parse(link)
+							if err != nil {
+								logger.Errorf("[Engram] TELA URL parse: %s\n", err)
 								errorText.Text = "error could parse URL"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-							})
-						} else {
-							err = fyne.CurrentApp().OpenURL(url)
-							if err != nil {
-								fyne.Do(func() {
+							} else {
+								pushTELANavigation(index.SCID)
+
+								err = fyne.CurrentApp().OpenURL(url)
+								if err != nil {
+									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
 									errorText.Text = "error could not open browser"
 									errorText.Color = colors.Red
-									errorText.Refresh()
-								})
+
+									if isMobileDevice() {
+										fyne.Do(func() {
+											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+										})
+									}
+								} else {
+									logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+								}
 							}
-						}
 
+							fyne.Do(func() {
+								textStatus.Text = "   Online"
+								textStatus.Color = colors.Green
+								textStatus.Refresh()
+								btnServer.Text = "Shutdown Application"
+								btnServer.Refresh()
+								linkOpenInBrowser.Show()
+							})
+
+							err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
+							if err != nil {
+								logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
+							}
+						}()
+					} else {
+						// Other error occurred
 						fyne.Do(func() {
-							textStatus.Text = "   Online"
-							textStatus.Color = colors.Green
-							textStatus.Refresh()
-							btnServer.Text = "Shutdown Application"
-							btnServer.Refresh()
-							linkOpenInBrowser.Show()
+							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
+							errorText.Text = telaErrorToString(err)
+							errorText.Color = colors.Red
+							errorText.Refresh()
 						})
-
-						err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
-						if err != nil {
-							logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
-						}
-					}()
-
-					return
+					}
 				}
 
-				logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-				errorText.Text = telaErrorToString(err)
-				errorText.Color = colors.Red
-				errorText.Refresh()
-			}
-
-			removeOverlays()
+				// Always remove overlays when done
+				uiDo(func() {
+					removeOverlays()
+				})
+			}()
 		}
 	}
 
-	ratings, err := tela.GetRating(index.SCID, session.Daemon, 0)
-	if err != nil {
-		logger.Errorf("[Engram] GetRating: %s\n", err)
+	var ratings tela.Rating_Result
+	if cachedData != nil && cachedData.Rating > 0 {
+		ratings.Average = cachedData.Rating
 	}
 
 	labelRatingAverage := canvas.NewText(fmt.Sprintf("%.1f", ratings.Average), colors.Account)
 	labelRatingAverage.TextSize = 24
 	labelRatingAverage.Alignment = fyne.TextAlignCenter
 	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
+
+	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(ratings.Average))
+	hexagonImg.SetMinSize(fyne.NewSize(80, 86))
+
+	go func() {
+		freshRatings, err := tela.GetRating(index.SCID, session.Daemon, 0)
+		if err != nil {
+			logger.Errorf("[Engram] GetRating: %s\n", err)
+			return
+		}
+
+		fyne.Do(func() {
+			ratings = freshRatings
+			labelRatingAverage.Text = fmt.Sprintf("%.1f", ratings.Average)
+			labelRatingAverage.Refresh()
+			hexagonImg.Resource = telaHexagonColor(ratings.Average)
+			hexagonImg.Refresh()
+		})
+
+		if engram.Disk != nil && cachedData != nil {
+			walletAddr := engram.Disk.GetAddress().String()
+			AddTELAFavorite(walletAddr, index.SCID, cachedData.Name, cachedData.Description, cachedData.IconURL, freshRatings.Average)
+		}
+	}()
 
 	linkTelaRatings := widget.NewHyperlinkWithStyle("View All Ratings", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkTelaRatings.OnTapped = func() {
@@ -16885,8 +20263,72 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 	}
 
-	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(ratings.Average))
-	hexagonImg.SetMinSize(fyne.NewSize(80, 86))
+	var favContainer *fyne.Container
+	var favCenter *fyne.Container
+	var btnFavorite *widget.Button
+
+	btnFavoriteIcon := resourceHeartOutlineSvg
+	if engram.Disk != nil {
+		walletAddress := engram.Disk.GetAddress().String()
+		if IsTELAFavorite(walletAddress, index.SCID) {
+			btnFavoriteIcon = resourceFavsPng
+		}
+	}
+
+	btnFavorite = widget.NewButtonWithIcon("", btnFavoriteIcon, func() {
+		if engram.Disk == nil {
+			errorText.Text = "No wallet connected"
+			errorText.Color = colors.Red
+			errorText.Refresh()
+			return
+		}
+
+		walletAddress := engram.Disk.GetAddress().String()
+
+		if IsTELAFavorite(walletAddress, index.SCID) {
+			err := RemoveTELAFavorite(walletAddress, index.SCID)
+			if err != nil {
+				errorText.Text = "Error removing favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+			btnFavorite.SetIcon(resourceHeartOutlineSvg)
+			errorText.Text = "Removed from favorites"
+			errorText.Color = colors.Green
+		} else {
+			err := AddTELAFavorite(walletAddress, index.SCID, index.NameHdr, index.DescrHdr, index.IconHdr, ratings.Average)
+			if err != nil {
+				errorText.Text = "Error adding favorite"
+				errorText.Color = colors.Red
+				errorText.Refresh()
+				return
+			}
+			btnFavorite.SetIcon(resourceFavsPng)
+			errorText.Text = "Added to favorites"
+			errorText.Color = colors.Green
+		}
+		errorText.Refresh()
+
+		if favContainer != nil {
+			favContainer.Refresh()
+		}
+		if favCenter != nil {
+			favCenter.Refresh()
+		}
+
+		if callback != nil {
+			callback()
+		}
+	})
+
+	favContainer = container.NewHBox(
+		btnFavorite,
+	)
+
+	favCenter = container.NewCenter(
+		favContainer,
+	)
 
 	center := container.NewStack(
 		rectBox,
@@ -16896,6 +20338,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				container.NewHBox(
 					layout.NewSpacer(),
 					container.NewVBox(
+						favCenter,
+						rectSpacer,
 						container.NewCenter(
 							image,
 						),
@@ -16915,9 +20359,15 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						labelSeparator,
 						rectSpacer,
 						rectSpacer,
-						labelDURL,
-						textDURL,
+						labelStatus,
 						rectSpacer,
+						wrapMobileButton(btnServer),
+						rectSpacer,
+						textStatus,
+						rectSpacer,
+						linkOpenInBrowser,
+						rectSpacer,
+						errorText,
 						rectSpacer,
 						labelSeparator2,
 						rectSpacer,
@@ -16946,16 +20396,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						labelSeparator3,
 						rectSpacer,
 						rectSpacer,
-						labelStatus,
-						rectSpacer,
-						textStatus,
-						rectSpacer,
-						rectSpacer,
-						btnServer,
-						rectSpacer,
-						linkOpenInBrowser,
-						rectSpacer,
-						errorText,
+						labelDURL,
+						textDURL,
 						rectSpacer,
 						rectSpacer,
 						labelSeparator4,
@@ -16991,6 +20433,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						container.NewStack(
 							rectWidth90,
 						),
+						rectSpacer,
+						rectSpacer,
 					),
 					layout.NewSpacer(),
 				),
@@ -17009,17 +20453,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
