@@ -16972,6 +16972,7 @@ func layoutTELA() fyne.CanvasObject {
 	var favoritesList *widget.List
 	var refreshFavoritesList func()
 	var refreshAppsList func()
+	var refreshServerList func()
 
 	frame := &iframe{}
 	rectLeft := canvas.NewRectangle(color.Transparent)
@@ -17016,6 +17017,11 @@ func layoutTELA() fyne.CanvasObject {
 	telaListHeartWidth := float32(34)
 	if isMobile {
 		telaListHeartWidth = 40
+	}
+
+	telaListButtonWidth := float32(70)
+	if isMobile {
+		telaListButtonWidth = 80
 	}
 
 	parseTelaListEntry := func(raw string) (name, scid string) {
@@ -17069,11 +17075,12 @@ func layoutTELA() fyne.CanvasObject {
 		nameLabel.Truncation = fyne.TextTruncateEllipsis
 		nameLabel.Wrapping = fyne.TextWrapOff
 
-		activeLabel := canvas.NewText("", colors.Green)
-		activeLabel.TextSize = 11
-		activeLabel.TextStyle = fyne.TextStyle{Bold: true}
-		activeLabel.Alignment = fyne.TextAlignTrailing
-		activeWrap := container.NewPadded(activeLabel)
+		startCloseBtn := widget.NewButtonWithIcon("Start", theme.MediaPlayIcon(), nil)
+		startCloseBtn.Importance = widget.LowImportance
+
+		btnSpacer := canvas.NewRectangle(color.Transparent)
+		btnSpacer.SetMinSize(fyne.NewSize(telaListButtonWidth, scaleSize(34)))
+		btnWrap := container.NewCenter(container.NewStack(btnSpacer, container.NewCenter(startCloseBtn)))
 
 		return container.NewStack(
 			activeBg,
@@ -17081,7 +17088,7 @@ func layoutTELA() fyne.CanvasObject {
 				nil,
 				nil,
 				heartWrap,
-				activeWrap,
+				btnWrap,
 				container.NewPadded(nameLabel),
 			),
 		)
@@ -17164,7 +17171,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		var heartBtn *widget.Button
 		var nameLabel *widget.Label
-		var activeLabel *canvas.Text
+		var startCloseBtn *widget.Button
 
 		var walk func(fyne.CanvasObject)
 		walk = func(obj fyne.CanvasObject) {
@@ -17172,14 +17179,12 @@ func layoutTELA() fyne.CanvasObject {
 			case *widget.Button:
 				if heartBtn == nil {
 					heartBtn = v
+				} else if startCloseBtn == nil {
+					startCloseBtn = v
 				}
 			case *widget.Label:
 				if nameLabel == nil {
 					nameLabel = v
-				}
-			case *canvas.Text:
-				if activeLabel == nil {
-					activeLabel = v
 				}
 			case *fyne.Container:
 				for _, child := range v.Objects {
@@ -17189,24 +17194,68 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		walk(row.Objects[1])
-		if heartBtn == nil || nameLabel == nil || activeLabel == nil {
+		if heartBtn == nil || nameLabel == nil || startCloseBtn == nil {
 			return
 		}
 
 		name, scid := parseTelaListEntry(raw)
 		nameLabel.SetText(name)
 		if isTelaActive(scid) {
-			activeLabel.Text = "LIVE"
 			activeBg.FillColor = color.NRGBA{R: 20, G: 120, B: 70, A: 48}
+			startCloseBtn.SetText("Close")
+			startCloseBtn.SetIcon(theme.MediaStopIcon())
 		} else {
-			activeLabel.Text = ""
 			activeBg.FillColor = color.Transparent
+			startCloseBtn.SetText("Start")
+			startCloseBtn.SetIcon(theme.MediaPlayIcon())
 		}
 		activeBg.Refresh()
-		activeLabel.Refresh()
 		updateTelaFavoriteButton(heartBtn, scid)
 		heartBtn.OnTapped = func() {
 			toggleTelaFavorite(scid)
+		}
+		startCloseBtn.OnTapped = func() {
+			if isTelaActive(scid) {
+				entry := findTelaSearchEntry(scid)
+				if entry != nil {
+					tela.ShutdownServer(entry.DURL)
+					if refreshServerList != nil {
+						refreshServerList()
+					}
+					searchList.Refresh()
+					favoritesList.Refresh()
+				}
+			} else {
+				if engram.Disk == nil {
+					errorText.Text = "No wallet connected"
+					errorText.Color = colors.Gray
+					errorText.Refresh()
+					return
+				}
+				errorText.Text = ""
+				errorText.Refresh()
+				go func() {
+					if link, err := tela.ServeTELA(scid, session.Daemon); err == nil {
+						pushTELANavigation(scid)
+						if u, err := url.Parse(link); err == nil {
+							fyne.CurrentApp().OpenURL(u)
+						}
+						fyne.Do(func() {
+							if refreshServerList != nil {
+								refreshServerList()
+							}
+							searchList.Refresh()
+							favoritesList.Refresh()
+						})
+					} else {
+						fyne.Do(func() {
+							errorText.Text = "error starting TELA app"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
+					}
+				}()
+			}
 		}
 	}
 
@@ -18881,7 +18930,7 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	// Refresh the active server list
-	refreshServerList := func() {
+	refreshServerList = func() {
 		defer func() {
 			if r := recover(); r != nil {
 				logger.Errorf("[Engram] refreshServerList panic recovered: %v\n", r)
