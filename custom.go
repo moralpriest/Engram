@@ -47,6 +47,25 @@ func (e *returnEntry) TypedKey(key *fyne.KeyEvent) {
 	}
 }
 
+// NewImageButton creates a button that displays an image with proper button styling
+func NewImageButton(res fyne.Resource, onTap func()) *fyne.Container {
+	btn := widget.NewButton("", onTap)
+	btn.Importance = widget.MediumImportance
+
+	img := canvas.NewImageFromResource(res)
+	img.FillMode = canvas.ImageFillContain
+
+	imgWidth := scaleSize(90)
+	imgHeight := scaleSize(35)
+
+	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(100, 40))
+
+	return container.NewStack(sizeEnforcer, btn, container.NewCenter(imgSizer))
+}
+
 var _ fyne.Draggable = (*iframe)(nil)
 
 type iframe struct {
@@ -93,14 +112,14 @@ func (o *iframe) DragEnd() {
 				if session.Domain == "app.wallet" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutIdentity())
-				} else if session.Domain == "app.cyberdeck" {
+				} else if session.Domain == "app.remoteaccess" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
 				}
 			} else if nav.CurX < nav.PosX-30 {
 				if session.Domain == "app.wallet" {
 					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutCyberdeck())
+					session.Window.SetContent(layoutRemoteAccess())
 				} else if session.Domain == "app.Identity" {
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
@@ -172,7 +191,9 @@ func (o *iframeRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (o *iframeRenderer) Refresh() {
-	o.rect.Refresh()
+	uiDo(func() {
+		o.rect.Refresh()
+	})
 }
 
 type mobileEntry struct {
@@ -190,7 +211,9 @@ func NewMobileEntry() *mobileEntry {
 
 func (o *mobileEntry) FocusGained() {
 	o.Entry.FocusGained()
-	o.OnFocusGained()
+	if o.OnFocusGained != nil {
+		o.OnFocusGained()
+	}
 }
 
 type contextMenuButton struct {
@@ -215,3 +238,56 @@ func NewContextMenuButton(label string, image fyne.Resource, menu *fyne.Menu) *c
 func NewVScroll(content *fyne.Container) *container.Scroll {
 	return container.NewVScroll(container.NewCenter(content, widget.NewLabel("")))
 }
+
+func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
+	btn := widget.NewButtonWithIcon("", icon, onTap)
+	btn.Importance = widget.MediumImportance
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+	sizeEnforcer.SetMinSize(scalePoint(100, h))
+	return container.NewStack(sizeEnforcer, btn)
+}
+
+type spacer struct {
+	widget.BaseWidget
+	width  float32
+	height float32
+}
+
+type spacerRenderer struct {
+	spacer *spacer
+}
+
+func NewSpacer(width, height float32) *spacer {
+	s := &spacer{
+		width:  width,
+		height: height,
+	}
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+func (s *spacer) CreateRenderer() fyne.WidgetRenderer {
+	return &spacerRenderer{spacer: s}
+}
+
+func (s *spacer) MinSize() fyne.Size {
+	return fyne.NewSize(s.width, s.height)
+}
+
+func (r *spacerRenderer) Layout(size fyne.Size) {}
+
+func (r *spacerRenderer) MinSize() fyne.Size {
+	return fyne.NewSize(r.spacer.width, r.spacer.height)
+}
+
+func (r *spacerRenderer) Refresh() {}
+
+func (r *spacerRenderer) Objects() []fyne.CanvasObject {
+	return nil
+}
+
+func (r *spacerRenderer) Destroy() {}

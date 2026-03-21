@@ -1,0 +1,9 @@
+# Trivy ignore file
+# Format: CVE-ID or vulnerability ID
+# Add comments with #
+
+# CVE-2025-22869 - golang.org/x/crypto SSH DoS
+# FIXED: Updated from v0.33.0 to v0.35.0 in go.mod
+# The vulnerability is in the SSH package which is not used for wallet operations
+# This is a transitive dependency and the fix has been applied
+# CVE-2025-22869

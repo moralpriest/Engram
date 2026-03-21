@@ -1,4 +1,4 @@
-// Copyright 2023-2024 DERO Foundation. All rights reserved.
+// Copyright 2023-2026 DERO Foundation. All rights reserved.
 // Use of this source code in any form is governed by RESEARCH license.
 // license can be found in the LICENSE file.
 //
@@ -19,6 +19,7 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -26,6 +27,7 @@ import (
 	"fyne.io/fyne/v2/driver/mobile"
 
 	"github.com/blang/semver"
+	"github.com/civilware/tela/logger"
 
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
@@ -44,7 +46,7 @@ const (
 	DEFAULT_LOCAL_TESTNET_DAEMON     = "127.0.0.1:40402"
 	DEFAULT_LOCAL_TESTNET_P2P        = "127.0.0.1:40401"
 	DEFAULT_LOCAL_TESTNET_WORK       = "0.0.0.0:40400"
-	DEFAULT_REMOTE_TESTNET_DAEMON    = "testnetexplorer.dero.io:40402"
+	DEFAULT_REMOTE_TESTNET_DAEMON    = "69.30.234.163:40402"
 	DEFAULT_LOCAL_DAEMON             = "127.0.0.1:10102"
 	DEFAULT_LOCAL_P2P                = "127.0.0.1:10101"
 	DEFAULT_LOCAL_WORK               = "0.0.0.0:10100"
@@ -57,8 +59,10 @@ const (
 	NETWORK_SIMULATOR                = "Simulator"
 )
 
-// Globals
-var version = semver.MustParse("0.6.2")
+// Version info - injected at build time via ldflags
+// Build with: go build -ldflags "-X main.versionString=1.0.0"
+var versionString = "0.6.5"
+var version semver.Version
 var a fyne.App
 var engram Engram
 var session Session
@@ -69,21 +73,59 @@ var status Status
 var tx Transfers
 var res Res
 var colors Colors
-var cyberdeck Cyberdeck
+var remoteAccess RemoteAccess
 var themes Theme
 var rpc_client Client
 var Connected bool
 var nav Navigation
 var ui UI
+var appExiting bool
+var previousDomain string
+var lastForegroundTime int64 // unix timestamp of last foreground event (for cooldown)
 
 func main() {
+	// Parse version from ldflags-injected string
+	var err error
+	version, err = semver.Parse(versionString)
+	if err != nil {
+		version = semver.MustParse("0.0.0-dev")
+	}
+
+	// Check for command line flags
+	var safeMode bool
+	args := os.Args
+	for _, arg := range args {
+		if arg == "--safe-mode" || arg == "-s" {
+			safeMode = true
+			fmt.Println("Starting Engram in SAFE MODE - Gnomon disabled")
+			break
+		}
+	}
+
 	// Initialize application
 	a = app.NewWithID("Engram")
+	if err := initDebugLog(); err != nil {
+		fmt.Printf("failed to initialize debug log: %s\n", err)
+	} else {
+		defer closeDebugLog()
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			writeCrashLog(r)
+			panic(r)
+		}
+	}()
 	a.Settings().SetTheme(themes.main)
 
+	if safeMode {
+		// Disable Gnomon in safe mode
+		gnomon.Active = 0
+	}
 	session.Window = a.NewWindow("Engram")
 	session.Window.SetMaster()
 	session.Window.SetCloseIntercept(func() {
+		appExiting = true
+		appExitFlag.Store(true)
 		if engram.Disk != nil {
 			closeWallet()
 		}
@@ -94,6 +136,9 @@ func main() {
 	session.Window.SetPadded(false)
 	session.Domain = "app.main.loading"
 	session.Window.CenterOnScreen()
+
+	// Initialize navigation stack
+	session.NavStack = NewNavigationStack()
 
 	// Load resources
 	loadResources()
@@ -126,10 +171,10 @@ func main() {
 	status.Sync.StrokeColor = colors.Red
 	status.Sync.StrokeWidth = 0
 	status.Sync.Refresh()
-	status.Cyberdeck = canvas.NewCircle(colors.Red)
-	status.Cyberdeck.StrokeColor = colors.Red
-	status.Cyberdeck.StrokeWidth = 0
-	status.Cyberdeck.Refresh()
+	status.RemoteAccess = canvas.NewCircle(colors.Red)
+	status.RemoteAccess.StrokeColor = colors.Red
+	status.RemoteAccess.StrokeWidth = 0
+	status.RemoteAccess.Refresh()
 	status.Gnomon = canvas.NewCircle(colors.Red)
 	status.Gnomon.StrokeColor = colors.Red
 	status.Gnomon.StrokeWidth = 0
@@ -161,32 +206,104 @@ func main() {
 
 	session.Domain = "app.main"
 
-	// Intercept mobile back button event
+	// Set up mobile back button handling
+	// Note: Fyne's mobile.KeyBack captures software back button on some devices
+	// Hardware back buttons and gesture navigation may vary by Android version/manufacturer
 	session.Window.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		logger.Printf("[KeyEvent] Received key: %s", ev.Name)
 		if ev.Name == mobile.KeyBack {
-			if session.LastDomain != nil {
-				session.Window.SetContent(layoutTransition())
-				session.Window.SetContent(session.LastDomain)
-			} else {
-				if engram.Disk != nil {
-					session.LastDomain = layoutDashboard()
-					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				} else {
-					session.LastDomain = layoutMain()
-					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutMain())
-				}
-			}
+			logger.Printf("[KeyEvent] Back key detected, handling navigation")
+			handleBackNavigation()
 		}
 	})
 
+	// Set up mobile lifecycle handling - handle app background/foreground transitions
+	// This prevents crashes when switching apps on mobile
+	a.Lifecycle().SetOnExitedForeground(func() {
+		logger.Printf("[Lifecycle] App losing focus (background)")
+		// Save current domain before going to background
+		if session.Domain != "" {
+			previousDomain = session.Domain
+		}
+	})
+
+	a.Lifecycle().SetOnEnteredForeground(func() {
+		logger.Printf("[Lifecycle] App gaining focus (foreground), previous domain: %s", previousDomain)
+
+		isMobileDevice := a.Driver().Device().IsMobile()
+
+		now := time.Now().Unix()
+		if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+			logger.Printf("[Lifecycle] Foreground cooldown active, skipping heavy refresh (mobile: %v)", isMobileDevice)
+			return
+		}
+		lastForegroundTime = now
+
+		if session.WalletOpen && engram.Disk != nil {
+			go func() {
+				generation := currentWalletGeneration()
+
+				foregroundDelay := 500 * time.Millisecond
+				if isMobileDevice {
+					foregroundDelay = 1500 * time.Millisecond
+				}
+				time.Sleep(foregroundDelay)
+
+				if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+					return
+				}
+
+				if !session.Offline && rpc_client.RPC == nil {
+					logger.Printf("[Lifecycle] RPC connection lost, will reconnect naturally")
+				}
+
+				if isMobileDevice {
+					logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
+					go StartPulse()
+					fyne.Do(func() {
+						if isWalletGenerationActive(generation) && session.Window != nil && session.Window.Content() != nil {
+							session.Window.Content().Refresh()
+							logger.Printf("[Lifecycle] UI refreshed after foreground (mobile)")
+						}
+					})
+					return
+				}
+
+				fyne.Do(func() {
+					if !isWalletGenerationActive(generation) {
+						return
+					}
+					if session.Window != nil && session.Window.Content() != nil {
+						session.Window.Content().Refresh()
+						logger.Printf("[Lifecycle] UI refreshed after foreground")
+					}
+				})
+
+				if !isWalletGenerationActive(generation) {
+					return
+				}
+				refreshMessageHistoryAsync(false)
+			}()
+		} else if previousDomain != "" {
+			fyne.Do(func() {
+				if session.Window != nil && session.Window.Content() != nil {
+					session.Window.Content().Refresh()
+				}
+			})
+		}
+	})
+
+	// Check wallet count for simplified login
+	var singleWalletName string
+	accounts, err := GetAccounts()
+	if err == nil && len(accounts) == 1 {
+		singleWalletName = accounts[0]
+	}
 	// Check if mobile device
 	if a.Driver().Device().IsMobile() {
 		go walletapi.Initialize_LookupTable(1, 1<<21)
 
+		// Initial placeholder values - layoutFrame will get actual screen dimensions
 		ui.MaxWidth = 3600
 		ui.MaxHeight = 6800
 
@@ -194,8 +311,9 @@ func main() {
 		ui.Height = ui.MaxHeight
 		ui.Padding = ui.MaxWidth * 0.05
 
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutFrame())
+		// Always use layoutFrame on mobile - it gets actual screen dimensions
+		// and handles orientation changes. Pass wallet name for single wallet quick login.
+		session.Window.SetContent(layoutFrameWithWallet(singleWalletName))
 		session.Window.SetFixedSize(true)
 
 		session.Window.ShowAndRun()
@@ -209,9 +327,81 @@ func main() {
 		ui.Padding = ui.MaxWidth * 0.05
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutMain())
+		// Use simplified login for single wallet on desktop too
+		if singleWalletName != "" {
+			session.Window.SetContent(layoutSingleWalletLogin(singleWalletName))
+		} else {
+			session.Window.SetContent(layoutMain())
+		}
 		session.Window.SetFixedSize(true)
 
+		// Window resize check disabled - see comment above for details
+		// go func() {
+		// 	for {
+		// 		time.Sleep(5000 * time.Millisecond)
+		// 		if session.Window == nil {
+		// 			return
+		// 		}
+		// 		currentSize := session.Window.Canvas().Size()
+		// 		if math.Abs(float64(currentSize.Width - ui.MaxWidth)) > 10 {
+		// 			session.Window.Resize(fyne.NewSize(ui.MaxWidth, ui.MaxHeight))
+		// 		}
+		// 	}
+		// }()
 		session.Window.ShowAndRun()
+	}
+}
+
+// handleBackNavigation handles back navigation using the navigation stack or LastDomain fallback
+func handleBackNavigation() {
+	logger.Printf("[Navigation] handleBackNavigation called, stack size: %d", session.NavStack.Size())
+
+	// First check if we have a navigation stack with history
+	if session.NavStack != nil && session.NavStack.CanGoBack() {
+		if entry, ok := session.NavStack.Pop(); ok {
+			logger.Printf("[Navigation] Popped to domain: %s", entry.Domain)
+
+			// Get the layout function for this domain
+			if layoutFn := getLayoutForDomain(entry.Domain); layoutFn != nil {
+				fyne.Do(func() {
+					session.Domain = entry.Domain
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutFn())
+				})
+				return
+			}
+
+			// Fallback: try to use the old LastDomain method
+			logger.Printf("[Navigation] No layout function found for domain: %s", entry.Domain)
+		}
+	}
+
+	// Fallback to LastDomain for backward compatibility
+	if session.LastDomain != nil {
+		logger.Printf("[Navigation] Using LastDomain fallback")
+		fyne.Do(func() {
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(session.LastDomain)
+		})
+		return
+	}
+
+	// If we're on main screen with wallet open, go to dashboard
+	if engram.Disk != nil {
+		logger.Printf("[Navigation] Going to dashboard (wallet open)")
+		fyne.Do(func() {
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutDashboard())
+		})
+		return
+	}
+
+	// On main/login screen - use mobile driver's GoBack to exit app (mobile only)
+	logger.Printf("[Navigation] Exiting app via GoBack()")
+	if a.Driver().Device().IsMobile() {
+		if mobileDriver, ok := a.(mobile.Driver); ok {
+			mobileDriver.GoBack()
+		}
 	}
 }

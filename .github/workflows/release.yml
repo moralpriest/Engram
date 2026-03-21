@@ -1,0 +1,512 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v0.6.3)"
+        required: true
+        type: string
+
+permissions: read-all
+
+env:
+  GO_VERSION: "1.26"
+  FYNE_VERSION: "latest"
+
+jobs:
+  verify:
+    name: Verify Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      fyne_version: ${{ steps.version.outputs.fyne_version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Extract Fyne-compatible version (x.y.z only, no suffixes)
+          FYNE_VERSION=$(echo "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+          echo "fyne_version=$FYNE_VERSION" >> $GITHUB_OUTPUT
+
+          # Check if prerelease
+          if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Version: $VERSION"
+          echo "Fyne version: $FYNE_VERSION"
+
+      - name: Validate semantic version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid semantic version: $VERSION"
+            exit 1
+          fi
+
+      - name: Display version info
+        run: |
+          echo "Building version: ${{ steps.version.outputs.version }}"
+          echo "Version will be injected via ldflags at build time"
+
+  changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+
+          if [ -f "RELEASE_NOTES.md" ]; then
+            cp RELEASE_NOTES.md /tmp/changelog.md
+            echo "Using RELEASE_NOTES.md for release notes"
+          else
+            if [ -z "$PREV_TAG" ]; then
+              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+            else
+              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
+            fi
+
+            # Build changelog with proper variable expansion
+            echo "## What's Changed" > /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "$COMMITS" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "## Security" >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
+            echo "" >> /tmp/changelog.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
+          fi
+          
+          # Output for use in release
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/changelog.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Fyne dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+
+      - name: Build Linux amd64
+        env:
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+        run: |
+          fyne package --target linux --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --icon Icon.png --tags migrated_fynedo
+          mv Engram.tar.xz engram-${{ needs.verify.outputs.version }}-linux-amd64.tar.xz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: linux-build
+          path: engram-*.tar.xz
+          retention-days: 5
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: verify
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+
+      - name: Build Windows amd64
+        env:
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+        run: |
+          fyne package --target windows --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} `
+            --icon Icon.png --tags migrated_fynedo
+          Rename-Item -Path "Engram.exe" -NewName "engram-${{ needs.verify.outputs.version }}-windows-amd64.exe"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: windows-build
+          path: engram-*.exe
+          retention-days: 5
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: verify
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+
+      - name: Build macOS amd64
+        env:
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+        run: |
+          fyne package --target darwin --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --icon Icon.png --tags migrated_fynedo
+          tar -czvf engram-${{ needs.verify.outputs.version }}-macos-amd64.tar.gz Engram.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: macos-build
+          path: engram-*.tar.gz
+          retention-days: 5
+
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;26.1.10909125"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+
+      - name: Install Fyne CLI
+        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+
+      - name: Build Android
+        env:
+          GOFLAGS: -trimpath -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+        run: |
+          fyne package --target android/arm64 --name Engram --app-version ${{ needs.verify.outputs.fyne_version }} \
+            --app-id com.engram.wallet --icon Icon.png --tags migrated_fynedo
+          mv Engram.apk engram-${{ needs.verify.outputs.version }}-android-arm64.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: android-build
+          path: engram-*.apk
+          retention-days: 5
+
+  sign-artifacts:
+    name: Sign Artifacts
+    runs-on: ubuntu-latest
+    needs: [verify, changelog, build-linux, build-windows, build-macos, build-android]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    outputs:
+      release-path: ${{ steps.collect.outputs.release-path }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        id: collect
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.apk" \) -exec cp {} release/ \;
+          ls -la release/
+          echo "release-path=release" >> $GITHUB_OUTPUT
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+
+      - name: Sign artifacts with Cosign
+        run: |
+          cd release
+          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+            if [ -f "$file" ]; then
+              cosign sign-blob --yes "$file" --bundle "${file}.bundle"
+            fi
+          done
+
+      - name: Generate artifact attestations
+        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        with:
+          subject-path: 'release/*'
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e11c554f704a0b820cbf8c51673f6945e0731532 # v0.18.0
+        with:
+          format: spdx-json
+          output-file: release/sbom.spdx.json
+
+      - name: Upload signed artifacts
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: signed-release
+          path: release/*
+          retention-days: 1
+
+  verify-artifacts:
+    name: Verify Artifacts
+    runs-on: ubuntu-latest
+    needs: sign-artifacts
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download signed artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: signed-release
+          path: release
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+
+      - name: Verify signatures with Cosign
+        run: |
+          cd release
+          echo "Verifying artifact signatures..."
+          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+            if [ -f "$file" ] && [ -f "${file}.bundle" ]; then
+              echo "Verifying $file..."
+              cosign verify-blob "$file" \
+                --bundle "${file}.bundle" \
+                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
+                --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+              if [ $? -ne 0 ]; then
+                echo "ERROR: Signature verification failed for $file"
+                exit 1
+              fi
+              echo "✅ Signature verified for $file"
+            fi
+          done
+          echo "All signatures verified successfully!"
+
+      - name: Verify attestations with GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd release
+          echo "Verifying artifact attestations..."
+          for file in *.tar.xz *.tar.gz *.exe *.apk; do
+            if [ -f "$file" ]; then
+              echo "Verifying attestation for $file..."
+              gh attestation verify "$file" --owner ${{ github.repository_owner }}
+              if [ $? -ne 0 ]; then
+                echo "ERROR: Attestation verification failed for $file"
+                exit 1
+              fi
+              echo "✅ Attestation verified for $file"
+            fi
+          done
+          echo "All attestations verified successfully!"
+
+      - name: Verify checksums
+        run: |
+          cd release
+          if [ -f SHA256SUMS.txt ]; then
+            echo "Verifying checksums..."
+            sha256sum -c SHA256SUMS.txt
+            if [ $? -ne 0 ]; then
+              echo "ERROR: Checksum verification failed"
+              exit 1
+            fi
+            echo "✅ All checksums verified successfully!"
+          else
+            echo "WARNING: No SHA256SUMS.txt found"
+          fi
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [verify, changelog, sign-artifacts, verify-artifacts]
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Download signed and verified artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: signed-release
+          path: release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        with:
+          name: Engram v${{ needs.verify.outputs.version }}
+          body: |
+            ## Engram v${{ needs.verify.outputs.version }}
+
+            ${{ needs.changelog.outputs.changelog }}
+
+            ### Verification
+
+            All artifacts are signed with [Sigstore Cosign](https://www.sigstore.dev/) and include [SLSA Level 3](https://slsa.dev) provenance attestations.
+
+            **Verify with Cosign:**
+            ```bash
+            cosign verify-blob <filename> \
+              --bundle <filename>.bundle \
+              --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/v${{ needs.verify.outputs.version }} \
+              --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+            ```
+
+            **Verify with GitHub CLI:**
+            ```bash
+            gh attestation verify <filename> --owner ${{ github.repository_owner }}
+            ```
+
+            ### Checksums (SHA256)
+
+            See `SHA256SUMS.txt` for file checksums.
+          files: release/*
+          prerelease: ${{ needs.verify.outputs.is_prerelease }}
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

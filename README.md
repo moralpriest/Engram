@@ -1,8 +1,8 @@
 <img src="ss1.png" alt="Engram Enigma" title="Powered by DERO">
 
-# <i>One Wallet. All of DERO.</i>
+# *One Wallet. All of DERO.*
 
-### The Engram smart wallet empowers users to easily and securely manage their money and assets on the DERO blockchain. 
+### The Engram smart wallet empowers users to easily and securely manage their money and assets on the DERO blockchain.
 
 ### Included Features
 - [x]  Privately send and receive money globally
@@ -34,7 +34,28 @@ We plan to deploy releases on the following platforms:
 
 See [releases](https://github.com/DEROFDN/Engram/releases) for the latest builds.
 
-## Build
+## Development
+
+### Using Taskfile
+
+We provide a [Taskfile](https://taskfile.dev/) for common development tasks:
+
+```bash
+# Install task
+go install github.com/go-task/task/v3/cmd/task@latest
+
+# List available tasks
+task --list
+
+# Common tasks
+task build          # Build the application
+task test           # Run tests
+task lint           # Run linters
+task ci             # Run CI pipeline locally
+task security       # Run all security checks
+```
+
+### Manual Build
 
 <b>Required Processes</b>
 
@@ -56,7 +77,7 @@ go mod tidy
 
 * Build from within the repo directory:
 ```
-fyne package -name Engram -os windows -appVersion 0.6.2 -icon Icon.png -tags migrated_fynedo
+fyne package -name Engram -os windows -appVersion 0.6.5 -icon Icon.png -tags migrated_fynedo
 ```
 
 #### Building for Android APK (Linux)
@@ -66,12 +87,25 @@ fyne package -name Engram -os windows -appVersion 0.6.2 -icon Icon.png -tags mig
 * Add environment variable for ANDROID_NDK_HOME to point at the downloaded and extracted ndk directory
 * Build from within the repo directory:
 ```
-fyne package -name Engram -os android/arm64 -appVersion 0.6.2 -appID com.engram.main -icon ./Icon.png -tags migrated_fynedo
+fyne package -name Engram -os android/arm64 -appVersion 0.6.5 -appID com.engram.main -icon ./Icon.png -tags migrated_fynedo
 ```
+
+## CI/CD & Security
+
+This project implements wallet-grade CI/CD with:
+- Multi-platform builds (Linux, Windows, macOS, Android)
+- Security scanning (Trivy, Gitleaks, GoSec, Semgrep)
+- Conventional commit validation
+- Fuzz testing for critical functions
+- Supply chain security with SBOM generation
+
+See [Security Audit](docs/SECURITY_AUDIT.md) for details.
 
 ## Contributing
 
 Issues and pull requests are welcome, but will need to be reviewed by DERO Foundation developers.
+
+Please follow [Conventional Commits](https://www.conventionalcommits.org/) for pull request titles.
 
 
 
