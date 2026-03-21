@@ -6202,11 +6202,7 @@ func layoutSettings() fyne.CanvasObject {
 		rectSpacer,
 		entryPass,
 		rectSpacer,
-		widget.NewLabel(""),
-		rectSpacer,
 		statusText,
-		rectSpacer,
-		rectSpacer,
 		wrapMobileButton(btnDelete),
 		rectSpacer,
 		wrapMobileButton(btnRestore),
@@ -6227,11 +6223,8 @@ func layoutSettings() fyne.CanvasObject {
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
-			widget.NewLabel(""),
 			heading,
-			widget.NewLabel(""),
 			scrollBox,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -6248,7 +6241,6 @@ func layoutSettings() fyne.CanvasObject {
 			btnBack,
 			layout.NewSpacer(),
 		),
-		widget.NewLabel(" "),
 	)
 
 	c := container.NewBorder(
