@@ -152,6 +152,7 @@ type Session struct {
 	LimitMessages     bool
 	TrackRecentBlocks int64
 	NavStack          *NavigationStack
+	Navigating        bool
 }
 
 type RemoteAccess struct {
@@ -310,14 +311,19 @@ func finishWalletShutdown() {}
 func startPulseForActiveWallet() bool {
 	walletSessionMu.Lock()
 	defer walletSessionMu.Unlock()
+	logger.Printf("[DEBUG] startPulseForActiveWallet - engram.Disk=%v, session.WalletOpen=%v, pulseRunning=%v, pulseSessionGeneration=%d, walletSessionGeneration=%d\n",
+		engram.Disk != nil, session.WalletOpen, pulseRunning, pulseSessionGeneration, walletSessionGeneration)
 	if engram.Disk == nil || !session.WalletOpen {
+		logger.Printf("[DEBUG] startPulseForActiveWallet returning false - Disk or WalletOpen check failed\n")
 		return false
 	}
 	if pulseRunning && pulseSessionGeneration == walletSessionGeneration {
+		logger.Printf("[DEBUG] startPulseForActiveWallet returning false - pulse already running for this session\n")
 		return false
 	}
 	pulseRunning = true
 	pulseSessionGeneration = walletSessionGeneration
+	logger.Printf("[DEBUG] startPulseForActiveWallet returning true - pulse starting\n")
 	return true
 }
 
@@ -1347,75 +1353,115 @@ func refreshPulseWalletState(sentNotifications *bool) {
 // Go routine to update the latest information from the connected daemon (Online Mode only)
 
 func StartPulse() {
+	logger.Printf("[DEBUG] StartPulse() called\n")
 	if !startPulseForActiveWallet() {
+		logger.Printf("[DEBUG] StartPulse() - startPulseForActiveWallet returned false\n")
 		return
 	}
 
 	generation := currentWalletGeneration()
 	defer finishPulseForGeneration(generation)
 
+	logger.Printf("[DEBUG] StartPulse() - checking connection, walletapi.Connected=%v, engram.Disk=%v\n", walletapi.Connected, engram.Disk != nil)
+
 	if !walletapi.Connected && engram.Disk != nil {
-		logger.Printf("[Network] Attempting network connection to: %s\n", walletapi.Daemon_Endpoint)
-		err := walletapi.Connect(session.Daemon)
-		if err != nil {
-			logger.Errorf("[Network] Failed to connect to: %s\n", walletapi.Daemon_Endpoint)
+		maxRetries := 3
+		var err error
+		var connected bool
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			logger.Printf("[Network] Attempting network connection to: %s (attempt %d/%d)\n", walletapi.Daemon_Endpoint, attempt, maxRetries)
+			err = walletapi.Connect(session.Daemon)
+			if err == nil {
+				// Verify connection actually works by checking daemon height
+				time.Sleep(500 * time.Millisecond)
+				height := walletapi.Get_Daemon_Height()
+				if height > 0 {
+					logger.Printf("[Network] Connection verified - daemon height: %d\n", height)
+					connected = true
+					break
+				}
+				// Connection returned nil but daemon height is 0 = not really connected
+				logger.Printf("[Network] Connection succeeded but daemon unreachable (height=0), retrying...\n")
+				walletapi.Connected = false
+				err = fmt.Errorf("daemon height is 0")
+			}
+			logger.Printf("[Network] Connection attempt %d failed: %v\n", attempt, err)
+			if attempt < maxRetries {
+				logger.Printf("[Network] Retrying in 2 seconds...\n")
+				time.Sleep(2 * time.Second)
+			}
+		}
+		if !connected {
+			logger.Errorf("[Network] Failed to connect after %d attempts: %s\n", maxRetries, walletapi.Daemon_Endpoint)
 			walletapi.Connected = false
 			return
-		} else {
-			sentNotifications := false
-			walletapi.Connected = true
-			engram.Disk.SetOnlineMode()
-			uiDo(func() {
-				status.Connection.FillColor = colors.Gray
-				status.Sync.FillColor = colors.Gray
-			})
-			refreshPermissionsAfterConnect()
+		}
 
-			go func() {
-				count := 0
-				for isWalletGenerationActive(generation) {
-					if !session.WalletOpen {
+		// Connection successful - set state immediately before goroutine
+		walletapi.Connected = true
+		engram.Disk.SetOnlineMode()
+
+		// Update UI to show connected status immediately
+		uiDo(func() {
+			status.Connection.FillColor = colors.Green
+			status.Connection.Refresh()
+			status.Sync.FillColor = colors.Yellow
+			status.Sync.Refresh()
+		})
+
+		logger.Printf("[Network] Connection established successfully, starting pulse loop\n")
+
+		// Start Gnomon indexing as soon as daemon is connected
+		logger.Printf("[DEBUG] Calling startGnomon() from StartPulse()\n")
+		go startGnomon()
+
+		refreshPermissionsAfterConnect()
+
+		sentNotifications := false
+		go func() {
+			count := 0
+			for isWalletGenerationActive(generation) {
+				if !session.WalletOpen {
+					break
+				}
+
+				if walletapi.Get_Daemon_Height() < 1 || !walletapi.Connected {
+					var shouldContinue bool
+					count, shouldContinue = pulseReconnect(count)
+					if shouldContinue {
+						continue
+					}
+					if !walletapi.Connected {
+						break
+					}
+				}
+
+				if !engram.Disk.IsRegistered() {
+					if !walletapi.Connected {
+						logger.Errorf("[Network] Could not connect to daemon...%d\n", engram.Disk.Get_Daemon_TopoHeight())
+						uiDo(func() {
+							status.Connection.FillColor = colors.Red
+							status.Connection.Refresh()
+							status.Sync.FillColor = colors.Red
+						})
+					}
+
+					time.Sleep(time.Second)
+				} else {
+					if !isWalletGenerationActive(generation) {
 						break
 					}
 
-					if walletapi.Get_Daemon_Height() < 1 || !walletapi.Connected {
-						var shouldContinue bool
-						count, shouldContinue = pulseReconnect(count)
-						if shouldContinue {
-							continue
-						}
-						if !walletapi.Connected {
-							break
-						}
-					}
+					refreshPulseWalletState(&sentNotifications)
 
-					if !engram.Disk.IsRegistered() {
-						if !walletapi.Connected {
-							logger.Errorf("[Network] Could not connect to daemon...%d\n", engram.Disk.Get_Daemon_TopoHeight())
-							uiDo(func() {
-								status.Connection.FillColor = colors.Red
-								status.Connection.Refresh()
-								status.Sync.FillColor = colors.Red
-							})
-						}
-
-						time.Sleep(time.Second)
-					} else {
-						if !isWalletGenerationActive(generation) {
-							break
-						}
-
-						refreshPulseWalletState(&sentNotifications)
-
-						time.Sleep(time.Second)
-					}
+					time.Sleep(time.Second)
 				}
+			}
 
-				if walletapi.Connected {
-					walletapi.Connected = false
-				}
-			}()
-		}
+			if walletapi.Connected {
+				walletapi.Connected = false
+			}
+		}()
 	}
 }
 
@@ -1721,6 +1767,7 @@ func getGnomon() (r string, err error) {
 		if storeErr := StoreValue("settings", []byte("gnomon"), []byte("1")); storeErr != nil {
 			logger.Errorf("[Settings] Could not store default gnomon setting: %s\n", storeErr)
 		}
+		return "1", nil
 	}
 
 	if string(v) == "1" {
@@ -1854,6 +1901,7 @@ func safeCanvasFocus(obj fyne.Focusable) {
 
 // Close the active wallet
 func closeWallet() {
+	logger.Printf("[Engram] closeWallet() called from domain: %s\n", session.Domain)
 	if !beginWalletShutdown() {
 		return
 	}
@@ -2031,6 +2079,9 @@ func login() {
 		loadPersistedMessageCache()
 		beginWalletSession()
 
+		// Reset exit flag so Gnomon can start in this session
+		globals.Exit_In_Progress = false
+
 		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
 		initSettings()
 	}
@@ -2054,7 +2105,11 @@ func login() {
 	session.BalanceUSD = ""
 	session.LastBalance = 0
 
+	logger.Printf("[DEBUG] login() - session.Offline=%v, session.Daemon='%s', walletapi.Connected=%v, engram.Disk=%v, session.WalletOpen=%v\n",
+		session.Offline, session.Daemon, walletapi.Connected, engram.Disk != nil, session.WalletOpen)
+
 	if !session.Offline {
+		walletapi.Connected = false
 		walletapi.SetDaemonAddress(session.Daemon)
 		engram.Disk.SetDaemonAddress(session.Daemon)
 
@@ -2103,9 +2158,16 @@ func login() {
 		session.Balance = 0
 
 		go func() {
+			logger.Printf("[DEBUG] login goroutine starting\n")
 			generation := currentWalletGeneration()
-			connected := waitForConnectionWithTimeout(5 * time.Second)
+
+			// Wait for StartPulse to actually establish connection
+			logger.Printf("[DEBUG] waiting for walletapi.Connected to become true...\n")
+			connected := waitForConnectionWithTimeout(10 * time.Second)
+			logger.Printf("[DEBUG] waitForConnection returned: %v, walletapi.Connected=%v\n", connected, walletapi.Connected)
+
 			if !connected || !isWalletGenerationActive(generation) {
+				logger.Printf("[DEBUG] connection timeout or wallet closed\n")
 				uiDo(func() {
 					if !isWalletGenerationActive(generation) {
 						return
@@ -2124,11 +2186,14 @@ func login() {
 			})
 
 			waitForWalletSync(3 * time.Second)
+			logger.Printf("[DEBUG] wallet sync complete\n")
 			if !isWalletGenerationActive(generation) {
 				return
 			}
 
+			logger.Printf("[DEBUG] checking wallet registration...\n")
 			needsReg, regDone := checkRegistrationWithTimeout(10 * time.Second)
+			logger.Printf("[DEBUG] registration check complete: needsReg=%v, regDone=%v\n", needsReg, regDone)
 			if !isWalletGenerationActive(generation) {
 				return
 			}
@@ -2147,6 +2212,7 @@ func login() {
 			}
 
 			if regDone && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+				logger.Printf("[DEBUG] calling startGnomon()\n")
 				go startGnomon()
 			}
 
@@ -2283,32 +2349,38 @@ func removeOverlays() {
 
 // Add an overlay with the loading animation
 func showLoadingOverlay() {
-	frame := &iframe{}
+	uiDo(func() {
+		if session.Window == nil {
+			return
+		}
 
-	if res.loading == nil {
-		res.loading, _ = x.NewAnimatedGifFromResource(resourceLoadingGif)
-		res.loading.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
-	}
+		frame := &iframe{}
 
-	rect := canvas.NewRectangle(colors.DarkMatter)
-	rect.SetMinSize(frame.Size())
+		if res.loading == nil {
+			res.loading, _ = x.NewAnimatedGifFromResource(resourceLoadingGif)
+			res.loading.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+		}
 
-	background := container.NewStack(
-		rect,
-		container.NewCenter(
-			res.loading,
-		),
-	)
+		rect := canvas.NewRectangle(colors.DarkMatter)
+		rect.SetMinSize(frame.Size())
 
-	res.loading.Start()
+		background := container.NewStack(
+			rect,
+			container.NewCenter(
+				res.loading,
+			),
+		)
 
-	layout := container.NewStack(
-		frame,
-		background,
-	)
+		res.loading.Start()
 
-	overlays := session.Window.Canvas().Overlays()
-	overlays.Add(layout)
+		layout := container.NewStack(
+			frame,
+			background,
+		)
+
+		overlays := session.Window.Canvas().Overlays()
+		overlays.Add(layout)
+	})
 }
 
 // Load embedded resources
@@ -4240,6 +4312,12 @@ func getPrimaryUsername() (err error) {
 
 // Start the Gnomon indexer
 func startGnomon() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Printf("[Gnomon] Panic recovered in startGnomon: %v\n", r)
+		}
+	}()
+
 	generation := currentWalletGeneration()
 	if !isWalletGenerationActive(generation) {
 		return
@@ -4349,7 +4427,7 @@ func startGnomon() {
 				return
 			}
 
-			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions)
+			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions, false)
 			indexer.InitLog(globals.Arguments, os.Stdout)
 			parallelBlocks := 8
 			if isMobile() {
@@ -4515,6 +4593,7 @@ func clearAllTELACache() {
 		[]byte("Searched SCIDs"),
 		[]byte("NegativeCache"),
 		[]byte("IndexCache"),
+		[]byte("CandidateCache"),
 		[]byte("Last Scan"),
 		[]byte("Last Indexed Height"),
 	}
@@ -4599,6 +4678,9 @@ func isConnectionError(err error) bool {
 // Method of Gnomon GetAllOwnersAndSCIDs() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 	if g.Index == nil {
+		return
+	}
+	if g.Index.GravDBBackend == nil && g.Index.BBSBackend == nil {
 		return
 	}
 	switch g.Index.DBType {
@@ -5920,17 +6002,30 @@ func cleanWalletData() (err error) {
 		return
 	}
 
+	// Check if path exists - nothing to clean is still success
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		logger.Printf("[Engram] Datashard path doesn't exist, nothing to clean\n")
+		// Still clear TELA cache including negative cache
+		clearAllTELACache()
+		return nil
+	}
+
 	dir, err := os.ReadDir(path)
 	if err != nil {
-		logger.Errorf("[Engram] Error purging local datashard data: %s\n", err)
+		logger.Errorf("[Engram] Error reading datashard directory: %s\n", err)
 		return err
 	}
 
 	for _, d := range dir {
-		os.RemoveAll(filepath.Join([]string{path, d.Name()}...))
-		logger.Printf("[Engram] Local datashard data has been purged successfully\n")
+		if err := os.RemoveAll(filepath.Join([]string{path, d.Name()}...)); err != nil {
+			logger.Errorf("[Engram] Error removing %s: %s\n", d.Name(), err)
+		}
 	}
 
+	// Clear TELA cache including negative cache to allow proper re-scan
+	clearAllTELACache()
+
+	logger.Printf("[Engram] Local datashard data has been purged successfully\n")
 	return nil
 }
 

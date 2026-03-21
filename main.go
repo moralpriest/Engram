@@ -81,6 +81,7 @@ var nav Navigation
 var ui UI
 var appExiting bool
 var previousDomain string
+var lastForegroundTime int64 // unix timestamp of last foreground event (for cooldown)
 
 func main() {
 	// Parse version from ldflags-injected string
@@ -229,33 +230,45 @@ func main() {
 	a.Lifecycle().SetOnEnteredForeground(func() {
 		logger.Printf("[Lifecycle] App gaining focus (foreground), previous domain: %s", previousDomain)
 
-		// Only handle reinitialization if wallet was open
+		isMobileDevice := a.Driver().Device().IsMobile()
+
+		now := time.Now().Unix()
+		if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+			logger.Printf("[Lifecycle] Foreground cooldown active, skipping heavy refresh (mobile: %v)", isMobileDevice)
+			return
+		}
+		lastForegroundTime = now
+
 		if session.WalletOpen && engram.Disk != nil {
-			// Reinitialize RPC connections if needed
 			go func() {
 				generation := currentWalletGeneration()
-				// Give the UI a moment to settle
-				time.Sleep(500 * time.Millisecond)
 
-				if !isWalletGenerationActive(generation) {
+				foregroundDelay := 500 * time.Millisecond
+				if isMobileDevice {
+					foregroundDelay = 1500 * time.Millisecond
+				}
+				time.Sleep(foregroundDelay)
+
+				if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
 					return
 				}
 
-				// Check if RPC connection is alive, reconnect if needed
-				if !session.Offline {
-					if rpc_client.RPC == nil {
-						logger.Printf("[Lifecycle] RPC connection lost, reconnecting...")
-						// Reconnection will happen naturally on next operation
-						// Just ensure the UI is refreshed
-						fyne.Do(func() {
-							if session.Window != nil && session.Window.Content() != nil {
-								session.Window.Content().Refresh()
-							}
-						})
-					}
+				if !session.Offline && rpc_client.RPC == nil {
+					logger.Printf("[Lifecycle] RPC connection lost, will reconnect naturally")
 				}
 
-				// Refresh the current content to ensure UI is stable
+				if isMobileDevice {
+					logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
+					go StartPulse()
+					fyne.Do(func() {
+						if isWalletGenerationActive(generation) && session.Window != nil && session.Window.Content() != nil {
+							session.Window.Content().Refresh()
+							logger.Printf("[Lifecycle] UI refreshed after foreground (mobile)")
+						}
+					})
+					return
+				}
+
 				fyne.Do(func() {
 					if !isWalletGenerationActive(generation) {
 						return
@@ -272,7 +285,6 @@ func main() {
 				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
-			// Wallet was not open, just refresh the UI
 			fyne.Do(func() {
 				if session.Window != nil && session.Window.Content() != nil {
 					session.Window.Content().Refresh()
