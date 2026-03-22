@@ -19808,17 +19808,10 @@ func layoutTELA() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		container.NewCenter(
-			layoutBrowser,
-		),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
@@ -19827,9 +19820,6 @@ func layoutTELA() fyne.CanvasObject {
 					btnSettingsTela,
 				),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -19841,6 +19831,7 @@ func layoutTELA() fyne.CanvasObject {
 			bottom,
 			nil,
 			nil,
+			layoutBrowser,
 		),
 	)
 

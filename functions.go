@@ -6881,7 +6881,29 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-	options := widget.NewSelect([]string{xswd.Allow.String(), xswd.Deny.String()}, nil)
+	done := make(chan struct{})
+
+	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
+		confirmed = true
+		done <- struct{}{}
+	})
+	btnAllow.Importance = widget.MediumImportance
+
+	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
+		confirmed = false
+		done <- struct{}{}
+	})
+	btnDeny.Importance = widget.MediumImportance
+
+	btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
 
 	content := container.NewStack(
 		container.NewBorder(
@@ -6889,7 +6911,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			container.NewVBox(
 				rectSpacer,
 				rectSpacer,
-				options,
+				btnRow,
 				rectSpacer,
 				rectSpacer,
 			),
@@ -6922,30 +6944,6 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		),
 	)
 
-	// Create and show connection prompt
-	done := make(chan struct{})
-	btnDismiss := widget.NewButton("Deny", nil)
-	btnDismiss.OnTapped = func() {
-		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
-			return
-		}
-		if options.Selected == xswd.Allow.String() {
-			confirmed = true
-		}
-		done <- struct{}{}
-	}
-
-	options.OnChanged = func(s string) {
-		if s == xswd.Deny.String() {
-			btnDismiss.Importance = widget.MediumImportance
-		} else {
-			btnDismiss.Importance = widget.HighImportance
-		}
-		btnDismiss.SetText(s)
-		btnDismiss.Refresh()
-	}
-
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
@@ -6973,7 +6971,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 					rectSpacer,
 					rectSpacer,
 					content,
-					btnDismiss,
+					btnRow,
 					rectSpacer,
 					rectSpacer,
 					rectSpacer,
@@ -7430,12 +7428,21 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-	permissions := []string{
-		xswd.Allow.String(),
-		xswd.Deny.String(),
-	}
+	done := make(chan struct{})
 
-	options := widget.NewSelect(permissions, nil)
+	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+		choice = xswd.Allow
+		done <- struct{}{}
+	})
+	btnAllow.Importance = widget.MediumImportance
+
+	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+		choice = xswd.Deny
+		done <- struct{}{}
+	})
+	btnDeny.Importance = widget.MediumImportance
+
+	btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
 
 	content := container.NewStack(
 		container.NewBorder(
@@ -7443,7 +7450,7 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 			container.NewVBox(
 				rectSpacer,
 				rectSpacer,
-				options,
+				btnRow,
 				rectSpacer,
 				rectSpacer,
 			),
@@ -7464,30 +7471,6 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 			),
 		),
 	)
-
-	// Create and show request prompt
-	done := make(chan struct{})
-	btnDismiss := widget.NewButton("Deny", nil)
-	btnDismiss.OnTapped = func() {
-		switch options.Selected {
-		case xswd.Allow.String():
-			choice = xswd.Allow
-		default:
-			choice = xswd.Deny
-		}
-		done <- struct{}{}
-	}
-
-	options.OnChanged = func(s string) {
-		switch s {
-		case xswd.Allow.String():
-			btnDismiss.Importance = widget.HighImportance
-		default:
-			btnDismiss.Importance = widget.MediumImportance
-		}
-		btnDismiss.SetText(s)
-		btnDismiss.Refresh()
-	}
 
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
@@ -7517,7 +7500,7 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 					rectSpacer,
 					rectSpacer,
 					content,
-					btnDismiss,
+					btnRow,
 					rectSpacer,
 					rectSpacer,
 					rectSpacer,
