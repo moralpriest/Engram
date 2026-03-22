@@ -19059,23 +19059,23 @@ func layoutTELA() fyne.CanvasObject {
 		favoritesList,
 	)
 
-	layoutBrowser := container.NewStack(
-		rectWidth,
-		container.NewHBox(
-			layout.NewSpacer(),
-			container.NewVBox(
-				entryHistory,
-				entrySearch,
-				entryServeSCID,
-				errorText,
-				tabButtons,
-				results,
-				favoritesBox,
-				historyBox,
-				searchBox,
-				servingBox,
-			),
-			layout.NewSpacer(),
+	layoutBrowser := container.NewBorder(
+		container.NewVBox(
+			entryHistory,
+			entrySearch,
+			entryServeSCID,
+			errorText,
+			tabButtons,
+			results,
+		),
+		nil,
+		nil,
+		nil,
+		container.NewStack(
+			favoritesBox,
+			historyBox,
+			searchBox,
+			servingBox,
 		),
 	)
 
@@ -19824,6 +19824,10 @@ func layoutTELA() fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
 					btnRescanTela,
@@ -19831,6 +19835,9 @@ func layoutTELA() fyne.CanvasObject {
 					btnSettingsTela,
 				),
 			),
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
 			rectSpacer,
 		),
 	)
