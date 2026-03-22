@@ -3011,97 +3011,8 @@ func layoutRestore() fyne.CanvasObject {
 	importFileText.TextSize = scaleFont(12)
 	importFileText.Alignment = fyne.TextAlignCenter
 
-	// Button to open file picker for import
+	// Button to open file picker for import - OnTapped set after formSuccess is defined
 	btnSelectFile := widget.NewButtonWithIcon("Select Wallet File", theme.FolderOpenIcon(), nil)
-	btnSelectFile.OnTapped = func() {
-		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
-			if err != nil {
-				logger.Errorf("[Engram] File dialog: %s\n", err)
-				showFormError(errorText, "could not import wallet file")
-				return
-			}
-
-			if uri == nil {
-				return // Canceled
-			}
-
-			fileName := uri.URI().String()
-			if uri.URI().MimeType() != "text/plain" {
-				logger.Errorf("[Engram] Cannot import file %s\n", fileName)
-				showFormError(errorText, "cannot import file")
-				return
-			}
-
-			if a.Driver().Device().IsMobile() {
-				fileName = uri.URI().Name()
-			} else {
-				fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
-			}
-
-			if !strings.HasSuffix(fileName, ".db") {
-				logger.Errorf("[Engram] Engram requires .db wallet file\n")
-				showFormError(errorText, "invalid wallet file (must be .db)")
-				return
-			}
-
-			filedata, err := readFromURI(uri)
-			if err != nil {
-				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
-				showFormError(errorText, "cannot read file data")
-				return
-			}
-
-			// Ensure directories exist before import
-			if err := checkDir(); err != nil {
-				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
-				showFormError(errorText, "error importing wallet file")
-				return
-			}
-			filePath := ""
-			switch cachedNetwork {
-			case NETWORK_TESTNET:
-				filePath = filepath.Join(AppPath(), "testnet", fileName)
-			case NETWORK_SIMULATOR:
-				filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
-			default:
-				filePath = filepath.Join(AppPath(), "mainnet", fileName)
-			}
-
-			if _, err = os.Stat(filePath); !os.IsNotExist(err) {
-				logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
-				showFormError(errorText, "wallet file already exists")
-				return
-			}
-
-			err = os.WriteFile(filePath, filedata, 0600)
-			if err != nil {
-				logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
-				showFormError(errorText, "error importing wallet file")
-				return
-			}
-
-			showFormSuccess(errorText, "Wallet imported! Return to login to access your account.")
-
-			if len(fileName) > MaxDisplayFileLen {
-				fileName = fileName[0:MaxDisplayFileLen] + "..."
-			}
-
-			showFormSuccess(importFileText, fileName)
-
-		}, session.Window)
-
-		if !a.Driver().Device().IsMobile() {
-			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
-			if err == nil {
-				dialogFileImport.SetLocation(uri)
-			}
-		}
-
-		dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
-		dialogFileImport.SetView(dialog.ListView)
-		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
-		dialogFileImport.Show()
-	}
 
 	importFileForm := container.NewVBox(
 		rectSpacer,
@@ -3195,6 +3106,271 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	formSuccess.Hide()
+
+	btnSelectFile.OnTapped = func() {
+		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil {
+				logger.Errorf("[Engram] File dialog: %s\n", err)
+				showFormError(errorText, "could not import wallet file")
+				return
+			}
+
+			if uri == nil {
+				return // Canceled
+			}
+
+			fileName := uri.URI().String()
+			if uri.URI().MimeType() != "text/plain" {
+				logger.Errorf("[Engram] Cannot import file %s\n", fileName)
+				showFormError(errorText, "cannot import file")
+				return
+			}
+
+			if a.Driver().Device().IsMobile() {
+				fileName = uri.URI().Name()
+			} else {
+				fileName = filepath.Base(strings.Replace(fileName, "file://", "", -1))
+			}
+
+			if !strings.HasSuffix(fileName, ".db") {
+				logger.Errorf("[Engram] Engram requires .db wallet file\n")
+				showFormError(errorText, "invalid wallet file (must be .db)")
+				return
+			}
+
+			filedata, err := readFromURI(uri)
+			if err != nil {
+				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
+				showFormError(errorText, "cannot read file data")
+				return
+			}
+
+			// Ensure directories exist before import
+			if err := checkDir(); err != nil {
+				logger.Errorf("[Engram] Creating directories for import: %s\n", err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
+			filePath := ""
+			switch cachedNetwork {
+			case NETWORK_TESTNET:
+				filePath = filepath.Join(AppPath(), "testnet", fileName)
+			case NETWORK_SIMULATOR:
+				filePath = filepath.Join(AppPath(), "testnet_simulator", fileName)
+			default:
+				filePath = filepath.Join(AppPath(), "mainnet", fileName)
+			}
+
+			if _, err = os.Stat(filePath); !os.IsNotExist(err) {
+				logger.Errorf("[Engram] Wallet file %q already exists\n", fileName)
+				showFormError(errorText, "wallet file already exists")
+				return
+			}
+
+			err = os.WriteFile(filePath, filedata, 0600)
+			if err != nil {
+				logger.Errorf("[Engram] Importing file %s: %s\n", fileName, err)
+				showFormError(errorText, "error importing wallet file")
+				return
+			}
+
+			// Close any previously open wallet before importing
+			if engram.Disk != nil {
+				closeWallet()
+			}
+
+			// Show password overlay to unlock the imported wallet
+			overlay := session.Window.Canvas().Overlays()
+
+			rectPassSpacer := canvas.NewRectangle(color.Transparent)
+			rectPassSpacer.SetMinSize(fyne.NewSize(10, 5))
+
+			passHeader := canvas.NewText("ENTER WALLET PASSWORD", colors.Gray)
+			passHeader.TextSize = scaleFont(14)
+			passHeader.Alignment = fyne.TextAlignCenter
+			passHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+			passSubHeader := canvas.NewText("Unlock Imported Wallet", colors.Account)
+			passSubHeader.TextSize = scaleFont(22)
+			passSubHeader.Alignment = fyne.TextAlignCenter
+			passSubHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+			btnUnlock := widget.NewButton("Unlock", nil)
+			btnUnlock.Disable()
+
+			entryWalletPass := NewReturnEntry()
+			entryWalletPass.Password = true
+			entryWalletPass.PlaceHolder = "Password"
+			entryWalletPass.OnChanged = func(s string) {
+				if s == "" {
+					btnUnlock.Text = "Unlock"
+					btnUnlock.Disable()
+					btnUnlock.Refresh()
+				} else {
+					btnUnlock.Text = "Unlock"
+					btnUnlock.Enable()
+					btnUnlock.Refresh()
+				}
+			}
+
+			btnBackImport := newSizedIconButton(theme.NavigateBackIcon(), func() {
+				if overlay.Top() != nil {
+					overlay.Top().Hide()
+					overlay.Remove(overlay.Top())
+				}
+				if overlay.Top() != nil {
+					overlay.Remove(overlay.Top())
+				}
+			})
+
+			btnUnlock.OnTapped = func() {
+				btnUnlock.Disable()
+				btnUnlock.Text = "Unlocking..."
+				btnUnlock.Refresh()
+
+				enteredPassword := entryWalletPass.Text
+
+				temp, err := walletapi.Open_Encrypted_Wallet(filePath, enteredPassword)
+				if err != nil {
+					logger.Errorf("[Engram] Cannot open imported wallet: %s\n", err)
+					btnUnlock.Text = "Invalid Password..."
+					btnUnlock.Refresh()
+					entryWalletPass.SetText("")
+					return
+				}
+
+				engram.Disk = temp
+				session.Password = ""
+
+				if cachedNetwork == NETWORK_MAINNET {
+					engram.Disk.SetNetwork(true)
+				} else {
+					engram.Disk.SetNetwork(false)
+				}
+
+				engram.Disk.Get_Balance_Rescan()
+				if err := engram.Disk.Save_Wallet(); err != nil {
+					logger.Errorf("[Import] Failed to save wallet after import: %s\n", err)
+				}
+
+				session.WalletOpen = true
+				beginWalletSession()
+
+				// Reset exit flag so Gnomon can start in this session
+				globals.Exit_In_Progress = false
+
+				// Delete Gnomon database to ensure clean sync state after import
+				gnomonPath := filepath.Join(AppPath(), "datashards", "gnomon")
+				switch session.Network {
+				case NETWORK_TESTNET:
+					gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_testnet")
+				case NETWORK_SIMULATOR:
+					gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
+				}
+				os.RemoveAll(gnomonPath)
+
+				initSettings()
+
+				// Generate QR code for success screen
+				address := engram.Disk.GetAddress().String()
+				qr, err := qrcode.New(address, qrcode.Highest)
+				if err == nil {
+					qr.BackgroundColor = colors.DarkMatter
+					qr.ForegroundColor = colors.Green
+					successQR.Image = qr.Image(int(ui.Width * 0.45))
+					successQR.Refresh()
+				}
+
+				successAddress.SetText(address)
+
+				btnCopyAddress.OnTapped = func() {
+					a.Clipboard().SetContent(address)
+				}
+
+				// Dismiss password overlay
+				if overlay.Top() != nil {
+					overlay.Top().Hide()
+					overlay.Remove(overlay.Top())
+				}
+				if overlay.Top() != nil {
+					overlay.Remove(overlay.Top())
+				}
+
+				// Hide the import form and show the success form with Enter button
+				btnCreate.Hide()
+				form.Hide()
+				form.Refresh()
+				formSuccess.Show()
+				formSuccess.Refresh()
+				btnEnter.Refresh()
+				grid.Refresh()
+				scrollBox.Refresh()
+				session.Window.Canvas().Content().Refresh()
+				session.Window.Canvas().Refresh(session.Window.Content())
+			}
+
+			entryWalletPass.OnReturn = btnUnlock.OnTapped
+
+			passSpan := canvas.NewRectangle(color.Transparent)
+			passSpan.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+			overlay.Add(
+				container.NewStack(
+					&iframe{},
+					canvas.NewRectangle(colors.DarkMatter),
+				),
+			)
+
+			overlay.Add(
+				container.NewStack(
+					&iframe{},
+					container.NewCenter(
+						container.NewVBox(
+							passSpan,
+							container.NewCenter(passHeader),
+							rectPassSpacer,
+							rectPassSpacer,
+							passSubHeader,
+							widget.NewLabel(""),
+							container.NewCenter(
+								container.NewStack(
+									passSpan,
+									entryWalletPass,
+								),
+							),
+							rectPassSpacer,
+							rectPassSpacer,
+							wrapMobileButton(btnUnlock),
+							rectPassSpacer,
+							rectPassSpacer,
+							container.NewHBox(
+								layout.NewSpacer(),
+								btnBackImport,
+								layout.NewSpacer(),
+							),
+							rectPassSpacer,
+							rectPassSpacer,
+						),
+					),
+				),
+			)
+
+			safeCanvasFocus(entryWalletPass)
+
+		}, session.Window)
+
+		if !a.Driver().Device().IsMobile() {
+			uri, err := storage.ListerForURI(storage.NewFileURI(AppPath()))
+			if err == nil {
+				dialogFileImport.SetLocation(uri)
+			}
+		}
+
+		dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
+		dialogFileImport.SetView(dialog.ListView)
+		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
+		dialogFileImport.Show()
+	}
 
 	scrollBox = container.NewVScroll(
 		container.NewStack(
