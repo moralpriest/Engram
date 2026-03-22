@@ -16966,7 +16966,7 @@ func layoutTELA() fyne.CanvasObject {
 	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, scaleSize(35)))
 
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, 100))
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
@@ -16976,7 +16976,6 @@ func layoutTELA() fyne.CanvasObject {
 
 	isMobileLayout := ui.Width <= 360
 	if isMobileLayout {
-		rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.52))
 		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 	}
 
