@@ -20135,44 +20135,22 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	textStatus.Alignment = fyne.TextAlignCenter
 	textStatus.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSeparator := widget.NewRichTextFromMarkdown("")
-	labelSeparator.Wrapping = fyne.TextWrapOff
-	labelSeparator.ParseMarkdown("---")
-	labelSeparator2 := widget.NewRichTextFromMarkdown("")
-	labelSeparator2.Wrapping = fyne.TextWrapOff
-	labelSeparator2.ParseMarkdown("---")
-	labelSeparator3 := widget.NewRichTextFromMarkdown("")
-	labelSeparator3.Wrapping = fyne.TextWrapOff
-	labelSeparator3.ParseMarkdown("---")
-	labelSeparator4 := widget.NewRichTextFromMarkdown("")
-	labelSeparator4.Wrapping = fyne.TextWrapOff
-	labelSeparator4.ParseMarkdown("---")
-	labelSeparator5 := widget.NewRichTextFromMarkdown("")
-	labelSeparator5.Wrapping = fyne.TextWrapOff
-	labelSeparator5.ParseMarkdown("---")
-	// labelSeparator6 := widget.NewRichTextFromMarkdown("")
-	// labelSeparator6.Wrapping = fyne.TextWrapOff
-	// labelSeparator6.ParseMarkdown("---")
+	sepWidth := ui.Width * 0.9
 
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	labelSeparator := canvas.NewRectangle(colors.Gray)
+	labelSeparator.SetMinSize(fyne.NewSize(sepWidth, 1))
 
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
+	labelSeparator2 := canvas.NewRectangle(colors.Gray)
+	labelSeparator2.SetMinSize(fyne.NewSize(sepWidth, 1))
 
-	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	labelSeparator3 := canvas.NewRectangle(colors.Gray)
+	labelSeparator3.SetMinSize(fyne.NewSize(sepWidth, 1))
 
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep2,
-		layout.NewSpacer(),
-	)
-	_ = line1
-	_ = line2
+	labelSeparator4 := canvas.NewRectangle(colors.Gray)
+	labelSeparator4.SetMinSize(fyne.NewSize(sepWidth, 1))
+
+	labelSeparator5 := canvas.NewRectangle(colors.Gray)
+	labelSeparator5.SetMinSize(fyne.NewSize(sepWidth, 1))
 
 	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
