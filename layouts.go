@@ -2400,11 +2400,7 @@ func layoutRestore() fyne.CanvasObject {
 
 	wPassword := NewMobileEntry()
 	wPassword.OnFocusGained = func() {
-		offset := wPassword.Position().Y
-		if offset-scrollBox.Offset.Y > scrollBox.MinSize().Height {
-			scrollBox.Offset = fyne.NewPos(0, offset)
-			scrollBox.Refresh()
-		}
+		scrollToFieldOnMobile(wPassword, scrollBox)
 	}
 
 	wPassword.Password = true
@@ -2435,11 +2431,7 @@ func layoutRestore() fyne.CanvasObject {
 
 	wPasswordConfirm := NewMobileEntry()
 	wPasswordConfirm.OnFocusGained = func() {
-		offset := wPasswordConfirm.Position().Y
-		if offset-scrollBox.Offset.Y > scrollBox.MinSize().Height {
-			scrollBox.Offset = fyne.NewPos(0, offset)
-			scrollBox.Refresh()
-		}
+		scrollToFieldOnMobile(wPasswordConfirm, scrollBox)
 	}
 
 	wPasswordConfirm.Password = true
@@ -2680,8 +2672,7 @@ func layoutRestore() fyne.CanvasObject {
 
 	wAccount := NewMobileEntry()
 	wAccount.OnFocusGained = func() {
-		scrollBox.Offset = fyne.NewPos(0, 0)
-		scrollBox.Refresh()
+		scrollToFieldOnMobile(wAccount, scrollBox)
 	}
 
 	wLanguage := widget.NewSelect(mnemonics.Language_List(), nil)
@@ -2829,6 +2820,9 @@ func layoutRestore() fyne.CanvasObject {
 	seedEntry.Wrapping = fyne.TextWrapWord
 	seedEntry.SetMinRowsVisible(6)
 	seedEntry.Password = false
+	seedEntry.OnFocusGained = func() {
+		scrollToFieldOnMobile(seedEntry, scrollBox)
+	}
 
 	btnToggleSeed := widget.NewButtonWithIcon("", theme.VisibilityIcon(), nil)
 	btnToggleSeed.OnTapped = func() {
@@ -2919,6 +2913,9 @@ func layoutRestore() fyne.CanvasObject {
 	hexEntry.Wrapping = fyne.TextWrapWord
 	hexEntry.SetMinRowsVisible(2)
 	hexEntry.Password = true
+	hexEntry.OnFocusGained = func() {
+		scrollToFieldOnMobile(hexEntry, scrollBox)
+	}
 	hexEntry.Validator = func(s string) (err error) {
 		clearFormText(errorText)
 

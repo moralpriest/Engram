@@ -16,6 +16,7 @@ package main
 
 import (
 	"image/color"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -291,3 +292,45 @@ func (r *spacerRenderer) Objects() []fyne.CanvasObject {
 }
 
 func (r *spacerRenderer) Destroy() {}
+
+// scrollToFieldOnMobile scrolls the scroll container to ensure a field is visible
+// above the keyboard on mobile devices
+func scrollToFieldOnMobile(field fyne.CanvasObject, scrollBox *container.Scroll) {
+	if !isMobile() {
+		return
+	}
+
+	// Delay to let the keyboard appear first
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+
+		fyne.Do(func() {
+			// Get the canvas to calculate absolute positions
+			canvas := fyne.CurrentApp().Driver().CanvasForObject(field)
+			if canvas == nil {
+				return
+			}
+
+			// Get field's position on screen (absolute)
+			fieldPosOnScreen := fyne.CurrentApp().Driver().AbsolutePositionForObject(field)
+
+			// Calculate where we want the field to be positioned
+			// Account for header area (Recover Account + Network + recovery type cards)
+			// Header is approximately 120-150dp, add extra padding to be safe
+			desiredY := scaleSize(160)
+
+			// Calculate how much we need to scroll
+			// Current field Y position minus desired position gives us the scroll offset needed
+			scrollAmount := fieldPosOnScreen.Y - desiredY
+
+			// Apply the scroll offset
+			newOffset := scrollBox.Offset.Y + scrollAmount
+			if newOffset < 0 {
+				newOffset = 0
+			}
+
+			scrollBox.Offset = fyne.NewPos(0, newOffset)
+			scrollBox.Refresh()
+		})
+	}()
+}
