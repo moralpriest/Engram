@@ -19815,9 +19815,6 @@ func layoutTELA() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
-		container.NewCenter(
-			layoutBrowser,
-		),
 	)
 
 	bottom := container.NewStack(
@@ -19848,6 +19845,7 @@ func layoutTELA() fyne.CanvasObject {
 			bottom,
 			nil,
 			nil,
+			layoutBrowser,
 		),
 	)
 
