@@ -320,18 +320,18 @@ func layoutMain() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	headerBlock := canvas.NewRectangle(color.Transparent)
 	headerBlock.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
 
 	headerBox := canvas.NewRectangle(color.Transparent)
-	headerBox.SetMinSize(fyne.NewSize(ui.Width, 1))
+	headerBox.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 
 	frame := &iframe{}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
 	status.Connection.FillColor = colors.Gray
 	status.RemoteAccess.FillColor = colors.Gray
@@ -344,7 +344,7 @@ func layoutMain() fyne.CanvasObject {
 	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
 	separator := container.NewCenter(separatorLine)
 	separatorSpacer := canvas.NewRectangle(color.Transparent)
-	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	// Create uniform button container - each button same size
 	buttonGrid := container.NewVBox(
@@ -363,11 +363,11 @@ func layoutMain() fyne.CanvasObject {
 
 	// Footer text
 	copyrightLabel := canvas.NewText("Copyright 2023-2026 DERO Foundation. All rights reserved.", colors.Gray)
-	copyrightLabel.TextSize = 10
+	copyrightLabel.TextSize = scaleFont(10)
 	copyrightLabel.Alignment = fyne.TextAlignCenter
 
 	versionLabel := canvas.NewText(fmt.Sprintf("Engram v%s", versionString), colors.Gray)
-	versionLabel.TextSize = 10
+	versionLabel.TextSize = scaleFont(10)
 	versionLabel.Alignment = fyne.TextAlignCenter
 
 	footer := container.NewVBox(
@@ -477,7 +477,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	// Display wallet name
 	lblWalletName := canvas.NewText(walletName, colors.Green)
-	lblWalletName.TextSize = 16
+	lblWalletName.TextSize = scaleFont(16)
 	lblWalletName.Alignment = fyne.TextAlignCenter
 	lblWalletName.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -609,13 +609,13 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	// Layout
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 20))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 
 	separatorLine := canvas.NewRectangle(color.White)
-	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
+	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(1)))
 	separator := container.NewCenter(separatorLine)
 	separatorSpacer := canvas.NewRectangle(color.Transparent)
-	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, 10))
+	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	isMobile := a.Driver().Device().IsMobile()
 
@@ -634,12 +634,6 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 		)
 
 		form = container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
@@ -695,7 +689,7 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Domain = "app.wallet"
 
 	session.BalanceText = canvas.NewText("...", colors.Green)
-	session.BalanceText.TextSize = 28
+	session.BalanceText.TextSize = scaleFont(28)
 	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
 
 	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
@@ -768,7 +762,7 @@ func layoutDashboard() fyne.CanvasObject {
 	}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	frame := &iframe{}
 
@@ -782,37 +776,37 @@ func layoutDashboard() fyne.CanvasObject {
 	path := strings.Split(session.Path, string(filepath.Separator))
 	accountName := canvas.NewText(path[len(path)-1], colors.Green)
 	accountName.TextStyle = fyne.TextStyle{Bold: true}
-	accountName.TextSize = 18
+	accountName.TextSize = scaleFont(18)
 
 	gramSend := widget.NewButton(" Send ", nil)
 
 	heading := canvas.NewText("B A L A N C E", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	sendDesc := canvas.NewText("Add Transfer Details", colors.Gray)
-	sendDesc.TextSize = 18
+	sendDesc.TextSize = scaleFont(18)
 	sendDesc.Alignment = fyne.TextAlignCenter
 	sendDesc.TextStyle = fyne.TextStyle{Bold: true}
 
 	sendHeading := canvas.NewText("Send Money", colors.Green)
-	sendHeading.TextSize = 22
+	sendHeading.TextSize = scaleFont(22)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
 	headerLabel := canvas.NewText("  "+network+"  ", colors.Gray)
-	headerLabel.TextSize = 11
+	headerLabel.TextSize = scaleFont(11)
 	headerLabel.Alignment = fyne.TextAlignCenter
 	headerLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	statusLabel := canvas.NewText("  S T A T U S  ", colors.Gray)
-	statusLabel.TextSize = 11
+	statusLabel.TextSize = scaleFont(11)
 	statusLabel.Alignment = fyne.TextAlignCenter
 	statusLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	daemonLabel := canvas.NewText("OFFLINE", colors.Gray)
-	daemonLabel.TextSize = 12
+	daemonLabel.TextSize = scaleFont(12)
 	daemonLabel.Alignment = fyne.TextAlignCenter
 	daemonLabel.TextStyle = fyne.TextStyle{Bold: false}
 
@@ -827,17 +821,17 @@ func layoutDashboard() fyne.CanvasObject {
 	}
 
 	remoteAccessLabel := canvas.NewText(remoteAccessText, colors.Gray)
-	remoteAccessLabel.TextSize = 12
+	remoteAccessLabel.TextSize = scaleFont(12)
 	remoteAccessLabel.Alignment = fyne.TextAlignTrailing
 	remoteAccessLabel.TextStyle = fyne.TextStyle{Bold: false}
 
 	gnomonLabel := canvas.NewText("GNOMON", colors.Gray)
-	gnomonLabel.TextSize = 12
+	gnomonLabel.TextSize = scaleFont(12)
 	gnomonLabel.Alignment = fyne.TextAlignCenter
 	gnomonLabel.TextStyle = fyne.TextStyle{Bold: false}
 
 	epochLabel := canvas.NewText("EPOCH", colors.Gray)
-	epochLabel.TextSize = 12
+	epochLabel.TextSize = scaleFont(12)
 	epochLabel.Alignment = fyne.TextAlignTrailing
 	epochLabel.TextStyle = fyne.TextStyle{Bold: false}
 	if !epoch.IsActive() {
@@ -851,7 +845,7 @@ func layoutDashboard() fyne.CanvasObject {
 	}
 
 	telaLabel := canvas.NewText("TELA", colors.Gray)
-	telaLabel.TextSize = 12
+	telaLabel.TextSize = scaleFont(12)
 	telaLabel.Alignment = fyne.TextAlignCenter
 	telaLabel.TextStyle = fyne.TextStyle{Bold: false}
 
@@ -891,12 +885,12 @@ func layoutDashboard() fyne.CanvasObject {
 
 	session.WalletHeight = engram.Disk.Get_Height()
 	session.StatusText = canvas.NewText(fmt.Sprintf("%d", session.WalletHeight), colors.Gray)
-	session.StatusText.TextSize = 12
+	session.StatusText.TextSize = scaleFont(12)
 	session.StatusText.Alignment = fyne.TextAlignTrailing
 	session.StatusText.TextStyle = fyne.TextStyle{Bold: false}
 
 	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 
 	line1 := container.NewVBox(
 		layout.NewSpacer(),
@@ -905,7 +899,7 @@ func layoutDashboard() fyne.CanvasObject {
 	)
 
 	sep2 := canvas.NewRectangle(colors.Gray)
-	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 
 	line2 := container.NewVBox(
 		layout.NewSpacer(),
@@ -1150,30 +1144,30 @@ func layoutDashboard() fyne.CanvasObject {
 	gramSendWrapper := wrapMobileButton(gramSend)
 
 	separator := canvas.NewText(" | ", colors.Gray)
-	separator.TextSize = 14
+	separator.TextSize = scaleFont(14)
 	separator.Alignment = fyne.TextAlignCenter
 
-	res.gram.SetMinSize(fyne.NewSize(ui.Width, 150))
+	res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	rectSpacerLarge := canvas.NewRectangle(color.Transparent)
-	rectSpacerLarge.SetMinSize(fyne.NewSize(10, 25))
+	rectSpacerLarge.SetMinSize(scalePoint(10, 25))
 
 	rectSquare := canvas.NewRectangle(color.Transparent)
-	rectSquare.SetMinSize(fyne.NewSize(5, 5))
+	rectSquare.SetMinSize(smallSpacerSize())
 
-	statusDotSize := fyne.NewSize(10, 10)
-	connectionDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.Connection))
-	syncDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, syncAnimationCanvas, status.Sync))
-	gnomonDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, gnomonAnimationCanvas, status.Gnomon))
-	epochDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, epochAnimationCanvas, status.EPOCH))
-	telaDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, telaStatus))
-	remoteAccessDot := container.NewGridWrap(statusDotSize, container.NewStack(rectStatus, status.RemoteAccess))
+	dotSz := statusDotSize()
+	connectionDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, status.Connection))
+	syncDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, syncAnimationCanvas, status.Sync))
+	gnomonDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, gnomonAnimationCanvas, status.Gnomon))
+	epochDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, epochAnimationCanvas, status.EPOCH))
+	telaDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, telaStatus))
+	remoteAccessDot := container.NewGridWrap(dotSz, container.NewStack(rectStatus, status.RemoteAccess))
 
 	rectOffset := canvas.NewRectangle(color.Transparent)
-	rectOffset.SetMinSize(fyne.NewSize(81, 1))
+	rectOffset.SetMinSize(scalePoint(81, 1))
 
 	deroForm := container.NewVBox(
 		rectSpacer,
@@ -1561,12 +1555,12 @@ func layoutSend() fyne.CanvasObject {
 	}
 
 	sendHeading := canvas.NewText("S E N D    D E R O", colors.Gray)
-	sendHeading.TextSize = 16
+	sendHeading.TextSize = scaleFont(16)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
 	optionalLabel := canvas.NewText("  O P T I O N A L  ", colors.Gray)
-	optionalLabel.TextSize = 11
+	optionalLabel.TextSize = scaleFont(11)
 	optionalLabel.Alignment = fyne.TextAlignCenter
 	optionalLabel.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1604,10 +1598,10 @@ func layoutSend() fyne.CanvasObject {
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 260))
 
 	rect300 := canvas.NewRectangle(color.Transparent)
-	rect300.SetMinSize(fyne.NewSize(ui.Width, 30))
+	rect300.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	form := container.NewVBox(
 		rectSpacer,
@@ -1775,12 +1769,12 @@ func layoutServiceAddress() fyne.CanvasObject {
 	wPaymentID.SetPlaceHolder("Payment ID / Service Port")
 
 	sendHeading := canvas.NewText("P A Y M E N T    R E Q U E S T", colors.Gray)
-	sendHeading.TextSize = 16
+	sendHeading.TextSize = scaleFont(16)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
 	optionalLabel := canvas.NewText("  O P T I O N A L  ", colors.Gray)
-	optionalLabel.TextSize = 11
+	optionalLabel.TextSize = scaleFont(11)
 	optionalLabel.Alignment = fyne.TextAlignCenter
 	optionalLabel.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1815,10 +1809,10 @@ func layoutServiceAddress() fyne.CanvasObject {
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 260))
 
 	rect300 := canvas.NewRectangle(color.Transparent)
-	rect300.SetMinSize(fyne.NewSize(ui.Width, 30))
+	rect300.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	btnCreate.OnTapped = func() {
 		var err error
@@ -1829,17 +1823,17 @@ func layoutServiceAddress() fyne.CanvasObject {
 
 			if err == nil {
 				header := canvas.NewText("CREATE  PAYMENT  REQUEST", colors.Gray)
-				header.TextSize = 14
+				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
 				subHeader := canvas.NewText("Successfully Created", colors.Account)
-				subHeader.TextSize = 22
+				subHeader.TextSize = scaleFont(22)
 				subHeader.Alignment = fyne.TextAlignCenter
 				subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
 				labelAddress := canvas.NewText("-------------    INTEGRATED  ADDRESS    -------------", colors.Gray)
-				labelAddress.TextSize = 12
+				labelAddress.TextSize = scaleFont(12)
 				labelAddress.Alignment = fyne.TextAlignCenter
 				labelAddress.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1895,7 +1889,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 				imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
 
 				span := canvas.NewRectangle(color.Transparent)
-				span.SetMinSize(fyne.NewSize(ui.Width, 10))
+				span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 				overlay := session.Window.Canvas().Overlays()
 
@@ -2044,7 +2038,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	languages := mnemonics.Language_List()
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	btnCreate := widget.NewButton("Create", nil)
@@ -2191,23 +2185,23 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("New Account", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	heading2 := canvas.NewText("Recovery", colors.Green)
-	heading2.TextSize = 22
+	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	rectHeader := canvas.NewRectangle(color.Transparent)
-	rectHeader.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
 	grid := container.NewVBox()
 	grid.Objects = nil
@@ -2314,7 +2308,7 @@ func layoutNewAccount() fyne.CanvasObject {
 		formatted := strings.Split(seed, " ")
 
 		rect := canvas.NewRectangle(color.RGBA{21, 27, 36, 255})
-		rect.SetMinSize(fyne.NewSize(ui.Width, 25))
+		rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
 		for i := 0; i < len(formatted); i++ {
 			pos := fmt.Sprintf("%d", i+1)
@@ -2382,12 +2376,12 @@ func layoutRestore() fyne.CanvasObject {
 	scrollBox := container.NewVScroll(nil)
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	// Password strength indicator
 	strengthText := canvas.NewText(" ", colors.Gray)
-	strengthText.TextSize = 11
+	strengthText.TextSize = scaleFont(11)
 	strengthText.Alignment = fyne.TextAlignCenter
 
 	btnCreate := widget.NewButton("Recover", nil)
@@ -2472,37 +2466,37 @@ func layoutRestore() fyne.CanvasObject {
 	cardBgHex := canvas.NewRectangle(colors.Gray)
 	cardBgImport := canvas.NewRectangle(colors.Gray)
 
-	cardBgWords.CornerRadius = 12
-	cardBgHex.CornerRadius = 12
-	cardBgImport.CornerRadius = 12
+	cardBgWords.CornerRadius = scaleSize(12)
+	cardBgHex.CornerRadius = scaleSize(12)
+	cardBgImport.CornerRadius = scaleSize(12)
 
 	// Card labels
 	lblWords := canvas.NewText("Words", colors.DarkMatter)
-	lblWords.TextSize = 14
+	lblWords.TextSize = scaleFont(14)
 	lblWords.Alignment = fyne.TextAlignCenter
 	lblWords.TextStyle = fyne.TextStyle{Bold: true}
 
 	lblHex := canvas.NewText("Hex Key", color.White)
-	lblHex.TextSize = 14
+	lblHex.TextSize = scaleFont(14)
 	lblHex.Alignment = fyne.TextAlignCenter
 	lblHex.TextStyle = fyne.TextStyle{Bold: true}
 
 	lblImport := canvas.NewText("Import", color.White)
-	lblImport.TextSize = 14
+	lblImport.TextSize = scaleFont(14)
 	lblImport.Alignment = fyne.TextAlignCenter
 	lblImport.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Card descriptions
 	descWords := canvas.NewText("25 words", colors.DarkMatter)
-	descWords.TextSize = 11
+	descWords.TextSize = scaleFont(11)
 	descWords.Alignment = fyne.TextAlignCenter
 
 	descHex := canvas.NewText("64 chars", color.White)
-	descHex.TextSize = 11
+	descHex.TextSize = scaleFont(11)
 	descHex.Alignment = fyne.TextAlignCenter
 
 	descImport := canvas.NewText(".db file", color.White)
-	descImport.TextSize = 11
+	descImport.TextSize = scaleFont(11)
 	descImport.Alignment = fyne.TextAlignCenter
 
 	// Card icons - larger size
@@ -2793,7 +2787,7 @@ func layoutRestore() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("Recover Account", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -2804,22 +2798,22 @@ func layoutRestore() fyne.CanvasObject {
 		networkColor = colors.Yellow
 	}
 	networkIndicator := canvas.NewText(networkName, networkColor)
-	networkIndicator.TextSize = 12
+	networkIndicator.TextSize = scaleFont(12)
 	networkIndicator.Alignment = fyne.TextAlignCenter
 
 	heading2 := canvas.NewText("Success", colors.Green)
-	heading2.TextSize = 22
+	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	rectHeader := canvas.NewRectangle(color.Transparent)
-	rectHeader.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
 	status.Connection.FillColor = colors.Gray
 	status.RemoteAccess.FillColor = colors.Gray
@@ -2856,7 +2850,7 @@ func layoutRestore() fyne.CanvasObject {
 	}
 
 	seedInfo := canvas.NewText(" ", colors.Gray)
-	seedInfo.TextSize = 11
+	seedInfo.TextSize = scaleFont(11)
 	seedInfo.Alignment = fyne.TextAlignCenter
 
 	// Show word count as user types
@@ -2970,7 +2964,7 @@ func layoutRestore() fyne.CanvasObject {
 	}
 
 	hexSpacer := canvas.NewRectangle(color.Transparent)
-	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, 60))
+	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(60)))
 
 	hexForm := container.NewVBox(
 		rectSpacer,
@@ -3017,7 +3011,7 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	importFileText := canvas.NewText(" ", colors.Green)
-	importFileText.TextSize = 12
+	importFileText.TextSize = scaleFont(12)
 	importFileText.Alignment = fyne.TextAlignCenter
 
 	// Button to open file picker for import
@@ -3402,7 +3396,7 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	rect1 := canvas.NewRectangle(color.Transparent)
-	rect1.SetMinSize(fyne.NewSize(ui.Width, 1))
+	rect1.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 
 	footer := container.NewCenter(
 		rect1,
@@ -3434,12 +3428,12 @@ func layoutAssetExplorer() fyne.CanvasObject {
 	frame := &iframe{}
 
 	heading := canvas.NewText("A S S E T    E X P L O R E R", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -3512,18 +3506,18 @@ func layoutMyAssets() fyne.CanvasObject {
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
 
 	heading := canvas.NewText("M Y    A S S E T S", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	results := canvas.NewText("", colors.Green)
-	results.TextSize = 13
+	results.TextSize = scaleFont(13)
 
 	labelLastScan := canvas.NewText("", colors.Green)
-	labelLastScan.TextSize = 13
+	labelLastScan.TextSize = scaleFont(13)
 
 	listData = binding.BindStringList(&data)
 	listBox = widget.NewListWithData(listData,
@@ -4014,43 +4008,43 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.58))
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	heading := canvas.NewText("Asset Manager", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelSigner := canvas.NewText("   SMART  CONTRACT  AUTHOR", colors.Gray)
-	labelSigner.TextSize = 14
+	labelSigner.TextSize = scaleFont(14)
 	labelSigner.Alignment = fyne.TextAlignLeading
 	labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelOwner := canvas.NewText("   SMART  CONTRACT  OWNER", colors.Gray)
-	labelOwner.TextSize = 14
+	labelOwner.TextSize = scaleFont(14)
 	labelOwner.Alignment = fyne.TextAlignLeading
 	labelOwner.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
-	labelSCID.TextSize = 14
+	labelSCID.TextSize = scaleFont(14)
 	labelSCID.Alignment = fyne.TextAlignLeading
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelBalance := canvas.NewText("   ASSET  BALANCE", colors.Gray)
-	labelBalance.TextSize = 14
+	labelBalance.TextSize = scaleFont(14)
 	labelBalance.Alignment = fyne.TextAlignLeading
 	labelBalance.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelTransfer := canvas.NewText("   TRANSFER  ASSET", colors.Gray)
-	labelTransfer.TextSize = 14
+	labelTransfer.TextSize = scaleFont(14)
 	labelTransfer.Alignment = fyne.TextAlignLeading
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelExecute := canvas.NewText("   EXECUTE  ACTION", colors.Gray)
-	labelExecute.TextSize = 14
+	labelExecute.TextSize = scaleFont(14)
 	labelExecute.Alignment = fyne.TextAlignLeading
 	labelExecute.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -4245,7 +4239,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	var zerobal uint64
 
 	balance := canvas.NewText(fmt.Sprintf("  %d", zerobal), colors.Green)
-	balance.TextSize = 20
+	balance.TextSize = scaleFont(20)
 	balance.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnSend.OnTapped = func() {
@@ -4547,12 +4541,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				params = contract.Functions[f].Params
 
 				header := canvas.NewText("EXECUTE  CONTRACT  FUNCTION", colors.Gray)
-				header.TextSize = 14
+				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
 				funcName := canvas.NewText(s, colors.Account)
-				funcName.TextSize = 22
+				funcName.TextSize = scaleFont(22)
 				funcName.Alignment = fyne.TextAlignCenter
 				funcName.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -4566,7 +4560,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				}
 
 				span := canvas.NewRectangle(color.Transparent)
-				span.SetMinSize(fyne.NewSize(ui.Width, 10))
+				span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 				overlay.Add(
 					container.NewStack(
@@ -5013,31 +5007,31 @@ func layoutTransfers() fyne.CanvasObject {
 
 	sendTitle := canvas.NewText("T R A N S F E R S", colors.Gray)
 	sendTitle.TextStyle = fyne.TextStyle{Bold: true}
-	sendTitle.TextSize = 16
+	sendTitle.TextSize = scaleFont(16)
 
 	sendDesc := canvas.NewText("", colors.Gray)
-	sendDesc.TextSize = 18
+	sendDesc.TextSize = scaleFont(18)
 	sendDesc.Alignment = fyne.TextAlignCenter
 	sendDesc.TextStyle = fyne.TextStyle{Bold: true}
 
 	sendHeading := canvas.NewText("S A V E D    T R A N S F E R S", colors.Gray)
-	sendHeading.TextSize = 16
+	sendHeading.TextSize = scaleFont(16)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 20))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 	frame := &iframe{}
-	rect.SetMinSize(fyne.NewSize(ui.Width, 30))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
-	rect.SetMinSize(fyne.NewSize(10, 10))
+	rectSpacer.SetMinSize(standardSpacerSize())
+	rect.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
-	rectEmpty.SetMinSize(fyne.NewSize(10, 10))
+	rectEmpty.SetMinSize(statusDotSize())
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.53))
 
@@ -5098,10 +5092,10 @@ func layoutTransfers() fyne.CanvasObject {
 			dest := dataItem[2]
 			dest = "   " + dest[0:4] + " ... " + dest[len(dataItem[2])-10:]
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*canvas.Text).Text = dest
-			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*canvas.Text).TextSize = 17
+			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*canvas.Text).TextSize = scaleFont(17)
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[0].(*canvas.Text).TextStyle.Bold = true
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[2].(*canvas.Text).Text = dataItem[1] + "   "
-			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[2].(*canvas.Text).TextSize = 17
+			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[2].(*canvas.Text).TextSize = scaleFont(17)
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[2].(*canvas.Text).TextStyle.Bold = true
 		})
 
@@ -5137,12 +5131,12 @@ func layoutTransfers() fyne.CanvasObject {
 		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Confirm Password", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -5271,7 +5265,7 @@ func layoutTransfers() fyne.CanvasObject {
 		entryPassword.OnReturn = btnSubmit.OnTapped
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay.Add(
 			container.NewStack(
@@ -5417,51 +5411,51 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	frame := &iframe{}
 
 	heading := canvas.NewText("T R A N S F E R    D E T A I L", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelDestination := canvas.NewText("   RECEIVER  ADDRESS", colors.Gray)
-	labelDestination.TextSize = 14
+	labelDestination.TextSize = scaleFont(14)
 	labelDestination.Alignment = fyne.TextAlignLeading
 	labelDestination.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelAmount := canvas.NewText("   AMOUNT", colors.Gray)
-	labelAmount.TextSize = 14
+	labelAmount.TextSize = scaleFont(14)
 	labelAmount.Alignment = fyne.TextAlignLeading
 	labelAmount.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelService := canvas.NewText("   PAYMENT  REQUEST", colors.Gray)
-	labelService.TextSize = 14
+	labelService.TextSize = scaleFont(14)
 	labelService.Alignment = fyne.TextAlignLeading
 	labelService.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelDestPort := canvas.NewText("   DESTINATION  PORT", colors.Gray)
-	labelDestPort.TextSize = 14
+	labelDestPort.TextSize = scaleFont(14)
 	labelDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelSourcePort := canvas.NewText("   SOURCE  PORT", colors.Gray)
-	labelSourcePort.TextSize = 14
+	labelSourcePort.TextSize = scaleFont(14)
 	labelSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelFees := canvas.NewText("   TRANSACTION  FEES", colors.Gray)
-	labelFees.TextSize = 14
+	labelFees.TextSize = scaleFont(14)
 	labelFees.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelPayload := canvas.NewText("   PAYLOAD", colors.Gray)
-	labelPayload.TextSize = 14
+	labelPayload.TextSize = scaleFont(14)
 	labelPayload.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelReply := canvas.NewText("   REPLY  ADDRESS", colors.Gray)
-	labelReply.TextSize = 14
+	labelReply.TextSize = scaleFont(14)
 	labelReply.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
@@ -5542,12 +5536,12 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	}
 
 	valueAmount := canvas.NewText("", colors.Account)
-	valueAmount.TextSize = 22
+	valueAmount.TextSize = scaleFont(22)
 	valueAmount.TextStyle = fyne.TextStyle{Bold: true}
 	valueAmount.Text = "  " + globals.FormatMoney(details.Amount)
 
 	valueDestPort := canvas.NewText("", colors.Account)
-	valueDestPort.TextSize = 22
+	valueDestPort.TextSize = scaleFont(22)
 	valueDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
 	if details.Payload_RPC.HasValue(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
@@ -5739,24 +5733,24 @@ func layoutSettings() fyne.CanvasObject {
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	heading := canvas.NewText("Settings", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelNetwork := canvas.NewText("NETWORK", colors.Gray)
 	labelNetwork.TextStyle = fyne.TextStyle{Bold: true}
-	labelNetwork.TextSize = 14
+	labelNetwork.TextSize = scaleFont(14)
 
 	labelNode := canvas.NewText("CONNECTION", colors.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
-	labelNode.TextSize = 14
+	labelNode.TextSize = scaleFont(14)
 
 	labelSecurity := canvas.NewText("SECURITY", colors.Gray)
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
-	labelSecurity.TextSize = 14
+	labelSecurity.TextSize = scaleFont(14)
 
 	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
 	textRemoteAccess.Wrapping = fyne.TextWrapWord
@@ -6147,7 +6141,7 @@ func layoutSettings() fyne.CanvasObject {
 	}
 
 	statusText := canvas.NewText("", colors.Account)
-	statusText.TextSize = 12
+	statusText.TextSize = scaleFont(12)
 
 	btnDelete.OnTapped = func() {
 		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
@@ -6264,15 +6258,15 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	heading := canvas.NewText("SETTINGS", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
-	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 1))
+	rectWidth.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 
 	// Remote Access Tab Content
 	go refreshXSWDList()
@@ -6281,26 +6275,26 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.20))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 0))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
 	rpcLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
-	rpcLabel.TextSize = 11
+	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	wsLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
-	wsLabel.TextSize = 11
+	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelConnections := canvas.NewText("  C O N N E C T I O N S  ", colors.Gray)
-	labelConnections.TextSize = 11
+	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -6326,7 +6320,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
-	shortShard.TextSize = 12
+	shortShard.TextSize = scaleFont(12)
 
 	linkColor := colors.Green
 
@@ -6336,11 +6330,11 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
-	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
-	serverStatus.TextSize = 12
+	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -6388,7 +6382,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
-	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextSize = scaleFont(22)
 	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
@@ -6712,7 +6706,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	// TELA Tab Content
 	telaTitle := canvas.NewText("T E L A", colors.Gray)
 	telaTitle.TextStyle = fyne.TextStyle{Bold: true}
-	telaTitle.TextSize = 16
+	telaTitle.TextSize = scaleFont(16)
 
 	// Port Start entry
 	entryPortStart := widget.NewEntry()
@@ -7015,11 +7009,11 @@ func layoutAppSettings() fyne.CanvasObject {
 	// Advanced Tab Content
 	advancedTitle := canvas.NewText("A D V A N C E D", colors.Gray)
 	advancedTitle.TextStyle = fyne.TextStyle{Bold: true}
-	advancedTitle.TextSize = 16
+	advancedTitle.TextSize = scaleFont(16)
 
 	// GNOMON Section
 	gnomonTitle := canvas.NewText("GNOMON", colors.Gray)
-	gnomonTitle.TextSize = 11
+	gnomonTitle.TextSize = scaleFont(11)
 	gnomonTitle.Alignment = fyne.TextAlignCenter
 	gnomonTitle.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7050,7 +7044,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText("EPOCH STATISTICS", colors.Gray)
-	epochTitle.TextSize = 11
+	epochTitle.TextSize = scaleFont(11)
 	epochTitle.Alignment = fyne.TextAlignCenter
 	epochTitle.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7101,7 +7095,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// SCANNING Section
 	scanningTitle := canvas.NewText("SCANNING", colors.Gray)
-	scanningTitle.TextSize = 11
+	scanningTitle.TextSize = scaleFont(11)
 	scanningTitle.Alignment = fyne.TextAlignCenter
 	scanningTitle.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7136,7 +7130,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// MAINTENANCE Section
 	maintenanceTitle := canvas.NewText("MAINTENANCE", colors.Gray)
-	maintenanceTitle.TextSize = 11
+	maintenanceTitle.TextSize = scaleFont(11)
 	maintenanceTitle.Alignment = fyne.TextAlignCenter
 	maintenanceTitle.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7244,12 +7238,12 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// DATASHARD Section components
 	labelDatashard := canvas.NewText("DATASHARD", colors.Gray)
-	labelDatashard.TextSize = 11
+	labelDatashard.TextSize = scaleFont(11)
 	labelDatashard.Alignment = fyne.TextAlignCenter
 	labelDatashard.TextStyle = fyne.TextStyle{Bold: true}
 
 	headerDatashard := canvas.NewText("DATASHARD  ID", colors.Gray)
-	headerDatashard.TextSize = 16
+	headerDatashard.TextSize = scaleFont(16)
 	headerDatashard.Alignment = fyne.TextAlignCenter
 	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7268,12 +7262,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	btnClearDatashard := widget.NewButton("Delete Datashard", nil)
 	btnClearDatashard.OnTapped = func() {
 		header := canvas.NewText("DATASHARD  DELETION  REQUESTED", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Are you sure?", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -7299,7 +7293,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay := session.Window.Canvas().Overlays()
 
@@ -7645,7 +7639,7 @@ func layoutMessages() fyne.CanvasObject {
 
 	title := canvas.NewText("M Y    C O N T A C T S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	checkLimit := widget.NewCheck(" Show only recent messages", nil)
 	checkLimit.OnChanged = func(b bool) {
@@ -7674,18 +7668,18 @@ func layoutMessages() fyne.CanvasObject {
 	})
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
-	rectEmpty.SetMinSize(fyne.NewSize(10, 10))
+	rectEmpty.SetMinSize(statusDotSize())
 	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 20))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 	frame := &iframe{}
-	rect.SetMinSize(fyne.NewSize(ui.Width, 30))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
-	rect.SetMinSize(fyne.NewSize(10, 10))
+	rectSpacer.SetMinSize(standardSpacerSize())
+	rect.SetMinSize(statusDotSize())
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.43))
 
@@ -7978,15 +7972,15 @@ func layoutPM() fyne.CanvasObject {
 
 	title := canvas.NewText("M E S S A G E S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	heading := canvas.NewText(contactAddress, colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	lastActive := canvas.NewText("", colors.Gray)
-	lastActive.TextSize = 12
+	lastActive.TextSize = scaleFont(12)
 	lastActive.Alignment = fyne.TextAlignCenter
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
 
@@ -7998,19 +7992,19 @@ func layoutPM() fyne.CanvasObject {
 	})
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
-	rectEmpty.SetMinSize(fyne.NewSize(10, 10))
+	rectEmpty.SetMinSize(statusDotSize())
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.7, 30))
 	frame := &iframe{}
 	subframe := canvas.NewRectangle(color.Transparent)
 	subframe.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.51))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
-	rect.SetMinSize(fyne.NewSize(10, 10))
+	rectSpacer.SetMinSize(standardSpacerSize())
+	rect.SetMinSize(statusDotSize())
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width*0.42, 30))
 	rectOutbound := canvas.NewRectangle(color.Transparent)
@@ -8150,13 +8144,13 @@ func layoutPM() fyne.CanvasObject {
 				mdata := widget.NewRichTextFromMarkdown("")
 				mdata.Wrapping = fyne.TextWrapWord
 				datetime := canvas.NewText("", colors.Green)
-				datetime.TextSize = 11
+				datetime.TextSize = scaleFont(11)
 				boxColor := colors.Flint
 				rect := canvas.NewRectangle(boxColor)
 				rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
-				rect.CornerRadius = 5.0
+				rect.CornerRadius = scaleSize(5)
 				rect5 := canvas.NewRectangle(color.Transparent)
-				rect5.SetMinSize(fyne.NewSize(5, 5))
+				rect5.SetMinSize(smallSpacerSize())
 
 				if !rendered.IsIncoming {
 					rect.FillColor = colors.DarkGreen
@@ -8240,7 +8234,7 @@ func layoutPM() fyne.CanvasObject {
 	btnSend := widget.NewButton("Send", nil)
 	btnSend.Disable()
 	labelLimit := canvas.NewText("", colors.Gray)
-	labelLimit.TextSize = 11
+	labelLimit.TextSize = scaleFont(11)
 	labelLimit.Alignment = fyne.TextAlignLeading
 	updateMessageLimit := func(message string, sender string) {
 		if sender == "" && engram.Disk != nil {
@@ -8540,7 +8534,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.20))
@@ -8548,23 +8542,23 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 0))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
 	rpcLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
-	rpcLabel.TextSize = 11
+	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	wsLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
-	wsLabel.TextSize = 11
+	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelConnections := canvas.NewText("  C O N N E C T I O N S  ", colors.Gray)
-	labelConnections.TextSize = 11
+	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -8598,7 +8592,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
-	shortShard.TextSize = 12
+	shortShard.TextSize = scaleFont(12)
 
 	linkColor := colors.Green
 
@@ -8608,11 +8602,11 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 
 	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
-	remoteAccess.RPC.status.TextSize = 22
+	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
-	serverStatus.TextSize = 12
+	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -8662,7 +8656,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 
 	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
-	remoteAccess.WS.status.TextSize = 22
+	remoteAccess.WS.status.TextSize = scaleFont(22)
 	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
@@ -9078,10 +9072,10 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.58))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelName := widget.NewRichText(&widget.TextSegment{
 		Text: ad.Name,
@@ -9103,7 +9097,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	labelDesc.Wrapping = fyne.TextWrapWord
 
 	labelID := canvas.NewText("   APP  ID", colors.Gray)
-	labelID.TextSize = 14
+	labelID.TextSize = scaleFont(14)
 	labelID.Alignment = fyne.TextAlignLeading
 	labelID.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9111,7 +9105,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textID.Wrapping = fyne.TextWrapWord
 
 	labelSignature := canvas.NewText("   SIGNATURE", colors.Gray)
-	labelSignature.TextSize = 14
+	labelSignature.TextSize = scaleFont(14)
 	labelSignature.Alignment = fyne.TextAlignLeading
 	labelSignature.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9119,7 +9113,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textSignature.Wrapping = fyne.TextWrapWord
 
 	labelURL := canvas.NewText("   URL", colors.Gray)
-	labelURL.TextSize = 14
+	labelURL.TextSize = scaleFont(14)
 	labelURL.Alignment = fyne.TextAlignLeading
 	labelURL.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9127,12 +9121,12 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textURL.Wrapping = fyne.TextWrapWord
 
 	labelPermissions := canvas.NewText("   PERMISSIONS", colors.Gray)
-	labelPermissions.TextSize = 14
+	labelPermissions.TextSize = scaleFont(14)
 	labelPermissions.Alignment = fyne.TextAlignLeading
 	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelEvents := canvas.NewText("   EVENTS", colors.Gray)
-	labelEvents.TextSize = 14
+	labelEvents.TextSize = scaleFont(14)
 	labelEvents.Alignment = fyne.TextAlignLeading
 	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9428,40 +9422,40 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, 20))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 0))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
 	title := canvas.NewText("G L O B A L   P E R M I S S I O N S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	xswdLabel := canvas.NewText("W E B   S O C K E T S", colors.Gray)
-	xswdLabel.TextSize = 11
+	xswdLabel.TextSize = scaleFont(11)
 	xswdLabel.Alignment = fyne.TextAlignCenter
 	xswdLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelMethods := canvas.NewText("  METHODS", colors.Gray)
-	labelMethods.TextSize = 14
+	labelMethods.TextSize = scaleFont(14)
 	labelMethods.Alignment = fyne.TextAlignLeading
 	labelMethods.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelConnection := canvas.NewText("  CONNECTIONS", colors.Gray)
-	labelConnection.TextSize = 14
+	labelConnection.TextSize = scaleFont(14)
 	labelConnection.Alignment = fyne.TextAlignLeading
 	labelConnection.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelEpoch := canvas.NewText("  EPOCH", colors.Gray)
-	labelEpoch.TextSize = 14
+	labelEpoch.TextSize = scaleFont(14)
 	labelEpoch.Alignment = fyne.TextAlignLeading
 	labelEpoch.TextStyle = fyne.TextStyle{Bold: true}
 
 	permissionInfo := canvas.NewText("APPLY ON CONNECTION", colors.Gray)
-	permissionInfo.TextSize = 12
+	permissionInfo.TextSize = scaleFont(12)
 	permissionInfo.Alignment = fyne.TextAlignCenter
 	permissionInfo.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9668,7 +9662,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			// Group header with description
 			header := widget.NewRichTextFromMarkdown("### " + group.Name)
 			desc := canvas.NewText(group.Description, colors.Gray)
-			desc.TextSize = 11
+			desc.TextSize = scaleFont(11)
 
 			// Permission selector
 			permSelect := widget.NewSelect(permissions, nil)
@@ -9763,7 +9757,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	remoteAccess.WS.global.status = canvas.NewText(statusText, statusColor)
-	remoteAccess.WS.global.status.TextSize = 22
+	remoteAccess.WS.global.status.TextSize = scaleFont(22)
 	remoteAccess.WS.global.status.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnDefaults.OnTapped = func() {
@@ -9772,12 +9766,12 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		}
 
 		header := canvas.NewText("RESTORE  DEFAULT  PERMISSIONS", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Are you sure?", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -9817,7 +9811,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		}
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay := session.Window.Canvas().Overlays()
 
@@ -10109,10 +10103,10 @@ func layoutIdentity() fyne.CanvasObject {
 	session.Domain = "app.Identity"
 	title := canvas.NewText("I D E N T I T Y", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	heading := canvas.NewText("My Contacts", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -10139,15 +10133,15 @@ func layoutIdentity() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.44))
 
 	shortShard := canvas.NewText("PRIMARY  USERNAME", colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
-	shortShard.TextSize = 12
+	shortShard.TextSize = scaleFont(12)
 
 	idCenter := container.NewCenter(
 		shortShard,
@@ -10352,7 +10346,7 @@ func layoutIdentity() fyne.CanvasObject {
 
 	textUsername := canvas.NewText(dispUsername, colors.Green)
 	textUsername.TextStyle = fyne.TextStyle{Bold: true}
-	textUsername.TextSize = 22
+	textUsername.TextSize = scaleFont(22)
 
 	if session.Username == "" {
 		textUsername.Text = "---"
@@ -10477,25 +10471,25 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	frame := &iframe{}
 
 	heading := canvas.NewText("I D E N T I T Y    D E T A I L", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelUsername := canvas.NewText("REGISTERED  USERNAME", colors.Gray)
-	labelUsername.TextSize = 11
+	labelUsername.TextSize = scaleFont(11)
 	labelUsername.Alignment = fyne.TextAlignCenter
 	labelUsername.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelTransfer := canvas.NewText("  T R A N S F E R  ", colors.Gray)
-	labelTransfer.TextSize = 11
+	labelTransfer.TextSize = scaleFont(11)
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -10524,7 +10518,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	})
 
 	valueUsername := canvas.NewText(username, colors.Green)
-	valueUsername.TextSize = 22
+	valueUsername.TextSize = scaleFont(22)
 	valueUsername.TextStyle = fyne.TextStyle{Bold: true}
 	valueUsername.Alignment = fyne.TextAlignCenter
 
@@ -10780,16 +10774,16 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.6, ui.Height*0.35))
 	rect2 := canvas.NewRectangle(color.Transparent)
-	rect2.SetMinSize(fyne.NewSize(ui.Width, 1))
+	rect2.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 	frame := canvas.NewRectangle(color.Transparent)
 	frame.SetMinSize(fyne.NewSize(ui.Width, ui.Height))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 	label := canvas.NewText("PROOF-OF-WORK", colors.Gray)
 	label.TextStyle = fyne.TextStyle{Bold: true}
-	label.TextSize = 12
+	label.TextSize = scaleFont(12)
 	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), colors.Account)
-	hashes.TextSize = 18
+	hashes.TextSize = scaleFont(18)
 
 	go func() {
 		for engram.Disk != nil {
@@ -10874,17 +10868,17 @@ func layoutAlert(t int) fyne.CanvasObject {
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.6, ui.Width*0.35))
 	frame := &iframe{}
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 	wSpacer := widget.NewLabel(" ")
 
 	title := canvas.NewText("", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 	title.Alignment = fyne.TextAlignCenter
 
 	heading := canvas.NewText("", colors.Red)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 
 	sub := widget.NewRichTextFromMarkdown("")
@@ -10919,7 +10913,7 @@ func layoutAlert(t int) fyne.CanvasObject {
 	}
 
 	rectHeader := canvas.NewRectangle(color.Transparent)
-	rectHeader.SetMinSize(fyne.NewSize(ui.Width, 1))
+	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 
 	session.Gif, _ = x.NewAnimatedGifFromResource(resourceAnimation2Gif)
 	session.Gif.SetMinSize(rect.MinSize())
@@ -10983,21 +10977,21 @@ func layoutHistory() fyne.CanvasObject {
 	view := ""
 
 	header := canvas.NewText("  Transaction History", colors.Green)
-	header.TextSize = 22
+	header.TextSize = scaleFont(22)
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
 	details_header := canvas.NewText("     Transaction Detail", colors.Green)
-	details_header.TextSize = 22
+	details_header.TextSize = scaleFont(22)
 	details_header.TextStyle = fyne.TextStyle{Bold: true}
 
 	frame := &iframe{}
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	heading := canvas.NewText("H I S T O R Y", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -11008,7 +11002,7 @@ func layoutHistory() fyne.CanvasObject {
 	rectMid.SetMinSize(fyne.NewSize(ui.Width*0.35, 35))
 
 	results := canvas.NewText("", colors.Green)
-	results.TextSize = 13
+	results.TextSize = scaleFont(13)
 
 	listData = binding.BindStringList(&data)
 	listBox = widget.NewListWithData(listData,
@@ -11043,7 +11037,7 @@ func layoutHistory() fyne.CanvasObject {
 		})
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(standardSpacerSize())
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.60))
 
@@ -11055,7 +11049,7 @@ func layoutHistory() fyne.CanvasObject {
 	})
 
 	label := canvas.NewText(view, colors.Account)
-	label.TextSize = 15
+	label.TextSize = scaleFont(15)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 	findCachedTransfer := func(txid string) rpc.Entry {
 		for i := range cachedTransfers {
@@ -11317,70 +11311,70 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	frame := &iframe{}
 
 	heading := canvas.NewText("T R A N S A C T I O N    D E T A I L", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelTXID := canvas.NewText("   TRANSACTION  ID", colors.Gray)
-	labelTXID.TextSize = 14
+	labelTXID.TextSize = scaleFont(14)
 	labelTXID.Alignment = fyne.TextAlignLeading
 	labelTXID.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelAmount := canvas.NewText("   AMOUNT", colors.Gray)
-	labelAmount.TextSize = 14
+	labelAmount.TextSize = scaleFont(14)
 	labelAmount.Alignment = fyne.TextAlignLeading
 	labelAmount.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelDirection := canvas.NewText("   PAYMENT  DIRECTION", colors.Gray)
-	labelDirection.TextSize = 14
+	labelDirection.TextSize = scaleFont(14)
 	labelDirection.Alignment = fyne.TextAlignLeading
 	labelDirection.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelMember := canvas.NewText("", colors.Gray)
-	labelMember.TextSize = 14
+	labelMember.TextSize = scaleFont(14)
 	labelMember.Alignment = fyne.TextAlignLeading
 	labelMember.TextStyle = fyne.TextStyle{Bold: true}
 
 	labeliMember := canvas.NewText("", colors.Gray)
-	labeliMember.TextSize = 14
+	labeliMember.TextSize = scaleFont(14)
 	labeliMember.Alignment = fyne.TextAlignLeading
 	labeliMember.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelProof := canvas.NewText("   TRANSACTION  PROOF", colors.Gray)
-	labelProof.TextSize = 14
+	labelProof.TextSize = scaleFont(14)
 	labelProof.Alignment = fyne.TextAlignLeading
 	labelProof.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelDestPort := canvas.NewText("   DESTINATION  PORT", colors.Gray)
-	labelDestPort.TextSize = 14
+	labelDestPort.TextSize = scaleFont(14)
 	labelDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelSourcePort := canvas.NewText("   SOURCE  PORT", colors.Gray)
-	labelSourcePort.TextSize = 14
+	labelSourcePort.TextSize = scaleFont(14)
 	labelSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelFees := canvas.NewText("   TRANSACTION  FEES", colors.Gray)
-	labelFees.TextSize = 14
+	labelFees.TextSize = scaleFont(14)
 	labelFees.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelPayload := canvas.NewText("   PAYLOAD", colors.Gray)
-	labelPayload.TextSize = 14
+	labelPayload.TextSize = scaleFont(14)
 	labelPayload.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelHeight := canvas.NewText("   BLOCK  HEIGHT", colors.Gray)
-	labelHeight.TextSize = 14
+	labelHeight.TextSize = scaleFont(14)
 	labelHeight.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelReply := canvas.NewText("   REPLY  ADDRESS", colors.Gray)
-	labelReply.TextSize = 14
+	labelReply.TextSize = scaleFont(14)
 	labelReply.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
@@ -11483,11 +11477,11 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	}
 
 	valueAmount := canvas.NewText("", colors.Account)
-	valueAmount.TextSize = 22
+	valueAmount.TextSize = scaleFont(22)
 	valueAmount.TextStyle = fyne.TextStyle{Bold: true}
 
 	valueDirection := canvas.NewText("", colors.Account)
-	valueDirection.TextSize = 22
+	valueDirection.TextSize = scaleFont(22)
 	valueDirection.TextStyle = fyne.TextStyle{Bold: true}
 	if details.Coinbase {
 		valueDirection.Text = "  Received"
@@ -11565,15 +11559,15 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	}
 
 	valueTime := canvas.NewText(stamp, colors.Account)
-	valueTime.TextSize = 14
+	valueTime.TextSize = scaleFont(14)
 	valueTime.TextStyle = fyne.TextStyle{Bold: true}
 
 	valueFees := canvas.NewText("  "+globals.FormatMoney(details.Fees), colors.Account)
-	valueFees.TextSize = 22
+	valueFees.TextSize = scaleFont(22)
 	valueFees.TextStyle = fyne.TextStyle{Bold: true}
 
 	valueHeight := canvas.NewText("  "+height, colors.Account)
-	valueHeight.TextSize = 22
+	valueHeight.TextSize = scaleFont(22)
 	valueHeight.TextStyle = fyne.TextStyle{Bold: true}
 
 	valueTXID := widget.NewRichTextFromMarkdown("")
@@ -11581,12 +11575,12 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	valueTXID.ParseMarkdown("" + txid)
 
 	valuePort := canvas.NewText("", colors.Account)
-	valuePort.TextSize = 22
+	valuePort.TextSize = scaleFont(22)
 	valuePort.TextStyle = fyne.TextStyle{Bold: true}
 	valuePort.Text = "  " + strconv.FormatUint(details.DestinationPort, 10)
 
 	valueSourcePort := canvas.NewText("", colors.Account)
-	valueSourcePort.TextSize = 22
+	valueSourcePort.TextSize = scaleFont(22)
 	valueSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 	valueSourcePort.Text = "  " + strconv.FormatUint(details.SourcePort, 10)
 
@@ -11847,10 +11841,10 @@ func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
 	title := canvas.NewText("S E C U R E   N O T E S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	heading := canvas.NewText("", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -11942,9 +11936,9 @@ func layoutDatapad() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 4))
 	rectList := canvas.NewRectangle(color.Transparent)
-	rectList.SetMinSize(fyne.NewSize(ui.Width, 35))
+	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, 0))
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
 	var padData []string
 
@@ -12091,18 +12085,18 @@ func layoutPad() fyne.CanvasObject {
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectEntry := canvas.NewRectangle(color.Transparent)
 	rectEntry.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.52))
 
 	heading := canvas.NewText(session.Datapad, colors.Green)
-	heading.TextSize = 20
+	heading.TextSize = scaleFont(20)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	selectOptions := widget.NewSelect([]string{"Clear", "Export (Plaintext)", "Import From File", "Delete"}, nil)
 	selectOptions.PlaceHolder = "Select an Option ..."
@@ -12120,7 +12114,7 @@ func layoutPad() fyne.CanvasObject {
 	entryPad.Wrapping = fyne.TextWrapWord
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	selectOptions.OnChanged = func(s string) {
@@ -12129,12 +12123,12 @@ func layoutPad() fyne.CanvasObject {
 
 		if s == "Clear" {
 			header := canvas.NewText("SECURE NOTES  RESET  REQUESTED", colors.Gray)
-			header.TextSize = 14
+			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
 			subHeader := canvas.NewText("Clear Datapad?", colors.Account)
-			subHeader.TextSize = 22
+			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12179,7 +12173,7 @@ func layoutPad() fyne.CanvasObject {
 			}
 
 			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
+			span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 			overlay.Add(
 				container.NewStack(
@@ -12339,12 +12333,12 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileImport.Show()
 		} else if s == "Delete" {
 			header := canvas.NewText("SECURE NOTES  DELETION  REQUESTED", colors.Gray)
-			header.TextSize = 14
+			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
 			subHeader := canvas.NewText("Delete Datapad?", colors.Account)
-			subHeader.TextSize = 22
+			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12378,7 +12372,7 @@ func layoutPad() fyne.CanvasObject {
 			}
 
 			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
+			span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 			overlay.Add(
 				container.NewStack(
@@ -12482,12 +12476,12 @@ func layoutPad() fyne.CanvasObject {
 	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		if session.DatapadChanged {
 			header := canvas.NewText("SECURE NOTES  CHANGE  DETECTED", colors.Gray)
-			header.TextSize = 14
+			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
 			subHeader := canvas.NewText("Save Datapad?", colors.Account)
-			subHeader.TextSize = 22
+			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12517,7 +12511,7 @@ func layoutPad() fyne.CanvasObject {
 			}
 
 			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
+			span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 			overlay.Add(
 				container.NewStack(
@@ -12633,7 +12627,7 @@ func layoutAccount() fyne.CanvasObject {
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
@@ -12642,11 +12636,11 @@ func layoutAccount() fyne.CanvasObject {
 
 	title := canvas.NewText("M Y    A C C O U N T", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = 16
+	title.TextSize = scaleFont(16)
 
 	addressStr := engram.Disk.GetAddress().String()
 	heading := canvas.NewText("", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12676,7 +12670,7 @@ func layoutAccount() fyne.CanvasObject {
 
 	labelPassword := canvas.NewText("N E W    P A S S W O R D", colors.Gray)
 	labelPassword.TextStyle = fyne.TextStyle{Bold: true}
-	labelPassword.TextSize = 11
+	labelPassword.TextSize = scaleFont(11)
 	labelPassword.Alignment = fyne.TextAlignCenter
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
@@ -12730,7 +12724,7 @@ func layoutAccount() fyne.CanvasObject {
 	)
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	// Recovery Words Link
@@ -12741,12 +12735,12 @@ func layoutAccount() fyne.CanvasObject {
 		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Confirm Password", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12794,7 +12788,7 @@ func layoutAccount() fyne.CanvasObject {
 		entryPassword.OnReturn = btnConfirm.OnTapped
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay.Add(
 			container.NewStack(
@@ -12848,12 +12842,12 @@ func layoutAccount() fyne.CanvasObject {
 		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Confirm Password", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -12901,7 +12895,7 @@ func layoutAccount() fyne.CanvasObject {
 		entryPassword.OnReturn = btnConfirm.OnTapped
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay.Add(
 			container.NewStack(
@@ -12955,12 +12949,12 @@ func layoutAccount() fyne.CanvasObject {
 		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText("ACCOUNT  AUTHORIZATION  REQUEST", colors.Gray)
-		header.TextSize = 14
+		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
 		subHeader := canvas.NewText("Change Password", colors.Account)
-		subHeader.TextSize = 22
+		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -13036,7 +13030,7 @@ func layoutAccount() fyne.CanvasObject {
 		}
 
 		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 		overlay.Add(
 			container.NewStack(
@@ -13248,15 +13242,15 @@ func layoutAccount() fyne.CanvasObject {
 func layoutRecovery() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("Recovery Words", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	rectHeader := canvas.NewRectangle(color.Transparent)
-	rectHeader.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	linkCancel := widget.NewHyperlinkWithStyle("Back to My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCancel.OnTapped = func() {
@@ -13264,7 +13258,7 @@ func layoutRecovery() fyne.CanvasObject {
 	}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
 	grid := container.NewVBox()
 	grid.Objects = nil
@@ -13328,7 +13322,7 @@ func layoutRecovery() fyne.CanvasObject {
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
 	rect := canvas.NewRectangle(color.RGBA{19, 25, 34, 255})
-	rect.SetMinSize(fyne.NewSize(ui.Width, 25))
+	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
 	for i := 0; i < len(formatted); i++ {
 		pos := fmt.Sprintf("%d", i+1)
@@ -13365,15 +13359,15 @@ func layoutRecovery() fyne.CanvasObject {
 func layoutRecoveryHex() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("Recovery Hex Keys", colors.Green)
-	heading.TextSize = 22
+	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
-	rectStatus.SetMinSize(fyne.NewSize(10, 10))
+	rectStatus.SetMinSize(statusDotSize())
 
 	rectHeader := canvas.NewRectangle(color.Transparent)
-	rectHeader.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	linkCancel := widget.NewHyperlinkWithStyle("Back to My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCancel.OnTapped = func() {
@@ -13381,7 +13375,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 	}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, 5))
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
 	grid := container.NewVBox()
 	grid.Objects = nil
@@ -13455,12 +13449,12 @@ func layoutRecoveryHex() fyne.CanvasObject {
 	linkCopyPublic := widget.NewHyperlinkWithStyle("Copy Public Key", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	labelSecret := canvas.NewText("   SECRET  KEY", colors.Gray)
-	labelSecret.TextSize = 14
+	labelSecret.TextSize = scaleFont(14)
 	labelSecret.Alignment = fyne.TextAlignLeading
 	labelSecret.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelPublic := canvas.NewText("   PUBLIC  KEY", colors.Gray)
-	labelPublic.TextSize = 14
+	labelPublic.TextSize = scaleFont(14)
 	labelPublic.Alignment = fyne.TextAlignLeading
 	labelPublic.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -13615,15 +13609,15 @@ func layoutFileManager() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	heading := canvas.NewText("F I L E    M A N A G E R", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelResults := canvas.NewText("   RESULTS", colors.Gray)
-	labelResults.TextSize = 14
+	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -13684,7 +13678,7 @@ func layoutFileManager() fyne.CanvasObject {
 	)
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	dialogBrowse := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
@@ -13868,29 +13862,29 @@ func layoutFileManager() fyne.CanvasObject {
 			rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
 			header := canvas.NewText("S I G N A T U R E    D E T A I L", colors.Gray)
-			header.TextSize = 16
+			header.TextSize = scaleFont(16)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
 			labelStatus := canvas.NewText("   VERIFICATION   STATUS", colors.Gray)
-			labelStatus.TextSize = 12
+			labelStatus.TextSize = scaleFont(12)
 			labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 			labelStatus.Alignment = fyne.TextAlignCenter
 
 			valueStatus := canvas.NewText("   Verified", colors.Green)
-			valueStatus.TextSize = 22
+			valueStatus.TextSize = scaleFont(22)
 			valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 			valueStatus.Alignment = fyne.TextAlignCenter
 
 			labelFilename := canvas.NewText("   FILENAME", colors.Gray)
-			labelFilename.TextSize = 14
+			labelFilename.TextSize = scaleFont(14)
 			labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 			valueFilename := widget.NewRichTextFromMarkdown(filename)
 			valueFilename.Wrapping = fyne.TextWrapBreak
 
 			labelSigner := canvas.NewText("   SIGNER   ADDRESS", colors.Gray)
-			labelSigner.TextSize = 14
+			labelSigner.TextSize = scaleFont(14)
 			labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
 			valueSigner := widget.NewRichTextFromMarkdown(split[1])
@@ -13993,7 +13987,7 @@ func layoutFileManager() fyne.CanvasObject {
 	}
 
 	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
-	labelAction.TextSize = 12
+	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -14418,15 +14412,15 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	heading := canvas.NewText("C O N T R A C T    B U I L D E R", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	errorText := canvas.NewText(promptText, colors.Red)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	// Open .bas SC from file browser
@@ -14503,7 +14497,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	}
 
 	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
-	labelAction.TextSize = 12
+	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -14726,10 +14720,10 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	header := canvas.NewText("F I L E S  &  C O N T R A C T S", colors.Gray)
-	header.TextSize = 16
+	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -14744,7 +14738,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
 	labelResults := canvas.NewText("   RESULTS", colors.Gray)
-	labelResults.TextSize = 14
+	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -14805,7 +14799,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	)
 
 	browseErrorText := canvas.NewText(" ", colors.Green)
-	browseErrorText.TextSize = 12
+	browseErrorText.TextSize = scaleFont(12)
 	browseErrorText.Alignment = fyne.TextAlignCenter
 
 	dialogBrowseFiles := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
@@ -14938,29 +14932,29 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
 		detailHeader := canvas.NewText("S I G N A T U R E    D E T A I L", colors.Gray)
-		detailHeader.TextSize = 16
+		detailHeader.TextSize = scaleFont(16)
 		detailHeader.Alignment = fyne.TextAlignCenter
 		detailHeader.TextStyle = fyne.TextStyle{Bold: true}
 
 		labelStatus := canvas.NewText("   VERIFICATION   STATUS", colors.Gray)
-		labelStatus.TextSize = 12
+		labelStatus.TextSize = scaleFont(12)
 		labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 		labelStatus.Alignment = fyne.TextAlignCenter
 
 		valueStatus := canvas.NewText("   Verified", colors.Green)
-		valueStatus.TextSize = 22
+		valueStatus.TextSize = scaleFont(22)
 		valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 		valueStatus.Alignment = fyne.TextAlignCenter
 
 		labelFilename := canvas.NewText("   FILENAME", colors.Gray)
-		labelFilename.TextSize = 14
+		labelFilename.TextSize = scaleFont(14)
 		labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 		valueFilename := widget.NewRichTextFromMarkdown(filename)
 		valueFilename.Wrapping = fyne.TextWrapBreak
 
 		labelSigner := canvas.NewText("   SIGNER   ADDRESS", colors.Gray)
-		labelSigner.TextSize = 14
+		labelSigner.TextSize = scaleFont(14)
 		labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
 		valueSigner := widget.NewRichTextFromMarkdown(split[1])
@@ -15156,7 +15150,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	// ==================== TAB 2: SMART CONTRACTS (Contract Builder) ====================
 	contractErrorText := canvas.NewText("", colors.Red)
-	contractErrorText.TextSize = 12
+	contractErrorText.TextSize = scaleFont(12)
 	contractErrorText.Alignment = fyne.TextAlignCenter
 
 	dialogBrowseSC := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
@@ -15230,7 +15224,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	}
 
 	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
-	labelAction.TextSize = 12
+	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -15466,13 +15460,13 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.45))
 	rectWidth := canvas.NewRectangle(color.Transparent)
-	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	results := canvas.NewText("", colors.Green)
-	results.TextSize = 14
+	results.TextSize = scaleFont(14)
 
 	listData = binding.BindStringList(&data)
 	listBox = widget.NewListWithData(listData,
@@ -15780,32 +15774,32 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	rectCode := canvas.NewRectangle(color.Transparent)
 	rectCode.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.35))
 
 	heading := canvas.NewText("C O N T R A C T    E D I T O R", colors.Green)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelHeaders := canvas.NewText("   HEADERS", colors.Gray)
-	labelHeaders.TextSize = 14
+	labelHeaders.TextSize = scaleFont(14)
 	labelHeaders.Alignment = fyne.TextAlignLeading
 	labelHeaders.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelCode := canvas.NewText("   CODE (DVM-BASIC)", colors.Gray)
-	labelCode.TextSize = 14
+	labelCode.TextSize = scaleFont(14)
 	labelCode.Alignment = fyne.TextAlignLeading
 	labelCode.TextStyle = fyne.TextStyle{Bold: true}
 
 	labelCodeSize := canvas.NewText("(0.0KB) ", colors.Green)
-	labelCodeSize.TextSize = 12
+	labelCodeSize.TextSize = scaleFont(12)
 	labelCodeSize.Alignment = fyne.TextAlignTrailing
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	var nameHdr, iconURLHdr, descrHdr string
@@ -16105,12 +16099,12 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			overlay := session.Window.Canvas().Overlays()
 
 			header := canvas.NewText("CONTRACT  EDITOR", colors.Gray)
-			header.TextSize = 14
+			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
 			subHeader := canvas.NewText("Import an existing function", colors.Account)
-			subHeader.TextSize = 22
+			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -16122,7 +16116,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			}
 
 			span := canvas.NewRectangle(color.Transparent)
-			span.SetMinSize(fyne.NewSize(ui.Width, 10))
+			span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 			overlay.Add(
 				container.NewStack(
@@ -16711,12 +16705,12 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				overlay := session.Window.Canvas().Overlays()
 
 				header := canvas.NewText("INSTALL  SMART  CONTRACT", colors.Gray)
-				header.TextSize = 14
+				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
 				subHeader := canvas.NewText(fmt.Sprintf("%s params", entrypoint), colors.Account)
-				subHeader.TextSize = 22
+				subHeader.TextSize = scaleFont(22)
 				subHeader.Alignment = fyne.TextAlignCenter
 				subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -16728,7 +16722,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				}
 
 				span := canvas.NewRectangle(color.Transparent)
-				span.SetMinSize(fyne.NewSize(ui.Width, 10))
+				span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 				overlay.Add(
 					container.NewStack(
@@ -16966,52 +16960,51 @@ func layoutTELA() fyne.CanvasObject {
 
 	frame := &iframe{}
 	rectLeft := canvas.NewRectangle(color.Transparent)
-	rectLeft.SetMinSize(fyne.NewSize(ui.Width*0.40, 35))
+	rectLeft.SetMinSize(fyne.NewSize(ui.Width*0.40, scaleSize(35)))
 
 	rectRight := canvas.NewRectangle(color.Transparent)
-	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, 35))
+	rectRight.SetMinSize(fyne.NewSize(ui.Width*0.58, scaleSize(35)))
 
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
-	rectWidth.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
-	// Mobile detection at 360px breakpoint for responsive layout
-	isMobile := ui.Width <= 360
-	if isMobile {
+	isMobileLayout := ui.Width <= 360
+	if isMobileLayout {
 		rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.52))
-		rectSpacer.SetMinSize(fyne.NewSize(6, 2))
+		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 	}
 
 	heading := canvas.NewText("T E L A    B R O W S E R", colors.Gray)
-	heading.TextSize = 16
+	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	results := canvas.NewText("", colors.Green)
-	results.TextSize = 13
+	results.TextSize = scaleFont(13)
 
 	labelLastScan := canvas.NewText("", colors.Green)
-	labelLastScan.TextSize = 13
+	labelLastScan.TextSize = scaleFont(13)
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	var telaSearch []INDEXwithRatings
 
-	telaListHeartWidth := float32(34)
-	if isMobile {
-		telaListHeartWidth = 40
+	telaListHeartWidth := scaleSize(34)
+	if isMobileLayout {
+		telaListHeartWidth = scaleSize(40)
 	}
 
-	telaListButtonWidth := float32(70)
-	if isMobile {
-		telaListButtonWidth = 80
+	telaListButtonWidth := scaleSize(70)
+	if isMobileLayout {
+		telaListButtonWidth = scaleSize(80)
 	}
 
 	parseTelaListEntry := func(raw string) (name, scid string) {
@@ -19815,6 +19808,9 @@ func layoutTELA() fyne.CanvasObject {
 		),
 		rectSpacer,
 		rectSpacer,
+		container.NewCenter(
+			layoutBrowser,
+		),
 	)
 
 	bottom := container.NewStack(
@@ -19845,7 +19841,6 @@ func layoutTELA() fyne.CanvasObject {
 			bottom,
 			nil,
 			nil,
-			layoutBrowser,
 		),
 	)
 
@@ -19878,10 +19873,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.58))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(6, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
 
 	labelName := widget.NewRichText(&widget.TextSegment{
 		Text: index.NameHdr,
@@ -19903,7 +19898,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	labelDesc.Wrapping = fyne.TextWrapWord
 
 	labelDURL := canvas.NewText("   DURL", colors.Gray)
-	labelDURL.TextSize = 14
+	labelDURL.TextSize = scaleFont(14)
 	labelDURL.Alignment = fyne.TextAlignLeading
 	labelDURL.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -19911,7 +19906,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	textDURL.Wrapping = fyne.TextWrapWord
 
 	labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
-	labelSCID.TextSize = 14
+	labelSCID.TextSize = scaleFont(14)
 	labelSCID.Alignment = fyne.TextAlignLeading
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -19935,7 +19930,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	}
 
 	labelAuthor := canvas.NewText("   SMART  CONTRACT  AUTHOR", colors.Gray)
-	labelAuthor.TextSize = 14
+	labelAuthor.TextSize = scaleFont(14)
 	labelAuthor.Alignment = fyne.TextAlignLeading
 	labelAuthor.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -19962,12 +19957,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	}
 
 	labelStatus := canvas.NewText("APPLICATION  STATUS", colors.Gray)
-	labelStatus.TextSize = 14
+	labelStatus.TextSize = scaleFont(14)
 	labelStatus.Alignment = fyne.TextAlignCenter
 	labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 
 	textStatus := canvas.NewText("Offline", colors.Gray)
-	textStatus.TextSize = 22
+	textStatus.TextSize = scaleFont(22)
 	textStatus.Alignment = fyne.TextAlignCenter
 	textStatus.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -20049,7 +20044,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	}()
 
 	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
+	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	spacerStatus := canvas.NewRectangle(color.Transparent)
@@ -20261,7 +20256,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	}
 
 	labelRatingAverage := canvas.NewText(fmt.Sprintf("%.1f", ratings.Average), colors.Account)
-	labelRatingAverage.TextSize = 24
+	labelRatingAverage.TextSize = scaleFont(24)
 	labelRatingAverage.Alignment = fyne.TextAlignCenter
 	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
 

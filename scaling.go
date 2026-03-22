@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	ReferenceWidth float32 = 324.0
-	MinScale       float32 = 0.8
-	MaxScale       float32 = 1.5
+	ReferenceWidth  float32 = 324.0
+	ReferenceHeight float32 = 680.0
+	MinScale        float32 = 0.75
+	MaxScale        float32 = 1.5
 )
 
 func isMobile() bool {
@@ -20,11 +21,7 @@ func isDesktop() bool {
 	return !isMobile()
 }
 
-func scale() float32 {
-	if !isMobile() {
-		return 1.0
-	}
-
+func scaleByWidth() float32 {
 	if ui.Width <= 0 {
 		return 1.0
 	}
@@ -39,6 +36,50 @@ func scale() float32 {
 	}
 
 	return factor
+}
+
+func scaleByHeight() float32 {
+	if ui.Height <= 0 {
+		return 1.0
+	}
+
+	factor := ui.Height / ReferenceHeight
+
+	if factor < MinScale {
+		factor = MinScale
+	}
+	if factor > MaxScale {
+		factor = MaxScale
+	}
+
+	return factor
+}
+
+func scale() float32 {
+	if !isMobile() {
+		return 1.0
+	}
+
+	w := scaleByWidth()
+	h := scaleByHeight()
+	if h < w {
+		return h
+	}
+	return w
+}
+
+func isSmallScreen() bool {
+	if !isMobile() {
+		return false
+	}
+	return ui.Height < 700 || scale() < 0.9
+}
+
+func compactSpacing() float32 {
+	if isSmallScreen() {
+		return 0.5
+	}
+	return 1.0
 }
 
 func scaleSize(baseSize float32) float32 {
@@ -74,4 +115,20 @@ func standardSpacerSize() fyne.Size {
 
 func compactSpacerSize() fyne.Size {
 	return scalePoint(6, 5)
+}
+
+func buttonIconSize() fyne.Size {
+	w := scaleSize(20)
+	if w > 24 {
+		w = 24
+	}
+	return fyne.NewSize(w, w)
+}
+
+func navIconSize() fyne.Size {
+	s := scaleSize(16)
+	if s > 20 {
+		s = 20
+	}
+	return fyne.NewSize(s, s)
 }
