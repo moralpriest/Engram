@@ -3071,7 +3071,11 @@ func layoutRestore() fyne.CanvasObject {
 
 	// QR code placeholder for success screen
 	successQR := canvas.NewImageFromImage(nil)
-	successQR.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	qrSize := ui.Width * 0.45
+	if qrSize > ui.Height*0.3 {
+		qrSize = ui.Height * 0.3
+	}
+	successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
 	successQR.FillMode = canvas.ImageFillContain
 
 	// Address text for success screen
@@ -3089,26 +3093,22 @@ func layoutRestore() fyne.CanvasObject {
 		})
 	})
 
-	formSuccess := container.NewHBox(
-		layout.NewSpacer(),
-		container.NewVBox(
-			rectSpacer,
-			heading2,
-			rectSpacer,
-			body,
-			rectSpacer,
-			container.NewCenter(successQR),
-			rectSpacer,
-			successAddress,
-			rectSpacer,
-			container.NewCenter(grid),
-			rectSpacer,
-			wrapMobileButton(btnEnter),
-			rectSpacer,
-			wrapMobileButton(btnCopyAddress),
-			rectSpacer,
-		),
-		layout.NewSpacer(),
+	formSuccess := container.NewVBox(
+		rectSpacer,
+		heading2,
+		rectSpacer,
+		body,
+		rectSpacer,
+		container.NewCenter(successQR),
+		rectSpacer,
+		successAddress,
+		rectSpacer,
+		container.NewCenter(grid),
+		rectSpacer,
+		wrapMobileButton(btnEnter),
+		rectSpacer,
+		wrapMobileButton(btnCopyAddress),
+		rectSpacer,
 	)
 
 	formSuccess.Hide()
@@ -3283,7 +3283,7 @@ func layoutRestore() fyne.CanvasObject {
 				if err == nil {
 					qr.BackgroundColor = colors.DarkMatter
 					qr.ForegroundColor = colors.Green
-					successQR.Image = qr.Image(int(ui.Width * 0.45))
+					successQR.Image = qr.Image(int(qrSize))
 					successQR.Refresh()
 				}
 
@@ -3508,7 +3508,7 @@ func layoutRestore() fyne.CanvasObject {
 		if err == nil {
 			qr.BackgroundColor = colors.DarkMatter
 			qr.ForegroundColor = colors.Green
-			successQR.Image = qr.Image(int(ui.Width * 0.45))
+			successQR.Image = qr.Image(int(qrSize))
 			successQR.Refresh()
 		}
 
