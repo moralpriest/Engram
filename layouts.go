@@ -1293,17 +1293,16 @@ func layoutDashboard() fyne.CanvasObject {
 		container.NewVBox(
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					wrapMobileButton(btnDatapad),
-					wrapMobileButton(btnTELA),
-					wrapMobileButton(btnMessages),
+					btnDatapad,
+					btnTELA,
+					btnMessages,
 				),
 			),
-			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(3),
-					wrapMobileButton(btnFilesContracts),
-					wrapMobileButton(btnLogout),
-					wrapMobileButton(btnSettings),
+					btnFilesContracts,
+					btnLogout,
+					btnSettings,
 				),
 			),
 			rectSpacer,
