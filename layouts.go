@@ -611,6 +611,10 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 
+	// Reserve space for logo (matches layoutMain headerBlock)
+	headerBlock := canvas.NewRectangle(color.Transparent)
+	headerBlock.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
+
 	separatorLine := canvas.NewRectangle(color.White)
 	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(1)))
 	separator := container.NewCenter(separatorLine)
@@ -635,6 +639,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 		form = container.NewVBox(
 			rectSpacer,
+			container.NewStack(headerBlock),
 			rectSpacer,
 			rectSpacer,
 			lblWalletName,
@@ -658,6 +663,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 		form = container.NewVBox(
 			rectSpacer,
+			container.NewStack(headerBlock),
 			rectSpacer,
 			lblWalletName,
 			rectSpacer,
