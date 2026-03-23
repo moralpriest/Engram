@@ -3071,12 +3071,8 @@ func layoutRestore() fyne.CanvasObject {
 
 	// QR code placeholder for success screen
 	successQR := canvas.NewImageFromImage(nil)
-	qrSize := ui.Width * 0.45
-	if qrSize > ui.Height*0.3 {
-		qrSize = ui.Height * 0.3
-	}
-	successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
-	successQR.FillMode = canvas.ImageFillContain
+	successQR.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
+	successQR.FillMode = canvas.ImageFillOriginal
 
 	// Address text for success screen
 	successAddress := widget.NewLabel("")
@@ -3281,9 +3277,14 @@ func layoutRestore() fyne.CanvasObject {
 				address := engram.Disk.GetAddress().String()
 				qr, err := qrcode.New(address, qrcode.Highest)
 				if err == nil {
+					qrSize := ui.Width * 0.45
+					if qrSize > ui.Height*0.3 {
+						qrSize = ui.Height * 0.3
+					}
 					qr.BackgroundColor = colors.DarkMatter
 					qr.ForegroundColor = colors.Green
 					successQR.Image = qr.Image(int(qrSize))
+					successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
 					successQR.Refresh()
 				}
 
@@ -3506,9 +3507,14 @@ func layoutRestore() fyne.CanvasObject {
 		// Generate QR code for success screen
 		qr, err := qrcode.New(address, qrcode.Highest)
 		if err == nil {
+			qrSize := ui.Width * 0.45
+			if qrSize > ui.Height*0.3 {
+				qrSize = ui.Height * 0.3
+			}
 			qr.BackgroundColor = colors.DarkMatter
 			qr.ForegroundColor = colors.Green
 			successQR.Image = qr.Image(int(qrSize))
+			successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
 			successQR.Refresh()
 		}
 
