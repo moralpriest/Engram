@@ -2393,6 +2393,21 @@ func layoutRestore() fyne.CanvasObject {
 	btnCreate := widget.NewButton("Recover", nil)
 	btnCreate.Disable()
 
+	seedValid := false
+	hexValid := false
+	selectedRecoveryType := 0
+
+	updateRecoveryButtonState := func() {
+		formValid := validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm)
+		keyValid := (selectedRecoveryType == 0 && seedValid) || (selectedRecoveryType == 1 && hexValid)
+		if formValid && keyValid {
+			btnCreate.Enable()
+		} else {
+			btnCreate.Disable()
+		}
+		btnCreate.Refresh()
+	}
+
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.Domain = "app.main"
 		session.Error = ""
@@ -2425,12 +2440,7 @@ func layoutRestore() fyne.CanvasObject {
 			clearFormText(strengthText)
 		}
 
-		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
-			btnCreate.Enable()
-		} else {
-			btnCreate.Disable()
-		}
-		btnCreate.Refresh()
+		updateRecoveryButtonState()
 	}
 	wPassword.SetPlaceHolder("Password")
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
@@ -2446,18 +2456,13 @@ func layoutRestore() fyne.CanvasObject {
 		clearFormText(errorText)
 		session.PasswordConfirm = s
 
-		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
-			btnCreate.Enable()
-		} else {
-			btnCreate.Disable()
-		}
-		btnCreate.Refresh()
+		updateRecoveryButtonState()
 	}
 	wPasswordConfirm.SetPlaceHolder("Confirm Password")
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	// Card selection for recovery type
-	selectedRecoveryType := 0 // 0=Words, 1=Hex, 2=Import
+	selectedRecoveryType = 0 // 0=Words, 1=Hex, 2=Import
 
 	// Card backgrounds for selection state
 	cardBgWords := canvas.NewRectangle(colors.Green)
@@ -2581,6 +2586,7 @@ func layoutRestore() fyne.CanvasObject {
 		if selectedRecoveryType != 0 {
 			selectedRecoveryType = 0
 			updateRecoveryTypeCards()
+			updateRecoveryButtonState()
 			if onRecoveryTypeChanged != nil {
 				onRecoveryTypeChanged(0)
 			}
@@ -2592,6 +2598,7 @@ func layoutRestore() fyne.CanvasObject {
 		if selectedRecoveryType != 1 {
 			selectedRecoveryType = 1
 			updateRecoveryTypeCards()
+			updateRecoveryButtonState()
 			if onRecoveryTypeChanged != nil {
 				onRecoveryTypeChanged(1)
 			}
@@ -2603,6 +2610,7 @@ func layoutRestore() fyne.CanvasObject {
 		if selectedRecoveryType != 2 {
 			selectedRecoveryType = 2
 			updateRecoveryTypeCards()
+			updateRecoveryButtonState()
 			if onRecoveryTypeChanged != nil {
 				onRecoveryTypeChanged(2)
 			}
@@ -2708,13 +2716,7 @@ func layoutRestore() fyne.CanvasObject {
 		// Update session name immediately for form validation
 		session.Name = s
 
-		// Update button state based on form validity
-		if validateRecoveryForm(session.Name, session.Password, session.PasswordConfirm) {
-			btnCreate.Enable()
-		} else {
-			btnCreate.Disable()
-		}
-		btnCreate.Refresh()
+		updateRecoveryButtonState()
 
 		if s != "" {
 			btnCardWords.Disable()
@@ -2879,7 +2881,8 @@ func layoutRestore() fyne.CanvasObject {
 
 		s = strings.TrimSpace(s)
 		if s == "" {
-			btnCreate.Disable()
+			seedValid = false
+			updateRecoveryButtonState()
 			return nil
 		}
 
@@ -2887,7 +2890,8 @@ func layoutRestore() fyne.CanvasObject {
 		wordCount := len(words)
 
 		if wordCount != SeedWordCount24 && wordCount != SeedWordCount25 {
-			btnCreate.Disable()
+			seedValid = false
+			updateRecoveryButtonState()
 			return nil // OnChanged handles the count display
 		}
 
@@ -2899,7 +2903,8 @@ func layoutRestore() fyne.CanvasObject {
 		}
 
 		if len(invalidWords) > 0 {
-			btnCreate.Disable()
+			seedValid = false
+			updateRecoveryButtonState()
 			err = errors.New("invalid seed words detected")
 			if len(invalidWords) <= 3 {
 				showFormError(errorText, fmt.Sprintf("Invalid: %s", strings.Join(invalidWords, ", ")))
@@ -2909,7 +2914,8 @@ func layoutRestore() fyne.CanvasObject {
 			return err
 		}
 
-		btnCreate.Enable()
+		seedValid = true
+		updateRecoveryButtonState()
 		return nil
 	}
 
@@ -2926,24 +2932,28 @@ func layoutRestore() fyne.CanvasObject {
 		clearFormText(errorText)
 
 		if s == "" {
-			btnCreate.Disable()
+			hexValid = false
+			updateRecoveryButtonState()
 			return nil
 		}
 
 		_, err = hex.DecodeString(s)
 		if err != nil {
 			showFormError(errorText, "invalid hex characters")
-			btnCreate.Disable()
+			hexValid = false
+			updateRecoveryButtonState()
 			return err
 		}
 
 		if len(s) != HexKeyLength {
 			showFormError(errorText, fmt.Sprintf("key must be exactly %d characters (%d entered)", HexKeyLength, len(s)))
-			btnCreate.Disable()
+			hexValid = false
+			updateRecoveryButtonState()
 			return errors.New("invalid key length")
 		}
 
-		btnCreate.Enable()
+		hexValid = true
+		updateRecoveryButtonState()
 		return nil
 	}
 
