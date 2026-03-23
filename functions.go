@@ -5001,13 +5001,22 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 
 	ratings, err := tela.GetRating(scid, session.Daemon, 0)
 	if err != nil {
-		removeOverlays()
 		logger.Errorf("[Engram] GetRating: %s\n", err)
 		err = fmt.Errorf("error could not get ratings")
 		return
 	}
 
-	removeOverlays()
+	// Remove overlays synchronously (bypass uiDo since we're on main goroutine)
+	overlays := session.Window.Canvas().Overlays()
+	for _, o := range overlays.List() {
+		overlays.Remove(o)
+	}
+	if res.loading != nil {
+		res.loading.Hide()
+		res.loading.Stop()
+		res.loading = nil
+	}
+
 	overlay := session.Window.Canvas().Overlays()
 
 	ratingsBox.Add(container.NewHBox(textLikes, canvas.NewText(fmt.Sprintf("%d", ratings.Likes), colors.Green)))
@@ -5028,12 +5037,11 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		}
 	}
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		overlay.Top().Hide()
 		overlay.Remove(overlay.Top())
 		overlay.Remove(overlay.Top())
-	}
+	})
 
 	labelSeparator := widget.NewRichTextFromMarkdown("")
 	labelSeparator.Wrapping = fyne.TextWrapOff
@@ -5122,41 +5130,10 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		rectSpacer,
 	)
 
-	menuLabel := canvas.NewText(" ", colors.Gray)
-	menuLabel.TextSize = 11
-	menuLabel.Alignment = fyne.TextAlignCenter
-	menuLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	sep := canvas.NewRectangle(colors.Gray)
-	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-
-	line1 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
-	line2 := container.NewVBox(
-		layout.NewSpacer(),
-		sep,
-		layout.NewSpacer(),
-	)
-
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			container.NewStack(
-				container.NewHBox(
-					layout.NewSpacer(),
-					line1,
-					layout.NewSpacer(),
-					menuLabel,
-					layout.NewSpacer(),
-					line2,
-					layout.NewSpacer(),
-				),
-			),
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
