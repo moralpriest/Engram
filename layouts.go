@@ -20439,7 +20439,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	linkTelaRatings := widget.NewHyperlinkWithStyle("View All Ratings", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkTelaRatings.OnTapped = func() {
-		showLoadingOverlay()
 		err := viewTELARatingsOverlay(index.NameHdr, index.SCID)
 		if err != nil {
 			errorText.Text = err.Error()
