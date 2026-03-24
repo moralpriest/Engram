@@ -18539,6 +18539,7 @@ func layoutTELA() fyne.CanvasObject {
 		// Batch-fetch INDEX data for prefilter-passed SCIDs not yet in indexCacheStore.
 		// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket.
 		indexFetchFailed := make(map[string]bool) // Track SCIDs whose INDEX fetch failed due to network errors
+		networkErrorDuringFetch := false          // Track if there was a network error during batch fetch
 		if !restrictiveMode {
 			var indexNeeded []string
 			for scid, allowed := range prefilterAllowed {
@@ -18560,6 +18561,7 @@ func layoutTELA() fyne.CanvasObject {
 				logger.Printf("[TELA] Batch INDEX fetch done: fetched=%d err=%v\n", len(fetched), fetchErr)
 				if fetchErr != nil {
 					logger.Printf("[TELA] Batch INDEX fetch for scan: %v\n", fetchErr)
+					networkErrorDuringFetch = true
 					// Mark SCIDs as failed due to network error - these should NOT be marked as negative
 					// They will be retried on the next scan
 					for _, scid := range indexNeeded {
@@ -18797,8 +18799,13 @@ func layoutTELA() fyne.CanvasObject {
 		searching = telaSearchDisplayAll(telaSearch, sortBy)
 		searchData.Set(searching)
 
-		results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
-		results.Color = colors.Green
+		if networkErrorDuringFetch {
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d (some apps may be missing - network error during fetch)", len(telaSearch))
+			results.Color = colors.Yellow
+		} else {
+			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
+			results.Color = colors.Green
+		}
 
 		fyne.Do(func() {
 			results.Refresh()
