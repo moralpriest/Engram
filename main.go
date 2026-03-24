@@ -131,6 +131,7 @@ func main() {
 		}
 
 		session.Window.Close()
+		time.Sleep(4 * time.Second)
 		os.Exit(0)
 	})
 	session.Window.SetPadded(false)

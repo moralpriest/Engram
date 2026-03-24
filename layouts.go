@@ -5924,7 +5924,6 @@ func layoutTransition() fyne.CanvasObject {
 }
 
 func layoutSettings() fyne.CanvasObject {
-	stopGnomon()
 	rectScroll := canvas.NewRectangle(color.Transparent)
 	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
