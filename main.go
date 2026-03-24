@@ -127,12 +127,15 @@ func main() {
 		appExiting = true
 		appExitFlag.Store(true)
 		if engram.Disk != nil {
-			closeWallet()
+			go func() {
+				closeWallet()
+				time.Sleep(2 * time.Second)
+				os.Exit(0)
+			}()
+		} else {
+			os.Exit(0)
 		}
-
 		session.Window.Close()
-		time.Sleep(4 * time.Second)
-		os.Exit(0)
 	})
 	session.Window.SetPadded(false)
 	session.Domain = "app.main.loading"
