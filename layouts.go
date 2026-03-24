@@ -1201,11 +1201,13 @@ func layoutDashboard() fyne.CanvasObject {
 		rectSpacer,
 		btnTransfersWrapper,
 		rectSpacer,
-		container.New(
-			layout.NewGridLayoutWithColumns(3),
-			linkMyAccount,
-			separator,
-			linkHistory,
+		container.NewCenter(
+			container.New(
+				layout.NewGridLayoutWithColumns(3),
+				linkMyAccount,
+				separator,
+				linkHistory,
+			),
 		),
 		rectSpacer,
 		container.NewHBox(
@@ -3084,7 +3086,6 @@ func layoutRestore() fyne.CanvasObject {
 	// QR code placeholder for success screen
 	successQR := canvas.NewImageFromImage(nil)
 	successQR.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
-	successQR.FillMode = canvas.ImageFillOriginal
 
 	// Address text for success screen
 	successAddress := widget.NewLabel("")
@@ -3323,6 +3324,7 @@ func layoutRestore() fyne.CanvasObject {
 				formSuccess.Refresh()
 				btnEnter.Refresh()
 				grid.Refresh()
+				scrollBox.ScrollToTop()
 				scrollBox.Refresh()
 				session.Window.Canvas().Content().Refresh()
 				session.Window.Canvas().Refresh(session.Window.Content())
@@ -3579,6 +3581,7 @@ func layoutRestore() fyne.CanvasObject {
 		formSuccess.Refresh()
 		btnEnter.Refresh()
 		grid.Refresh()
+		scrollBox.ScrollToTop()
 		scrollBox.Refresh()
 		session.Window.Canvas().Content().Refresh()
 		session.Window.Canvas().Refresh(session.Window.Content())
