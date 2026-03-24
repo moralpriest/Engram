@@ -70,6 +70,8 @@ var telaNavigationStack struct {
 	history []string
 }
 
+var forceFreshScan bool
+
 func isMobileDevice() bool {
 	return isMobile()
 }
@@ -17656,8 +17658,6 @@ func layoutTELA() fyne.CanvasObject {
 		)
 	}
 
-	var forceFreshScan bool
-
 	wSelect := widget.NewSelect([]string{"Search", "Favorites", "History"}, nil)
 	wSelect.SetSelectedIndex(0)
 
@@ -18421,27 +18421,32 @@ func layoutTELA() fyne.CanvasObject {
 
 		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
 			candidateSet := map[string]bool{}
-			candidateCacheMu.RLock()
-			validCandidateSCIDs := candidateCache.validSCIDs()
-			candidateCacheMu.RUnlock()
-			for _, sc := range validCandidateSCIDs {
+			// Use known cached SCIDs (telaSCIDs) instead of candidateCache.validSCIDs()
+			// because telaSCIDs is the authoritative list of confirmed TELA apps
+			for _, sc := range telaSCIDs {
 				candidateSet[sc] = true
 			}
-			deltaSCIDs := make([]string, 0)
+			skippedNoHeights := 0
 			for _, sc := range allSCIDs {
 				heights := gnomon.GetSCIDInteractionHeight(sc)
 				if len(heights) == 0 {
-					deltaSCIDs = append(deltaSCIDs, sc)
-					candidateSet[sc] = true
+					// Skip - Gnomon may not have indexed this SCID's interactions yet.
+					// SCIDs with missing interaction data will be caught in subsequent scans
+					// once Gnomon finishes indexing. New TELA apps are infrequent, so
+					// this trade-off is acceptable to avoid scanning ~50k false positives.
+					// See TELA_DELTA_SCAN_ISSUE.md for details.
+					skippedNoHeights++
 					continue
 				}
 				for _, h := range heights {
 					if h > storedIndexedHeight {
-						deltaSCIDs = append(deltaSCIDs, sc)
 						candidateSet[sc] = true
 						break
 					}
 				}
+			}
+			if skippedNoHeights > 0 {
+				logger.Printf("[TELA] Delta scan: skipped %d SCIDs with no interaction heights (Gnomon may not have indexed them yet)\n", skippedNoHeights)
 			}
 			if len(candidateSet) > 0 {
 				allSCIDs = make([]string, 0, len(candidateSet))
@@ -18449,9 +18454,13 @@ func layoutTELA() fyne.CanvasObject {
 					allSCIDs = append(allSCIDs, sc)
 				}
 				sort.Strings(allSCIDs)
-			} else if len(deltaSCIDs) > 0 {
-				allSCIDs = deltaSCIDs
 			}
+		}
+
+		// Create set of known TELA SCIDs for O(1) lookup
+		knownTelaSCIDs := make(map[string]bool, len(telaSCIDs))
+		for _, sc := range telaSCIDs {
+			knownTelaSCIDs[sc] = true
 		}
 
 		prefilterAllowed := map[string]bool{}
@@ -18460,6 +18469,16 @@ func layoutTELA() fyne.CanvasObject {
 			for _, sc := range allSCIDs {
 				if !rescanRecheck && isNegativeSCID(sc) {
 					prefilterAllowed[sc] = false
+					continue
+				}
+				// Skip prefilter for SCIDs with cached INDEX data
+				if _, hasIndexData := indexCacheStore[sc]; hasIndexData {
+					prefilterAllowed[sc] = true
+					continue
+				}
+				// Skip prefilter for known TELA SCIDs from storage
+				if knownTelaSCIDs[sc] {
+					prefilterAllowed[sc] = true
 					continue
 				}
 				candidates = append(candidates, sc)
