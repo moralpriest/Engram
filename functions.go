@@ -214,6 +214,8 @@ type Gnomon struct {
 	Path     string
 }
 
+var gnomonMu sync.Mutex
+
 type ProofData struct {
 	Receivers []string
 	Amounts   []uint64
@@ -1917,8 +1919,8 @@ func closeWallet() {
 		if gnomon.Index != nil {
 			logger.Printf("[Gnomon] Shutting down indexers...\n")
 			stopGnomon()
-			// Increased delay to ensure database file is fully released
-			time.Sleep(500 * time.Millisecond)
+			// Increased delay to ensure database file is fully released by OS
+			time.Sleep(3 * time.Second)
 		}
 
 		stopEPOCH()
@@ -4326,6 +4328,9 @@ func startGnomon() {
 		return
 	}
 
+	gnomonMu.Lock()
+	defer gnomonMu.Unlock()
+
 	if walletapi.Connected {
 		if gnomon.Index == nil && gnomon.Active == 1 {
 			gnomon.Active = 2
@@ -4514,6 +4519,9 @@ func isDatabaseCorrupted(path string) bool {
 
 // Stop all indexers and close Gnomon
 func stopGnomon() {
+	gnomonMu.Lock()
+	defer gnomonMu.Unlock()
+
 	if gnomon.Index != nil {
 		gnomon.Active = 0
 		gnomon.Index.Close()
