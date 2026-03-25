@@ -1023,6 +1023,14 @@ func initSettings() {
 	initWebSocketState()
 	logger.Printf("[Engram] WebSocket state initialization completed")
 
+	// Initialize EPOCH max hashes to 10000 (hard limit) to support dApps like Dero Beats
+	// Default from epoch package is 1000, which causes "hashes exceeds maxHashes" errors
+	if err := epoch.SetMaxHashes(10000); err != nil {
+		logger.Errorf("[Engram] Failed to set EPOCH max hashes: %s\n", err)
+	} else {
+		logger.Printf("[Engram] EPOCH max hashes set to 10000 (was %d)", 1000)
+	}
+
 	// NOW initialize Gnomon with error handling so failure doesn't prevent other features
 	logger.Printf("[Engram] Initializing Gnomon database...")
 	_, _ = getGnomon()
@@ -1106,7 +1114,9 @@ func initTELAPreferences() {
 		tela.AllowUpdates(allowUpdates == "Allow")
 		logger.Printf("[Engram] TELA Allow Updates applied: %s", allowUpdates)
 	} else {
-		logger.Printf("[Engram] TELA Allow Updates not found, using default")
+		// Default to Allow when no stored value exists
+		tela.AllowUpdates(true)
+		logger.Printf("[Engram] TELA Allow Updates not found, defaulting to Allow")
 	}
 
 	// Load and apply Restrictive Mode setting using dual storage
@@ -6146,10 +6156,12 @@ func GetPermissionGroup(method string) *PermissionGroup {
 // getSimpleDefault returns the default permission for a category in Simple Mode
 func getSimpleDefault(category string) xswd.Permission {
 	switch category {
-	case "readonly", "utility":
+	case "utility":
 		return xswd.AlwaysAllow
 	case "mining":
-		return xswd.AlwaysDeny
+		return xswd.AlwaysAllow
+	case "readonly":
+		return xswd.Ask
 	default:
 		return xswd.Ask
 	}
@@ -6559,6 +6571,27 @@ func toggleXSWD(endpoint string) {
 
 		logger.Printf("[Engram] Starting XSWD server %s\n", endpoint)
 
+		// Check if port is already in use before attempting to start
+		if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
+			if listener, err := net.ListenTCP("tcp", addr); err != nil {
+				logger.Printf("[Engram] Port %s already in use, waiting for release...\n", endpoint)
+				// Wait for port to be released
+				for i := 0; i < 5; i++ {
+					time.Sleep(time.Second)
+					if listener, err := net.ListenTCP("tcp", addr); err == nil {
+						listener.Close()
+						logger.Printf("[Engram] Port %s now available\n", endpoint)
+						break
+					}
+					if i == 4 {
+						logger.Errorf("[Engram] Port %s still in use after 5 seconds\n", endpoint)
+					}
+				}
+			} else {
+				listener.Close()
+			}
+		}
+
 		noStoreMethods := engramNoStoreMethods()
 
 		xswdStateMu.Lock()
@@ -6590,29 +6623,47 @@ func toggleXSWD(endpoint string) {
 		server := remoteAccess.WS.server
 		xswdStateMu.RUnlock()
 		if server == nil || !server.IsRunning() {
-			xswdStateMu.Lock()
-			remoteAccess.WS.server = nil
-			xswdStateMu.Unlock()
-			logger.Errorf("[Engram] Error starting XSWD server\n")
-			if remoteAccess.WS.toggle != nil {
-				uiDo(func() {
-					if remoteAccess.WS.toggle != nil {
-						remoteAccess.WS.toggle.Text = "Error starting web sockets"
-						remoteAccess.WS.toggle.Refresh()
+			// Retry after a brief delay (port may still be releasing)
+			logger.Printf("[Engram] XSWD server not running, retrying in 1 second...\n")
+			time.Sleep(time.Second)
+
+			xswdStateMu.RLock()
+			server = remoteAccess.WS.server
+			xswdStateMu.RUnlock()
+			if server == nil || !server.IsRunning() {
+				// Check port availability
+				if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
+					if listener, err := net.ListenTCP("tcp", addr); err != nil {
+						logger.Errorf("[Engram] Port %s still in use after retry: %v\n", endpoint, err)
+					} else {
+						listener.Close()
 					}
-				})
-				go func() {
-					time.Sleep(time.Second * 2)
+				}
+
+				xswdStateMu.Lock()
+				remoteAccess.WS.server = nil
+				xswdStateMu.Unlock()
+				logger.Errorf("[Engram] Error starting XSWD server: server=%v engram.Disk=%v WalletOpen=%v\n", server, engram.Disk != nil, session.WalletOpen)
+				if remoteAccess.WS.toggle != nil {
 					uiDo(func() {
 						if remoteAccess.WS.toggle != nil {
-							remoteAccess.WS.toggle.Text = "Turn On"
+							remoteAccess.WS.toggle.Text = "Error starting web sockets"
 							remoteAccess.WS.toggle.Refresh()
-							remoteAccess.WS.toggle.Enable()
 						}
 					})
-				}()
+					go func() {
+						time.Sleep(time.Second * 2)
+						uiDo(func() {
+							if remoteAccess.WS.toggle != nil {
+								remoteAccess.WS.toggle.Text = "Turn On"
+								remoteAccess.WS.toggle.Refresh()
+								remoteAccess.WS.toggle.Enable()
+							}
+						})
+					}()
+				}
+				return
 			}
-			return
 		}
 		if remoteAccess.WS.toggle != nil {
 			uiDo(func() {
@@ -6703,6 +6754,13 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			// Initialize ad.Permissions if nil to avoid panic
 			if ad.Permissions == nil {
 				ad.Permissions = make(map[string]xswd.Permission)
+			}
+			// Load stored per-app permissions first (they persist across reconnections)
+			if storedPerms, _ := GetAppPermissions(ad.Name); storedPerms != nil {
+				for k, v := range storedPerms {
+					ad.Permissions[k] = v
+				}
+				logger.Printf("[Engram] Loaded %d stored permissions for app %s\n", len(storedPerms), ad.Name)
 			}
 			remoteAccess.WS.RLock()
 			for k, v := range remoteAccess.WS.global.permissions {
@@ -7096,9 +7154,23 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	// All other methods require approval
 	choice = xswd.Deny
 
-	// EPOCH is not online or permissioned so Deny request
-	if strings.HasSuffix(method, "EPOCH") && !epoch.IsActive() {
-		return
+	// EPOCH methods - auto-start EPOCH if not active (HOLOGRAM-style, no dialog)
+	if strings.HasSuffix(method, "EPOCH") {
+		if !epoch.IsActive() {
+			// Auto-start EPOCH with user's address or dApp address
+			// Start with user's default address - dApp can use AttemptEPOCHWithAddr to specify different address
+			err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
+			if err != nil {
+				logger.Errorf("[EPOCH] Auto-start failed: %s\n", err)
+				return xswd.Deny
+			}
+			remoteAccess.EPOCH.enabled = true
+			remoteAccess.EPOCH.err = nil
+			setRemoteAccess(epoch.GetPort(), "EPOCH")
+			logger.Printf("[EPOCH] Auto-started for dApp request\n")
+		}
+		// Auto-allow EPOCH methods (no permission dialog needed)
+		return xswd.Allow
 	}
 
 	overlay := session.Window.Canvas().Overlays()
@@ -7172,7 +7244,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	// Add AlwaysAllow option if method is !noStore
-	if remoteAccess.WS.server.CanStorePermission(method) {
+	if remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method) {
 		permissions = append(permissions, xswd.AlwaysAllow.String())
 	}
 
@@ -7326,6 +7398,203 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	go refreshXSWDList()
 
+	// Persist permission for this app if granted
+	if choice.IsPositive() {
+		StoreAppPermissions(ad.Name, ad.Permissions)
+	}
+
+	return choice
+}
+
+// Ask user to enable EPOCH when an app requests it but EPOCH is not active
+func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permission) {
+	generation := currentWalletGeneration()
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return xswd.Deny
+	}
+
+	overlay := session.Window.Canvas().Overlays()
+
+	headerText := "EPOCH  REQUEST"
+
+	header := canvas.NewText(headerText, colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp.TextSize = 14
+	labelApp.Alignment = fyne.TextAlignLeading
+	labelApp.TextStyle = fyne.TextStyle{Bold: true}
+
+	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
+	textApp.Wrapping = fyne.TextWrapWord
+
+	labelRequest := canvas.NewText("REQUESTING", colors.Gray)
+	labelRequest.TextSize = 14
+	labelRequest.Alignment = fyne.TextAlignLeading
+	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
+
+	textRequest := widget.NewRichTextFromMarkdown("### Enable EPOCH")
+	textRequest.Wrapping = fyne.TextWrapWord
+
+	infoText := widget.NewLabel("This app needs EPOCH (Proof-of-Work) to interact with your wallet.\nEPOCH allows the app to perform mining operations.")
+	infoText.Wrapping = fyne.TextWrapWord
+
+	labelMiningAddr := canvas.NewText("Mining address:", colors.Gray)
+	labelMiningAddr.TextSize = 12
+	labelMiningAddr.Alignment = fyne.TextAlignLeading
+
+	// Radio group for mining address selection - default to dApp Chooses
+	miningAddrOptions := []string{"My Address", "dApp Chooses"}
+	miningAddrRadio := widget.NewRadioGroup(miningAddrOptions, nil)
+	miningAddrRadio.SetSelected("dApp Chooses")
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
+	choice = xswd.Deny
+
+	btnEnable := widget.NewButtonWithIcon("Enable", theme.ConfirmIcon(), nil)
+	btnEnable.Importance = widget.HighImportance
+	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
+
+	done := make(chan struct{})
+
+	btnEnable.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
+
+		// Set allowWithAddress based on radio selection
+		remoteAccess.EPOCH.allowWithAddress = (miningAddrRadio.Selected == "dApp Chooses")
+
+		// Start EPOCH
+		err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
+		if err != nil {
+			logger.Errorf("[EPOCH] Failed to start: %s\n", err)
+			remoteAccess.EPOCH.err = err
+			choice = xswd.Deny
+		} else {
+			remoteAccess.EPOCH.enabled = true
+			remoteAccess.EPOCH.err = nil
+			setRemoteAccess(epoch.GetPort(), "EPOCH")
+			choice = xswd.Allow
+			logger.Printf("[EPOCH] Started successfully via permission prompt (allowWithAddress: %v)\n", remoteAccess.EPOCH.allowWithAddress)
+		}
+		done <- struct{}{}
+	}
+
+	btnDeny.OnTapped = func() {
+		choice = xswd.Deny
+		done <- struct{}{}
+	}
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				container.NewHBox(
+					layout.NewSpacer(),
+					btnEnable,
+					btnDeny,
+					layout.NewSpacer(),
+				),
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						labelApp,
+						textApp,
+						rectSpacer,
+						labelRequest,
+						textRequest,
+						rectSpacer,
+						infoText,
+						rectSpacer,
+						labelMiningAddr,
+						miningAddrRadio,
+					),
+				),
+			),
+		),
+	)
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		),
+	)
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+				),
+			),
+		),
+	)
+
+	if a.Driver().Device().IsMobile() {
+		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
+	} else {
+		session.Window.RequestFocus()
+	}
+
+	// Wait for user input
+	select {
+	case <-done:
+	case <-ad.OnClose:
+	}
+
+	if !isWalletGenerationActive(generation) || session.Window == nil {
+		return xswd.Deny
+	}
+
+	overlay.Top().Hide()
+	overlay.Remove(overlay.Top())
+	overlay.Remove(overlay.Top())
+
+	go refreshXSWDList()
+
+	// Persist permission for this app if granted
+	if choice.IsPositive() {
+		StoreAppPermissions(ad.Name, ad.Permissions)
+	}
+
 	return choice
 }
 
@@ -7354,6 +7623,56 @@ func refreshXSWDList() {
 			remoteAccess.WS.list.Refresh()
 		})
 	}
+}
+
+// StoreAppPermissions saves per-app permissions to encrypted storage
+func StoreAppPermissions(appName string, permissions map[string]xswd.Permission) error {
+	if appName == "" || len(permissions) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		logger.Errorf("[Engram] StoreAppPermissions: marshal error: %s\n", err)
+		return err
+	}
+	err = StoreEncryptedValue("XSWD", []byte("AppName:"+appName), data)
+	if err != nil {
+		logger.Errorf("[Engram] StoreAppPermissions: storage error: %s\n", err)
+		return err
+	}
+	logger.Printf("[Engram] Stored permissions for app %s: %d methods\n", appName, len(permissions))
+	return nil
+}
+
+// GetAppPermissions retrieves per-app permissions from encrypted storage
+func GetAppPermissions(appName string) (map[string]xswd.Permission, error) {
+	if appName == "" {
+		return nil, nil
+	}
+	data, err := GetEncryptedValue("XSWD", []byte("AppName:"+appName))
+	if err != nil {
+		logger.Printf("[Engram] GetAppPermissions: no stored permissions for app %s: %s\n", appName, err)
+		return nil, nil // Not an error, just no stored permissions
+	}
+	var permissions map[string]xswd.Permission
+	if err := json.Unmarshal(data, &permissions); err != nil {
+		logger.Errorf("[Engram] GetAppPermissions: unmarshal error: %s\n", err)
+		return nil, err
+	}
+	logger.Printf("[Engram] GetAppPermissions: found %d permissions for app %s\n", len(permissions), appName)
+	return permissions, nil
+}
+
+// DeleteAppPermissions removes per-app permissions from storage
+func DeleteAppPermissions(appName string) error {
+	if appName == "" {
+		return nil
+	}
+	err := DeleteKey("XSWD", []byte("AppName:"+appName))
+	if err != nil {
+		logger.Debugf("[Engram] DeleteAppPermissions: %s\n", err)
+	}
+	return nil
 }
 
 // Ask permission to complete a specific Engram action, using xswd permissions to match existing requests that have params to display
