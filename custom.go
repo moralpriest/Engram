@@ -15,12 +15,14 @@
 package main
 
 import (
+	"fmt"
 	"image/color"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -250,6 +252,104 @@ func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
 	}
 	sizeEnforcer.SetMinSize(scalePoint(100, h))
 	return container.NewStack(sizeEnforcer, btn)
+}
+
+type slimProgressBar struct {
+	widget.BaseWidget
+	value  float64
+	height float32
+	label  *canvas.Text
+}
+
+func NewSlimProgressBar() *slimProgressBar {
+	bar := &slimProgressBar{height: scaleSize(6)}
+	bar.label = canvas.NewText("0%", colors.Gray)
+	bar.label.TextSize = scaleFont(11)
+	bar.label.Alignment = fyne.TextAlignTrailing
+	bar.ExtendBaseWidget(bar)
+	return bar
+}
+
+func (s *slimProgressBar) SetValue(value float64) {
+	if value < 0 {
+		value = 0
+	}
+	if value > 1 {
+		value = 1
+	}
+	if s.value == value {
+		return
+	}
+	s.value = value
+	s.Refresh()
+}
+
+func (s *slimProgressBar) CreateRenderer() fyne.WidgetRenderer {
+	track := canvas.NewRectangle(color.NRGBA{R: 36, G: 38, B: 44, A: 0xff})
+	track.CornerRadius = s.height / 2
+	fill := canvas.NewRectangle(colors.Green)
+	fill.CornerRadius = s.height / 2
+	barWrap := container.NewStack(track, fill)
+	objects := []fyne.CanvasObject{container.NewBorder(nil, nil, nil, s.label, barWrap)}
+	return &slimProgressBarRenderer{bar: s, track: track, fill: fill, objects: objects}
+}
+
+func (s *slimProgressBar) MinSize() fyne.Size {
+	return fyne.NewSize(scaleSize(160), scaleSize(16))
+}
+
+type slimProgressBarRenderer struct {
+	bar     *slimProgressBar
+	track   *canvas.Rectangle
+	fill    *canvas.Rectangle
+	objects []fyne.CanvasObject
+}
+
+func (r *slimProgressBarRenderer) Layout(size fyne.Size) {
+	r.objects[0].Resize(size)
+	barWidth := size.Width - scaleSize(34)
+	if barWidth < 0 {
+		barWidth = 0
+	}
+	barY := (size.Height - r.bar.height) / 2
+	r.track.Move(fyne.NewPos(0, barY))
+	r.track.Resize(fyne.NewSize(barWidth, r.bar.height))
+	fillWidth := barWidth * float32(r.bar.value)
+	if r.bar.value > 0 && fillWidth < r.bar.height {
+		fillWidth = r.bar.height
+	}
+	if fillWidth > barWidth {
+		fillWidth = barWidth
+	}
+	r.fill.Move(fyne.NewPos(0, barY))
+	r.fill.Resize(fyne.NewSize(fillWidth, r.bar.height))
+}
+
+func (r *slimProgressBarRenderer) MinSize() fyne.Size {
+	return r.bar.MinSize()
+}
+
+func (r *slimProgressBarRenderer) Refresh() {
+	r.track.FillColor = color.NRGBA{R: 36, G: 38, B: 44, A: 0xff}
+	r.fill.FillColor = colors.Green
+	r.track.CornerRadius = r.bar.height / 2
+	r.fill.CornerRadius = r.bar.height / 2
+	r.bar.label.Text = fmt.Sprintf("%d%%", int(r.bar.value*100+0.5))
+	r.bar.label.Color = colors.Gray
+	r.bar.label.Refresh()
+	r.Layout(r.bar.Size())
+	canvas.Refresh(r.track)
+	canvas.Refresh(r.fill)
+}
+
+func (r *slimProgressBarRenderer) Objects() []fyne.CanvasObject {
+	return r.objects
+}
+
+func (r *slimProgressBarRenderer) Destroy() {}
+
+func (r *slimProgressBarRenderer) BackgroundColor() color.Color {
+	return theme.Color(theme.ColorNameBackground)
 }
 
 type spacer struct {
