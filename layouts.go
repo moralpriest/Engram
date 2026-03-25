@@ -7032,14 +7032,11 @@ func layoutAppSettings() fyne.CanvasObject {
 			logger.Printf("[Engram] TELA Allow Updates loaded from storage: Deny")
 		}
 	} else {
-		// Fallback to current tela state
-		if tela.UpdatesAllowed() {
-			wAllowUpdates.SetSelectedIndex(1)
-			logger.Printf("[Engram] TELA Allow Updates using tela state: Allow")
-		} else {
-			wAllowUpdates.SetSelectedIndex(0)
-			logger.Printf("[Engram] TELA Allow Updates using tela state: Deny")
-		}
+		// Default to Allow when no stored value exists
+		wAllowUpdates.SetSelectedIndex(1)
+		tela.AllowUpdates(true)
+		setTELADual("Allow Updates", []byte("Allow"))
+		logger.Printf("[Engram] TELA Allow Updates defaulting to: Allow")
 	}
 	wAllowUpdates.OnChanged = func(s string) {
 		if s == xswd.Allow.String() {
@@ -7084,7 +7081,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Reset Defaults button
 	btnResetDefaults := widget.NewButton("Reset Default Settings", func() {
-		wRestrictiveMode.SetChecked(true)
+		wRestrictiveMode.SetChecked(false)
 		wAllowUpdates.SetSelectedIndex(0)
 		wRescanRecheck.SetSelectedIndex(0)
 		wSortBy.SetSelectedIndex(0)
@@ -9787,7 +9784,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			btnDefaults.Disable()
 		}
 	} else {
-		wMode.SetChecked(true)
+		wMode.SetChecked(false)
 		wConnection.SetSelectedIndex(0)
 		wConnection.Disable()
 		wGlobalPermissions.SetSelectedIndex(0)
@@ -17421,6 +17418,9 @@ func layoutTELA() fyne.CanvasObject {
 						if u, err := url.Parse(link); err == nil {
 							fyne.CurrentApp().OpenURL(u)
 						}
+						if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
+							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
+						}
 						fyne.Do(func() {
 							if refreshServerList != nil {
 								refreshServerList()
@@ -17429,11 +17429,53 @@ func layoutTELA() fyne.CanvasObject {
 							favoritesList.Refresh()
 						})
 					} else {
-						fyne.Do(func() {
-							errorText.Text = "error starting TELA app"
-							errorText.Color = colors.Red
-							errorText.Refresh()
-						})
+						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
+							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", scid)}
+							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							if permErr != nil {
+								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
+								fyne.Do(func() {
+									errorText.Text = "error could not open TELA"
+									errorText.Color = colors.Red
+									errorText.Refresh()
+								})
+								return
+							}
+
+							if linkPermission != xswd.Allow {
+								return
+							}
+
+							link, updateErr := serveTELAUpdates(scid)
+							if updateErr != nil {
+								logger.Errorf("[Engram] Error serving TELA: %s\n", updateErr)
+								fyne.Do(func() {
+									errorText.Text = telaErrorToString(updateErr)
+									errorText.Color = colors.Red
+									errorText.Refresh()
+								})
+								return
+							}
+
+							pushTELANavigation(scid)
+							if u, parseErr := url.Parse(link); parseErr == nil {
+								fyne.CurrentApp().OpenURL(u)
+							}
+							fyne.Do(func() {
+								if refreshServerList != nil {
+									refreshServerList()
+								}
+								searchList.Refresh()
+								favoritesList.Refresh()
+							})
+						} else {
+							logger.Printf("[TELA] ServeTELA failed for SCID %s: %v", scid, err)
+							fyne.Do(func() {
+								errorText.Text = "error starting TELA app"
+								errorText.Color = colors.Red
+								errorText.Refresh()
+							})
+						}
 					}
 				}()
 			}
@@ -20328,6 +20370,11 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						errorText.Refresh()
 					} else {
 						pushTELANavigation(index.SCID)
+
+						// Save to TELA history
+						if err := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); err != nil {
+							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
+						}
 
 						// Open the URL in browser
 						err = fyne.CurrentApp().OpenURL(url)
