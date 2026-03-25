@@ -197,6 +197,8 @@ type INDEXwithRatings struct {
 	tela.INDEX
 }
 
+type telaDisplayCache []INDEXwithRatings
+
 type Engram struct {
 	Disk *walletapi.Wallet_Disk
 }
@@ -566,6 +568,33 @@ func saveTelaIndexCache(cache indexCache) error {
 	}
 
 	return StoreEncryptedValue("TELA Search", []byte("IndexCache"), data)
+}
+
+func loadTelaDisplayCache() telaDisplayCache {
+	cache := telaDisplayCache{}
+	raw, err := GetEncryptedValue("TELA Search", []byte("DisplayCache"))
+	if err != nil || len(raw) == 0 {
+		return cache
+	}
+
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		logger.Printf("[TELA] Failed decoding display cache: %v\n", err)
+		return telaDisplayCache{}
+	}
+
+	return cache
+}
+
+func saveTelaDisplayCache(cache telaDisplayCache) error {
+	if cache == nil {
+		cache = telaDisplayCache{}
+	}
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+
+	return StoreEncryptedValue("TELA Search", []byte("DisplayCache"), data)
 }
 
 func loadTelaCandidateCache() telaCandidateCache {
@@ -4773,12 +4802,18 @@ func preIndexFavorites(favs map[string]*TELAFavoriteData) {
 		return
 	}
 
+	batch := make(map[string]*structures.FastSyncImport)
 	for scid := range favs {
 		if gnomon.GetAllSCIDVariableDetails(scid) == nil {
-			logger.Printf("[Engram] Pre-indexing favorite SCID: %s\n", scid)
-			if err := gnomon.AddSCIDToIndex(scid); err != nil {
-				logger.Errorf("[Engram] Failed to pre-index %s: %v\n", scid, err)
-			}
+			batch[scid] = &structures.FastSyncImport{}
+		}
+	}
+
+	if len(batch) > 0 {
+		if err := gnomon.Index.AddSCIDToIndex(batch, false, true); err != nil {
+			logger.Errorf("[Engram] Failed to pre-index favorites: %v\n", err)
+		} else {
+			logger.Printf("[Engram] Pre-indexed %d favorite SCIDs\n", len(batch))
 		}
 	}
 }
@@ -7875,14 +7910,12 @@ func getLikesRatio(scid, dURL, searchExclusions string, minLikes float64) (ratio
 	}
 
 	_, up := gnomon.GetSCIDValuesByKey(scid, "likes")
-	if up == nil {
-		err = fmt.Errorf("could not get %s likes", scid)
-		return
-	}
-
 	_, down := gnomon.GetSCIDValuesByKey(scid, "dislikes")
-	if down == nil {
-		err = fmt.Errorf("could not get %s dislikes", scid)
+
+	if up == nil || down == nil || len(up) == 0 || len(down) == 0 {
+		ratings.Likes = 0
+		ratings.Dislikes = 0
+		ratio = 50
 		return
 	}
 
