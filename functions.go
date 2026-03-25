@@ -7273,19 +7273,18 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-	permissions := []string{
-		xswd.Allow.String(),
-		xswd.Deny.String(),
+	canStorePermission := remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method)
+	alwaysRemember := false
+	rememberCheck := widget.NewCheck("Always remember this choice", func(checked bool) {
+		alwaysRemember = checked
+	})
+	if !canStorePermission {
+		rememberCheck.Hide()
 	}
 
-	// Add AlwaysAllow option if method is !noStore
-	if remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method) {
-		permissions = append(permissions, xswd.AlwaysAllow.String())
-	}
-
-	permissions = append(permissions, xswd.AlwaysDeny.String())
-
-	options := widget.NewSelect(permissions, nil)
+	btnAllow := widget.NewButtonWithIcon("Allow", theme.ConfirmIcon(), nil)
+	btnAllow.Importance = widget.HighImportance
+	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
 
 	content := container.NewStack(
 		container.NewBorder(
@@ -7293,7 +7292,13 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 			container.NewVBox(
 				rectSpacer,
 				rectSpacer,
-				options,
+				container.NewHBox(
+					layout.NewSpacer(),
+					btnAllow,
+					btnDeny,
+					layout.NewSpacer(),
+				),
+				rememberCheck,
 				rectSpacer,
 				rectSpacer,
 			),
@@ -7319,34 +7324,30 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	// Create and show request prompt
 	done := make(chan struct{})
-	btnDismiss := widget.NewButton("Deny", nil)
-	btnDismiss.OnTapped = func() {
+	btnAllow.OnTapped = func() {
 		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
 			return
 		}
-		switch options.Selected {
-		case xswd.Allow.String():
-			choice = xswd.Allow
-		case xswd.Deny.String():
-			choice = xswd.Deny
-		case xswd.AlwaysAllow.String():
+		if alwaysRemember && canStorePermission {
 			choice = xswd.AlwaysAllow
-		case xswd.AlwaysDeny.String():
-			choice = xswd.AlwaysDeny
+		} else {
+			choice = xswd.Allow
 		}
 		done <- struct{}{}
 	}
 
-	options.OnChanged = func(s string) {
-		switch s {
-		case xswd.Allow.String(), xswd.AlwaysAllow.String():
-			btnDismiss.Importance = widget.HighImportance
-		case xswd.Deny.String(), xswd.AlwaysDeny.String():
-			btnDismiss.Importance = widget.MediumImportance
+	btnDeny.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
 		}
-		btnDismiss.SetText(s)
-		btnDismiss.Refresh()
+		if alwaysRemember && canStorePermission {
+			choice = xswd.AlwaysDeny
+		} else {
+			choice = xswd.Deny
+		}
+		done <- struct{}{}
 	}
 
 	linkRemove := widget.NewHyperlinkWithStyle("Remove Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
@@ -7394,7 +7395,6 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 					rectSpacer,
 					rectSpacer,
 					content,
-					btnDismiss,
 					rectSpacer,
 					rectSpacer,
 					rectSpacer,
