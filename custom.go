@@ -254,6 +254,28 @@ func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
 	return container.NewStack(sizeEnforcer, btn)
 }
 
+func newSmallIconLink(label string, icon fyne.Resource, onTap func()) *fyne.Container {
+	link := widget.NewHyperlinkWithStyle(label, nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	link.OnTapped = onTap
+	iconImg := canvas.NewImageFromResource(icon)
+	iconImg.FillMode = canvas.ImageFillContain
+	h := float32(14)
+	if isMobile() {
+		h = 16
+	}
+	iconImg.SetMinSize(scalePoint(14, h))
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(80, 20))
+	linkContainer := container.NewHBox(iconImg, link)
+	return container.NewStack(sizeEnforcer, linkContainer)
+}
+
+func newSmallIconButton(label string, icon fyne.Resource, onTap func()) *fyne.Container {
+	btn := widget.NewButtonWithIcon(label, icon, onTap)
+	btn.Importance = widget.LowImportance
+	return container.NewGridWrap(scalePoint(110, 40), btn)
+}
+
 type slimProgressBar struct {
 	widget.BaseWidget
 	value  float64

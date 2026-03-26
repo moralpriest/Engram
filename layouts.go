@@ -1026,21 +1026,19 @@ func layoutDashboard() fyne.CanvasObject {
 		logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
 	})
 
-	linkHistory := widget.NewHyperlinkWithStyle("History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkHistory.OnTapped = func() {
+	linkHistory := newSmallIconButton("History", theme.HistoryIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutHistory())
 		removeOverlays()
-	}
+	})
 
-	linkMyAccount := widget.NewHyperlinkWithStyle("My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkMyAccount.OnTapped = func() {
+	linkMyAccount := newSmallIconButton("My Account", theme.AccountIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAccount())
 		removeOverlays()
-	}
+	})
 
 	btnTransfers := widget.NewButton("Transfers", nil)
 	btnTransfers.OnTapped = func() {
@@ -1052,10 +1050,6 @@ func layoutDashboard() fyne.CanvasObject {
 
 	btnTransfersWrapper := wrapMobileButton(btnTransfers)
 	gramSendWrapper := wrapMobileButton(gramSend)
-
-	separator := canvas.NewText(" | ", colors.Gray)
-	separator.TextSize = scaleFont(14)
-	separator.Alignment = fyne.TextAlignCenter
 
 	res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 
@@ -1104,10 +1098,9 @@ func layoutDashboard() fyne.CanvasObject {
 		btnTransfersWrapper,
 		rectSpacer,
 		container.NewCenter(
-			container.New(
-				layout.NewGridLayoutWithColumns(3),
+			container.NewHBox(
 				linkMyAccount,
-				separator,
+				NewSpacer(10, 5),
 				linkHistory,
 			),
 		),
@@ -11063,6 +11056,8 @@ func layoutAlert(t int) fyne.CanvasObject {
 }
 
 func layoutHistory() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+
 	var data []string
 	var entries []rpc.Entry
 	var zeroscid crypto.Hash
@@ -12723,6 +12718,8 @@ func layoutPad() fyne.CanvasObject {
 }
 
 func layoutAccount() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
