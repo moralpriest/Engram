@@ -1772,13 +1772,12 @@ func layoutServiceAddress() fyne.CanvasObject {
 					a.Clipboard().SetContent(address.String())
 				}
 
-				linkClose := widget.NewHyperlinkWithStyle("Go Back", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-				linkClose.OnTapped = func() {
+				btnClose := newSizedIconButton(theme.NavigateBackIcon(), func() {
 					overlay := session.Window.Canvas().Overlays()
 					overlay.Top().Hide()
 					overlay.Remove(overlay.Top())
 					overlay.Remove(overlay.Top())
-				}
+				})
 
 				var imageQR *canvas.Image
 
@@ -1836,7 +1835,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 								rectSpacer,
 								container.NewHBox(
 									layout.NewSpacer(),
-									linkClose,
+									btnClose,
 									layout.NewSpacer(),
 								),
 								rectSpacer,
@@ -4460,8 +4459,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		captureDomain = "app.explorer"
 	}
 
-	linkBack := widget.NewHyperlinkWithStyle(fmt.Sprintf("Back to %s", sessionDomainToString(captureDomain)), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		capture := session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -4472,7 +4470,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			session.Domain = captureDomain
 		}
 		session.LastDomain = capture
-	}
+	})
 
 	image = canvas.NewImageFromResource(resourceBlankPng)
 	image.SetMinSize(fyne.NewSize(ui.Width*0.3, ui.Width*0.3))
@@ -5072,7 +5070,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -5646,11 +5644,10 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		valueDestPort.Text = "  0"
 	}
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Transfers", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutTransfers())
-	}
+	})
 
 	btnDelete := widget.NewButton("Cancel Transfer", nil)
 	btnDelete.OnTapped = func() {
@@ -5765,7 +5762,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -8674,13 +8671,12 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
-	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkBack.OnTapped = func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	}
+	})
 
 	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
@@ -9129,7 +9125,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
-				linkBack,
+				btnBack,
 				layout.NewSpacer(),
 			),
 			rectSpacer,
@@ -13348,10 +13344,9 @@ func layoutRecovery() fyne.CanvasObject {
 	rectHeader := canvas.NewRectangle(color.Transparent)
 	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-	linkCancel := widget.NewHyperlinkWithStyle("Back to My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCancel.OnTapped = func() {
+	btnCancel := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
-	}
+	})
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
@@ -13371,7 +13366,7 @@ func layoutRecovery() fyne.CanvasObject {
 		wSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
-			linkCancel,
+			btnCancel,
 			layout.NewSpacer(),
 		),
 		wSpacer,
@@ -13465,10 +13460,9 @@ func layoutRecoveryHex() fyne.CanvasObject {
 	rectHeader := canvas.NewRectangle(color.Transparent)
 	rectHeader.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-	linkCancel := widget.NewHyperlinkWithStyle("Back to My Account", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCancel.OnTapped = func() {
+	btnCancel := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
-	}
+	})
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
@@ -13488,7 +13482,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 		wSpacer,
 		container.NewHBox(
 			layout.NewSpacer(),
-			linkCancel,
+			btnCancel,
 			layout.NewSpacer(),
 		),
 		wSpacer,
