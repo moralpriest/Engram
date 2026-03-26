@@ -297,12 +297,6 @@ func main() {
 		}
 	})
 
-	// Check wallet count for simplified login
-	var singleWalletName string
-	accounts, err := GetAccounts()
-	if err == nil && len(accounts) == 1 {
-		singleWalletName = accounts[0]
-	}
 	// Check if mobile device
 	if a.Driver().Device().IsMobile() {
 		go walletapi.Initialize_LookupTable(1, 1<<21)
@@ -316,8 +310,8 @@ func main() {
 		ui.Padding = ui.MaxWidth * 0.05
 
 		// Always use layoutFrame on mobile - it gets actual screen dimensions
-		// and handles orientation changes. Pass wallet name for single wallet quick login.
-		session.Window.SetContent(layoutFrameWithWallet(singleWalletName))
+		// and handles orientation changes.
+		session.Window.SetContent(layoutFrame())
 		session.Window.SetFixedSize(true)
 
 		session.Window.ShowAndRun()
@@ -331,12 +325,7 @@ func main() {
 		ui.Padding = ui.MaxWidth * 0.05
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		// Use simplified login for single wallet on desktop too
-		if singleWalletName != "" {
-			session.Window.SetContent(layoutSingleWalletLogin(singleWalletName))
-		} else {
-			session.Window.SetContent(layoutMain())
-		}
+		session.Window.SetContent(layoutMain())
 		session.Window.SetFixedSize(true)
 
 		// Window resize check disabled - see comment above for details

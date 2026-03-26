@@ -77,6 +77,82 @@ func isMobileDevice() bool {
 	return isMobile()
 }
 
+type walletBtn struct {
+	widget.BaseWidget
+	BgColor  color.Color
+	TxtColor color.Color
+	Label    string
+	onTapped func()
+	bg       *canvas.Rectangle
+	lbl      *canvas.Text
+}
+
+func newWalletBtn(label string, onTap func()) *walletBtn {
+	w := &walletBtn{
+		BgColor:  colors.DarkMatter,
+		TxtColor: colors.Gray,
+		Label:    label,
+		onTapped: onTap,
+	}
+	w.ExtendBaseWidget(w)
+	return w
+}
+
+func (w *walletBtn) CreateRenderer() fyne.WidgetRenderer {
+	w.bg = canvas.NewRectangle(w.BgColor)
+	w.bg.CornerRadius = 4
+	w.lbl = canvas.NewText(w.Label, w.TxtColor)
+	w.lbl.Alignment = fyne.TextAlignCenter
+	w.lbl.TextStyle = fyne.TextStyle{Bold: true}
+	return &walletBtnRenderer{btn: w}
+}
+
+func (w *walletBtn) Tapped(_ *fyne.PointEvent) {
+	if w.onTapped != nil {
+		w.onTapped()
+	}
+}
+
+func (w *walletBtn) SetColors(bg, txt color.Color) {
+	w.BgColor = bg
+	w.TxtColor = txt
+	if w.bg != nil {
+		w.bg.FillColor = bg
+		w.bg.Refresh()
+	}
+	if w.lbl != nil {
+		w.lbl.Color = txt
+		w.lbl.Refresh()
+	}
+}
+
+type walletBtnRenderer struct {
+	btn *walletBtn
+}
+
+func (r *walletBtnRenderer) Layout(s fyne.Size) {
+	r.btn.bg.Resize(s)
+	r.btn.lbl.Resize(s)
+}
+
+func (r *walletBtnRenderer) MinSize() fyne.Size {
+	return fyne.NewSize(scaleSize(100), scaleSize(36))
+}
+
+func (r *walletBtnRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{r.btn.bg, r.btn.lbl}
+}
+
+func (r *walletBtnRenderer) Refresh() {
+	r.btn.bg.FillColor = r.btn.BgColor
+	r.btn.bg.Refresh()
+	r.btn.lbl.Text = r.btn.Label
+	r.btn.lbl.Color = r.btn.TxtColor
+	r.btn.lbl.Refresh()
+}
+
+func (r *walletBtnRenderer) Destroy() {}
+
 func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
 	return wrapMobileButton(widget.NewButtonWithIcon(label, icon, tapped))
 }
@@ -273,51 +349,98 @@ func layoutMain() fyne.CanvasObject {
 		session.Window.SetContent(layoutAlert(2))
 	}
 
-	// Populate the accounts in dropdown menu
-	wAccount := widget.NewSelect(list, nil)
-	wAccount.PlaceHolder = "(Select Account)"
-	wAccount.OnChanged = func(s string) {
+	walletButtons := container.NewVBox()
+	var walletBtns []*walletBtn
+	var extraDropdown *widget.Select
+	logoGreen := color.RGBA{R: 70, G: 184, B: 104, A: 0xff}
+
+	selectWallet := func(walletName string) {
 		session.Error = ""
+		switch session.Network {
+		case NETWORK_TESTNET:
+			session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + walletName
+		case NETWORK_SIMULATOR:
+			session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + walletName
+		default:
+			session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + walletName
+		}
 		if !session.Offline {
 			btnLogin.Text = "Connect"
 		} else {
 			btnLogin.Text = "Decrypt"
 		}
-		btnLogin.Refresh()
-
-		// OnChange set wallet path
-		switch session.Network {
-		case NETWORK_TESTNET:
-			session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + s
-		case NETWORK_SIMULATOR:
-			session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + s
-		default:
-			session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + s
+		btnLogin.Enable()
+		lastWalletKey := "last_wallet_" + session.Network
+		if err := StoreValue("settings", []byte(lastWalletKey), []byte(walletName)); err != nil {
+			logger.Debugf("[Wallets] Failed storing last selected wallet %q: %v\n", walletName, err)
 		}
-
-		if session.Password != "" {
-			btnLogin.Enable()
-		} else {
-			btnLogin.Disable()
-		}
-
 		safeCanvasFocus(wPassword)
-
 		btnLogin.Refresh()
 	}
 
-	if len(list) < 1 {
-		wAccount.Disable()
-		wPassword.Disable()
-	} else {
-		wAccount.Enable()
-		// Auto-select if there's only one account
-		if len(list) == 1 {
-			wAccount.SetSelected(list[0])
-			// OnChanged will be triggered, which sets path and focuses password
-			// Explicitly focus password field to ensure it gets focus
-			safeCanvasFocus(wPassword)
+	unselectButtons := func() {
+		for _, b := range walletBtns {
+			b.SetColors(colors.DarkMatter, colors.Gray)
 		}
+	}
+
+	for i, walletName := range list {
+		if i >= 3 {
+			break
+		}
+		selectedWallet := walletName
+		btn := newWalletBtn(walletName, nil)
+		btn.onTapped = func() {
+			unselectButtons()
+			btn.SetColors(logoGreen, color.Black)
+			if extraDropdown != nil {
+				extraDropdown.ClearSelected()
+			}
+			selectWallet(selectedWallet)
+		}
+		walletBtns = append(walletBtns, btn)
+		walletButtons.Add(wrapMobileButton(container.New(layout.NewGridLayout(1), btn)))
+	}
+
+	if len(list) > 3 {
+		extraList := list[3:]
+		extraDropdown = widget.NewSelect(extraList, func(s string) {
+			if s == "" {
+				return
+			}
+			unselectButtons()
+			selectWallet(s)
+		})
+		extraDropdown.PlaceHolder = fmt.Sprintf("More wallets (%d)", len(extraList))
+		walletButtons.Add(extraDropdown)
+	}
+
+	if len(list) >= 1 {
+		autoSelectWallet := list[0]
+		lastWalletKey := "last_wallet_" + session.Network
+		if lastWallet, err := GetValue("settings", []byte(lastWalletKey)); err == nil && len(lastWallet) > 0 {
+			lastWalletName := string(lastWallet)
+			for _, name := range list {
+				if name == lastWalletName {
+					autoSelectWallet = lastWalletName
+					break
+				}
+			}
+		}
+		selectedTopButton := false
+		for i, btn := range walletBtns {
+			if i < len(list) && list[i] == autoSelectWallet {
+				btn.SetColors(logoGreen, color.Black)
+				selectedTopButton = true
+				break
+			}
+		}
+		if extraDropdown != nil && !selectedTopButton {
+			extraDropdown.SetSelected(autoSelectWallet)
+		}
+		selectWallet(autoSelectWallet)
+	} else {
+		wPassword.Disable()
 	}
 
 	wSpacer := widget.NewLabel(" ")
@@ -387,7 +510,7 @@ func layoutMain() fyne.CanvasObject {
 			),
 			rectSpacer,
 			rectSpacer,
-			wAccount,
+			walletButtons,
 			rectSpacer,
 			wPassword,
 			rectSpacer,
@@ -412,7 +535,7 @@ func layoutMain() fyne.CanvasObject {
 				),
 				rectSpacer,
 				rectSpacer,
-				wAccount,
+				walletButtons,
 				rectSpacer,
 				wPassword,
 				rectSpacer,
@@ -459,236 +582,14 @@ func layoutMain() fyne.CanvasObject {
 		session.NavStack.Push(session.Domain, false)
 	}
 
-	return NewVScroll(layout)
-}
-
-// layoutSingleWalletLogin shows a simplified login screen for when only 1 wallet exists
-func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
-	a.Settings().SetTheme(themes.main)
-	session.Domain = "app.main"
-	session.Password = ""
-
-	// Set the wallet path automatically
-	switch session.Network {
-	case NETWORK_TESTNET:
-		session.Path = filepath.Join(AppPath(), "testnet") + string(filepath.Separator) + walletName
-	case NETWORK_SIMULATOR:
-		session.Path = filepath.Join(AppPath(), "testnet_simulator") + string(filepath.Separator) + walletName
-	default:
-		session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + walletName
-	}
-
-	// Display wallet name
-	lblWalletName := canvas.NewText(walletName, colors.Green)
-	lblWalletName.TextSize = scaleFont(16)
-	lblWalletName.Alignment = fyne.TextAlignCenter
-	lblWalletName.TextStyle = fyne.TextStyle{Bold: true}
-
-	// Password entry
-	wPassword := NewReturnEntry()
-	wPassword.Password = true
-	wPassword.SetPlaceHolder("Password")
-
-	// Login button
-	btnLogin := widget.NewButtonWithIcon("Connect", resourceConnectPng, nil)
-	btnLogin.Disable()
-
-	if session.Error != "" {
-		btnLogin.Text = session.Error
-		btnLogin.Disable()
-		btnLogin.Refresh()
-		session.Error = ""
-	}
-
-	btnLogin.OnTapped = func() {
-		if session.Password == "" {
-			btnLogin.Text = "Invalid password..."
-			btnLogin.Disable()
-			btnLogin.Refresh()
-		} else {
-			if !session.Offline {
-				btnLogin.Text = "Connect"
-			} else {
-				btnLogin.Text = "Decrypt"
-			}
-			btnLogin.Enable()
-			btnLogin.Refresh()
-			login()
-			btnLogin.Text = session.Error
-			btnLogin.Disable()
-			btnLogin.Refresh()
-			session.Error = ""
-		}
-	}
-
-	wPassword.OnReturn = btnLogin.OnTapped
-	wPassword.OnChanged = func(s string) {
-		session.Error = ""
-		if !session.Offline {
-			btnLogin.Text = "Connect"
-		} else {
-			btnLogin.Text = "Decrypt"
-		}
-		btnLogin.Enable()
-		btnLogin.Refresh()
-		session.Password = s
-
-		if len(s) < 1 {
-			btnLogin.Disable()
-			btnLogin.Refresh()
-		} else {
-			btnLogin.Enable()
-		}
-
-		btnLogin.Refresh()
-	}
-
-	// Auto-focus password field
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		fyne.Do(func() {
+	if len(list) >= 1 {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
 			safeCanvasFocus(wPassword)
-		})
-	}()
-
-	// Offline mode toggle
-	modeData := binding.BindBool(&session.Offline)
-	mode := widget.NewCheckWithData(" Offline Mode", modeData)
-	mode.OnChanged = func(b bool) {
-		if b {
-			session.Offline = true
-			btnLogin.Text = "Decrypt"
-			btnLogin.Refresh()
-		} else {
-			session.Offline = false
-			btnLogin.Text = "Connect"
-			btnLogin.Refresh()
-		}
+		}()
 	}
 
-	// Switch Account button
-	btnSwitchAccount := widget.NewButtonWithIcon("Switch Account", theme.AccountIcon(), func() {
-		session.Domain = "app.main"
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMain())
-		removeOverlays()
-	})
-
-	// Connection Settings button
-	btnConnectionSettings := widget.NewButtonWithIcon("Connection Settings", theme.SettingsIcon(), func() {
-		session.Domain = "app.settings"
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutSettings())
-		removeOverlays()
-	})
-
-	// Handle return key
-	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
-		if session.Domain == "app.main" {
-			if k.Name == fyne.KeyReturn {
-				if session.Password == "" {
-					btnLogin.Text = "Invalid password..."
-					btnLogin.Disable()
-					btnLogin.Refresh()
-				} else {
-					if !session.Offline {
-						btnLogin.Text = "Connect"
-					} else {
-						btnLogin.Text = "Decrypt"
-					}
-					btnLogin.Enable()
-					btnLogin.Refresh()
-					login()
-					btnLogin.Text = session.Error
-					btnLogin.Disable()
-					btnLogin.Refresh()
-					session.Error = ""
-				}
-			}
-		}
-	})
-
-	// Layout
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
-
-	// Reserve space for logo (matches layoutMain headerBlock)
-	headerBlock := canvas.NewRectangle(color.Transparent)
-	headerBlock.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
-
-	separatorLine := canvas.NewRectangle(color.White)
-	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(1)))
-	separator := container.NewCenter(separatorLine)
-	separatorSpacer := canvas.NewRectangle(color.Transparent)
-	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
-
-	isMobile := a.Driver().Device().IsMobile()
-
-	frame := &iframe{}
-
-	var form *fyne.Container
-	if isMobile {
-		buttonGroup := container.NewVBox(
-			container.New(layout.NewGridLayout(1),
-				wrapMobileButton(btnSwitchAccount),
-			),
-			rectSpacer,
-			container.New(layout.NewGridLayout(1),
-				wrapMobileButton(btnConnectionSettings),
-			),
-		)
-
-		form = container.NewVBox(
-			rectSpacer,
-			container.NewStack(headerBlock),
-			rectSpacer,
-			rectSpacer,
-			lblWalletName,
-			rectSpacer,
-			wPassword,
-			rectSpacer,
-			mode,
-			rectSpacer,
-			wrapMobileButton(btnLogin),
-			separatorSpacer,
-			separator,
-			separatorSpacer,
-			buttonGroup,
-		)
-	} else {
-		buttonGroup := container.NewVBox(
-			btnSwitchAccount,
-			rectSpacer,
-			btnConnectionSettings,
-		)
-
-		form = container.NewVBox(
-			rectSpacer,
-			container.NewStack(headerBlock),
-			rectSpacer,
-			lblWalletName,
-			rectSpacer,
-			wPassword,
-			rectSpacer,
-			mode,
-			rectSpacer,
-			btnLogin,
-			separatorSpacer,
-			separator,
-			separatorSpacer,
-			buttonGroup,
-		)
-	}
-
-	layout := container.NewStack(
-		frame,
-		res.mainBg,
-		container.NewCenter(form),
-	)
-
-	return layout
+	return NewVScroll(layout)
 }
 
 func layoutDashboard() fyne.CanvasObject {
@@ -13707,10 +13608,6 @@ func layoutRecoveryHex() fyne.CanvasObject {
 }
 
 func layoutFrame() fyne.CanvasObject {
-	return layoutFrameWithWallet("")
-}
-
-func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 	entry := widget.NewEntry()
 	layout := container.NewStack(entry)
 
@@ -13738,12 +13635,7 @@ func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 		session.Window.SetContent(layoutTransition())
-
-		if singleWalletName != "" {
-			session.Window.SetContent(layoutSingleWalletLogin(singleWalletName))
-		} else {
-			session.Window.SetContent(layoutMain())
-		}
+		session.Window.SetContent(layoutMain())
 
 		frameWidth := ui.MaxWidth
 		frameHeight := ui.MaxHeight
