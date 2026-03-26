@@ -17727,7 +17727,7 @@ func layoutTELA() fyne.CanvasObject {
 	})
 	btnFavorites.Importance = widget.LowImportance
 
-	btnHistory := widget.NewButtonWithIcon("History", theme.DocumentIcon(), func() {
+	btnHistory := widget.NewButtonWithIcon("History", theme.HistoryIcon(), func() {
 		wSelect.SetSelected("History")
 	})
 	btnHistory.Importance = widget.LowImportance
