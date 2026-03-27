@@ -203,6 +203,7 @@ type mobileEntry struct {
 	widget.Entry
 	OnFocusLost   func()
 	OnFocusGained func()
+	scrollBox     *container.Scroll
 }
 
 // NewMobileEntry creates a new single line entry widget with more options for mobile devices
@@ -212,8 +213,22 @@ func NewMobileEntry() *mobileEntry {
 	return entry
 }
 
+// NewMobileEntryWithScroll creates a new single line entry widget with mobile-focused scrolling behavior
+func NewMobileEntryWithScroll(scrollBox *container.Scroll) *mobileEntry {
+	entry := &mobileEntry{scrollBox: scrollBox}
+	entry.ExtendBaseWidget(entry)
+	return entry
+}
+
 func (o *mobileEntry) FocusGained() {
 	o.Entry.FocusGained()
+	scrollBox := o.scrollBox
+	if scrollBox == nil {
+		scrollBox = currentScrollBox
+	}
+	if scrollBox != nil {
+		scrollToFieldOnMobile(o, scrollBox)
+	}
 	if o.OnFocusGained != nil {
 		o.OnFocusGained()
 	}
@@ -240,6 +255,11 @@ func NewContextMenuButton(label string, image fyne.Resource, menu *fyne.Menu) *c
 // NewVScroll places content in a VScroll container for mobile orientations and scrolling
 func NewVScroll(content *fyne.Container) *container.Scroll {
 	return container.NewVScroll(container.NewCenter(content, widget.NewLabel("")))
+}
+
+// SetCurrentScrollBox sets the global scroll container for mobile input focus scrolling
+func SetCurrentScrollBox(sb *container.Scroll) {
+	currentScrollBox = sb
 }
 
 func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
