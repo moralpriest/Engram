@@ -3645,6 +3645,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	entrySCID := widget.NewEntry()
 	entrySCID.PlaceHolder = "Search by SCID"
+	entrySCID.SetIcon(theme.SearchIcon())
 
 	sep := canvas.NewRectangle(colors.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
@@ -7885,6 +7886,7 @@ func layoutMessages() fyne.CanvasObject {
 	contactInput.MultiLine = false
 	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	contactInput.PlaceHolder = "Search username or address"
+	contactInput.SetIcon(theme.SearchIcon())
 
 	validateContactInput := func(value string) bool {
 		value = strings.TrimSpace(value)
@@ -11959,6 +11961,7 @@ func layoutDatapad() fyne.CanvasObject {
 	}
 
 	entryNewPad.PlaceHolder = "Note Name"
+	entryNewPad.SetIcon(theme.SearchIcon())
 	entryNewPad.Validator = func(s string) error {
 		session.Datapad = s
 		if len(s) > 0 {
@@ -15580,6 +15583,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 
 	entrySCID := widget.NewEntry()
 	entrySCID.PlaceHolder = "Search by SCID"
+	entrySCID.SetIcon(theme.SearchIcon())
 	entrySCID.Disable()
 
 	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
@@ -17558,6 +17562,7 @@ func layoutTELA() fyne.CanvasObject {
 	entrySearchCompletions := []string{"author:", "durl:", "name:", "my:"}
 	entrySearch := x.NewCompletionEntry(entrySearchCompletions)
 	entrySearch.PlaceHolder = "Search TELA"
+	entrySearch.SetIcon(theme.SearchIcon())
 	entrySearch.Disable()
 
 	sep := canvas.NewRectangle(colors.Gray)
