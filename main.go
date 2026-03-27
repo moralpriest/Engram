@@ -106,6 +106,7 @@ func main() {
 
 	// Initialize application
 	a = app.NewWithID("Engram")
+	appDriver = a.Driver().Device()
 	if err := initDebugLog(); err != nil {
 		fmt.Printf("failed to initialize debug log: %s\n", err)
 	} else {

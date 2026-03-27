@@ -2939,7 +2939,7 @@ func layoutRestore() fyne.CanvasObject {
 	importFileForm := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
-		container.NewCenter(wrapMobileButton(btnSelectFile)),
+		wrapMobileButton(btnSelectFile),
 		rectSpacer,
 		rectSpacer,
 		importFileText,
@@ -3118,6 +3118,9 @@ func layoutRestore() fyne.CanvasObject {
 			entryWalletPass := NewReturnEntry()
 			entryWalletPass.Password = true
 			entryWalletPass.PlaceHolder = "Password"
+			entryWalletPass.OnFocusGained = func() {
+				showVirtualKeyboard(entryWalletPass)
+			}
 			entryWalletPass.OnChanged = func(s string) {
 				if s == "" {
 					btnUnlock.Text = "Unlock"
@@ -3255,12 +3258,7 @@ func layoutRestore() fyne.CanvasObject {
 							rectPassSpacer,
 							passSubHeader,
 							widget.NewLabel(""),
-							container.NewCenter(
-								container.NewStack(
-									passSpan,
-									entryWalletPass,
-								),
-							),
+							entryWalletPass,
 							rectPassSpacer,
 							rectPassSpacer,
 							wrapMobileButton(btnUnlock),
@@ -3279,6 +3277,7 @@ func layoutRestore() fyne.CanvasObject {
 			)
 
 			safeCanvasFocus(entryWalletPass)
+			showVirtualKeyboard(entryWalletPass)
 
 		}, session.Window)
 
