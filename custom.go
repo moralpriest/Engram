@@ -26,9 +26,12 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+var appDriver fyne.Device
+
 type returnEntry struct {
 	widget.Entry
-	OnReturn func()
+	OnReturn      func()
+	OnFocusGained func()
 }
 
 // NewReturnEntry creates a new single line entry widget that executes a function when the
@@ -47,6 +50,13 @@ func (e *returnEntry) TypedKey(key *fyne.KeyEvent) {
 		e.OnReturn()
 	default:
 		e.Entry.TypedKey(key)
+	}
+}
+
+func (e *returnEntry) FocusGained() {
+	e.Entry.FocusGained()
+	if e.OnFocusGained != nil {
+		e.OnFocusGained()
 	}
 }
 
@@ -201,6 +211,7 @@ func (o *iframeRenderer) Refresh() {
 
 type mobileEntry struct {
 	widget.Entry
+	OnReturn      func()
 	OnFocusLost   func()
 	OnFocusGained func()
 	scrollBox     *container.Scroll
@@ -222,15 +233,24 @@ func NewMobileEntryWithScroll(scrollBox *container.Scroll) *mobileEntry {
 
 func (o *mobileEntry) FocusGained() {
 	o.Entry.FocusGained()
-	scrollBox := o.scrollBox
-	if scrollBox == nil {
-		scrollBox = currentScrollBox
-	}
-	if scrollBox != nil {
-		scrollToFieldOnMobile(o, scrollBox)
+	if o.scrollBox != nil {
+		scrollToFieldOnMobile(o, o.scrollBox)
+	} else if currentScrollBox != nil {
+		scrollToFieldOnMobile(o, currentScrollBox)
 	}
 	if o.OnFocusGained != nil {
 		o.OnFocusGained()
+	}
+}
+
+func (o *mobileEntry) TypedKey(key *fyne.KeyEvent) {
+	switch key.Name {
+	case fyne.KeyReturn, fyne.KeyEnter:
+		if o.OnReturn != nil {
+			o.OnReturn()
+		}
+	default:
+		o.Entry.TypedKey(key)
 	}
 }
 
@@ -442,30 +462,34 @@ func scrollToFieldOnMobile(field fyne.CanvasObject, scrollBox *container.Scroll)
 		return
 	}
 
-	// Delay to let the keyboard appear first
+	if field == nil || scrollBox == nil {
+		return
+	}
+
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 
 		fyne.Do(func() {
-			// Get the canvas to calculate absolute positions
+			if appExiting {
+				return
+			}
+
 			canvas := fyne.CurrentApp().Driver().CanvasForObject(field)
 			if canvas == nil {
 				return
 			}
 
-			// Get field's position on screen (absolute)
 			fieldPosOnScreen := fyne.CurrentApp().Driver().AbsolutePositionForObject(field)
+			if fieldPosOnScreen.Y <= 0 {
+				return
+			}
 
-			// Calculate where we want the field to be positioned
-			// Account for header area (Recover Account + Network + recovery type cards)
-			// Header is approximately 120-150dp, add extra padding to be safe
 			desiredY := scaleSize(160)
-
-			// Calculate how much we need to scroll
-			// Current field Y position minus desired position gives us the scroll offset needed
 			scrollAmount := fieldPosOnScreen.Y - desiredY
+			if scrollAmount <= 0 {
+				return
+			}
 
-			// Apply the scroll offset
 			newOffset := scrollBox.Offset.Y + scrollAmount
 			if newOffset < 0 {
 				newOffset = 0
@@ -475,4 +499,31 @@ func scrollToFieldOnMobile(field fyne.CanvasObject, scrollBox *container.Scroll)
 			scrollBox.Refresh()
 		})
 	}()
+}
+
+func showVirtualKeyboard(obj fyne.Focusable) {
+	if obj == nil || appDriver == nil {
+		return
+	}
+	mobileDriver, ok := appDriver.(interface{ ShowVirtualKeyboard() })
+	if !ok {
+		return
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		fyne.Do(func() {
+			mobileDriver.ShowVirtualKeyboard()
+		})
+	}()
+}
+
+func hideVirtualKeyboard() {
+	if appDriver == nil {
+		return
+	}
+	mobileDriver, ok := appDriver.(interface{ HideVirtualKeyboard() })
+	if !ok {
+		return
+	}
+	mobileDriver.HideVirtualKeyboard()
 }
