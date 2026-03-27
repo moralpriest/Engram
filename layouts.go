@@ -2939,7 +2939,7 @@ func layoutRestore() fyne.CanvasObject {
 	importFileForm := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
-		container.NewCenter(btnSelectFile),
+		container.NewCenter(wrapMobileButton(btnSelectFile)),
 		rectSpacer,
 		rectSpacer,
 		importFileText,
@@ -3704,7 +3704,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				),
 				rectSpacer,
 				rectSpacer,
-				btnRescan,
+				wrapMobileButton(btnRescan),
 			),
 			layout.NewSpacer(),
 		),
@@ -7971,9 +7971,9 @@ func layoutMessages() fyne.CanvasObject {
 			msgbox.List,
 		),
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
-		rebuildBtn,
+		wrapMobileButton(rebuildBtn),
 		rectSpacer,
 		checkLimit,
 	)
@@ -8547,7 +8547,7 @@ func layoutPM() fyne.CanvasObject {
 		rectSpacer,
 		entry,
 		rectSpacer,
-		btnSend,
+		wrapMobileButton(btnSend),
 		rectSpacer,
 		rectSpacer,
 	)
@@ -15228,17 +15228,9 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	browseTabContent := container.NewVBox(
 		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnSignFile,
-			layout.NewSpacer(),
-		),
+		wrapMobileButton(btnSignFile),
 		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnVerifyFile,
-			layout.NewSpacer(),
-		),
+		wrapMobileButton(btnVerifyFile),
 		rectSpacer,
 		browseErrorText,
 		rectSpacer,
