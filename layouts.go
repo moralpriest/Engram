@@ -2191,6 +2191,10 @@ func layoutNewAccount() fyne.CanvasObject {
 	)
 	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
 
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
+
 	btnCreate.OnTapped = func() {
 		if findAccount() {
 			errorText.Text = "Account name already exists."
@@ -2278,6 +2282,10 @@ func layoutRestore() fyne.CanvasObject {
 	accountDebouncer := NewDebouncer(300 * time.Millisecond)
 
 	scrollBox := container.NewVScroll(nil)
+
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
 
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = scaleFont(12)
@@ -6305,6 +6313,10 @@ func layoutSettings() fyne.CanvasObject {
 
 	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
+
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
 			heading,
@@ -6801,7 +6813,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	telaTitle.TextSize = scaleFont(16)
 
 	// Port Start entry
-	entryPortStart := widget.NewEntry()
+	entryPortStart := NewMobileEntry()
 	entryPortStart.SetPlaceHolder(strconv.Itoa(tela.DEFAULT_PORT_START))
 	// Load Port Start setting from dual storage
 	if portStart, found := getTELADual("Port Start"); found {
@@ -6827,7 +6839,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// Min Likes entry
-	entryMinLikes := widget.NewEntry()
+	entryMinLikes := NewMobileEntry()
 	entryMinLikes.SetPlaceHolder("30")
 	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
 		entryMinLikes.SetText(string(storedMinLikes))
@@ -6854,7 +6866,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// Exclusions entry
-	entryExclusions := widget.NewEntry()
+	entryExclusions := NewMobileEntry()
 	entryExclusions.SetPlaceHolder("dURL Exclusions (exclude1,exclude2)")
 	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
 		entryExclusions.SetText(string(storedExclusions))
@@ -7192,7 +7204,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	scanningDescription := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
 	scanningDescription.Wrapping = fyne.TextWrapWord
 
-	entryTrackBlocks := widget.NewEntry()
+	entryTrackBlocks := NewMobileEntry()
 	entryTrackBlocks.SetPlaceHolder("# of Latest Blocks (Optional)")
 	entryTrackBlocks.Validator = func(s string) (err error) {
 		if s == "" {
@@ -7674,6 +7686,10 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
 
 	gridItem1 := container.NewCenter(
 		container.NewVBox(
@@ -13413,6 +13429,10 @@ func layoutRecovery() fyne.CanvasObject {
 	)
 	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
+
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
 	rect := canvas.NewRectangle(color.RGBA{19, 25, 34, 255})
@@ -13525,6 +13545,10 @@ func layoutRecoveryHex() fyne.CanvasObject {
 		),
 	)
 	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
 
 	keys := engram.Disk.Get_Keys()
 	key := fmt.Sprintf("0000000000000000000000000000000000000000000000%s", keys.Secret.Text(16))

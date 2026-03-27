@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/mobile"
 
 	"github.com/blang/semver"
@@ -81,7 +82,8 @@ var nav Navigation
 var ui UI
 var appExiting bool
 var previousDomain string
-var lastForegroundTime int64 // unix timestamp of last foreground event (for cooldown)
+var lastForegroundTime int64           // unix timestamp of last foreground event (for cooldown)
+var currentScrollBox *container.Scroll // tracks current page's scroll container for mobile input scrolling
 
 func main() {
 	// Parse version from ldflags-injected string
