@@ -7698,6 +7698,10 @@ func layoutAppSettings() fyne.CanvasObject {
 func layoutMessages() fyne.CanvasObject {
 	session.Domain = "app.messages"
 
+	if !isMobile() {
+		resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	}
+
 	if !walletapi.Connected {
 		session.Window.SetContent(layoutSettings())
 	}
@@ -7746,7 +7750,11 @@ func layoutMessages() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
-	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.43))
+	listMinFrac := float32(0.43)
+	if !isMobile() {
+		listMinFrac = 0.36
+	}
+	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*listMinFrac))
 
 	messages.Data = nil
 
@@ -8015,6 +8023,10 @@ func layoutMessages() fyne.CanvasObject {
 func layoutPM() fyne.CanvasObject {
 	session.Domain = "app.messages.contact"
 
+	if !isMobile() {
+		resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	}
+
 	if !walletapi.Connected {
 		session.Window.SetContent(layoutSettings())
 	}
@@ -8036,10 +8048,6 @@ func layoutPM() fyne.CanvasObject {
 		contactAddress = "..." + short
 	}
 
-	title := canvas.NewText("M E S S A G E S", colors.Gray)
-	title.TextStyle = fyne.TextStyle{Bold: true}
-	title.TextSize = scaleFont(16)
-
 	heading := canvas.NewText(contactAddress, colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
@@ -8050,12 +8058,16 @@ func layoutPM() fyne.CanvasObject {
 	lastActive.Alignment = fyne.TextAlignCenter
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
 
-	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+	backFromThread := func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMessages())
 		removeOverlays()
-	})
+	}
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), backFromThread)
+	if isMobile() {
+		btnBack = wrapMobileButton(btnBack).(*fyne.Container)
+	}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(statusDotSize())
@@ -8065,7 +8077,11 @@ func layoutPM() fyne.CanvasObject {
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.7, 30))
 	frame := &iframe{}
 	subframe := canvas.NewRectangle(color.Transparent)
-	subframe.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.51))
+	if isMobile() {
+		subframe.SetMinSize(fyne.NewSize(ui.Width, scaleSize(48)))
+	} else {
+		subframe.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.36))
+	}
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 	rect.SetMinSize(statusDotSize())
@@ -8331,10 +8347,11 @@ func layoutPM() fyne.CanvasObject {
 		labelLimit.Refresh()
 	}
 
-	entry := widget.NewEntry()
+	var entry *mobileEntry
+	entry = NewMobileEntry()
 	entry.MultiLine = false
 	entry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
-	entry.PlaceHolder = "Message"
+	entry.SetPlaceHolder("Message")
 	updateMessageLimit("", session.Username)
 	entry.OnChanged = func(s string) {
 		messages.Message = s
@@ -8482,61 +8499,66 @@ func layoutPM() fyne.CanvasObject {
 		}()
 	}
 
-	messageForm := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			heading,
-			layout.NewSpacer(),
-		),
-		rectSpacer,
-		lastActive,
-		rectSpacer,
-		threadSearch,
-		rectSpacer,
-		rectSpacer,
-		container.NewStack(
-			subframe,
-			chatbox,
-		),
-		rectSpacer,
+	var topBlock *fyne.Container
+	if isMobile() {
+		topBlock = container.NewVBox(
+			container.NewMax(container.NewCenter(heading)),
+			rectSpacer,
+			lastActive,
+			rectSpacer,
+			threadSearch,
+			rectSpacer,
+		)
+	} else {
+		topBlock = container.NewVBox(
+			rectSpacer,
+			container.NewHBox(
+				layout.NewSpacer(),
+				heading,
+				layout.NewSpacer(),
+			),
+			rectSpacer,
+			lastActive,
+			rectSpacer,
+			threadSearch,
+			rectSpacer,
+		)
+	}
+
+	middle := container.NewStack(subframe, chatbox)
+
+	bottomItems := []fyne.CanvasObject{
 		rectSpacer,
 		labelLimit,
 		rectSpacer,
 		entry,
 		rectSpacer,
 		wrapMobileButton(btnSend),
-		rectSpacer,
-		rectSpacer,
-	)
+	}
+	if isMobile() {
+		composerPad := canvas.NewRectangle(color.Transparent)
+		composerPad.SetMinSize(fyne.NewSize(ui.Width, scaleSize(16)))
+		bottomItems = append(bottomItems, composerPad)
+	}
+	bottomItems = append(bottomItems, rectSpacer)
+	bottomItems = append(bottomItems, container.NewHBox(layout.NewSpacer(), btnBack, layout.NewSpacer()))
+	bottomItems = append(bottomItems, rectSpacer)
+	bottomBlock := container.NewVBox(bottomItems...)
 
-	gridItem1 := container.NewCenter(
-		messageForm,
-	)
+	column := container.NewBorder(topBlock, bottomBlock, nil, nil, middle)
 
-	gridItem2 := container.NewCenter()
-
-	gridItem3 := container.NewCenter()
-
-	gridItem4 := container.NewCenter()
-
-	gridItem1.Hidden = false
-	gridItem2.Hidden = true
-	gridItem3.Hidden = true
-	gridItem4.Hidden = true
-
-	features := container.NewCenter(
-		layout.NewSpacer(),
-		gridItem1,
-		layout.NewSpacer(),
-		gridItem2,
-		layout.NewSpacer(),
-		gridItem3,
-		layout.NewSpacer(),
-		gridItem4,
-		layout.NewSpacer(),
-	)
+	var gridItem1 *fyne.Container
+	if isMobile() {
+		pmScroll := container.NewVScroll(column)
+		SetCurrentScrollBox(pmScroll)
+		entry.OnFocusGained = func() {
+			showVirtualKeyboard(entry)
+		}
+		gridItem1 = container.NewMax(pmScroll)
+	} else {
+		SetCurrentScrollBox(nil)
+		gridItem1 = container.NewMax(column)
+	}
 
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
 		if session.Domain != "app.messages.contact" {
@@ -8560,27 +8582,35 @@ func layoutPM() fyne.CanvasObject {
 		}
 	})
 
-	subContainer := container.NewStack(
-		container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
-			),
+	var subContainer *fyne.Container
+	if isMobile() {
+		subContainer = container.NewStack(container.NewVBox(
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
-		),
-	)
+			rectSpacer,
+			rectSpacer,
+		))
+	} else {
+		subContainer = container.NewStack(container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+		))
+	}
 
+	// Center slot receives all space between window edges and bottom bar; do not put
+	// main content in Border "top" — top height is only MinSize() (see Fyne borderLayout).
 	c := container.NewBorder(
-		features,
+		nil,
 		subContainer,
 		nil,
 		nil,
+		gridItem1,
 	)
 
 	layout := container.NewStack(
