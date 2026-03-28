@@ -354,6 +354,7 @@ func finishPulseForGeneration(generation uint64) {
 }
 
 var appExitFlag atomic.Bool
+var telaViewActive atomic.Bool
 
 type Messages struct {
 	Contact string
