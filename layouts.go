@@ -1890,7 +1890,9 @@ func layoutServiceAddress() fyne.CanvasObject {
 }
 
 func layoutNewAccount() fyne.CanvasObject {
-	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	if !isMobile() {
+		resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	}
 	a.Settings().SetTheme(themes.alt)
 
 	session.Domain = "app.register"
@@ -2227,7 +2229,9 @@ func layoutNewAccount() fyne.CanvasObject {
 }
 
 func layoutRestore() fyne.CanvasObject {
-	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	if !isMobile() {
+		resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	}
 	a.Settings().SetTheme(themes.alt)
 
 	session.Domain = "app.restore"
@@ -2846,10 +2850,9 @@ func layoutRestore() fyne.CanvasObject {
 	}
 
 	hexSpacer := canvas.NewRectangle(color.Transparent)
-	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(60)))
+	hexSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	hexForm := container.NewVBox(
-		rectSpacer,
 		hexEntry,
 		rectSpacer,
 		container.NewHBox(
@@ -2863,7 +2866,6 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	seedForm := container.NewVBox(
-		rectSpacer,
 		seedEntry,
 		rectSpacer,
 		container.NewHBox(
@@ -2872,11 +2874,9 @@ func layoutRestore() fyne.CanvasObject {
 			btnPasteSeed,
 			layout.NewSpacer(),
 		),
-		rectSpacer,
 		seedInfo,
 		rectSpacer,
 		errorText,
-		rectSpacer,
 	)
 
 	// Create a new form for account/password inputs
@@ -2888,8 +2888,8 @@ func layoutRestore() fyne.CanvasObject {
 		strengthText,
 		wPasswordConfirm,
 		rectSpacer,
-		rectSpacer,
 		seedForm,
+		wrapMobileButton(btnCreate),
 	)
 
 	importFileText := canvas.NewText(" ", colors.Green)
@@ -2988,6 +2988,7 @@ func layoutRestore() fyne.CanvasObject {
 	formSuccess.Hide()
 
 	btnSelectFile.OnTapped = func() {
+		a.Settings().SetTheme(themes.alt)
 		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
 			if err != nil {
 				logger.Errorf("[Engram] File dialog: %s\n", err)
@@ -3258,26 +3259,23 @@ func layoutRestore() fyne.CanvasObject {
 	}
 
 	scrollBox = container.NewVScroll(
-		container.NewStack(
-			rectHeader,
-			container.NewHBox(
-				layout.NewSpacer(),
-				container.NewVBox(
-					form,
-					formSuccess,
-					func() fyne.CanvasObject {
-						if isMobile() {
-							return NewSpacer(0, ui.Height*0.4)
-						}
-						return layout.NewSpacer()
-					}(),
-				),
-				layout.NewSpacer(),
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewVBox(
+				form,
+				formSuccess,
+				func() fyne.CanvasObject {
+					if isMobile() {
+						return NewSpacer(0, ui.Height*0.4)
+					}
+					return layout.NewSpacer()
+				}(),
 			),
+			layout.NewSpacer(),
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
+	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
 
 	btnCreate.OnTapped = func() {
 		if engram.Disk != nil {
@@ -3465,8 +3463,6 @@ func layoutRestore() fyne.CanvasObject {
 	footer := container.NewCenter(
 		rect1,
 		container.NewVBox(
-			wrapMobileButton(btnCreate),
-			rectSpacer,
 			container.NewHBox(
 				layout.NewSpacer(),
 				btnBack,

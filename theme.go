@@ -54,7 +54,7 @@ func (eTheme) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	case theme.ColorNamePressed:
 		return color.NRGBA{R: 208, G: 208, B: 208, A: 0x19}
 	case theme.ColorNamePrimary:
-		return color.NRGBA{R: 208, G: 208, B: 208, A: 0xff}
+		return color.NRGBA{R: 19, G: 202, B: 105, A: 0xff}
 	case theme.ColorNameScrollBar:
 		return color.NRGBA{R: 19, G: 202, B: 105, A: 0x44}
 	case theme.ColorNameShadow:
@@ -153,7 +153,7 @@ func (eTheme2) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	case theme.ColorNamePressed:
 		return color.NRGBA{R: 208, G: 208, B: 208, A: 0x19}
 	case theme.ColorNamePrimary:
-		return color.NRGBA{R: 208, G: 208, B: 208, A: 0xff}
+		return color.NRGBA{R: 19, G: 202, B: 105, A: 0xff}
 	case theme.ColorNameScrollBar:
 		return color.NRGBA{R: 19, G: 202, B: 105, A: 0x44}
 	case theme.ColorNameShadow:
