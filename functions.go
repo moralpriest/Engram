@@ -214,6 +214,19 @@ type Gnomon struct {
 	BBolt    *storage.BboltStore
 	Graviton *storage.GravitonStore
 	Path     string
+	bootMu   sync.RWMutex
+	boot     GnomonBootstrapState
+}
+
+type GnomonBootstrapState struct {
+	Phase     string
+	Current   int64
+	Total     int64
+	Ready     bool
+	Active    bool
+	Err       string
+	StartedAt time.Time
+	UpdatedAt time.Time
 }
 
 var gnomonMu sync.Mutex
@@ -4355,6 +4368,7 @@ func getPrimaryUsername() (err error) {
 func startGnomon() {
 	defer func() {
 		if r := recover(); r != nil {
+			gnomon.setBootstrapError("Gnomon stopped unexpectedly")
 			logger.Printf("[Gnomon] Panic recovered in startGnomon: %v\n", r)
 		}
 	}()
@@ -4372,6 +4386,8 @@ func startGnomon() {
 
 	if walletapi.Connected {
 		if gnomon.Index == nil && gnomon.Active == 1 {
+			gnomon.resetBootstrapState()
+			gnomon.setBootstrapPhase("Connecting to Gnomon...", 0, 0)
 			gnomon.Active = 2
 			path := filepath.Join(AppPath(), "datashards", "gnomon")
 			switch session.Network {
@@ -4438,11 +4454,13 @@ func startGnomon() {
 			}
 
 			if err != nil || gnomon.BBolt == nil {
+				gnomon.setBootstrapError("Connection timeout")
 				logger.Printf("[Gnomon] Failed to initialize BBoltDB: %v\n", err)
 				return
 			}
 			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
 			if err != nil {
+				gnomon.setBootstrapError("Connection timeout")
 				logger.Printf("[Gmonon] Error creating GravDB: %v\n", err)
 				return
 			}
@@ -4467,11 +4485,13 @@ func startGnomon() {
 			var exclusions []string
 
 			if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+				gnomon.resetBootstrapState()
 				gnomon.Active = 1
 				return
 			}
 
 			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions, false)
+			gnomon.setBootstrapPhase("Validating fastsync contract...", 0, 0)
 			indexer.InitLog(globals.Arguments, os.Stdout)
 			parallelBlocks := 8
 			if isMobile() {
@@ -4482,6 +4502,7 @@ func startGnomon() {
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
+						gnomon.setBootstrapError("Gnomon stopped unexpectedly")
 						logger.Printf("[Gnomon] Critical error in StartDaemonMode: %v\n", r)
 						logger.Printf("[Gnomon] This usually indicates corrupted database. Please use 'Clear Local Data' in Advanced settings.\n")
 
@@ -4499,6 +4520,7 @@ func startGnomon() {
 				if !isWalletGenerationActive(generation) || gnomon.Index == nil {
 					return
 				}
+				gnomon.setBootstrapPhase("Starting index routine...", 0, 0)
 				gnomon.Index.StartDaemonMode(parallelBlocks)
 				if !isWalletGenerationActive(generation) {
 					return
@@ -4507,6 +4529,9 @@ func startGnomon() {
 
 			logger.Printf("[Gnomon] Scan Status: [%d / %d]\n", height, gnomon.Index.LastIndexedHeight)
 			gnomon.Active = 1
+			if gnomon.telaBootstrapReady() {
+				gnomon.setBootstrapReady()
+			}
 		}
 	}
 }
@@ -4560,6 +4585,7 @@ func isDatabaseCorrupted(path string) bool {
 func stopGnomon() {
 	gnomonMu.Lock()
 	defer gnomonMu.Unlock()
+	gnomon.resetBootstrapState()
 
 	if gnomon.Index != nil {
 		gnomon.Active = 0
@@ -4706,12 +4732,14 @@ func isConnectionError(err error) bool {
 		"connection timed out",
 		"timeout",
 		"no route to host",
+		"no such host",
 		"network is unreachable",
 		"broken pipe",
 		"EOF",
 		"i/o timeout",
 		"context deadline exceeded",
 		"dial tcp",
+		"lookup",
 	}
 	errStrLower := strings.ToLower(errStr)
 	for _, ce := range connectionErrors {
@@ -4723,6 +4751,103 @@ func isConnectionError(err error) bool {
 }
 
 // Method of Gnomon GetAllOwnersAndSCIDs() where DB type is defined by Indexer.DBType
+func (g *Gnomon) resetBootstrapState() {
+	g.bootMu.Lock()
+	g.boot = GnomonBootstrapState{}
+	g.bootMu.Unlock()
+}
+
+func (g *Gnomon) setBootstrapPhase(phase string, current, total int64) {
+	now := time.Now()
+	g.bootMu.Lock()
+	if g.boot.StartedAt.IsZero() {
+		g.boot.StartedAt = now
+	}
+	g.boot.Phase = phase
+	g.boot.Current = current
+	g.boot.Total = total
+	g.boot.Active = true
+	g.boot.Ready = false
+	g.boot.Err = ""
+	g.boot.UpdatedAt = now
+	g.bootMu.Unlock()
+}
+
+func (g *Gnomon) setBootstrapReady() {
+	now := time.Now()
+	g.bootMu.Lock()
+	if g.boot.StartedAt.IsZero() {
+		g.boot.StartedAt = now
+	}
+	g.boot.Active = false
+	g.boot.Ready = true
+	g.boot.Err = ""
+	g.boot.UpdatedAt = now
+	g.bootMu.Unlock()
+}
+
+func (g *Gnomon) setBootstrapError(msg string) {
+	now := time.Now()
+	g.bootMu.Lock()
+	if g.boot.StartedAt.IsZero() {
+		g.boot.StartedAt = now
+	}
+	g.boot.Active = false
+	g.boot.Ready = false
+	g.boot.Err = msg
+	g.boot.UpdatedAt = now
+	g.bootMu.Unlock()
+}
+
+func (g *Gnomon) bootstrapState() GnomonBootstrapState {
+	g.bootMu.RLock()
+	defer g.bootMu.RUnlock()
+	return g.boot
+}
+
+func (g *Gnomon) telaBootstrapReady() bool {
+	if g.Index == nil {
+		return false
+	}
+	if (g.Index.DBType == "gravdb" && g.Index.GravDBBackend == nil) || (g.Index.DBType == "boltdb" && g.Index.BBSBackend == nil) {
+		return false
+	}
+	state := g.bootstrapState()
+	if state.Err != "" {
+		return false
+	}
+	if state.Ready {
+		return true
+	}
+	if state.Phase != "Starting index routine..." {
+		return false
+	}
+	if state.UpdatedAt.IsZero() {
+		return false
+	}
+	if time.Since(state.UpdatedAt) < 1500*time.Millisecond {
+		return false
+	}
+	return true
+}
+
+func (g *Gnomon) telaSearchReady() bool {
+	if !g.telaBootstrapReady() {
+		return false
+	}
+	if g.Index == nil {
+		return false
+	}
+	if g.Index.LastIndexedHeight <= 0 {
+		return false
+	}
+	state := g.bootstrapState()
+	if state.Phase == "Starting index routine..." && time.Since(state.UpdatedAt) < 3*time.Second {
+		return false
+	}
+	return true
+}
+
 func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 	if g.Index == nil {
 		return

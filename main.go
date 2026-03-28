@@ -240,7 +240,9 @@ func main() {
 		isMobileDevice := a.Driver().Device().IsMobile()
 
 		now := time.Now().Unix()
-		if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+		if telaViewActive.Load() {
+			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
+		} else if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
 			logger.Printf("[Lifecycle] Foreground cooldown active, skipping heavy refresh (mobile: %v)", isMobileDevice)
 			return
 		}
@@ -249,6 +251,22 @@ func main() {
 		if session.WalletOpen && engram.Disk != nil {
 			go func() {
 				generation := currentWalletGeneration()
+
+				refreshForegroundUI := func(msg string) {
+					fyne.Do(func() {
+						if !isWalletGenerationActive(generation) {
+							return
+						}
+						if telaViewActive.Load() {
+							logger.Printf("[Lifecycle] Skipping foreground refresh during active TELA bootstrap")
+							return
+						}
+						if session.Window != nil && session.Window.Content() != nil {
+							session.Window.Content().Refresh()
+							logger.Printf("%s", msg)
+						}
+					})
+				}
 
 				foregroundDelay := 500 * time.Millisecond
 				if isMobileDevice {
@@ -267,24 +285,11 @@ func main() {
 				if isMobileDevice {
 					logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
 					go StartPulse()
-					fyne.Do(func() {
-						if isWalletGenerationActive(generation) && session.Window != nil && session.Window.Content() != nil {
-							session.Window.Content().Refresh()
-							logger.Printf("[Lifecycle] UI refreshed after foreground (mobile)")
-						}
-					})
+					refreshForegroundUI("[Lifecycle] UI refreshed after foreground (mobile)")
 					return
 				}
 
-				fyne.Do(func() {
-					if !isWalletGenerationActive(generation) {
-						return
-					}
-					if session.Window != nil && session.Window.Content() != nil {
-						session.Window.Content().Refresh()
-						logger.Printf("[Lifecycle] UI refreshed after foreground")
-					}
-				})
+				refreshForegroundUI("[Lifecycle] UI refreshed after foreground")
 
 				if !isWalletGenerationActive(generation) {
 					return
@@ -293,6 +298,10 @@ func main() {
 			}()
 		} else if previousDomain != "" {
 			fyne.Do(func() {
+				if telaViewActive.Load() {
+					logger.Printf("[Lifecycle] Skipping foreground refresh during active TELA bootstrap")
+					return
+				}
 				if session.Window != nil && session.Window.Content() != nil {
 					session.Window.Content().Refresh()
 				}
