@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"math"
 	"net"
 	"net/url"
 	"os"
@@ -2558,10 +2557,6 @@ func layoutRestore() fyne.CanvasObject {
 	btnCopyAddress := widget.NewButton("Copy Address", nil)
 
 	wPassword := NewMobileEntry()
-	wPassword.OnFocusGained = func() {
-		scrollToFieldOnMobile(wPassword, scrollBox)
-	}
-
 	wPassword.Password = true
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
@@ -2584,10 +2579,6 @@ func layoutRestore() fyne.CanvasObject {
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	wPasswordConfirm := NewMobileEntry()
-	wPasswordConfirm.OnFocusGained = func() {
-		scrollToFieldOnMobile(wPasswordConfirm, scrollBox)
-	}
-
 	wPasswordConfirm.Password = true
 	wPasswordConfirm.OnChanged = func(s string) {
 		session.Error = ""
@@ -3541,6 +3532,9 @@ func layoutRestore() fyne.CanvasObject {
 	)
 
 	scrollBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.85))
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
 
 	btnCreate.OnTapped = func() {
 		if engram.Disk != nil {
@@ -17317,6 +17311,15 @@ func layoutTELA() fyne.CanvasObject {
 	var refreshFavoritesList func()
 	var refreshAppsList func()
 	var refreshServerList func()
+	var scheduleTelaWarmup func()
+	var maybeStartTelaWork func(bool)
+	var startTelaInitialLoad func()
+	var resetTelaProgress func()
+	var hasTelaCache func() bool
+	var telaWarmupScheduled atomic.Bool
+	var telaWorkActive atomic.Bool
+	var telaLaunchPending atomic.Bool
+	var telaNetworkPaused atomic.Bool
 
 	frame := &iframe{}
 	rectLeft := canvas.NewRectangle(color.Transparent)
@@ -17356,9 +17359,29 @@ func layoutTELA() fyne.CanvasObject {
 	labelLastScan := canvas.NewText("", colors.Green)
 	labelLastScan.TextSize = scaleFont(13)
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText("", colors.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
+	errorText.Hide()
+
+	statusBox := container.NewVBox()
+	refreshTelaStatusBox := func() {
+		objs := []fyne.CanvasObject{}
+		if !errorText.Hidden && strings.TrimSpace(errorText.Text) != "" {
+			objs = append(objs, errorText)
+		}
+		if !results.Hidden && strings.TrimSpace(results.Text) != "" {
+			objs = append(objs, results)
+		}
+		if !telaStatus.Hidden && strings.TrimSpace(telaStatus.Text) != "" {
+			objs = append(objs, telaStatus)
+		}
+		if !telaProgress.Hidden {
+			objs = append(objs, telaProgress)
+		}
+		statusBox.Objects = objs
+		statusBox.Refresh()
+	}
 
 	var telaSearch []INDEXwithRatings
 
@@ -17426,13 +17449,25 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	setTelaStatus := func(text string, clr color.Color) {
+		if text == "" || clr == color.Transparent {
+			telaStatus.Text = ""
+			telaStatus.Color = clr
+			fyne.Do(func() {
+				telaStatus.Hide()
+				telaStatus.Refresh()
+				refreshTelaStatusBox()
+			})
+			return
+		}
 		if telaStatus.Text == text && telaStatus.Color == clr {
 			return
 		}
 		telaStatus.Text = text
 		telaStatus.Color = clr
 		fyne.Do(func() {
+			telaStatus.Show()
 			telaStatus.Refresh()
+			refreshTelaStatusBox()
 		})
 	}
 
@@ -17448,12 +17483,69 @@ func layoutTELA() fyne.CanvasObject {
 				telaProgress.Show()
 			}
 			telaProgress.SetValue(value)
+			refreshTelaStatusBox()
 		})
 	}
+
+	var displayedTelaProgress float64
+
+	showInfiniteTelaProgress := func() {
+		fyne.Do(func() {
+			if telaProgress.Hidden {
+				telaProgress.Show()
+			}
+			next := displayedTelaProgress + 0.04
+			if next < 0.12 {
+				next = 0.12
+			}
+			if next > 0.72 {
+				next = 0.72
+			}
+			displayedTelaProgress = next
+			telaProgress.SetValue(next)
+			refreshTelaStatusBox()
+		})
+	}
+
+	updateTelaProgress := func(value float64) {
+		if value < displayedTelaProgress {
+			value = displayedTelaProgress
+		}
+		if value > 0.99 {
+			value = 0.99
+		}
+		displayedTelaProgress = value
+		setTelaProgress(value)
+	}
+
+	showActiveTelaProgress := func(status string, value float64, initial bool) {
+		telaViewActive.Store(true)
+		if initial {
+			results.Hide()
+			telaStatus.Text = status
+			telaStatus.Color = colors.Yellow
+			telaStatus.Refresh()
+			if telaProgress.Hidden {
+				telaProgress.Show()
+			}
+			telaProgress.SetValue(value)
+			refreshTelaStatusBox()
+			return
+		}
+		fyne.Do(func() {
+			results.Hide()
+			refreshTelaStatusBox()
+		})
+		setTelaStatus(status, colors.Yellow)
+		updateTelaProgress(value)
+	}
+
+	resetTelaProgress = func() { displayedTelaProgress = 0 }
 
 	hideTelaProgress := func() {
 		fyne.Do(func() {
 			telaProgress.Hide()
+			refreshTelaStatusBox()
 		})
 	}
 
@@ -17924,8 +18016,6 @@ func layoutTELA() fyne.CanvasObject {
 		)
 	}
 
-	var forceFreshScan bool
-
 	wSelect := widget.NewSelect([]string{"Search", "Favorites", "History"}, nil)
 	wSelect.SetSelectedIndex(0)
 
@@ -18031,9 +18121,6 @@ func layoutTELA() fyne.CanvasObject {
 	var minLikes float64
 	var telaSCIDs []string
 	var sAll = map[string]bool{}
-	var telaStartupWaitMu sync.Mutex
-	telaStartupWaiting := false
-
 	// Initialize TELA settings from storage
 	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
 		if f, err := strconv.ParseFloat(string(storedMinLikes), 64); err == nil {
@@ -18076,8 +18163,49 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	var getSearchResults func()
+	hasTelaCache = func() bool {
+		if raw, err := GetEncryptedValue("TELA Search", []byte("DisplayCache")); err == nil && len(raw) > 0 {
+			var cachedDisplay telaDisplayCache
+			if json.Unmarshal(raw, &cachedDisplay) == nil && len(cachedDisplay) > 0 {
+				return true
+			}
+		}
+		if raw, err := GetEncryptedValue("TELA Search", []byte("SCIDs")); err == nil && len(raw) > 0 {
+			var cachedSCIDs []string
+			if json.Unmarshal(raw, &cachedSCIDs) == nil && len(cachedSCIDs) > 0 {
+				return true
+			}
+		}
+		if raw, err := GetEncryptedValue("TELA Search", []byte("IndexCache")); err == nil && len(raw) > 0 {
+			var cachedINDEXes indexCache
+			if json.Unmarshal(raw, &cachedINDEXes) == nil && len(cachedINDEXes) > 0 {
+				return true
+			}
+		}
+		if raw, err := GetEncryptedValue("TELA Search", []byte("CandidateCache")); err == nil && len(raw) > 0 {
+			var cachedCandidates telaCandidateCache
+			if json.Unmarshal(raw, &cachedCandidates) == nil {
+				for _, meta := range cachedCandidates {
+					if meta.Result == telaCandidateValidIndex {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
 	getSearchResults = func() {
+		if !telaWorkActive.CompareAndSwap(false, true) {
+			return
+		}
 		defer func() {
+			telaLaunchPending.Store(false)
+			telaWorkActive.Store(false)
+			// Clear network-paused flag if the wallet session has changed (closed/switched).
+			// The paused-retry goroutine checks the flag itself, but this is a safety net.
+			if !isWalletGenerationActive(currentWalletGeneration()) {
+				telaNetworkPaused.Store(false)
+			}
 			if r := recover(); r != nil {
 				logger.Errorf("[TELA-SEARCH] getSearchResults PANIC recovered: %v\n", r)
 				isSearching = false
@@ -18110,8 +18238,15 @@ func layoutTELA() fyne.CanvasObject {
 		cacheHitMode := "full"
 		fullScanReason := "cold_start"
 		cacheIntegrity := "ok"
+		keepProgressVisible := true
 		var heightDelta int64
 		var storedIndexedHeight int64
+
+		var gnomonSyncStartTime time.Time
+		var gnomonSyncDuration time.Duration
+		var telaStartTime time.Time
+		var estimatedTelaDuration time.Duration
+		var estimatedTelaFallback = 30 * time.Second
 
 		currentDaemonHeight := func() int64 {
 			if engram.Disk == nil {
@@ -18133,6 +18268,8 @@ func layoutTELA() fyne.CanvasObject {
 
 			return gnomon.Index.LastIndexedHeight >= daemonHeight
 		}
+
+		allowTelaIndexMutations := isGnomonCaughtUp()
 
 		deviceClass := "desktop"
 		workerPoolSize := runtime.NumCPU()
@@ -18229,11 +18366,12 @@ func layoutTELA() fyne.CanvasObject {
 
 		// Already scanned (skip if force fresh scan was just triggered)
 		if len(telaSearch) > 0 {
+			keepProgressVisible = false
 			fyne.Do(func() {
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
 				searchData.Set(searching)
 				searchList.Refresh()
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
+				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
 				results.Color = colors.Green
 				entrySearch.Enable()
 				entryAddSCID.Enable()
@@ -18262,8 +18400,10 @@ func layoutTELA() fyne.CanvasObject {
 
 		defer func() {
 			isSearching = false
-			setTelaStatus("", color.Transparent)
-			hideTelaProgress()
+			if !keepProgressVisible {
+				setTelaStatus("", color.Transparent)
+				hideTelaProgress()
+			}
 			fyne.Do(func() {
 				entrySearch.Enable()
 				entryAddSCID.Enable()
@@ -18277,77 +18417,28 @@ func layoutTELA() fyne.CanvasObject {
 			}
 		}()
 
-		if gnomon.Index == nil {
-			results.Text = "  Gnomon is starting..."
-			results.Color = colors.Yellow
-			setTelaStatus("Starting Gnomon index...", colors.Yellow)
-			setTelaProgress(0.05)
-			fyne.Do(func() {
-				results.Refresh()
-			})
-			return
-		}
-
-		hasTelaCache := func() bool {
-			if raw, err := GetEncryptedValue("TELA Search", []byte("DisplayCache")); err == nil && len(raw) > 0 {
-				var cachedDisplay telaDisplayCache
-				if json.Unmarshal(raw, &cachedDisplay) == nil && len(cachedDisplay) > 0 {
-					return true
-				}
-			}
-			if raw, err := GetEncryptedValue("TELA Search", []byte("SCIDs")); err == nil && len(raw) > 0 {
-				var cachedSCIDs []string
-				if json.Unmarshal(raw, &cachedSCIDs) == nil && len(cachedSCIDs) > 0 {
-					return true
-				}
-			}
-			if raw, err := GetEncryptedValue("TELA Search", []byte("IndexCache")); err == nil && len(raw) > 0 {
-				var cachedINDEXes indexCache
-				if json.Unmarshal(raw, &cachedINDEXes) == nil && len(cachedINDEXes) > 0 {
-					return true
-				}
-			}
-			if raw, err := GetEncryptedValue("TELA Search", []byte("CandidateCache")); err == nil && len(raw) > 0 {
-				var cachedCandidates telaCandidateCache
-				if json.Unmarshal(raw, &cachedCandidates) == nil {
-					for _, meta := range cachedCandidates {
-						if meta.Result == telaCandidateValidIndex {
-							return true
-						}
-					}
-				}
-			}
-			return false
-		}
-
 		gnomonReadyForTela := func() bool {
-			if gnomon.Index == nil {
-				return false
-			}
-			// If we already have cached TELA search results, we can proceed immediately
-			// without waiting for gnomon to fully sync - use cached data to display
 			if hasTelaCache() || len(telaSearch) > 0 {
 				return true
 			}
-			// Double-check after cache check to avoid race
+			if !gnomon.telaBootstrapReady() {
+				return false
+			}
 			if gnomon.Index == nil {
 				return false
 			}
-			// Check if backends are initialized
-			if (gnomon.Index.DBType == "gravdb" && gnomon.Index.GravDBBackend == nil) ||
-				(gnomon.Index.DBType == "boltdb" && gnomon.Index.BBSBackend == nil) {
+			if gnomon.Index.LastIndexedHeight <= 0 {
 				return false
 			}
-
-			allOwnersAndSCIDs := gnomon.GetAllOwnersAndSCIDs()
-			if len(allOwnersAndSCIDs) <= 1 {
-				return false
-			}
-
 			return isGnomonCaughtUp()
 		}
 
+		gnomonSyncStarted := false
 		for !gnomonReadyForTela() {
+			if !gnomonSyncStarted {
+				gnomonSyncStartTime = time.Now()
+				gnomonSyncStarted = true
+			}
 			syncWaitSeconds++
 			// Check if user navigated away
 			if !strings.Contains(session.Domain, ".tela") {
@@ -18393,6 +18484,7 @@ func layoutTELA() fyne.CanvasObject {
 				// If still disconnected after 30 seconds, mark as interrupted
 				if !walletapi.Connected {
 					interruptReason = "connection_timeout_syncing"
+					keepProgressVisible = true
 					results.Text = "  Connection timeout"
 					results.Color = colors.Red
 					fyne.Do(func() {
@@ -18407,61 +18499,44 @@ func layoutTELA() fyne.CanvasObject {
 				results.Color = colors.Yellow
 			}
 
+			// Show time-based progress during sync wait
+			if gnomon.Index != nil && engram.Disk != nil {
+				daemonHeight := int64(engram.Disk.Get_Daemon_Height())
+				indexedHeight := gnomon.Index.LastIndexedHeight
+				elapsed := time.Since(gnomonSyncStartTime)
+				remainingBlocks := daemonHeight - indexedHeight
+				processedBlocks := indexedHeight
+				var estimatedGnomon time.Duration
+				if processedBlocks > 0 && remainingBlocks > 0 {
+					timePerBlock := float64(elapsed) / float64(processedBlocks)
+					remainingTime := time.Duration(timePerBlock * float64(remainingBlocks))
+					estimatedGnomon = elapsed + remainingTime
+				} else if processedBlocks > 0 {
+					estimatedGnomon = elapsed
+				} else {
+					estimatedGnomon = elapsed + estimatedTelaFallback
+				}
+				provisionalTotal := estimatedGnomon + estimatedTelaFallback
+				if provisionalTotal > 0 {
+					updateTelaProgress(float64(elapsed) / float64(provisionalTotal))
+				}
+				setTelaStatus(fmt.Sprintf("Synching gnomon index... [%d / %d]", indexedHeight, daemonHeight), colors.Yellow)
+				fyne.Do(func() {
+					results.Refresh()
+				})
+			}
+
 			fyne.Do(func() {
 				entrySearch.Disable()
 				entryAddSCID.Disable()
 			})
-			results.Text = "  Gnomon is starting..."
-			results.Color = colors.Yellow
-			if gnomon.Index == nil || ((gnomon.Index.DBType == "gravdb" && gnomon.Index.GravDBBackend == nil) || (gnomon.Index.DBType == "boltdb" && gnomon.Index.BBSBackend == nil)) {
-				setTelaStatus("Starting Gnomon index...", colors.Yellow)
-				setTelaProgress(0.1)
-			} else {
-				daemonHeight := currentDaemonHeight()
-				indexedHeight := int64(0)
-				if gnomon.Index != nil {
-					indexedHeight = gnomon.Index.LastIndexedHeight
-				}
-				progress := 0.2
-				if daemonHeight > 0 {
-					progress = math.Max(0.2, math.Min(0.9, float64(indexedHeight)/float64(daemonHeight)))
-				}
-				setTelaStatus(fmt.Sprintf("Syncing Gnomon index... (%d / %d)", indexedHeight, daemonHeight), colors.Yellow)
-				setTelaProgress(progress)
-			}
-
-			// Save syncing state for progress tracking
-			var daemonHeight int
-			if engram.Disk != nil {
-				daemonHeight = int(engram.Disk.Get_Daemon_Height())
-			}
-			if gnomon.Index != nil {
-				saveProgress(int(gnomon.Index.LastIndexedHeight), daemonHeight, "", "syncing")
-			}
-
-			fyne.Do(func() {
-				results.Refresh()
-			})
-
-			time.Sleep(time.Second)
+			time.Sleep(1 * time.Second)
 		}
 
-		allowTelaIndexMutations := isGnomonCaughtUp()
-
-		if gnomon.Index != nil && gnomon.Index.LastIndexedHeight < currentDaemonHeight() {
-			results.Text = "  Gnomon still syncing, using available TELA data..."
-			results.Color = colors.Yellow
-			daemonHeight := currentDaemonHeight()
-			progress := 0.2
-			if daemonHeight > 0 {
-				progress = math.Max(0.2, math.Min(0.9, float64(gnomon.Index.LastIndexedHeight)/float64(daemonHeight)))
-			}
-			setTelaStatus(fmt.Sprintf("Syncing Gnomon index... (%d / %d)", gnomon.Index.LastIndexedHeight, daemonHeight), colors.Yellow)
-			setTelaProgress(progress)
-			fyne.Do(func() {
-				results.Refresh()
-			})
-		}
+		// Gnomon sync complete - record duration and initialize TELA timing
+		gnomonSyncDuration = time.Since(gnomonSyncStartTime)
+		telaStartTime = time.Now()
+		estimatedTelaDuration = 30 * time.Second // Initial estimate, will refine
 
 		indexCacheStore := loadTelaIndexCache()
 		candidateCache := loadTelaCandidateCache()
@@ -18526,9 +18601,6 @@ func layoutTELA() fyne.CanvasObject {
 			if len(telaSCIDs) == 0 {
 				json.Unmarshal(storedSCIDs, &telaSCIDs)
 			}
-
-			results.Text = "  Scanning..."
-			results.Color = colors.Yellow
 
 			fyne.Do(func() {
 				results.Refresh()
@@ -18678,6 +18750,7 @@ func layoutTELA() fyne.CanvasObject {
 					labelLastScan.Refresh()
 				})
 
+				keepProgressVisible = false
 				logger.Printf("[TELA] Deferring full scan until Gnomon catches up; showing cached results only\n")
 				return
 			}
@@ -18685,11 +18758,12 @@ func layoutTELA() fyne.CanvasObject {
 			if !rescanRecheck && (len(telaSearch) > 0 || len(telaSCIDs) > 0) && heightDelta == 0 {
 				cacheHitMode = "cached_only"
 				fullScanReason = ""
+				keepProgressVisible = false
 				fyne.Do(func() {
 					searching = telaSearchDisplayAll(telaSearch, sortBy)
 					searchData.Set(searching)
 					searchList.Refresh()
-					results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
+					results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
 					results.Color = colors.Green
 					entrySearch.Enable()
 					entryAddSCID.Enable()
@@ -18730,41 +18804,25 @@ func layoutTELA() fyne.CanvasObject {
 				all[sc] = ""
 			}
 		} else {
-			// Guard against uninitialized backends
 			if gnomon.Index == nil ||
 				(gnomon.Index.DBType == "gravdb" && gnomon.Index.GravDBBackend == nil) ||
 				(gnomon.Index.DBType == "boltdb" && gnomon.Index.BBSBackend == nil) {
-				results.Text = "  Gnomon is initializing..."
-				results.Color = colors.Yellow
-				uiDo(func() {
-					results.Refresh()
-				})
-				go func() {
-					time.Sleep(2 * time.Second)
-					if strings.Contains(session.Domain, ".tela") {
-						uiDo(func() {
-							getSearchResults()
-						})
-					}
-				}()
+				keepProgressVisible = true
+				setTelaStatus("Waiting for Gnomon backend...", colors.Yellow)
+				showInfiniteTelaProgress()
+				scheduleTelaWarmup()
 				return
 			}
+			logger.Printf("[TELA-SEARCH] Fetching all indexed owners and SCIDs...\n")
 			all = gnomon.GetAllOwnersAndSCIDs()
+			logger.Printf("[TELA-SEARCH] Found %d total indexed SCIDs\n", len(all))
 		}
 
 		if !restrictiveMode && !hasCachedTelaData && len(all) <= 1 {
-			results.Text = "  Gnomon is preparing SCIDs..."
-			results.Color = colors.Yellow
-			uiDo(func() {
-				results.Refresh()
-			})
-
-			go func() {
-				time.Sleep(2 * time.Second)
-				if strings.Contains(session.Domain, ".tela") {
-					go getSearchResults()
-				}
-			}()
+			keepProgressVisible = true
+			setTelaStatus("Gnomon indexing in progress...", colors.Yellow)
+			showInfiniteTelaProgress()
+			scheduleTelaWarmup()
 			return
 		}
 
@@ -18775,28 +18833,45 @@ func layoutTELA() fyne.CanvasObject {
 		sort.Strings(allSCIDs)
 
 		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
+			logger.Printf("[TELA-SEARCH] Beginning delta scan interaction check for %d SCIDs\n", len(allSCIDs))
+			fyne.Do(func() {
+				setTelaStatus(fmt.Sprintf("Filtering %d SCIDs against Gnomon...", len(allSCIDs)), colors.Yellow)
+				showInfiniteTelaProgress()
+				results.Refresh()
+			})
+
 			candidateSet := map[string]bool{}
-			candidateCacheMu.RLock()
-			validCandidateSCIDs := candidateCache.validSCIDs()
-			candidateCacheMu.RUnlock()
-			for _, sc := range validCandidateSCIDs {
+			// Use known cached SCIDs (telaSCIDs) instead of candidateCache.validSCIDs()
+			// because telaSCIDs is the authoritative list of confirmed TELA apps
+			for _, sc := range telaSCIDs {
 				candidateSet[sc] = true
 			}
-			deltaSCIDs := make([]string, 0)
-			for _, sc := range allSCIDs {
+			skippedNoHeights := 0
+			for i, sc := range allSCIDs {
+				if i > 0 && i%5000 == 0 {
+					logger.Printf("[TELA-SEARCH] Delta scan progress: %d / %d SCIDs checked\n", i, len(allSCIDs))
+					// Yield slightly to prevent hogging thread
+					time.Sleep(10 * time.Millisecond)
+				}
 				heights := gnomon.GetSCIDInteractionHeight(sc)
 				if len(heights) == 0 {
-					deltaSCIDs = append(deltaSCIDs, sc)
-					candidateSet[sc] = true
+					// Skip - Gnomon may not have indexed this SCID's interactions yet.
+					// SCIDs with missing interaction data will be caught in subsequent scans
+					// once Gnomon finishes indexing. New TELA apps are infrequent, so
+					// this trade-off is acceptable to avoid scanning ~50k false positives.
+					// See TELA_DELTA_SCAN_ISSUE.md for details.
+					skippedNoHeights++
 					continue
 				}
 				for _, h := range heights {
 					if h > storedIndexedHeight {
-						deltaSCIDs = append(deltaSCIDs, sc)
 						candidateSet[sc] = true
 						break
 					}
 				}
+			}
+			if skippedNoHeights > 0 {
+				logger.Printf("[TELA] Delta scan: skipped %d SCIDs with no interaction heights (Gnomon may not have indexed them yet)\n", skippedNoHeights)
 			}
 			if len(candidateSet) > 0 {
 				allSCIDs = make([]string, 0, len(candidateSet))
@@ -18804,9 +18879,13 @@ func layoutTELA() fyne.CanvasObject {
 					allSCIDs = append(allSCIDs, sc)
 				}
 				sort.Strings(allSCIDs)
-			} else if len(deltaSCIDs) > 0 {
-				allSCIDs = deltaSCIDs
 			}
+		}
+
+		// Create set of known TELA SCIDs for O(1) lookup
+		knownTelaSCIDs := make(map[string]bool, len(telaSCIDs))
+		for _, sc := range telaSCIDs {
+			knownTelaSCIDs[sc] = true
 		}
 
 		prefilterAllowed := map[string]bool{}
@@ -18817,13 +18896,21 @@ func layoutTELA() fyne.CanvasObject {
 					prefilterAllowed[sc] = false
 					continue
 				}
+				// Skip prefilter for SCIDs with cached INDEX data
+				if _, hasIndexData := indexCacheStore[sc]; hasIndexData {
+					prefilterAllowed[sc] = true
+					continue
+				}
+				// Skip prefilter for known TELA SCIDs from storage
+				if knownTelaSCIDs[sc] {
+					prefilterAllowed[sc] = true
+					continue
+				}
 				candidates = append(candidates, sc)
 			}
 
-			results.Text = fmt.Sprintf("  Prefiltering... (%d candidates)", len(candidates))
-			results.Color = colors.Yellow
 			setTelaStatus(fmt.Sprintf("Checking TELA candidates... (%d total)", len(candidates)), colors.Yellow)
-			setTelaProgress(0.92)
+			setTelaProgress(0.10)
 			uiDo(func() {
 				results.Refresh()
 			})
@@ -18845,14 +18932,26 @@ func layoutTELA() fyne.CanvasObject {
 			var batchErr error
 			if len(pool) > 0 {
 				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, 500, 3, pool, func(completed, total int) {
-					results.Text = fmt.Sprintf("  Prefiltering... (%d / %d)", completed, total)
 					results.Color = colors.Yellow
-					progress := 0.92
-					if total > 0 {
-						progress = 0.92 + (float64(completed)/float64(total))*0.06
+					// Time-based progress calculation
+					now := time.Now()
+					elapsedTela := now.Sub(telaStartTime)
+					elapsedTotal := now.Sub(gnomonSyncStartTime)
+
+					// Estimate remaining TELA time based on batch rate
+					if completed > 0 {
+						timePerItem := float64(elapsedTela) / float64(completed)
+						remainingItems := total - completed
+						remainingTELATime := time.Duration(float64(timePerItem) * float64(remainingItems))
+						estimatedTelaDuration = elapsedTela + remainingTELATime
+					}
+
+					// Calculate total progress purely based on time
+					totalEstimatedDuration := gnomonSyncDuration + estimatedTelaDuration
+					if totalEstimatedDuration > 0 {
+						updateTelaProgress(float64(elapsedTotal) / float64(totalEstimatedDuration))
 					}
 					setTelaStatus(fmt.Sprintf("Checking TELA candidates... (%d / %d)", completed, total), colors.Yellow)
-					setTelaProgress(progress)
 					uiDo(func() {
 						results.Refresh()
 					})
@@ -18868,7 +18967,8 @@ func layoutTELA() fyne.CanvasObject {
 			if batchErr != nil {
 				logger.Printf("[TELA] Batch prefilter error: %v\n", batchErr)
 				if len(telaSearch) > 0 {
-					results.Text = fmt.Sprintf("  TELA SCIDs:  %d (cached apps shown - network error)", len(telaSearch))
+					keepProgressVisible = false
+					results.Text = fmt.Sprintf("  TELA Apps:  %d (cached apps shown - network error)", len(telaSearch))
 					results.Color = colors.Yellow
 					uiDo(func() {
 						searching = telaSearchDisplayAll(telaSearch, sortBy)
@@ -18883,13 +18983,42 @@ func layoutTELA() fyne.CanvasObject {
 
 				results.Text = "  TELA network error - no cached apps available"
 				results.Color = colors.Red
+				keepProgressVisible = true
+				setTelaStatus("TELA search paused \u2013 waiting for network", colors.Yellow)
+				showInfiniteTelaProgress()
 				uiDo(func() {
 					searchData.Set(nil)
 					searchList.Refresh()
+					results.Show()
 					results.Refresh()
 				})
 				phaseFinalizeMs = 0
+				interruptReason = "prefilter_network_error"
 				logger.Printf("[TELA] Search metrics: outcome=interrupted reason=prefilter_network_error elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+
+				// Enter network-paused state: a single goroutine waits
+				// for connectivity to return before relaunching.
+				telaNetworkPaused.Store(true)
+				pauseGeneration := currentWalletGeneration()
+				go func() {
+					for {
+						time.Sleep(5 * time.Second)
+						// Exit if user navigated away or wallet changed.
+						if !strings.Contains(session.Domain, ".tela") || !isWalletGenerationActive(pauseGeneration) || globals.Exit_In_Progress {
+							telaNetworkPaused.Store(false)
+							hideTelaProgress()
+							return
+						}
+						if walletapi.Connected {
+							logger.Printf("[TELA] Network restored, resuming search\n")
+							telaNetworkPaused.Store(false)
+							hideTelaProgress()
+							setTelaStatus("", color.Transparent)
+							maybeStartTelaWork(true)
+							return
+						}
+					}
+				}()
 				return
 			} else {
 				atomic.AddInt64(&retryCount, batchStats.Retries)
@@ -18905,7 +19034,7 @@ func layoutTELA() fyne.CanvasObject {
 				shouldMarkNegative := len(passed) > 0 && prefilterSuccessRate > 0.01 // At least 1% passed
 
 				if !shouldMarkNegative && len(candidates) > 0 {
-					logger.Printf("[TELA] Prefilter passed 0/%d candidates - skipping negative cache update to allow retry\n", len(candidates))
+					logger.Printf("[TELA] Prefilter passed %d/%d candidates - skipping negative cache update to allow retry\n", len(passed), len(candidates))
 				}
 
 				for _, sc := range candidates {
@@ -18924,6 +19053,7 @@ func layoutTELA() fyne.CanvasObject {
 		// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket.
 		indexFetchFailed := make(map[string]bool) // Track SCIDs whose INDEX fetch failed due to network errors
 		networkErrorDuringFetch := false          // Track if there was a network error during batch fetch
+		indexFetchRecoverableFailure := false
 		if !restrictiveMode {
 			var indexNeeded []string
 			for scid, allowed := range prefilterAllowed {
@@ -18945,6 +19075,10 @@ func layoutTELA() fyne.CanvasObject {
 				logger.Printf("[TELA] Batch INDEX fetch done: fetched=%d err=%v\n", len(fetched), fetchErr)
 				if fetchErr != nil {
 					logger.Printf("[TELA] Batch INDEX fetch for scan: %v\n", fetchErr)
+					networkErrorDuringFetch = true
+					if len(indexNeeded) > 0 && len(fetched) == 0 {
+						indexFetchRecoverableFailure = true
+					}
 					// Mark SCIDs as failed due to network error - these should NOT be marked as negative
 					// They will be retried on the next scan
 					for _, scid := range indexNeeded {
@@ -18964,6 +19098,25 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				atomic.AddInt64(&indexInfoCalls, int64(len(indexNeeded)))
 			}
+		}
+
+		if indexFetchRecoverableFailure && len(telaSearch) == 0 {
+			keepProgressVisible = true
+			interruptReason = "index_fetch_retrying"
+			results.Hide()
+			setTelaStatus("Retrying TELA fetch...", colors.Yellow)
+			showInfiniteTelaProgress()
+			phaseFinalizeMs = 0
+			logger.Printf("[TELA] Search metrics: outcome=interrupted reason=index_fetch_retrying elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+			retryGeneration := currentWalletGeneration()
+			go func() {
+				time.Sleep(3 * time.Second)
+				if !strings.Contains(session.Domain, ".tela") || !isWalletGenerationActive(retryGeneration) || globals.Exit_In_Progress {
+					return
+				}
+				maybeStartTelaWork(true)
+			}()
+			return
 		}
 
 		allLen := len(allSCIDs)
@@ -19200,11 +19353,12 @@ func layoutTELA() fyne.CanvasObject {
 			searching = telaSearchDisplayAll(telaSearch, sortBy)
 			searchData.Set(searching)
 			searchList.Refresh()
+			results.Show()
 			if networkErrorDuringFetch {
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d (some apps may be missing - network error during fetch)", len(telaSearch))
+				results.Text = fmt.Sprintf("  TELA Apps:  %d (some apps may be missing - network error during fetch)", len(telaSearch))
 				results.Color = colors.Yellow
 			} else {
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(telaSearch))
+				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
 				results.Color = colors.Green
 			}
 			results.Refresh()
@@ -19297,6 +19451,71 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+		keepProgressVisible = false
+	}
+
+	scheduleTelaWarmup = func() {
+		if !telaWarmupScheduled.CompareAndSwap(false, true) {
+			return
+		}
+		generation := currentWalletGeneration()
+		go func() {
+			defer telaWarmupScheduled.Store(false)
+			time.Sleep(2 * time.Second)
+			if globals.Exit_In_Progress || !isWalletGenerationActive(generation) {
+				return
+			}
+			if !strings.Contains(session.Domain, ".tela") {
+				return
+			}
+			if telaNetworkPaused.Load() || telaWorkActive.Load() || telaLaunchPending.Load() {
+				return
+			}
+			maybeStartTelaWork(true)
+		}()
+	}
+
+	maybeStartTelaWork = func(force bool) {
+		if !strings.Contains(session.Domain, ".tela") || globals.Exit_In_Progress {
+			return
+		}
+		// Do not launch while waiting for network to restore.
+		if telaNetworkPaused.Load() {
+			return
+		}
+		if telaWorkActive.Load() {
+			return
+		}
+		if telaLaunchPending.Load() {
+			return
+		}
+		if !telaLaunchPending.CompareAndSwap(false, true) {
+			return
+		}
+		go getSearchResults()
+	}
+
+	startTelaInitialLoad = func() {
+		if len(searching) > 0 || len(telaSearch) > 0 {
+			return
+		}
+		resetTelaProgress()
+		showActiveTelaProgress("Connecting to Gnomon...", 0.02, true)
+		if refreshAppsList != nil {
+			refreshAppsList()
+		}
+		if gnomon.Index == nil {
+			if engram.Disk != nil {
+				generation := currentWalletGeneration()
+				enableGnomon, _ := getGnomon()
+				if enableGnomon == "1" && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
+					go startGnomon()
+				}
+			}
+			maybeStartTelaWork(true)
+			return
+		}
+		maybeStartTelaWork(true)
 	}
 
 	entrySearch.OnChanged = func(s string) {
@@ -19320,7 +19539,17 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				results.Refresh()
 			} else {
-				go getSearchResults()
+				if len(telaSearch) > 0 {
+					searching = telaSearchDisplayAll(telaSearch, sortBy)
+					_ = searchData.Set(searching)
+					if refreshAppsList != nil {
+						refreshAppsList()
+					}
+				} else {
+					results.Text = "  No TELA apps loaded."
+					results.Color = colors.Gray
+					results.Refresh()
+				}
 			}
 			if !a.Driver().Device().IsMobile() {
 				entrySearch.HideCompletion()
@@ -19404,7 +19633,7 @@ func layoutTELA() fyne.CanvasObject {
 			searchData.Set(searching)
 			searchList.Refresh()
 
-			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(queryResult))
+			results.Text = fmt.Sprintf("  TELA Apps:  %d", len(queryResult))
 			results.Color = colors.Green
 			results.Refresh()
 			entrySearch.Enable()
@@ -19476,7 +19705,7 @@ func layoutTELA() fyne.CanvasObject {
 		searchData.Set(searching)
 		searchList.Refresh()
 
-		results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(queryResult))
+		results.Text = fmt.Sprintf("  TELA Apps:  %d", len(queryResult))
 		results.Color = colors.Green
 		results.Refresh()
 		entrySearch.Enable()
@@ -19529,7 +19758,7 @@ func layoutTELA() fyne.CanvasObject {
 			errorText.Color = colors.Green
 			errorText.Refresh()
 
-			go getSearchResults()
+			maybeStartTelaWork(true)
 		}
 	}
 
@@ -19554,7 +19783,7 @@ func layoutTELA() fyne.CanvasObject {
 				refreshAppsList()
 			}
 			if !isSearching && wSelect.Selected == "Search" && len(serversRunning) > 0 {
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
 				results.Color = colors.Green
 				results.Refresh()
 			}
@@ -19594,7 +19823,7 @@ func layoutTELA() fyne.CanvasObject {
 			searchData.Set(searching)
 			searchList.Refresh()
 			if !isSearching && wSelect.Selected == "Search" {
-				results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
+				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
 				results.Color = colors.Green
 				results.Refresh()
 			}
@@ -19677,11 +19906,8 @@ func layoutTELA() fyne.CanvasObject {
 			entryHistory,
 			entrySearch,
 			entryServeSCID,
-			errorText,
 			tabButtons,
-			results,
-			telaStatus,
-			telaProgress,
+			statusBox,
 		),
 		nil,
 		nil,
@@ -19703,8 +19929,6 @@ func layoutTELA() fyne.CanvasObject {
 	servingBox.Hide()
 
 	results.Show()
-	results.Text = "  Loading TELA dapps..."
-	results.Color = colors.Yellow
 	results.Refresh()
 
 	if engram.Disk != nil {
@@ -19717,6 +19941,7 @@ func layoutTELA() fyne.CanvasObject {
 	go func() {
 		fyne.Do(func() {
 			wSelect.SetSelected("Search")
+			startTelaInitialLoad()
 		})
 	}()
 
@@ -19764,9 +19989,6 @@ func layoutTELA() fyne.CanvasObject {
 					break
 				}
 
-				results.Text = "  Gnomon is syncing..."
-				results.Color = colors.Yellow
-
 				fyne.Do(func() {
 					entryHistory.Disable()
 					results.Refresh()
@@ -19775,7 +19997,7 @@ func layoutTELA() fyne.CanvasObject {
 				time.Sleep(time.Second)
 			}
 
-			results.Text = "  Loading previous search history..."
+			results.Text = "  Loading launched apps..."
 			results.Color = colors.Yellow
 
 			fyne.Do(func() {
@@ -19834,8 +20056,7 @@ func layoutTELA() fyne.CanvasObject {
 			history = historyResults
 			historyData.Set(history)
 
-			results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
-			results.Color = colors.Green
+			results.Text = ""
 
 			fyne.Do(func() {
 				historyList.Refresh()
@@ -19890,89 +20111,29 @@ func layoutTELA() fyne.CanvasObject {
 		servingBox.Hide()
 		results.Show()
 
+		telaViewActive.Store(false)
+		setTelaStatus("", color.Transparent)
+		hideTelaProgress()
+
+		if len(searching) > 0 || len(telaSearch) > 0 {
+			if len(searching) == 0 && len(telaSearch) > 0 {
+				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				_ = searchData.Set(searching)
+			}
+			if refreshAppsList != nil {
+				refreshAppsList()
+			} else {
+				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
+				results.Color = colors.Green
+				results.Refresh()
+			}
+			return
+		}
+
 		entrySearch.SetPlaceHolder("Search TELA")
-		if refreshAppsList != nil {
-			refreshAppsList()
-		}
-		if gnomon.Index == nil {
-			if engram.Disk != nil {
-				generation := currentWalletGeneration()
-				enableGnomon, _ := getGnomon()
-				if enableGnomon == "1" && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
-					go startGnomon()
-				}
-			}
-			results.Text = "  Gnomon is inactive. Waiting..."
-			results.Color = colors.Gray
-			results.Refresh()
-
-			telaStartupWaitMu.Lock()
-			if telaStartupWaiting {
-				telaStartupWaitMu.Unlock()
-				// If another startup is in progress, check if gnomon is now ready
-				if gnomon.Index != nil {
-					// Gnomon became ready during another startup, proceed with search
-					go getSearchResults()
-				} else {
-					searchList.Refresh()
-				}
-				return
-			}
-			telaStartupWaiting = true
-			telaStartupWaitMu.Unlock()
-
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.Errorf("[Engram] TELA startup wait panic recovered: %v\n", r)
-					}
-				}()
-				generation := currentWalletGeneration()
-				defer func() {
-					telaStartupWaitMu.Lock()
-					telaStartupWaiting = false
-					telaStartupWaitMu.Unlock()
-				}()
-				for i := 0; i < 60; i++ {
-					if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
-						return
-					}
-					time.Sleep(time.Second)
-					if !strings.Contains(session.Domain, ".tela") {
-						return
-					}
-					if gnomon.Index != nil {
-						uiDo(func() {
-							if !isWalletGenerationActive(generation) {
-								return
-							}
-							results.Text = "  Starting TELA scan..."
-							results.Color = colors.Yellow
-							results.Refresh()
-						})
-						if isWalletGenerationActive(generation) {
-							go getSearchResults()
-						}
-						return
-					}
-				}
-			}()
-		} else if len(searching) > 0 {
-			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
-			results.Color = colors.Green
-			results.Refresh()
-		} else if len(telaSearch) > 0 {
-			searching = telaSearchDisplayAll(telaSearch, sortBy)
-			_ = searchData.Set(searching)
-			results.Text = fmt.Sprintf("  TELA SCIDs:  %d", len(searching))
-			results.Color = colors.Green
-			results.Refresh()
-		} else {
-			generation := currentWalletGeneration()
-			if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
-				go getSearchResults()
-			}
-		}
+		results.Text = "  No scanned TELA apps yet."
+		results.Color = colors.Gray
+		results.Refresh()
 
 		searchList.Refresh()
 	}
@@ -19993,6 +20154,8 @@ func layoutTELA() fyne.CanvasObject {
 		switch s {
 		case "Favorites":
 			results.Show()
+			telaStatus.Hide()
+			refreshTelaStatusBox()
 			entrySearch.Show()
 			entrySearch.SetPlaceHolder("Search favorites...")
 			refreshFavoritesList()
@@ -20010,11 +20173,15 @@ func layoutTELA() fyne.CanvasObject {
 			favoritesBox.Show()
 			favoritesList.Refresh()
 		case "History":
-			results.Show()
+			results.Hide()
+			telaStatus.Hide()
+			refreshTelaStatusBox()
 			if gnomon.Index == nil {
-				results.Text = "  Gnomon is inactive."
+				results.Text = "  Index is unavailable."
 				results.Color = colors.Gray
+				results.Show()
 				results.Refresh()
+				refreshTelaStatusBox()
 			}
 
 			generation := currentWalletGeneration()
@@ -20027,6 +20194,9 @@ func layoutTELA() fyne.CanvasObject {
 			historyList.Refresh()
 			servingList.UnselectAll()
 		case "Search":
+			results.Show()
+			telaStatus.Hide()
+			refreshTelaStatusBox()
 			activateTelaSearch()
 		}
 	}
@@ -20039,7 +20209,7 @@ func layoutTELA() fyne.CanvasObject {
 		entryAddSCID.Disable()
 		btnShutdown.Disable()
 	} else if gnomon.Index == nil {
-		results.Text = "  Gnomon is inactive."
+		results.Text = "  Index is unavailable."
 		results.Color = colors.Gray
 		results.Refresh()
 		entryAddSCID.Disable()
@@ -20148,8 +20318,7 @@ func layoutTELA() fyne.CanvasObject {
 						history = historyResults
 						historyData.Set(history)
 
-						results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
-						results.Color = colors.Green
+						results.Text = ""
 
 						err = StoreEncryptedValue("TELA History", []byte(s), []byte(""))
 						if err != nil {
@@ -20229,8 +20398,7 @@ func layoutTELA() fyne.CanvasObject {
 								historyList.Refresh()
 							})
 
-							results.Text = fmt.Sprintf("  Search History:  %d", len(historyResults))
-							results.Color = colors.Green
+							results.Text = ""
 
 							err = StoreEncryptedValue("TELA History", []byte(s), []byte(""))
 							if err != nil {
@@ -20255,11 +20423,6 @@ func layoutTELA() fyne.CanvasObject {
 				removeOverlays()
 			}()
 		}
-	}
-
-	generation := currentWalletGeneration()
-	if isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
-		go getHistoryResults()
 	}
 
 	historyList.OnSelected = func(id widget.ListItemID) {

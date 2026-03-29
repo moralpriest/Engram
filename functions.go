@@ -355,6 +355,7 @@ func finishPulseForGeneration(generation uint64) {
 
 var appExitFlag atomic.Bool
 var telaViewActive atomic.Bool
+var forceFreshScan bool
 
 type Messages struct {
 	Contact string
@@ -983,6 +984,34 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		return nil, nil, fmt.Errorf("gnomon rpc client unavailable")
 	}
 	rpcClient := gnomon.Index.RPC.RPC
+	retryableFetchError := func(err error) bool {
+		if err == nil {
+			return false
+		}
+		msg := strings.ToLower(err.Error())
+		return strings.Contains(msg, "closed network connection") ||
+			strings.Contains(msg, "use of closed network connection") ||
+			strings.Contains(msg, "broken pipe") ||
+			strings.Contains(msg, "connection reset by peer") ||
+			strings.Contains(msg, "eof")
+	}
+	rebuildRPCClient := func() (*jrpc2.Client, func(), error) {
+		pool, cleanup, err := dialRPCPool(session.Daemon, 1)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(pool) == 0 || pool[0] == nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("rebuilt rpc pool was empty")
+		}
+		return pool[0], cleanup, nil
+	}
+	var transientCleanup func()
+	defer func() {
+		if transientCleanup != nil {
+			transientCleanup()
+		}
+	}()
 
 	for i := 0; i < len(scids); i += batchSize {
 		select {
@@ -1009,9 +1038,31 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			}
 		}
 
-		batchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		responses, err := rpcClient.Batch(batchCtx, specs)
-		cancel()
+		var responses []*jrpc2.Response
+		var err error
+		for attempt := 0; attempt < 3; attempt++ {
+			batchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			responses, err = rpcClient.Batch(batchCtx, specs)
+			cancel()
+			if err == nil {
+				break
+			}
+			if !retryableFetchError(err) || attempt == 2 {
+				break
+			}
+			logger.Printf("[TELA] Batch INDEX fetch retry %d for offset %d after rpc error: %v\n", attempt+1, i, err)
+			if transientCleanup != nil {
+				transientCleanup()
+				transientCleanup = nil
+			}
+			rebuilt, cleanup, rebuildErr := rebuildRPCClient()
+			if rebuildErr != nil {
+				logger.Printf("[TELA] Failed rebuilding rpc client for INDEX fetch retry: %v\n", rebuildErr)
+				break
+			}
+			rpcClient = rebuilt
+			transientCleanup = cleanup
+		}
 		if err != nil {
 			logger.Printf("[TELA] Batch INDEX fetch error at offset %d: %v\n", i, err)
 			if batchErr == nil {
