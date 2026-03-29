@@ -17883,6 +17883,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	entryHistory := widget.NewEntry()
 	entryHistory.PlaceHolder = "Search History"
+	entryHistory.SetIcon(theme.SearchIcon())
 	entryHistory.Disable()
 
 	entryServeSCID := widget.NewEntry()
@@ -20130,7 +20131,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		entrySearch.SetPlaceHolder("Search TELA")
+		entrySearch.SetPlaceHolder("Search Apps")
 		results.Text = "  No scanned TELA apps yet."
 		results.Color = colors.Gray
 		results.Refresh()
@@ -20157,7 +20158,7 @@ func layoutTELA() fyne.CanvasObject {
 			telaStatus.Hide()
 			refreshTelaStatusBox()
 			entrySearch.Show()
-			entrySearch.SetPlaceHolder("Search favorites...")
+			entrySearch.SetPlaceHolder("Search favorites")
 			refreshFavoritesList()
 			if engram.Disk == nil {
 				results.Text = "  No wallet connected."
