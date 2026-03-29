@@ -2122,7 +2122,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					btnCreate,
+					wrapMobileButton(btnCreate),
 				),
 				layout.NewSpacer(),
 			),
@@ -13060,14 +13060,14 @@ func layoutAccount() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	btnIdentity := widget.NewButtonWithIcon("Identity", theme.AccountIcon(), func() {
+	btnIdentity := newSmallIconButton("Identity", theme.AccountIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutIdentity())
 		removeOverlays()
 	})
 
-	btnServiceAddress := widget.NewButtonWithIcon("Payment", theme.ComputerIcon(), func() {
+	btnPayment := newSmallIconButton("Payment", theme.ComputerIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutServiceAddress())
@@ -13076,9 +13076,9 @@ func layoutAccount() fyne.CanvasObject {
 
 	buttonsRow := container.NewHBox(
 		layout.NewSpacer(),
-		wrapMobileButton(btnServiceAddress),
+		btnPayment,
 		rectSpacer,
-		wrapMobileButton(btnIdentity),
+		btnIdentity,
 		layout.NewSpacer(),
 	)
 
@@ -13423,7 +13423,7 @@ func layoutAccount() fyne.CanvasObject {
 						confirm,
 						rectSpacer,
 						rectSpacer,
-						btnChange,
+						wrapMobileButton(btnChange),
 						widget.NewLabel(""),
 						container.NewHBox(
 							layout.NewSpacer(),
