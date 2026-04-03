@@ -318,9 +318,11 @@ func newSmallIconButton(label string, icon fyne.Resource, onTap func()) *fyne.Co
 
 type slimProgressBar struct {
 	widget.BaseWidget
-	value  float64
-	height float32
-	label  *canvas.Text
+	value     float64
+	height    float32
+	minWidth  float32
+	minHeight float32
+	label     *canvas.Text
 }
 
 func NewSlimProgressBar() *slimProgressBar {
@@ -330,6 +332,12 @@ func NewSlimProgressBar() *slimProgressBar {
 	bar.label.Alignment = fyne.TextAlignTrailing
 	bar.ExtendBaseWidget(bar)
 	return bar
+}
+
+func (s *slimProgressBar) SetBarMinSize(size fyne.Size) {
+	s.minWidth = size.Width
+	s.minHeight = size.Height
+	s.Refresh()
 }
 
 func (s *slimProgressBar) SetValue(value float64) {
@@ -352,30 +360,40 @@ func (s *slimProgressBar) CreateRenderer() fyne.WidgetRenderer {
 	fill := canvas.NewRectangle(colors.Green)
 	fill.CornerRadius = s.height / 2
 	barWrap := container.NewStack(track, fill)
-	objects := []fyne.CanvasObject{container.NewBorder(nil, nil, nil, s.label, barWrap)}
-	return &slimProgressBarRenderer{bar: s, track: track, fill: fill, objects: objects}
+	objects := []fyne.CanvasObject{barWrap, s.label}
+	return &slimProgressBarRenderer{bar: s, track: track, fill: fill, label: s.label, barWrap: barWrap, objects: objects}
 }
 
 func (s *slimProgressBar) MinSize() fyne.Size {
-	return fyne.NewSize(scaleSize(160), scaleSize(16))
+	w := s.minWidth
+	h := s.minHeight
+	if w <= 0 {
+		w = scaleSize(160)
+	}
+	if h <= 0 {
+		h = scaleSize(16)
+	}
+	return fyne.NewSize(w, h)
 }
 
 type slimProgressBarRenderer struct {
 	bar     *slimProgressBar
 	track   *canvas.Rectangle
 	fill    *canvas.Rectangle
+	label   *canvas.Text
+	barWrap *fyne.Container
 	objects []fyne.CanvasObject
 }
 
 func (r *slimProgressBarRenderer) Layout(size fyne.Size) {
-	r.objects[0].Resize(size)
-	barWidth := size.Width - scaleSize(34)
+	labelWidth := scaleSize(34)
+	barWidth := size.Width - labelWidth
 	if barWidth < 0 {
 		barWidth = 0
 	}
 	barY := (size.Height - r.bar.height) / 2
-	r.track.Move(fyne.NewPos(0, barY))
-	r.track.Resize(fyne.NewSize(barWidth, r.bar.height))
+	r.barWrap.Move(fyne.NewPos(0, barY))
+	r.barWrap.Resize(fyne.NewSize(barWidth, r.bar.height))
 	fillWidth := barWidth * float32(r.bar.value)
 	if r.bar.value > 0 && fillWidth < r.bar.height {
 		fillWidth = r.bar.height
@@ -383,8 +401,13 @@ func (r *slimProgressBarRenderer) Layout(size fyne.Size) {
 	if fillWidth > barWidth {
 		fillWidth = barWidth
 	}
-	r.fill.Move(fyne.NewPos(0, barY))
+	r.track.Move(fyne.NewPos(0, 0))
+	r.track.Resize(fyne.NewSize(barWidth, r.bar.height))
+	r.fill.Move(fyne.NewPos(0, 0))
 	r.fill.Resize(fyne.NewSize(fillWidth, r.bar.height))
+	labelY := (size.Height - r.bar.label.TextSize) / 2
+	r.label.Move(fyne.NewPos(barWidth+scaleSize(4), labelY-scaleSize(1)))
+	r.label.Resize(fyne.NewSize(labelWidth-scaleSize(4), r.bar.label.TextSize))
 }
 
 func (r *slimProgressBarRenderer) MinSize() fyne.Size {
