@@ -2188,6 +2188,9 @@ func login() {
 		// Reset exit flag so Gnomon can start in this session
 		globals.Exit_In_Progress = false
 
+		// CRITICAL: Set WalletOpen before initSettings so toggleXSWD auto-start succeeds
+		session.WalletOpen = true
+
 		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
 		initSettings()
 	}
@@ -2206,8 +2209,6 @@ func login() {
 		globals.Arguments["--testnet"] = false
 		globals.Arguments["--simulator"] = false
 	}
-
-	session.WalletOpen = true
 	session.BalanceUSD = ""
 	session.LastBalance = 0
 
@@ -6351,6 +6352,160 @@ func setPermissions() {
 	} else {
 		logger.Printf("[Engram] WebSocket enabled state saved to fallback storage: %s\n", enabledValue)
 	}
+}
+
+// getWalletXSWDID returns a stable identifier for the current wallet (short hash of address)
+func getWalletXSWDID() string {
+	if engram.Disk == nil {
+		return ""
+	}
+	addr := engram.Disk.GetAddress().String()
+	if addr == "" {
+		return ""
+	}
+	h := sha1.Sum([]byte(addr))
+	return fmt.Sprintf("%x", h[:8])
+}
+
+// hasAskedXSWD checks if the first-time XSWD prompt has already been shown for this wallet
+func hasAskedXSWD() bool {
+	wid := getWalletXSWDID()
+	logger.Printf("[XSWD-PROMPT] hasAskedXSWD: wid=%q (empty=%v)\n", wid, wid == "")
+	if wid == "" {
+		logger.Printf("[XSWD-PROMPT] hasAskedXSWD: returning false (no wallet ID, show prompt)\n")
+		return false
+	}
+	_, err := GetValue("XSWDUnencrypted", []byte("Asked_"+wid))
+	result := err == nil
+	logger.Printf("[XSWD-PROMPT] hasAskedXSWD: key exists=%v (err=%v)\n", result, err)
+	return result
+}
+
+// setAskedXSWD records that the first-time XSWD prompt has been shown for this wallet
+func setAskedXSWD() {
+	wid := getWalletXSWDID()
+	if wid == "" {
+		return
+	}
+	err := StoreValue("XSWDUnencrypted", []byte("Asked_"+wid), []byte("1"))
+	if err != nil {
+		logger.Errorf("[Engram] setAskedXSWD: failed to save for wallet %s: %s\n", wid, err)
+	}
+}
+
+// showXSWDPrompt shows a first-time popup asking whether to allow WebSocket connections for TELA apps.
+// Returns true if the user allows, false if they deny.
+func showXSWDPrompt() bool {
+	if session.Window == nil {
+		return false
+	}
+
+	allowed := false
+	done := make(chan struct{})
+
+	header := canvas.NewText("Application Connections", colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	message := widget.NewLabel("Some TELA applications require connections to interact with your wallet. Would you like to allow application connections?")
+	message.Wrapping = fyne.TextWrapWord
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
+	btnAllow := widget.NewButton("Allow", func() {
+		allowed = true
+		done <- struct{}{}
+	})
+	btnAllow.Importance = widget.MediumImportance
+
+	btnDeny := widget.NewButton("Deny", func() {
+		allowed = false
+		done <- struct{}{}
+	})
+	btnDeny.Importance = widget.MediumImportance
+
+	btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				btnRow,
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						message,
+						rectSpacer,
+					),
+				),
+			),
+		),
+	)
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	uiDo(func() {
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
+						),
+						container.NewCenter(
+							container.NewStack(
+								span,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						content,
+						btnRow,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+					),
+				),
+			),
+		)
+	})
+
+	<-done
+
+	uiDo(func() {
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Top().Hide()
+		overlay.Remove(overlay.Top())
+		overlay.Remove(overlay.Top())
+	})
+
+	return allowed
 }
 
 // GetPermissionGroup returns the group a method belongs to
