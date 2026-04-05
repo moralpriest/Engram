@@ -6486,65 +6486,67 @@ func layoutSettings() fyne.CanvasObject {
 	})
 
 	btnRestore.OnTapped = func() {
-		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
-		restoreLabel.Wrapping = fyne.TextWrapWord
-		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
-			if confirmed {
-				return
-			}
+		verificationOverlay(
+			false,
+			"SETTINGS",
+			"Reset all settings to defaults?",
+			"Confirm",
+			func(b bool) {
+				if b {
+					setNetwork(NETWORK_MAINNET)
+					setDaemon(DEFAULT_REMOTE_DAEMON)
+					setAuthMode("true")
+					setGnomon("1")
 
-			setNetwork(NETWORK_MAINNET)
-			setDaemon(DEFAULT_REMOTE_DAEMON)
-			setAuthMode("true")
-			setGnomon("1")
+					StoreValue("settings", []byte("mainnet_nodes"), []byte{})
+					StoreValue("settings", []byte("testnet_nodes"), []byte{})
+					StoreValue("settings", []byte("simulator_nodes"), []byte{})
 
-			// Clear saved nodes for all networks
-			StoreValue("settings", []byte("mainnet_nodes"), []byte{})
-			StoreValue("settings", []byte("testnet_nodes"), []byte{})
-			StoreValue("settings", []byte("simulator_nodes"), []byte{})
+					remoteAccess.RPC.user = newRPCUsername()
+					remoteAccess.RPC.pass = newRPCPassword()
+					StoreValue("settings", []byte("rpc_user"), []byte(remoteAccess.RPC.user))
+					StoreValue("settings", []byte("rpc_pass"), []byte(remoteAccess.RPC.pass))
 
-			// Regenerate RPC credentials
-			remoteAccess.RPC.user = newRPCUsername()
-			remoteAccess.RPC.pass = newRPCPassword()
-			StoreValue("settings", []byte("rpc_user"), []byte(remoteAccess.RPC.user))
-			StoreValue("settings", []byte("rpc_pass"), []byte(remoteAccess.RPC.pass))
-
-			resizeWindow(ui.MaxWidth, ui.MaxHeight)
-			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutSettings())
-			removeOverlays()
-		}, session.Window)
+					resizeWindow(ui.MaxWidth, ui.MaxHeight)
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutSettings())
+					removeOverlays()
+				}
+			},
+		)
 	}
 
 	statusText := canvas.NewText("", colors.Account)
 	statusText.TextSize = scaleFont(12)
 
 	btnDelete.OnTapped = func() {
-		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
-		clearLabel.Wrapping = fyne.TextWrapWord
-		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
-			if confirmed {
-				return
-			}
+		verificationOverlay(
+			false,
+			"SETTINGS",
+			fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)),
+			"Confirm",
+			func(b bool) {
+				if b {
+					err := cleanGnomonData()
+					if err != nil {
+						if parseError, ok := err.(*os.PathError); !ok {
+							err = fmt.Errorf("error clearing local %s data", session.Network)
+						} else {
+							err = parseError.Err
+						}
 
-			err := cleanGnomonData()
-			if err != nil {
-				if parseError, ok := err.(*os.PathError); !ok {
-					err = fmt.Errorf("error clearing local %s data", session.Network)
-				} else {
-					err = parseError.Err
+						statusText.Color = colors.Red
+						statusText.Text = err.Error()
+						statusText.Refresh()
+						return
+					}
+
+					statusText.Color = colors.Green
+					statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
+					statusText.Refresh()
 				}
-
-				statusText.Color = colors.Red
-				statusText.Text = err.Error()
-				statusText.Refresh()
-				return
-			}
-
-			statusText.Color = colors.Green
-			statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
-			statusText.Refresh()
-		}, session.Window)
+			},
+		)
 	}
 
 	formSettings := container.NewVBox(
@@ -7513,58 +7515,58 @@ func layoutAppSettings() fyne.CanvasObject {
 	maintenanceTitle.TextStyle = fyne.TextStyle{Bold: true}
 
 	btnClearLocalData := widget.NewButton("Clear Local Data", func() {
-		clearLabel := widget.NewLabel(fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)))
-		clearLabel.Wrapping = fyne.TextWrapWord
-		dialog.ShowCustomConfirm("Clear Local Data", "No", "Yes", clearLabel, func(confirmed bool) {
-			if confirmed {
-				return
-			}
+		verificationOverlay(
+			false,
+			"ADVANCED",
+			fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)),
+			"Confirm",
+			func(b bool) {
+				if b {
+					err := cleanGnomonData()
+					if err != nil {
+						if parseError, ok := err.(*os.PathError); !ok {
+							err = fmt.Errorf("error clearing local %s data", session.Network)
+						} else {
+							err = parseError.Err
+						}
 
-			err := cleanGnomonData()
-			if err != nil {
-				if parseError, ok := err.(*os.PathError); !ok {
-					err = fmt.Errorf("error clearing local %s data", session.Network)
-				} else {
-					err = parseError.Err
+						errorDialog := dialog.NewError(err, session.Window)
+						errorDialog.SetOnClosed(func() {})
+						errorDialog.Show()
+						return
+					}
+
+					successDialog := dialog.NewInformation("Success", fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network)), session.Window)
+					successDialog.SetOnClosed(func() {})
+					successDialog.Show()
 				}
-
-				// Show error dialog
-				errorDialog := dialog.NewError(err, session.Window)
-				errorDialog.SetOnClosed(func() {})
-				errorDialog.Show()
-				return
-			}
-
-			// Show success notification
-			successDialog := dialog.NewInformation("Success", fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network)), session.Window)
-			successDialog.SetOnClosed(func() {})
-			successDialog.Show()
-		}, session.Window)
+			},
+		)
 	})
 
 	btnRestoreDefaults := widget.NewButton("Restore Defaults", func() {
-		restoreLabel := widget.NewLabel("Reset all settings to defaults?")
-		restoreLabel.Wrapping = fyne.TextWrapWord
-		dialog.ShowCustomConfirm("Restore Defaults", "No", "Yes", restoreLabel, func(confirmed bool) {
-			if confirmed {
-				return
-			}
+		verificationOverlay(
+			false,
+			"ADVANCED",
+			"Reset all settings to defaults?",
+			"Confirm",
+			func(b bool) {
+				if b {
+					setNetwork(NETWORK_MAINNET)
+					setDaemon(DEFAULT_REMOTE_DAEMON)
+					setAuthMode("true")
+					setGnomon("1")
+					remoteAccess.RPC.user = "username"
+					remoteAccess.RPC.pass = "password"
+					remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
+					setRemoteAccess(remoteAccess.RPC.port, "RPC")
 
-			// Reset all settings to defaults
-			setNetwork(NETWORK_MAINNET)
-			setDaemon(DEFAULT_REMOTE_DAEMON)
-			setAuthMode("true")
-			setGnomon("1")
-			remoteAccess.RPC.user = "username"
-			remoteAccess.RPC.pass = "password"
-			remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
-			setRemoteAccess(remoteAccess.RPC.port, "RPC")
-
-			// Show success notification
-			successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
-			successDialog.SetOnClosed(func() {})
-			successDialog.Show()
-		}, session.Window)
+					successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
+					successDialog.SetOnClosed(func() {})
+					successDialog.Show()
+				}
+			},
+		)
 	})
 
 	btnExportDebugLog := widget.NewButton("Export Debug Log", func() {
