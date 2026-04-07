@@ -639,13 +639,69 @@ func saveTelaCandidateCache(cache telaCandidateCache) error {
 	return StoreEncryptedValue("TELA Search", []byte("CandidateCache"), data)
 }
 
+// dnsCache stores resolved addresses to avoid repeated DNS lookups.
+var dnsCache = struct {
+	sync.Mutex
+	cache map[string]dnsEntry
+}{
+	cache: make(map[string]dnsEntry),
+}
+
+type dnsEntry struct {
+	ip        string
+	expiresAt time.Time
+}
+
+// resolveWithCache resolves a hostname to an IP address with caching.
+// Returns the original endpoint if resolution fails or cache is expired.
+func resolveWithCache(endpoint string) string {
+	host, port, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return endpoint // Not a host:port format
+	}
+
+	// Check if host is already an IP address
+	if ip := net.ParseIP(host); ip != nil {
+		return endpoint
+	}
+
+	dnsCache.Lock()
+	entry, exists := dnsCache.cache[host]
+	if exists && time.Now().Before(entry.expiresAt) {
+		resolved := entry.ip + ":" + port
+		dnsCache.Unlock()
+		return resolved
+	}
+	dnsCache.Unlock()
+
+	// Resolve and cache
+	addrs, err := net.LookupHost(host)
+	if err != nil || len(addrs) == 0 {
+		return endpoint // Return original on failure
+	}
+
+	resolved := addrs[0] + ":" + port
+	dnsCache.Lock()
+	dnsCache.cache[host] = dnsEntry{
+		ip:        addrs[0],
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
+	dnsCache.Unlock()
+
+	logger.Printf("[DNS] Resolved %s -> %s (cached for 5m)\n", host, addrs[0])
+	return resolved
+}
+
 // dialRPCPool creates n independent jrpc2 websocket connections to the DERO daemon.
 // Each connection has its own websocket and jrpc2.Client for true parallel RPC pipelines.
 // Caller must close all connections when done via the returned cleanup function.
 func dialRPCPool(endpoint string, n int) ([]*jrpc2.Client, func(), error) {
 	clients := make([]*jrpc2.Client, 0, n)
 	conns := make([]*websocket.Conn, 0, n)
-	uri := "ws://" + endpoint + "/ws"
+
+	// Use DNS cache to avoid repeated lookups
+	resolvedEndpoint := resolveWithCache(endpoint)
+	uri := "ws://" + resolvedEndpoint + "/ws"
 
 	cleanup := func() {
 		// Close websockets first to unblock jrpc2's background reader goroutines,
@@ -758,7 +814,12 @@ func batchPrefilterTelaVersions(ctx context.Context, scids []string, batchSize, 
 				if !isConnectionError(err) || attempt >= maxRetries-1 {
 					break
 				}
-				time.Sleep(time.Duration(attempt+1) * time.Second)
+				// Exponential backoff with jitter: base * 2^attempt ± 25%
+				baseMs := 1000 << uint(attempt)
+				jitterMs := baseMs / 4
+				jitter, _ := rand.Int(rand.Reader, big.NewInt(int64(jitterMs*2)))
+				sleepMs := int64(baseMs) - int64(jitterMs) + jitter.Int64()
+				time.Sleep(time.Duration(sleepMs) * time.Millisecond)
 			}
 
 			if err != nil {
@@ -7395,6 +7456,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	if a.Driver().Device().IsMobile() {
 		fyne.Do(func() {
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been received"})
+			session.Window.RequestFocus()
 		})
 	} else {
 		fyne.Do(func() {
@@ -7615,7 +7677,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	btnAllow := widget.NewButtonWithIcon("Allow", theme.ConfirmIcon(), nil)
-	btnAllow.Importance = widget.HighImportance
+	btnAllow.Importance = widget.MediumImportance
 	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
 
 	content := container.NewStack(
@@ -7744,6 +7806,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	if a.Driver().Device().IsMobile() {
 		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
+		session.Window.RequestFocus()
 	} else {
 		session.Window.RequestFocus()
 	}

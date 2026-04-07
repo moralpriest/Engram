@@ -17450,16 +17450,6 @@ func layoutTELA() fyne.CanvasObject {
 
 	var telaSearch []INDEXwithRatings
 
-	telaListHeartWidth := scaleSize(34)
-	if isMobileLayout {
-		telaListHeartWidth = scaleSize(40)
-	}
-
-	telaListButtonWidth := scaleSize(70)
-	if isMobileLayout {
-		telaListButtonWidth = scaleSize(80)
-	}
-
 	parseTelaListEntry := func(raw string) (name, scid string) {
 		split := strings.Split(raw, ";;;")
 		if len(split) > 0 {
@@ -17619,11 +17609,7 @@ func layoutTELA() fyne.CanvasObject {
 		heartBtn.Importance = widget.LowImportance
 
 		activeBg := canvas.NewRectangle(color.Transparent)
-		activeBg.SetMinSize(fyne.NewSize(0, scaleSize(36)))
-
-		heartSpacer := canvas.NewRectangle(color.Transparent)
-		heartSpacer.SetMinSize(fyne.NewSize(telaListHeartWidth, scaleSize(34)))
-		heartWrap := container.NewCenter(container.NewStack(heartSpacer, container.NewCenter(heartBtn)))
+		activeBg.SetMinSize(fyne.NewSize(0, scaleSize(39)))
 
 		nameLabel := widget.NewLabel("")
 		nameLabel.Alignment = fyne.TextAlignLeading
@@ -17633,10 +17619,6 @@ func layoutTELA() fyne.CanvasObject {
 		startCloseBtn := widget.NewButtonWithIcon("Start", theme.MediaPlayIcon(), nil)
 		startCloseBtn.Importance = widget.LowImportance
 
-		btnSpacer := canvas.NewRectangle(color.Transparent)
-		btnSpacer.SetMinSize(fyne.NewSize(telaListButtonWidth, scaleSize(34)))
-		btnWrap := container.NewCenter(container.NewStack(btnSpacer, container.NewCenter(startCloseBtn)))
-
 		launchProgress := NewSlimProgressBar()
 		launchProgress.SetBarMinSize(fyne.NewSize(0, scaleSize(10)))
 		launchProgress.Hide()
@@ -17645,19 +17627,28 @@ func layoutTELA() fyne.CanvasObject {
 		launchStatus.TextSize = scaleFont(10)
 		launchStatus.Hide()
 
-		return container.NewStack(
+		bottomSpacer := canvas.NewRectangle(color.Transparent)
+		bottomSpacer.SetMinSize(fyne.NewSize(0, 1))
+
+		topRow := container.NewBorder(
+			nil, bottomSpacer,
+			container.NewPadded(heartBtn),
+			container.NewPadded(startCloseBtn),
+			container.NewPadded(nameLabel),
+		)
+
+		row := container.NewStack(
 			activeBg,
 			container.NewBorder(
-				nil,
+				topRow,
 				container.NewVBox(
 					launchStatus,
 					launchProgress,
 				),
-				heartWrap,
-				btnWrap,
-				container.NewPadded(nameLabel),
+				nil, nil, nil,
 			),
 		)
+		return row
 	}
 
 	updateTelaFavoriteButton := func(btn *widget.Button, scid string) {
@@ -17845,14 +17836,11 @@ func layoutTELA() fyne.CanvasObject {
 				telaLaunchingSCIDs.m[scid] = true
 				telaLaunchingSCIDs.Unlock()
 
-				if launchProgress != nil {
-					launchProgress.Show()
-					launchProgress.SetValue(0)
-				}
 				if launchStatus != nil {
 					launchStatus.Text = "Starting..."
 					launchStatus.Show()
 				}
+				activeBg.Refresh()
 				startCloseBtn.Disable()
 				startCloseBtn.SetText("Starting")
 				startCloseBtn.SetIcon(nil)
@@ -17860,54 +17848,134 @@ func layoutTELA() fyne.CanvasObject {
 				favoritesList.Refresh()
 
 				progressDone := make(chan struct{})
+				progressStart := time.Now()
 				go func() {
-					for i := 0; ; i++ {
+					const cap = 0.95
+					const tau = 10.0
+					for {
 						select {
 						case <-progressDone:
 							return
 						case <-time.After(200 * time.Millisecond):
-							val := 0.1 + float64(i%30)*0.02
-							fyne.Do(func() {
+							elapsed := time.Since(progressStart).Seconds()
+							val := cap * (1.0 - math.Exp(-elapsed/tau))
+							if val > cap {
+								val = cap
+							}
+							uiDo(func() {
 								if launchProgress != nil && !launchProgress.Hidden {
 									launchProgress.SetValue(val)
+								}
+								if launchStatus != nil && !launchStatus.Hidden {
+									if val < 0.30 {
+										launchStatus.Text = "Connecting to node..."
+									} else if val < 0.60 {
+										launchStatus.Text = "Fetching content..."
+									} else if val < 0.85 {
+										launchStatus.Text = "Preparing app..."
+									} else {
+										launchStatus.Text = "Almost ready..."
+									}
 								}
 							})
 						}
 					}
 				}()
 
-				cleanupLaunch := func() {
+				cleanupLaunch := func(failed bool) {
 					close(progressDone)
 					telaLaunchingSCIDs.Lock()
 					delete(telaLaunchingSCIDs.m, scid)
 					telaLaunchingSCIDs.Unlock()
 					uiDo(func() {
 						if launchProgress != nil {
-							launchProgress.Hide()
+							if failed {
+								launchProgress.SetValue(launchProgress.value)
+								launchProgress.Refresh()
+							} else {
+								launchProgress.SetValue(1.0)
+								launchProgress.Refresh()
+							}
 						}
 						if launchStatus != nil {
-							launchStatus.Hide()
+							if failed {
+								launchStatus.Text = "Failed"
+								launchStatus.Color = colors.Red
+							} else {
+								launchStatus.Text = "Done!"
+								launchStatus.Color = colors.Green
+							}
+							launchStatus.Refresh()
 						}
-						if refreshServerList != nil {
-							refreshServerList()
-						}
-						searchList.Refresh()
-						favoritesList.Refresh()
+						time.AfterFunc(400*time.Millisecond, func() {
+							uiDo(func() {
+								if launchProgress != nil {
+									launchProgress.Hide()
+								}
+								if launchStatus != nil {
+									launchStatus.Hide()
+								}
+								activeBg.SetMinSize(fyne.NewSize(0, scaleSize(40)))
+								activeBg.Refresh()
+								if refreshServerList != nil {
+									refreshServerList()
+								}
+								searchList.Refresh()
+								favoritesList.Refresh()
+							})
+						})
 					})
 				}
 
 				errorText.Text = ""
 				errorText.Refresh()
 				go func() {
-					if link, err := tela.ServeTELA(scid, session.Daemon); err == nil {
-						pushTELANavigation(scid)
+					openURLAfterDelay := func(link string) {
+						if a.Driver().Device().IsMobile() {
+							time.Sleep(2 * time.Second)
+						}
 						if u, err := url.Parse(link); err == nil {
 							fyne.CurrentApp().OpenURL(u)
 						}
+					}
+
+					for _, s := range tela.GetServerInfo() {
+						if s.SCID == scid {
+							link := fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint)
+							pushTELANavigation(scid)
+							go openURLAfterDelay(link)
+							if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
+								logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
+							}
+							cleanupLaunch(false)
+							return
+						}
+					}
+
+					link, err := tela.ServeTELA(scid, session.Daemon)
+					if err != nil && strings.Contains(err.Error(), "already exists") {
+						telaPath := tela.GetPath()
+						runningDirs := make(map[string]bool)
+						for _, s := range tela.GetServerInfo() {
+							runningDirs[s.Name] = true
+						}
+						if entries, readErr := os.ReadDir(telaPath); readErr == nil {
+							for _, entry := range entries {
+								if entry.IsDir() && !runningDirs[entry.Name()] {
+									os.RemoveAll(filepath.Join(telaPath, entry.Name()))
+								}
+							}
+						}
+						link, err = tela.ServeTELA(scid, session.Daemon)
+					}
+
+					if err == nil {
+						pushTELANavigation(scid)
+						go openURLAfterDelay(link)
 						if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
 							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
 						}
-						cleanupLaunch()
+						cleanupLaunch(false)
 					} else {
 						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", scid)}
@@ -17919,12 +17987,12 @@ func layoutTELA() fyne.CanvasObject {
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
 							if linkPermission != xswd.Allow {
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
@@ -17936,15 +18004,13 @@ func layoutTELA() fyne.CanvasObject {
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
 							pushTELANavigation(scid)
-							if u, parseErr := url.Parse(link); parseErr == nil {
-								fyne.CurrentApp().OpenURL(u)
-							}
-							cleanupLaunch()
+							go openURLAfterDelay(link)
+							cleanupLaunch(false)
 						} else {
 							logger.Printf("[TELA] ServeTELA failed for SCID %s: %v", scid, err)
 							fyne.Do(func() {
@@ -17952,7 +18018,7 @@ func layoutTELA() fyne.CanvasObject {
 								errorText.Color = colors.Red
 								errorText.Refresh()
 							})
-							cleanupLaunch()
+							cleanupLaunch(true)
 						}
 					}
 				}()
@@ -18715,9 +18781,15 @@ func layoutTELA() fyne.CanvasObject {
 			currentScanHeight = gnomon.Index.LastIndexedHeight
 		}
 		if !restrictiveMode {
+			// Merge negative SCIDs from both in-memory candidate cache and persistent storage
+			// for maximum cache hit rate across sessions.
 			sAll = candidateCache.negativeSet()
-			if len(sAll) == 0 {
-				sAll = loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
+			persistedNegatives := loadStringSetFromEncryptedStorage("TELA Search", "NegativeCache")
+			for scid := range persistedNegatives {
+				sAll[scid] = true
+			}
+			if len(sAll) > 0 {
+				logger.Printf("[TELA] Loaded %d negative SCIDs from cache (%d from storage)\n", len(sAll), len(persistedNegatives))
 			}
 		}
 
@@ -18900,7 +18972,11 @@ func layoutTELA() fyne.CanvasObject {
 					searching = telaSearchDisplayAll(telaSearch, sortBy)
 					searchData.Set(searching)
 					searchList.Refresh()
-					results.Text = fmt.Sprintf("  TELA cache loaded while Gnomon syncs: %d", len(telaSearch))
+					if len(telaSearch) > 0 {
+						results.Text = fmt.Sprintf("  TELA cache loaded while Gnomon syncs: %d", len(telaSearch))
+					} else {
+						results.Text = "  Loading cached TELA data..."
+					}
 					results.Color = colors.Yellow
 					entrySearch.Enable()
 					entryAddSCID.Enable()
@@ -18908,7 +18984,7 @@ func layoutTELA() fyne.CanvasObject {
 
 				if last, err := GetEncryptedValue("TELA Search", []byte("Last Scan")); err == nil {
 					lastScan = string(last)
-					labelLastScan.Text = fmt.Sprintf("  %s", lastScan)
+					labelLastScan.Text = fmt.Sprintf("  %s (syncing)", lastScan)
 					labelLastScan.Color = colors.Yellow
 				}
 
@@ -19083,22 +19159,37 @@ func layoutTELA() fyne.CanvasObject {
 			})
 
 			prefilterStart := time.Now()
-			poolSize := 3
+
+			// Always create a dedicated RPC pool for prefilter.
+			// Reusing Gnomon's connection causes conflicts during active indexing
+			// (both share the same WebSocket, leading to "use of closed network connection" errors).
+			poolSize := 6
+			if !a.Driver().Device().IsMobile() {
+				poolSize = 8
+			}
 			pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
 			if poolErr != nil {
 				logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
-				// Fallback: use Gnomon's single connection
 				if gnomon.Index != nil && gnomon.Index.RPC != nil && gnomon.Index.RPC.RPC != nil {
 					pool = []*jrpc2.Client{gnomon.Index.RPC.RPC}
 					poolCleanup = func() {} // Don't close Gnomon's connection
+				} else {
+					pool = nil
+					poolCleanup = func() {}
 				}
+			}
+
+			// Scale batch size based on device class for better progress granularity.
+			batchSize := 200
+			if !a.Driver().Device().IsMobile() {
+				batchSize = 500
 			}
 
 			var passed map[string]bool
 			var batchStats batchPrefilterStats
 			var batchErr error
 			if len(pool) > 0 {
-				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, 500, 3, pool, func(completed, total int) {
+				passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, batchSize, 3, pool, func(completed, total int) {
 					results.Color = colors.Yellow
 					// Time-based progress calculation
 					now := time.Now()
@@ -19619,6 +19710,65 @@ func layoutTELA() fyne.CanvasObject {
 
 		logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
 		keepProgressVisible = false
+
+		// Start background pre-warm for TELA apps on mobile to reduce launch latency.
+		// Pre-warm up to 3 most recently used apps from history.
+		if a.Driver().Device().IsMobile() && len(telaSearch) > 0 {
+			go func() {
+				time.Sleep(3 * time.Second) // Wait for UI to settle
+				if !strings.Contains(session.Domain, ".tela") || globals.Exit_In_Progress {
+					return
+				}
+
+				// Get recently used SCIDs from history
+				var recentSCIDs []string
+				historyRaw, err := GetEncryptedValue("TELA History", []byte("RecentSCIDs"))
+				if err == nil && len(historyRaw) > 0 {
+					json.Unmarshal(historyRaw, &recentSCIDs)
+				}
+
+				// Pre-warm up to 3 apps that are in our search results
+				preWarmCount := 0
+				for _, scid := range recentSCIDs {
+					if preWarmCount >= 3 {
+						break
+					}
+					// Check if this SCID is in our current results
+					found := false
+					for _, entry := range telaSearch {
+						if entry.SCID == scid {
+							found = true
+							break
+						}
+					}
+					if !found {
+						continue
+					}
+
+					// Check if already served
+					alreadyServed := false
+					for _, s := range tela.GetServerInfo() {
+						if s.SCID == scid {
+							alreadyServed = true
+							break
+						}
+					}
+					if alreadyServed {
+						continue
+					}
+
+					logger.Printf("[TELA-PREWARM] Pre-warming SCID %s (%d/3)\n", scid, preWarmCount+1)
+					if _, err := tela.ServeTELA(scid, session.Daemon); err != nil {
+						logger.Printf("[TELA-PREWARM] Failed to pre-warm %s: %v\n", scid, err)
+					} else {
+						preWarmCount++
+					}
+				}
+				if preWarmCount > 0 {
+					logger.Printf("[TELA-PREWARM] Pre-warmed %d apps\n", preWarmCount)
+				}
+			}()
+		}
 	}
 
 	scheduleTelaWarmup = func() {
@@ -20463,19 +20613,39 @@ func layoutTELA() fyne.CanvasObject {
 					} else {
 						pushTELANavigation(s)
 
-						err = fyne.CurrentApp().OpenURL(url)
-						if err != nil {
-							logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-							errorText.Text = "error could not open browser"
-							errorText.Color = colors.Red
+						if a.Driver().Device().IsMobile() {
+							go func() {
+								time.Sleep(2 * time.Second)
+								err = fyne.CurrentApp().OpenURL(url)
+								if err != nil {
+									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+									errorText.Text = "error could not open browser"
+									errorText.Color = colors.Red
 
-							if isMobileDevice() {
-								fyne.Do(func() {
-									dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-								})
+									if isMobileDevice() {
+										fyne.Do(func() {
+											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+										})
+									}
+								} else if isMobileDevice() {
+									logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
+								}
+							}()
+						} else {
+							err = fyne.CurrentApp().OpenURL(url)
+							if err != nil {
+								logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+								errorText.Text = "error could not open browser"
+								errorText.Color = colors.Red
+
+								if isMobileDevice() {
+									fyne.Do(func() {
+										dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+									})
+								}
+							} else if isMobileDevice() {
+								logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
 							}
-						} else if isMobileDevice() {
-							logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
 						}
 					}
 
@@ -20543,15 +20713,32 @@ func layoutTELA() fyne.CanvasObject {
 						} else {
 							pushTELANavigation(s)
 
-							err = fyne.CurrentApp().OpenURL(url)
-							if err != nil {
-								errorText.Text = "error could not open browser"
-								errorText.Color = colors.Red
+							if a.Driver().Device().IsMobile() {
+								go func() {
+									time.Sleep(2 * time.Second)
+									err = fyne.CurrentApp().OpenURL(url)
+									if err != nil {
+										errorText.Text = "error could not open browser"
+										errorText.Color = colors.Red
 
-								if isMobileDevice() {
-									fyne.Do(func() {
-										dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-									})
+										if isMobileDevice() {
+											fyne.Do(func() {
+												dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+											})
+										}
+									}
+								}()
+							} else {
+								err = fyne.CurrentApp().OpenURL(url)
+								if err != nil {
+									errorText.Text = "error could not open browser"
+									errorText.Color = colors.Red
+
+									if isMobileDevice() {
+										fyne.Do(func() {
+											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+										})
+									}
 								}
 							}
 						}
@@ -21012,20 +21199,37 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		} else {
 			pushTELANavigation(index.SCID)
 
-			err = fyne.CurrentApp().OpenURL(url)
-			if err != nil {
-				logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-				errorText.Text = "error could not open browser"
-				errorText.Color = colors.Red
+			if a.Driver().Device().IsMobile() {
+				go func() {
+					time.Sleep(2 * time.Second)
+					openErr := fyne.CurrentApp().OpenURL(url)
+					if openErr != nil {
+						logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
+						fyne.Do(func() {
+							errorText.Text = "error could not open browser"
+							errorText.Color = colors.Red
+							errorText.Refresh()
+						})
+					} else if isMobileDevice() {
+						logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
+					}
+				}()
+			} else {
+				err = fyne.CurrentApp().OpenURL(url)
+				if err != nil {
+					logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+					errorText.Text = "error could not open browser"
+					errorText.Color = colors.Red
 
-				if isMobileDevice() {
-					fyne.Do(func() {
-						dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-					})
+					if isMobileDevice() {
+						fyne.Do(func() {
+							dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+						})
+					}
+					errorText.Refresh()
+				} else if isMobileDevice() {
+					logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
 				}
-				errorText.Refresh()
-			} else if isMobileDevice() {
-				logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
 			}
 		}
 	}
@@ -21070,64 +21274,97 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			launchStatus.Refresh()
 
 			progressDone := make(chan struct{})
+			progressStart := time.Now()
 			go func() {
-				for i := 0; ; i++ {
+				const cap = 0.95
+				const tau = 10.0
+				for {
 					select {
 					case <-progressDone:
 						return
-					case <-time.After(150 * time.Millisecond):
-						val := 0.12 + 0.55*(0.5+0.5*math.Sin(float64(i)*0.15))
-						fyne.Do(func() {
+					case <-time.After(200 * time.Millisecond):
+						elapsed := time.Since(progressStart).Seconds()
+						val := cap * (1.0 - math.Exp(-elapsed/tau))
+						if val > cap {
+							val = cap
+						}
+						uiDo(func() {
 							if launchProgress != nil && !launchProgress.Hidden {
 								launchProgress.SetValue(val)
+							}
+							if launchStatus != nil && !launchStatus.Hidden {
+								if val < 0.30 {
+									launchStatus.Text = "Connecting to node..."
+								} else if val < 0.60 {
+									launchStatus.Text = "Fetching content..."
+								} else if val < 0.85 {
+									launchStatus.Text = "Preparing app..."
+								} else {
+									launchStatus.Text = "Almost ready..."
+								}
 							}
 						})
 					}
 				}
 			}()
 
-			cleanupLaunch := func() {
+			cleanupLaunch := func(failed bool) {
 				close(progressDone)
 				telaLaunchingSCIDsGlobal.Lock()
 				delete(telaLaunchingSCIDsGlobal.m, index.SCID)
 				telaLaunchingSCIDsGlobal.Unlock()
 				uiDo(func() {
-					launchProgress.Hide()
-					launchStatus.Hide()
-					btnServer.Enable()
+					if launchProgress != nil {
+						if failed {
+							launchProgress.SetValue(launchProgress.value)
+							launchProgress.Refresh()
+						} else {
+							launchProgress.SetValue(1.0)
+							launchProgress.Refresh()
+						}
+					}
+					if launchStatus != nil {
+						if failed {
+							launchStatus.Text = "Failed"
+							launchStatus.Color = colors.Red
+						} else {
+							launchStatus.Text = "Done!"
+							launchStatus.Color = colors.Green
+						}
+						launchStatus.Refresh()
+					}
+					time.AfterFunc(400*time.Millisecond, func() {
+						uiDo(func() {
+							if launchProgress != nil {
+								launchProgress.Hide()
+							}
+							if launchStatus != nil {
+								launchStatus.Hide()
+							}
+							btnServer.Enable()
+						})
+					})
 				})
 			}
 
 			go func() {
-				if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
-					url, err := url.Parse(link)
-					if err != nil {
-						logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-						errorText.Text = "error could parse URL"
-						errorText.Color = colors.Red
-						errorText.Refresh()
-					} else {
-						pushTELANavigation(index.SCID)
-
-						if err := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); err != nil {
-							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
-						}
-
-						err = fyne.CurrentApp().OpenURL(url)
-						if err != nil {
-							logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-							errorText.Text = "error could not open browser"
-							errorText.Color = colors.Red
-
-							if isMobileDevice() {
-								fyne.Do(func() {
-									dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-								})
-							}
-						} else {
-							logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
-						}
+				openURLAfterDelay := func(link string) {
+					if a.Driver().Device().IsMobile() {
+						time.Sleep(2 * time.Second)
 					}
+					if u, perr := url.Parse(link); perr == nil {
+						fyne.CurrentApp().OpenURL(u)
+					}
+				}
+
+				if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
+					pushTELANavigation(index.SCID)
+
+					if err := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); err != nil {
+						logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
+					}
+
+					go openURLAfterDelay(link)
 
 					uiDo(func() {
 						textStatus.Text = "   Online"
@@ -21138,64 +21375,81 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						linkOpenInBrowser.Show()
 					})
 
-					cleanupLaunch()
+					cleanupLaunch(false)
 				} else {
 					if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 						generation := currentWalletGeneration()
 						go func() {
 							if !isWalletGenerationActive(generation) {
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
-							linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
-							if err != nil {
-								logger.Errorf("[Engram] Open TELA link: %s\n", err)
+							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							if permErr != nil {
+								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
 								errorText.Text = "error could not open TELA"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
 							if linkPermission != xswd.Allow {
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
-							link, err := serveTELAUpdates(index.SCID)
-							if err != nil {
-								logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-								errorText.Text = telaErrorToString(err)
+							servedLink, serveErr := serveTELAUpdates(index.SCID)
+							if serveErr != nil {
+								logger.Errorf("[Engram] Error serving TELA: %s\n", serveErr)
+								errorText.Text = telaErrorToString(serveErr)
 								errorText.Color = colors.Red
 								errorText.Refresh()
-								cleanupLaunch()
+								cleanupLaunch(true)
 								return
 							}
 
-							url, err := url.Parse(link)
-							if err != nil {
-								logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+							parsedURL, parseErr := url.Parse(servedLink)
+							if parseErr != nil {
+								logger.Errorf("[Engram] TELA URL parse: %s\n", parseErr)
 								errorText.Text = "error could parse URL"
 								errorText.Color = colors.Red
 								errorText.Refresh()
 							} else {
 								pushTELANavigation(index.SCID)
 
-								err = fyne.CurrentApp().OpenURL(url)
-								if err != nil {
-									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-									errorText.Text = "error could not open browser"
-									errorText.Color = colors.Red
-
-									if isMobileDevice() {
-										fyne.Do(func() {
-											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-										})
-									}
+								if a.Driver().Device().IsMobile() {
+									go func() {
+										time.Sleep(2 * time.Second)
+										openErr := fyne.CurrentApp().OpenURL(parsedURL)
+										if openErr != nil {
+											logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
+											fyne.Do(func() {
+												errorText.Text = "error could not open browser"
+												errorText.Color = colors.Red
+												errorText.Refresh()
+											})
+										} else {
+											logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+										}
+									}()
 								} else {
-									logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+									openErr := fyne.CurrentApp().OpenURL(parsedURL)
+									if openErr != nil {
+										logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
+										errorText.Text = "error could not open browser"
+										errorText.Color = colors.Red
+
+										if isMobileDevice() {
+											fyne.Do(func() {
+												dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
+											})
+										}
+									} else {
+										logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
+									}
 								}
 							}
 
@@ -21208,12 +21462,11 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								linkOpenInBrowser.Show()
 							})
 
-							err = StoreEncryptedValue("TELA History", []byte(index.SCID), []byte(""))
-							if err != nil {
-								logger.Errorf("[Engram] Error saving TELA search result: %s\n", err)
+							if saveErr := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); saveErr != nil {
+								logger.Errorf("[Engram] Error saving TELA search result: %s\n", saveErr)
 							}
 
-							cleanupLaunch()
+							cleanupLaunch(false)
 						}()
 					} else {
 						fyne.Do(func() {
@@ -21222,7 +21475,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							errorText.Color = colors.Red
 							errorText.Refresh()
 						})
-						cleanupLaunch()
+						cleanupLaunch(true)
 					}
 				}
 			}()
