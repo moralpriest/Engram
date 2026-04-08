@@ -18814,7 +18814,6 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		cachedDisplay := loadTelaDisplayCache()
-		hasDisplayCache := len(cachedDisplay) > 0
 		if len(cachedDisplay) > 0 {
 			for _, entry := range cachedDisplay {
 				if !isDisplayableTelaApp(entry.INDEX) {
@@ -18837,8 +18836,17 @@ func layoutTELA() fyne.CanvasObject {
 			logger.Debugf("[Engram] Could not get stored TELA SCIDs: %s\n", err)
 		} else {
 			// Have stored SCIDs
-			if len(telaSCIDs) == 0 {
-				json.Unmarshal(storedSCIDs, &telaSCIDs)
+			var unmarshaledSCIDs []string
+			if err := json.Unmarshal(storedSCIDs, &unmarshaledSCIDs); err == nil {
+				scidMap := make(map[string]bool)
+				for _, sc := range telaSCIDs {
+					scidMap[sc] = true
+				}
+				for _, sc := range unmarshaledSCIDs {
+					if !scidMap[sc] {
+						telaSCIDs = append(telaSCIDs, sc)
+					}
+				}
 			}
 
 			fyne.Do(func() {
@@ -18876,7 +18884,18 @@ func layoutTELA() fyne.CanvasObject {
 				atomic.AddInt64(&indexInfoCalls, int64(len(cacheMissed)))
 			}
 
-			if !hasDisplayCache {
+			var searchMap = make(map[string]bool)
+			for _, entry := range telaSearch {
+				searchMap[entry.SCID] = true
+			}
+			var missingSCIDs []string
+			for _, sc := range telaSCIDs {
+				if !searchMap[sc] {
+					missingSCIDs = append(missingSCIDs, sc)
+				}
+			}
+
+			if len(missingSCIDs) > 0 {
 				cachedAdded := int64(0)
 				var cachedMu sync.Mutex
 				cachedWorkers := workerPoolSize / 2
@@ -18889,7 +18908,7 @@ func layoutTELA() fyne.CanvasObject {
 				cachedSlots := make(chan struct{}, cachedWorkers)
 				var cachedWg sync.WaitGroup
 
-				for i, sc := range telaSCIDs {
+				for i, sc := range missingSCIDs {
 					if !walletapi.Connected {
 						break
 					}
@@ -18917,7 +18936,7 @@ func layoutTELA() fyne.CanvasObject {
 
 						if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
 							if atomic.AddInt64(&cachedAdded, 1)%8 == 0 {
-								results.Text = fmt.Sprintf("  Adding... (%d / %d)", idx+1, len(telaSCIDs))
+								results.Text = fmt.Sprintf("  Adding... (%d / %d)", idx+1, len(missingSCIDs))
 								results.Color = colors.Yellow
 								fyne.Do(func() {
 									results.Refresh()
@@ -19075,55 +19094,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 		sort.Strings(allSCIDs)
 
-		if !restrictiveMode && !rescanRecheck && heightDelta > 0 {
-			logger.Printf("[TELA-SEARCH] Beginning delta scan interaction check for %d SCIDs\n", len(allSCIDs))
-			fyne.Do(func() {
-				setTelaStatus(fmt.Sprintf("Filtering %d SCIDs against Gnomon...", len(allSCIDs)), colors.Yellow)
-				showInfiniteTelaProgress()
-				results.Refresh()
-			})
-
-			candidateSet := map[string]bool{}
-			// Use known cached SCIDs (telaSCIDs) instead of candidateCache.validSCIDs()
-			// because telaSCIDs is the authoritative list of confirmed TELA apps
-			for _, sc := range telaSCIDs {
-				candidateSet[sc] = true
-			}
-			skippedNoHeights := 0
-			for i, sc := range allSCIDs {
-				if i > 0 && i%5000 == 0 {
-					logger.Printf("[TELA-SEARCH] Delta scan progress: %d / %d SCIDs checked\n", i, len(allSCIDs))
-					// Yield slightly to prevent hogging thread
-					time.Sleep(10 * time.Millisecond)
-				}
-				heights := gnomon.GetSCIDInteractionHeight(sc)
-				if len(heights) == 0 {
-					// Skip - Gnomon may not have indexed this SCID's interactions yet.
-					// SCIDs with missing interaction data will be caught in subsequent scans
-					// once Gnomon finishes indexing. New TELA apps are infrequent, so
-					// this trade-off is acceptable to avoid scanning ~50k false positives.
-					// See TELA_DELTA_SCAN_ISSUE.md for details.
-					skippedNoHeights++
-					continue
-				}
-				for _, h := range heights {
-					if h > storedIndexedHeight {
-						candidateSet[sc] = true
-						break
-					}
-				}
-			}
-			if skippedNoHeights > 0 {
-				logger.Printf("[TELA] Delta scan: skipped %d SCIDs with no interaction heights (Gnomon may not have indexed them yet)\n", skippedNoHeights)
-			}
-			if len(candidateSet) > 0 {
-				allSCIDs = make([]string, 0, len(candidateSet))
-				for sc := range candidateSet {
-					allSCIDs = append(allSCIDs, sc)
-				}
-				sort.Strings(allSCIDs)
-			}
-		}
+		// Delta scan block removed as it drops valid SCIDs with no interaction heights.
 
 		// Create set of known TELA SCIDs for O(1) lookup
 		knownTelaSCIDs := make(map[string]bool, len(telaSCIDs))

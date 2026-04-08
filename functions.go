@@ -6364,28 +6364,38 @@ func engramCanStoreMethod(method string) bool {
 // Set XSWD permissions to the local Graviton tree
 func setPermissions() {
 	// Save permissions with dual storage
-	data, err := json.Marshal(&remoteAccess.WS.global.permissions)
+	data, err := json.Marshal(remoteAccess.WS.global.permissions)
 	if err != nil {
 		logger.Errorf("[Engram] setPermissions: %s\n", err)
-	} else {
-		// Try encrypted storage first (when wallet available)
-		if engram.Disk != nil {
-			err = StoreEncryptedValue("XSWD", []byte("Globals"), data)
-			if err != nil {
-				logger.Debugf("[Engram] setPermissions (encrypted): %s\n", err)
-			} else {
-				logger.Printf("[Engram] Permissions saved to encrypted storage: %d bytes", len(data))
-			}
-		}
+		return
+	}
 
-		// Always save to unencrypted storage as fallback
-		err = StoreValue("XSWDUnencrypted", []byte("Globals"), data)
+	// Validate that we have valid JSON before storing
+	var test map[string]xswd.Permission
+	if err := json.Unmarshal(data, &test); err != nil {
+		logger.Errorf("[Engram] setPermissions: Generated invalid JSON: %v", err)
+			// Continue anyway - the data was successfully marshaled above
+	}
+
+	// Try encrypted storage first (when wallet available)
+	if engram.Disk != nil {
+		err = StoreEncryptedValue("XSWD", []byte("Globals"), data)
 		if err != nil {
-			logger.Debugf("[Engram] setPermissions (fallback): %s\n", err)
+			logger.Debugf("[Engram] setPermissions (encrypted): %s\n", err)
 		} else {
-			logger.Printf("[Engram] Permissions saved to fallback storage: %d bytes", len(data))
+			logger.Printf("[Engram] Permissions saved to encrypted storage: %d bytes", len(data))
 		}
 	}
+
+	// Always save to unencrypted storage as fallback with synchronization
+	remoteAccess.WS.Lock()
+	err = StoreValue("XSWDUnencrypted", []byte("Globals"), data)
+	if err != nil {
+		logger.Debugf("[Engram] setPermissions (fallback): %s\n", err)
+	} else {
+		logger.Printf("[Engram] Permissions saved to fallback storage: %d bytes", len(data))
+	}
+	remoteAccess.WS.Unlock()
 
 	// Force immediate save to ensure data is written
 	logger.Printf("[Engram] setPermissions completed - permissions saved to dual storage")
@@ -6897,24 +6907,29 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 		if err != nil {
 			logger.Printf("[Engram] getPermissions: fallback permissions not found: %s (using defaults)\n", err)
 		} else {
-			// Load fallback permissions into a temporary map
-			var storedPermissions map[string]xswd.Permission
-			if err := json.Unmarshal(stored, &storedPermissions); err != nil {
-				logger.Errorf("[Engram] getPermissions: fallback JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
-				// Delete corrupted data so it will be recreated on next save
-				if delErr := DeleteKey("XSWDUnencrypted", []byte("Globals")); delErr != nil {
-					logger.Debugf("[Engram] getPermissions: could not delete corrupted fallback globals: %s\n", delErr)
-				}
+			// Validate we have data before attempting to unmarshal
+			if len(stored) == 0 {
+				logger.Printf("[Engram] getPermissions: fallback storage empty (using defaults)\n")
 			} else {
-				logger.Printf("[Engram] getPermissions: Successfully loaded %d fallback permissions\n", len(storedPermissions))
-				// Merge fallback permissions with defaults (stored takes precedence)
-				for method, permission := range storedPermissions {
-					if _, exists := remoteAccess.WS.global.permissions[method]; exists {
-						remoteAccess.WS.global.permissions[method] = permission
-						logger.Printf("[Engram] getPermissions: Merged fallback permission for %s: %s", method, permission)
+				// Load fallback permissions into a temporary map
+				var storedPermissions map[string]xswd.Permission
+				if err := json.Unmarshal(stored, &storedPermissions); err != nil {
+					logger.Errorf("[Engram] getPermissions: fallback JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
+					// Delete corrupted data so it will be recreated on next save
+					if delErr := DeleteKey("XSWDUnencrypted", []byte("Globals")); delErr != nil {
+						logger.Debugf("[Engram] getPermissions: could not delete corrupted fallback globals: %s\n", delErr)
 					}
+				} else {
+					logger.Printf("[Engram] getPermissions: Successfully loaded %d fallback permissions\n", len(storedPermissions))
+					// Merge fallback permissions with defaults (stored takes precedence)
+					for method, permission := range storedPermissions {
+						if _, exists := remoteAccess.WS.global.permissions[method]; exists {
+							remoteAccess.WS.global.permissions[method] = permission
+							logger.Printf("[Engram] getPermissions: Merged fallback permission for %s: %s", method, permission)
+						}
+					}
+					logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 				}
-				logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 			}
 		}
 
@@ -7183,18 +7198,19 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			if ad.Permissions == nil {
 				ad.Permissions = make(map[string]xswd.Permission)
 			}
-			// Load stored per-app permissions first (they persist across reconnections)
+			remoteAccess.WS.RLock()
+			for k, v := range remoteAccess.WS.global.permissions {
+				ad.Permissions[k] = v
+			}
+			remoteAccess.WS.RUnlock()
+
+			// Load stored per-app permissions (they persist across reconnections and override globals)
 			if storedPerms, _ := GetAppPermissions(ad.Name); storedPerms != nil {
 				for k, v := range storedPerms {
 					ad.Permissions[k] = v
 				}
 				logger.Printf("[Engram] Loaded %d stored permissions for app %s\n", len(storedPerms), ad.Name)
 			}
-			remoteAccess.WS.RLock()
-			for k, v := range remoteAccess.WS.global.permissions {
-				ad.Permissions[k] = v
-			}
-			remoteAccess.WS.RUnlock()
 		}
 
 		// If wallet is set to connect to all requests, connect to app
@@ -7828,8 +7844,14 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	go refreshXSWDList()
 
-	// Persist permission for this app if granted
-	if choice.IsPositive() {
+	// Persist permission for this app if applicable
+	if choice == xswd.AlwaysAllow || choice == xswd.AlwaysDeny {
+		if ad.Permissions == nil {
+			ad.Permissions = make(map[string]xswd.Permission)
+		}
+		ad.Permissions[method] = choice
+		StoreAppPermissions(ad.Name, ad.Permissions)
+	} else if choice.IsPositive() {
 		StoreAppPermissions(ad.Name, ad.Permissions)
 	}
 
