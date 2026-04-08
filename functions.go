@@ -5258,39 +5258,6 @@ func telaHexagonColor(r float64) fyne.Resource {
 
 // Display ratings overview and the details of each rating for the TELA SCID
 func viewTELARatingsOverlay(name, scid string) (err error) {
-	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
-
-	header := canvas.NewText("TELA  RATINGS", colors.Gray)
-	header.TextSize = 16
-	header.Alignment = fyne.TextAlignCenter
-	header.TextStyle = fyne.TextStyle{Bold: true}
-
-	if len(name) > 30 {
-		name = fmt.Sprintf("%s...", name[0:30])
-	}
-
-	nameHdr := canvas.NewText(name, colors.Account)
-	nameHdr.Alignment = fyne.TextAlignCenter
-	nameHdr.TextStyle = fyne.TextStyle{Bold: true}
-
-	labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
-	labelSCID.TextSize = 14
-	labelSCID.Alignment = fyne.TextAlignLeading
-	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
-
-	textSCID := widget.NewRichTextWithText(scid)
-	textSCID.Wrapping = fyne.TextWrapWord
-
-	textLikes := widget.NewRichTextFromMarkdown("Likes:")
-	textDislikes := widget.NewRichTextFromMarkdown("Dislikes:")
-	textAverage := widget.NewRichTextFromMarkdown("Average:")
-
-	ratingsBox := container.NewVBox(labelSCID, textSCID)
-
 	ratings, err := tela.GetRating(scid, session.Daemon, 0)
 	if err != nil {
 		logger.Errorf("[Engram] GetRating: %s\n", err)
@@ -5298,167 +5265,201 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		return
 	}
 
-	// Remove overlays synchronously (bypass uiDo since we're on main goroutine)
-	overlays := session.Window.Canvas().Overlays()
-	for _, o := range overlays.List() {
-		overlays.Remove(o)
-	}
-	if res.loading != nil {
-		res.loading.Hide()
-		res.loading.Stop()
-		res.loading = nil
-	}
+	uiDo(func() {
+		rectWidth90 := canvas.NewRectangle(color.Transparent)
+		rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlay := session.Window.Canvas().Overlays()
+		rectSpacer := canvas.NewRectangle(color.Transparent)
+		rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	ratingsBox.Add(container.NewHBox(textLikes, canvas.NewText(fmt.Sprintf("%d", ratings.Likes), colors.Green)))
-	ratingsBox.Add(container.NewHBox(textDislikes, canvas.NewText(fmt.Sprintf("%d", ratings.Dislikes), colors.Red)))
-	ratingsBox.Add(container.NewHBox(textAverage, canvas.NewText(fmt.Sprintf("%0.1f/10", ratings.Average), colors.Account)))
+		header := canvas.NewText("TELA  RATINGS", colors.Gray)
+		header.TextSize = 16
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
 
-	linkRate := widget.NewHyperlinkWithStyle("Rate SCID", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	linkRate.OnTapped = func() {
-		rateTELAOverlay(name, scid)
-	}
-	linkRate.Hide()
-
-	// Check if wallet has rated SCID
-	if gnomon.Index != nil {
-		ratingStore, _ := gnomon.GetSCIDValuesByKey(scid, engram.Disk.GetAddress().String())
-		if ratingStore == nil {
-			linkRate.Show()
+		if len(name) > 30 {
+			name = fmt.Sprintf("%s...", name[0:30])
 		}
-	}
 
-	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
-		overlay.Top().Hide()
-		overlay.Remove(overlay.Top())
-		overlay.Remove(overlay.Top())
-	})
+		nameHdr := canvas.NewText(name, colors.Account)
+		nameHdr.Alignment = fyne.TextAlignCenter
+		nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSeparator := widget.NewRichTextFromMarkdown("")
-	labelSeparator.Wrapping = fyne.TextWrapOff
-	labelSeparator.ParseMarkdown("---")
-	labelSeparator2 := widget.NewRichTextFromMarkdown("")
-	labelSeparator2.Wrapping = fyne.TextWrapOff
-	labelSeparator2.ParseMarkdown("---")
+		labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
+		labelSCID.TextSize = 14
+		labelSCID.Alignment = fyne.TextAlignLeading
+		labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
-	span := canvas.NewRectangle(color.Transparent)
-	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+		textSCID := widget.NewRichTextWithText(scid)
+		textSCID.Wrapping = fyne.TextWrapWord
 
-	userRatingsBox := container.NewVBox()
+		textLikes := widget.NewRichTextFromMarkdown("Likes:")
+		textDislikes := widget.NewRichTextFromMarkdown("Dislikes:")
+		textAverage := widget.NewRichTextFromMarkdown("Average:")
 
-	for _, r := range ratings.Ratings {
-		ratingString, err := tela.Ratings.ParseString(r.Rating)
-		if err != nil {
-			ratingString = fmt.Sprintf("%d", r.Rating)
+		ratingsBox := container.NewVBox(labelSCID, textSCID)
+
+		overlays := session.Window.Canvas().Overlays()
+		for _, o := range overlays.List() {
+			overlays.Remove(o)
 		}
+		if res.loading != nil {
+			res.loading.Hide()
+			res.loading.Stop()
+			res.loading = nil
+		}
+
+		overlay := session.Window.Canvas().Overlays()
+
+		ratingsBox.Add(container.NewHBox(textLikes, canvas.NewText(fmt.Sprintf("%d", ratings.Likes), colors.Green)))
+		ratingsBox.Add(container.NewHBox(textDislikes, canvas.NewText(fmt.Sprintf("%d", ratings.Dislikes), colors.Red)))
+		ratingsBox.Add(container.NewHBox(textAverage, canvas.NewText(fmt.Sprintf("%0.1f/10", ratings.Average), colors.Account)))
+
+		linkRate := widget.NewHyperlinkWithStyle("Rate SCID", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		linkRate.OnTapped = func() {
+			rateTELAOverlay(name, scid)
+		}
+		linkRate.Hide()
+
+		// Check if wallet has rated SCID
+		if gnomon.Index != nil {
+			ratingStore, _ := gnomon.GetSCIDValuesByKey(scid, engram.Disk.GetAddress().String())
+			if ratingStore == nil {
+				linkRate.Show()
+			}
+		}
+
+		linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		})
 
 		labelSeparator := widget.NewRichTextFromMarkdown("")
 		labelSeparator.Wrapping = fyne.TextWrapOff
 		labelSeparator.ParseMarkdown("---")
+		labelSeparator2 := widget.NewRichTextFromMarkdown("")
+		labelSeparator2.Wrapping = fyne.TextWrapOff
+		labelSeparator2.ParseMarkdown("---")
 
-		labelAddress := widget.NewRichTextFromMarkdown(r.Address)
-		labelAddress.Wrapping = fyne.TextWrapWord
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		userRatingsBox.Add(
-			container.NewVBox(
-				labelAddress,
-				container.NewHBox(widget.NewRichTextFromMarkdown("Height:"), canvas.NewText(fmt.Sprintf("%d", r.Height), colors.Account)),
-				container.NewHBox(widget.NewRichTextFromMarkdown("Rating:"), canvas.NewText(fmt.Sprintf("%d", r.Rating), telaRatingColor(r.Rating))),
-				widget.NewRichTextFromMarkdown(ratingString),
-				labelSeparator,
+		userRatingsBox := container.NewVBox()
+
+		for _, r := range ratings.Ratings {
+			ratingString, errRating := tela.Ratings.ParseString(r.Rating)
+			if errRating != nil {
+				ratingString = fmt.Sprintf("%d", r.Rating)
+			}
+
+			labelSeparator := widget.NewRichTextFromMarkdown("")
+			labelSeparator.Wrapping = fyne.TextWrapOff
+			labelSeparator.ParseMarkdown("---")
+
+			labelAddress := widget.NewRichTextFromMarkdown(r.Address)
+			labelAddress.Wrapping = fyne.TextWrapWord
+
+			userRatingsBox.Add(
+				container.NewVBox(
+					labelAddress,
+					container.NewHBox(widget.NewRichTextFromMarkdown("Height:"), canvas.NewText(fmt.Sprintf("%d", r.Height), colors.Account)),
+					container.NewHBox(widget.NewRichTextFromMarkdown("Rating:"), canvas.NewText(fmt.Sprintf("%d", r.Rating), telaRatingColor(r.Rating))),
+					widget.NewRichTextFromMarkdown(ratingString),
+					labelSeparator,
+				),
+			)
+		}
+
+		userRatingsBoxScroll := container.NewVScroll(
+			container.NewHBox(
+				layout.NewSpacer(),
+				container.NewVBox(
+					ratingsBox,
+					rectWidth90,
+					container.NewHBox(
+						linkRate,
+						layout.NewSpacer(),
+					),
+					rectSpacer,
+					rectSpacer,
+					labelSeparator2,
+					rectSpacer,
+					rectSpacer,
+					userRatingsBox,
+				),
+				layout.NewSpacer(),
 			),
 		)
-	}
+		userRatingsBoxScroll.SetMinSize(fyne.NewSize(ui.Width*0.80, ui.Height*0.50))
 
-	userRatingsBoxScroll := container.NewVScroll(
-		container.NewHBox(
-			layout.NewSpacer(),
-			container.NewVBox(
-				ratingsBox,
-				rectWidth90,
-				container.NewHBox(
-					linkRate,
-					layout.NewSpacer(),
-				),
-				rectSpacer,
-				rectSpacer,
-				labelSeparator2,
-				rectSpacer,
-				rectSpacer,
-				userRatingsBox,
+		overlayCont := container.NewVBox(
+			span,
+			container.NewCenter(
+				header,
 			),
-			layout.NewSpacer(),
-		),
-	)
-	userRatingsBoxScroll.SetMinSize(fyne.NewSize(ui.Width*0.80, ui.Height*0.50))
-
-	overlayCont := container.NewVBox(
-		span,
-		container.NewCenter(
-			header,
-		),
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		container.NewCenter(
-			nameHdr,
-		),
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		labelSeparator,
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-		),
-		userRatingsBoxScroll,
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-	)
-
-	bottom := container.NewStack(
-		container.NewVBox(
-			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				nameHdr,
 			),
 			rectSpacer,
 			rectSpacer,
 			rectSpacer,
+			labelSeparator,
 			rectSpacer,
-		),
-	)
-
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
-		),
-	)
-
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			container.NewBorder(
-				nil,
-				bottom,
-				nil,
-				nil,
-				overlayCont,
+			rectSpacer,
+			rectSpacer,
+			container.NewHBox(
+				layout.NewSpacer(),
 			),
-		),
-	)
+			userRatingsBoxScroll,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+			rectSpacer,
+		)
+
+		bottom := container.NewStack(
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+				container.NewCenter(
+					layout.NewSpacer(),
+					linkBack,
+					layout.NewSpacer(),
+				),
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+			),
+		)
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewBorder(
+					nil,
+					bottom,
+					nil,
+					nil,
+					overlayCont,
+				),
+			),
+		)
+	})
 
 	return
 }
