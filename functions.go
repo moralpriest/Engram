@@ -6375,7 +6375,7 @@ func setPermissions() {
 	var test map[string]xswd.Permission
 	if err := json.Unmarshal(data, &test); err != nil {
 		logger.Errorf("[Engram] setPermissions: Generated invalid JSON: %v", err)
-			// Continue anyway - the data was successfully marshaled above
+		// Continue anyway - the data was successfully marshaled above
 	}
 
 	// Try encrypted storage first (when wallet available)
@@ -7015,20 +7015,19 @@ func toggleXSWD(endpoint string) {
 
 		logger.Printf("[Engram] Starting XSWD server %s\n", endpoint)
 
-		// Check if port is already in use before attempting to start
+		// Check if port is already in use and wait up to 10 seconds for release
 		if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
 			if listener, err := net.ListenTCP("tcp", addr); err != nil {
-				logger.Printf("[Engram] Port %s already in use, waiting for release...\n", endpoint)
-				// Wait for port to be released
-				for i := 0; i < 5; i++ {
+				logger.Printf("[Engram] Port %s in use, waiting up to 10 seconds for release...\n", endpoint)
+				for i := 0; i < 10; i++ {
 					time.Sleep(time.Second)
 					if listener, err := net.ListenTCP("tcp", addr); err == nil {
 						listener.Close()
 						logger.Printf("[Engram] Port %s now available\n", endpoint)
 						break
 					}
-					if i == 4 {
-						logger.Errorf("[Engram] Port %s still in use after 5 seconds\n", endpoint)
+					if i == 9 {
+						logger.Errorf("[Engram] Port %s still in use after 10 seconds\n", endpoint)
 					}
 				}
 			} else {
