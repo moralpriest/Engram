@@ -91,11 +91,17 @@ var telaStoppingSCIDsGlobal struct {
 	m map[string]bool
 }
 
+var telaLaunchStartTimesGlobal struct {
+	sync.Mutex
+	m map[string]time.Time
+}
+
 func init() {
 	telaLaunchingSCIDsGlobal.m = make(map[string]bool)
 	telaLaunchCancelChansGlobal.m = make(map[string]chan struct{})
 	telaRunningAppsGlobal.m = make(map[string]bool)
 	telaStoppingSCIDsGlobal.m = make(map[string]bool)
+	telaLaunchStartTimesGlobal.m = make(map[string]time.Time)
 }
 
 func isMobileDevice() bool {
@@ -17397,22 +17403,7 @@ func layoutTELA() fyne.CanvasObject {
 	var telaWarmupScheduled atomic.Bool
 	var telaWorkActive atomic.Bool
 	var telaLaunchPending atomic.Bool
-	var telaLaunchingSCIDs struct {
-		sync.Mutex
-		m map[string]bool
-	}
-	telaLaunchingSCIDs.m = make(map[string]bool)
-	var telaLaunchCancelChans struct {
-		sync.Mutex
-		m map[string]chan struct{}
-	}
-	telaLaunchCancelChans.m = make(map[string]chan struct{})
-
-	var telaStoppingSCIDs struct {
-		sync.Mutex
-		m map[string]bool
-	}
-	telaStoppingSCIDs.m = make(map[string]bool)
+	var activeRowUpdaters sync.Map // fyne.CanvasObject -> scid
 	var telaNetworkPaused atomic.Bool
 
 	frame := &iframe{}
@@ -17795,13 +17786,13 @@ func layoutTELA() fyne.CanvasObject {
 		name, scid := parseTelaListEntry(raw)
 		nameLabel.SetText(name)
 
-		telaLaunchingSCIDs.Lock()
-		isLaunching := telaLaunchingSCIDs.m[scid]
-		telaLaunchingSCIDs.Unlock()
+		telaLaunchingSCIDsGlobal.Lock()
+		isLaunching := telaLaunchingSCIDsGlobal.m[scid]
+		telaLaunchingSCIDsGlobal.Unlock()
 
-		telaStoppingSCIDs.Lock()
-		isStopping := telaStoppingSCIDs.m[scid]
-		telaStoppingSCIDs.Unlock()
+		telaStoppingSCIDsGlobal.Lock()
+		isStopping := telaStoppingSCIDsGlobal.m[scid]
+		telaStoppingSCIDsGlobal.Unlock()
 
 		if isLaunching {
 			if launchProgress != nil {
@@ -17818,6 +17809,67 @@ func layoutTELA() fyne.CanvasObject {
 			startCloseBtn.SetText("Cancel")
 			startCloseBtn.SetIcon(theme.CancelIcon())
 			startCloseBtn.Enable()
+
+			// Sync UI with existing launch progress
+			if _, loaded := activeRowUpdaters.LoadOrStore(co, scid); !loaded {
+				go func(targetRow fyne.CanvasObject, rowSCID string) {
+					defer activeRowUpdaters.Delete(targetRow)
+
+					telaLaunchStartTimesGlobal.Lock()
+					startTime, ok := telaLaunchStartTimesGlobal.m[rowSCID]
+					telaLaunchStartTimesGlobal.Unlock()
+					if !ok {
+						return
+					}
+
+					const cap = 0.95
+					const tau = 10.0
+					for {
+						// Check if this row is still assigned to the same SCID
+						if current, ok := activeRowUpdaters.Load(targetRow); !ok || current != rowSCID {
+							return
+						}
+
+						telaLaunchingSCIDsGlobal.Lock()
+						stillLaunching := telaLaunchingSCIDsGlobal.m[rowSCID]
+						telaLaunchingSCIDsGlobal.Unlock()
+						if !stillLaunching {
+							return
+						}
+
+						elapsed := time.Since(startTime).Seconds()
+						val := cap * (1.0 - math.Exp(-elapsed/tau))
+						if val > cap {
+							val = cap
+						}
+
+						uiDo(func() {
+							if launchProgress != nil && !launchProgress.Hidden {
+								launchProgress.SetValue(val)
+							}
+							if launchStatus != nil && !launchStatus.Hidden {
+								telaStoppingSCIDsGlobal.Lock()
+								isStopping := telaStoppingSCIDsGlobal.m[rowSCID]
+								telaStoppingSCIDsGlobal.Unlock()
+								if isStopping {
+									launchStatus.Text = "Stopping..."
+								} else {
+									if val < 0.30 {
+										launchStatus.Text = "Connecting to node..."
+									} else if val < 0.60 {
+										launchStatus.Text = "Fetching content..."
+									} else if val < 0.85 {
+										launchStatus.Text = "Preparing app..."
+									} else {
+										launchStatus.Text = "Almost ready..."
+									}
+								}
+							}
+						})
+						time.Sleep(200 * time.Millisecond)
+					}
+				}(co, scid)
+			}
 		} else if isTelaActive(scid) {
 			if launchProgress != nil {
 				launchProgress.Hide()
@@ -17847,21 +17899,21 @@ func layoutTELA() fyne.CanvasObject {
 			toggleTelaFavorite(scid)
 		}
 		startCloseBtn.OnTapped = func() {
-			telaLaunchingSCIDs.Lock()
-			isLaunching := telaLaunchingSCIDs.m[scid]
-			telaLaunchingSCIDs.Unlock()
+			telaLaunchingSCIDsGlobal.Lock()
+			isLaunching := telaLaunchingSCIDsGlobal.m[scid]
+			telaLaunchingSCIDsGlobal.Unlock()
 
 			if isLaunching {
-				telaStoppingSCIDs.Lock()
-				telaStoppingSCIDs.m[scid] = true
-				telaStoppingSCIDs.Unlock()
+				telaStoppingSCIDsGlobal.Lock()
+				telaStoppingSCIDsGlobal.m[scid] = true
+				telaStoppingSCIDsGlobal.Unlock()
 
-				telaLaunchCancelChans.Lock()
-				if cancelChan, ok := telaLaunchCancelChans.m[scid]; ok {
+				telaLaunchCancelChansGlobal.Lock()
+				if cancelChan, ok := telaLaunchCancelChansGlobal.m[scid]; ok {
 					close(cancelChan)
-					delete(telaLaunchCancelChans.m, scid)
+					delete(telaLaunchCancelChansGlobal.m, scid)
 				}
-				telaLaunchCancelChans.Unlock()
+				telaLaunchCancelChansGlobal.Unlock()
 				if launchStatus != nil {
 					launchStatus.Text = "Stopping..."
 					launchStatus.Refresh()
@@ -17884,18 +17936,22 @@ func layoutTELA() fyne.CanvasObject {
 					return
 				}
 
-				telaLaunchingSCIDs.Lock()
-				if telaLaunchingSCIDs.m[scid] {
-					telaLaunchingSCIDs.Unlock()
+				telaLaunchingSCIDsGlobal.Lock()
+				if telaLaunchingSCIDsGlobal.m[scid] {
+					telaLaunchingSCIDsGlobal.Unlock()
 					return
 				}
-				telaLaunchingSCIDs.m[scid] = true
-				telaLaunchingSCIDs.Unlock()
+				telaLaunchingSCIDsGlobal.m[scid] = true
+				telaLaunchingSCIDsGlobal.Unlock()
 
 				cancelChan := make(chan struct{})
-				telaLaunchCancelChans.Lock()
-				telaLaunchCancelChans.m[scid] = cancelChan
-				telaLaunchCancelChans.Unlock()
+				telaLaunchCancelChansGlobal.Lock()
+				telaLaunchCancelChansGlobal.m[scid] = cancelChan
+				telaLaunchCancelChansGlobal.Unlock()
+
+				telaLaunchStartTimesGlobal.Lock()
+				telaLaunchStartTimesGlobal.m[scid] = time.Now()
+				telaLaunchStartTimesGlobal.Unlock()
 
 				if launchStatus != nil {
 					launchStatus.Text = "Starting..."
@@ -17908,55 +17964,24 @@ func layoutTELA() fyne.CanvasObject {
 				favoritesList.Refresh()
 
 				progressDone := make(chan struct{})
-				progressStart := time.Now()
 				var cancelled atomic.Bool
-				go func() {
-					const cap = 0.95
-					const tau = 10.0
-					for {
-						select {
-						case <-progressDone:
-							return
-						case <-cancelChan:
-							cancelled.Store(true)
-							return
-						case <-time.After(200 * time.Millisecond):
-							elapsed := time.Since(progressStart).Seconds()
-							val := cap * (1.0 - math.Exp(-elapsed/tau))
-							if val > cap {
-								val = cap
-							}
-							uiDo(func() {
-								if launchProgress != nil && !launchProgress.Hidden {
-									launchProgress.SetValue(val)
-								}
-								if launchStatus != nil && !launchStatus.Hidden {
-									if val < 0.30 {
-										launchStatus.Text = "Connecting to node..."
-									} else if val < 0.60 {
-										launchStatus.Text = "Fetching content..."
-									} else if val < 0.85 {
-										launchStatus.Text = "Preparing app..."
-									} else {
-										launchStatus.Text = "Almost ready..."
-									}
-								}
-							})
-						}
-					}
-				}()
+				// Progress updates are now handled by configureTelaListRow's sync goroutine
+				// which is triggered by the searchesList.Refresh() below.
 
 				cleanupLaunch := func(failed, cancelledLaunch bool) {
 					close(progressDone)
-					telaLaunchingSCIDs.Lock()
-					delete(telaLaunchingSCIDs.m, scid)
-					telaLaunchingSCIDs.Unlock()
-					telaLaunchCancelChans.Lock()
-					delete(telaLaunchCancelChans.m, scid)
-					telaLaunchCancelChans.Unlock()
-					telaStoppingSCIDs.Lock()
-					delete(telaStoppingSCIDs.m, scid)
-					telaStoppingSCIDs.Unlock()
+					telaLaunchingSCIDsGlobal.Lock()
+					delete(telaLaunchingSCIDsGlobal.m, scid)
+					telaLaunchingSCIDsGlobal.Unlock()
+					telaLaunchCancelChansGlobal.Lock()
+					delete(telaLaunchCancelChansGlobal.m, scid)
+					telaLaunchCancelChansGlobal.Unlock()
+					telaStoppingSCIDsGlobal.Lock()
+					delete(telaStoppingSCIDsGlobal.m, scid)
+					telaStoppingSCIDsGlobal.Unlock()
+					telaLaunchStartTimesGlobal.Lock()
+					delete(telaLaunchStartTimesGlobal.m, scid)
+					telaLaunchStartTimesGlobal.Unlock()
 					uiDo(func() {
 						if launchProgress != nil {
 							if failed || cancelledLaunch {
@@ -21322,6 +21347,58 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		launchStatus.Show()
 		btnServer.Text = "Cancel"
 		btnServer.SetIcon(theme.CancelIcon())
+
+		// Sync UI with existing launch progress
+		go func() {
+			telaLaunchStartTimesGlobal.Lock()
+			startTime, ok := telaLaunchStartTimesGlobal.m[index.SCID]
+			telaLaunchStartTimesGlobal.Unlock()
+			if !ok {
+				return
+			}
+
+			const cap = 0.95
+			const tau = 10.0
+			for {
+				telaLaunchingSCIDsGlobal.Lock()
+				stillLaunching := telaLaunchingSCIDsGlobal.m[index.SCID]
+				telaLaunchingSCIDsGlobal.Unlock()
+				if !stillLaunching {
+					return
+				}
+
+				elapsed := time.Since(startTime).Seconds()
+				val := cap * (1.0 - math.Exp(-elapsed/tau))
+				if val > cap {
+					val = cap
+				}
+
+				uiDo(func() {
+					if launchProgress != nil && !launchProgress.Hidden {
+						launchProgress.SetValue(val)
+					}
+					if launchStatus != nil && !launchStatus.Hidden {
+						telaStoppingSCIDsGlobal.Lock()
+						isStopping := telaStoppingSCIDsGlobal.m[index.SCID]
+						telaStoppingSCIDsGlobal.Unlock()
+						if isStopping {
+							launchStatus.Text = "Stopping..."
+						} else {
+							if val < 0.30 {
+								launchStatus.Text = "Connecting to node..."
+							} else if val < 0.60 {
+								launchStatus.Text = "Fetching content..."
+							} else if val < 0.85 {
+								launchStatus.Text = "Preparing app..."
+							} else {
+								launchStatus.Text = "Almost ready..."
+							}
+						}
+					}
+				})
+				time.Sleep(200 * time.Millisecond)
+			}
+		}()
 	} else if tela.HasServer(index.DURL) {
 		textStatus.Text = "Running"
 		textStatus.Color = colors.Green
@@ -21378,6 +21455,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			telaLaunchCancelChansGlobal.m[index.SCID] = cancelChan
 			telaLaunchCancelChansGlobal.Unlock()
 
+			telaLaunchStartTimesGlobal.Lock()
+			telaLaunchStartTimesGlobal.m[index.SCID] = time.Now()
+			telaLaunchStartTimesGlobal.Unlock()
+
 			launchProgress.Show()
 			launchProgress.SetValue(0)
 			launchStatus.Text = "Starting TELA app..."
@@ -21412,14 +21493,21 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								launchProgress.SetValue(val)
 							}
 							if launchStatus != nil && !launchStatus.Hidden {
-								if val < 0.30 {
-									launchStatus.Text = "Connecting to node..."
-								} else if val < 0.60 {
-									launchStatus.Text = "Fetching content..."
-								} else if val < 0.85 {
-									launchStatus.Text = "Preparing app..."
+								telaStoppingSCIDsGlobal.Lock()
+								isStopping := telaStoppingSCIDsGlobal.m[index.SCID]
+								telaStoppingSCIDsGlobal.Unlock()
+								if isStopping {
+									launchStatus.Text = "Stopping..."
 								} else {
-									launchStatus.Text = "Almost ready..."
+									if val < 0.30 {
+										launchStatus.Text = "Connecting to node..."
+									} else if val < 0.60 {
+										launchStatus.Text = "Fetching content..."
+									} else if val < 0.85 {
+										launchStatus.Text = "Preparing app..."
+									} else {
+										launchStatus.Text = "Almost ready..."
+									}
 								}
 							}
 						})
@@ -21438,6 +21526,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				telaStoppingSCIDsGlobal.Lock()
 				delete(telaStoppingSCIDsGlobal.m, index.SCID)
 				telaStoppingSCIDsGlobal.Unlock()
+				telaLaunchStartTimesGlobal.Lock()
+				delete(telaLaunchStartTimesGlobal.m, index.SCID)
+				telaLaunchStartTimesGlobal.Unlock()
 				uiDo(func() {
 					if launchProgress != nil {
 						if failed || cancelledLaunch {
@@ -21469,9 +21560,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							if launchStatus != nil {
 								launchStatus.Hide()
 							}
-							btnServer.Text = "Start Application"
-							btnServer.SetIcon(theme.MediaPlayIcon())
-							btnServer.Refresh()
+
+							if failed || cancelledLaunch {
+								btnServer.Text = "Start Application"
+								btnServer.SetIcon(theme.MediaPlayIcon())
+								btnServer.Refresh()
+							}
 						})
 					})
 				})
@@ -21506,7 +21600,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 					go openURLAfterDelay(link)
 
 					uiDo(func() {
-						textStatus.Text = "   Online"
+						textStatus.Text = "   Running"
 						textStatus.Color = colors.Green
 						textStatus.Refresh()
 						btnServer.Text = "Shutdown Application"
@@ -21598,7 +21692,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							}
 
 							uiDo(func() {
-								textStatus.Text = "   Online"
+								textStatus.Text = "   Running"
 								textStatus.Color = colors.Green
 								textStatus.Refresh()
 								btnServer.Text = "Shutdown Application"
