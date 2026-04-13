@@ -76,8 +76,26 @@ var telaLaunchingSCIDsGlobal struct {
 	m map[string]bool
 }
 
+var telaLaunchCancelChansGlobal struct {
+	sync.Mutex
+	m map[string]chan struct{}
+}
+
+var telaRunningAppsGlobal struct {
+	sync.Mutex
+	m map[string]bool
+}
+
+var telaStoppingSCIDsGlobal struct {
+	sync.Mutex
+	m map[string]bool
+}
+
 func init() {
 	telaLaunchingSCIDsGlobal.m = make(map[string]bool)
+	telaLaunchCancelChansGlobal.m = make(map[string]chan struct{})
+	telaRunningAppsGlobal.m = make(map[string]bool)
+	telaStoppingSCIDsGlobal.m = make(map[string]bool)
 }
 
 func isMobileDevice() bool {
@@ -17384,6 +17402,17 @@ func layoutTELA() fyne.CanvasObject {
 		m map[string]bool
 	}
 	telaLaunchingSCIDs.m = make(map[string]bool)
+	var telaLaunchCancelChans struct {
+		sync.Mutex
+		m map[string]chan struct{}
+	}
+	telaLaunchCancelChans.m = make(map[string]chan struct{})
+
+	var telaStoppingSCIDs struct {
+		sync.Mutex
+		m map[string]bool
+	}
+	telaStoppingSCIDs.m = make(map[string]bool)
 	var telaNetworkPaused atomic.Bool
 
 	frame := &iframe{}
@@ -17770,17 +17799,25 @@ func layoutTELA() fyne.CanvasObject {
 		isLaunching := telaLaunchingSCIDs.m[scid]
 		telaLaunchingSCIDs.Unlock()
 
+		telaStoppingSCIDs.Lock()
+		isStopping := telaStoppingSCIDs.m[scid]
+		telaStoppingSCIDs.Unlock()
+
 		if isLaunching {
 			if launchProgress != nil {
 				launchProgress.Show()
 			}
 			if launchStatus != nil {
-				launchStatus.Text = "Starting..."
+				if isStopping {
+					launchStatus.Text = "Stopping..."
+				} else {
+					launchStatus.Text = "Starting..."
+				}
 				launchStatus.Show()
 			}
-			startCloseBtn.Disable()
-			startCloseBtn.SetText("Starting")
-			startCloseBtn.SetIcon(nil)
+			startCloseBtn.SetText("Cancel")
+			startCloseBtn.SetIcon(theme.CancelIcon())
+			startCloseBtn.Enable()
 		} else if isTelaActive(scid) {
 			if launchProgress != nil {
 				launchProgress.Hide()
@@ -17810,7 +17847,26 @@ func layoutTELA() fyne.CanvasObject {
 			toggleTelaFavorite(scid)
 		}
 		startCloseBtn.OnTapped = func() {
-			if isTelaActive(scid) {
+			telaLaunchingSCIDs.Lock()
+			isLaunching := telaLaunchingSCIDs.m[scid]
+			telaLaunchingSCIDs.Unlock()
+
+			if isLaunching {
+				telaStoppingSCIDs.Lock()
+				telaStoppingSCIDs.m[scid] = true
+				telaStoppingSCIDs.Unlock()
+
+				telaLaunchCancelChans.Lock()
+				if cancelChan, ok := telaLaunchCancelChans.m[scid]; ok {
+					close(cancelChan)
+					delete(telaLaunchCancelChans.m, scid)
+				}
+				telaLaunchCancelChans.Unlock()
+				if launchStatus != nil {
+					launchStatus.Text = "Stopping..."
+					launchStatus.Refresh()
+				}
+			} else if isTelaActive(scid) {
 				entry := findTelaSearchEntry(scid)
 				if entry != nil {
 					tela.ShutdownServer(entry.DURL)
@@ -17836,25 +17892,33 @@ func layoutTELA() fyne.CanvasObject {
 				telaLaunchingSCIDs.m[scid] = true
 				telaLaunchingSCIDs.Unlock()
 
+				cancelChan := make(chan struct{})
+				telaLaunchCancelChans.Lock()
+				telaLaunchCancelChans.m[scid] = cancelChan
+				telaLaunchCancelChans.Unlock()
+
 				if launchStatus != nil {
 					launchStatus.Text = "Starting..."
 					launchStatus.Show()
 				}
 				activeBg.Refresh()
-				startCloseBtn.Disable()
-				startCloseBtn.SetText("Starting")
-				startCloseBtn.SetIcon(nil)
+				startCloseBtn.SetText("Cancel")
+				startCloseBtn.SetIcon(theme.CancelIcon())
 				searchList.Refresh()
 				favoritesList.Refresh()
 
 				progressDone := make(chan struct{})
 				progressStart := time.Now()
+				var cancelled atomic.Bool
 				go func() {
 					const cap = 0.95
 					const tau = 10.0
 					for {
 						select {
 						case <-progressDone:
+							return
+						case <-cancelChan:
+							cancelled.Store(true)
 							return
 						case <-time.After(200 * time.Millisecond):
 							elapsed := time.Since(progressStart).Seconds()
@@ -17882,14 +17946,20 @@ func layoutTELA() fyne.CanvasObject {
 					}
 				}()
 
-				cleanupLaunch := func(failed bool) {
+				cleanupLaunch := func(failed, cancelledLaunch bool) {
 					close(progressDone)
 					telaLaunchingSCIDs.Lock()
 					delete(telaLaunchingSCIDs.m, scid)
 					telaLaunchingSCIDs.Unlock()
+					telaLaunchCancelChans.Lock()
+					delete(telaLaunchCancelChans.m, scid)
+					telaLaunchCancelChans.Unlock()
+					telaStoppingSCIDs.Lock()
+					delete(telaStoppingSCIDs.m, scid)
+					telaStoppingSCIDs.Unlock()
 					uiDo(func() {
 						if launchProgress != nil {
-							if failed {
+							if failed || cancelledLaunch {
 								launchProgress.SetValue(launchProgress.value)
 								launchProgress.Refresh()
 							} else {
@@ -17898,7 +17968,10 @@ func layoutTELA() fyne.CanvasObject {
 							}
 						}
 						if launchStatus != nil {
-							if failed {
+							if cancelledLaunch {
+								launchStatus.Text = "Cancelled"
+								launchStatus.Color = colors.Gray
+							} else if failed {
 								launchStatus.Text = "Failed"
 								launchStatus.Color = colors.Red
 							} else {
@@ -17907,23 +17980,19 @@ func layoutTELA() fyne.CanvasObject {
 							}
 							launchStatus.Refresh()
 						}
-						time.AfterFunc(400*time.Millisecond, func() {
-							uiDo(func() {
-								if launchProgress != nil {
-									launchProgress.Hide()
-								}
-								if launchStatus != nil {
-									launchStatus.Hide()
-								}
-								activeBg.SetMinSize(fyne.NewSize(0, scaleSize(40)))
-								activeBg.Refresh()
-								if refreshServerList != nil {
-									refreshServerList()
-								}
-								searchList.Refresh()
-								favoritesList.Refresh()
-							})
-						})
+						if launchProgress != nil {
+							launchProgress.Hide()
+						}
+						if launchStatus != nil {
+							launchStatus.Hide()
+						}
+						activeBg.SetMinSize(fyne.NewSize(0, scaleSize(40)))
+						activeBg.Refresh()
+						if refreshServerList != nil {
+							refreshServerList()
+						}
+						searchList.Refresh()
+						favoritesList.Refresh()
 					})
 				}
 
@@ -17947,12 +18016,20 @@ func layoutTELA() fyne.CanvasObject {
 							if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
 								logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
 							}
-							cleanupLaunch(false)
+							cleanupLaunch(false, false)
 							return
 						}
 					}
 
 					link, err := tela.ServeTELA(scid, session.Daemon)
+					if cancelled.Load() {
+						if err == nil {
+							tela.ShutdownServer(scid)
+						}
+						cleanupLaunch(false, true)
+						return
+					}
+
 					if err != nil && strings.Contains(err.Error(), "already exists") {
 						telaPath := tela.GetPath()
 						runningDirs := make(map[string]bool)
@@ -17967,6 +18044,13 @@ func layoutTELA() fyne.CanvasObject {
 							}
 						}
 						link, err = tela.ServeTELA(scid, session.Daemon)
+						if cancelled.Load() {
+							if err == nil {
+								tela.ShutdownServer(scid)
+							}
+							cleanupLaunch(false, true)
+							return
+						}
 					}
 
 					if err == nil {
@@ -17975,7 +18059,7 @@ func layoutTELA() fyne.CanvasObject {
 						if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
 							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
 						}
-						cleanupLaunch(false)
+						cleanupLaunch(false, false)
 					} else {
 						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", scid)}
@@ -17987,12 +18071,12 @@ func layoutTELA() fyne.CanvasObject {
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
 							if linkPermission != xswd.Allow {
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
@@ -18004,13 +18088,13 @@ func layoutTELA() fyne.CanvasObject {
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
 							pushTELANavigation(scid)
 							go openURLAfterDelay(link)
-							cleanupLaunch(false)
+							cleanupLaunch(false, false)
 						} else {
 							logger.Printf("[TELA] ServeTELA failed for SCID %s: %v", scid, err)
 							fyne.Do(func() {
@@ -18018,7 +18102,7 @@ func layoutTELA() fyne.CanvasObject {
 								errorText.Color = colors.Red
 								errorText.Refresh()
 							})
-							cleanupLaunch(true)
+							cleanupLaunch(true, false)
 						}
 					}
 				}()
@@ -18597,8 +18681,8 @@ func layoutTELA() fyne.CanvasObject {
 			fullScanReason = "height_delta"
 		}
 
-		// Already scanned (skip if force fresh scan was just triggered)
-		if len(telaSearch) > 0 {
+		// Already scanned - only skip if no updates are expected
+		if len(telaSearch) > 0 && heightDelta == 0 && !rescanRecheck {
 			keepProgressVisible = false
 			fyne.Do(func() {
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
@@ -18617,13 +18701,16 @@ func layoutTELA() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				labelLastScan.Refresh()
+				hideTelaProgress()
 			})
 
 			return
 		}
 
-		telaSearch = []INDEXwithRatings{}
-		searchData.Set(nil)
+		if !keepProgressVisible && heightDelta == 0 && !rescanRecheck {
+			telaSearch = []INDEXwithRatings{}
+			searchData.Set(nil)
+		}
 		labelLastScan.Text = ""
 
 		fyne.Do(func() {
@@ -18751,7 +18838,17 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				provisionalTotal := estimatedGnomon + estimatedTelaFallback
 				if provisionalTotal > 0 {
-					updateTelaProgress(float64(elapsed) / float64(provisionalTotal))
+					syncProgress := float64(elapsed) / float64(provisionalTotal)
+					if daemonHeight > 0 && indexedHeight > 0 {
+						heightProgress := float64(indexedHeight) / float64(daemonHeight)
+						// Ensure we start at a low value even if synced, moving towards 100%
+						if heightProgress > 0.99 && syncProgress < 0.1 {
+							syncProgress = 0.05 + (syncProgress * 0.5) // Start around 5% if Gnomon synced
+						} else {
+							syncProgress = (syncProgress * 0.4) + (heightProgress * 0.6)
+						}
+					}
+					updateTelaProgress(syncProgress)
 				}
 				setTelaStatus(fmt.Sprintf("Synching gnomon index... [%d / %d]", indexedHeight, daemonHeight), colors.Yellow)
 				fyne.Do(func() {
@@ -21207,7 +21304,25 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	btnServer := widget.NewButton("Start Application", nil)
 
-	if tela.HasServer(index.DURL) {
+	telaLaunchingSCIDsGlobal.Lock()
+	isLaunchingGlobal := telaLaunchingSCIDsGlobal.m[index.SCID]
+	telaLaunchingSCIDsGlobal.Unlock()
+
+	telaStoppingSCIDsGlobal.Lock()
+	isStoppingGlobal := telaStoppingSCIDsGlobal.m[index.SCID]
+	telaStoppingSCIDsGlobal.Unlock()
+
+	if isLaunchingGlobal {
+		launchProgress.Show()
+		if isStoppingGlobal {
+			launchStatus.Text = "Stopping..."
+		} else {
+			launchStatus.Text = "Starting TELA app..."
+		}
+		launchStatus.Show()
+		btnServer.Text = "Cancel"
+		btnServer.SetIcon(theme.CancelIcon())
+	} else if tela.HasServer(index.DURL) {
 		textStatus.Text = "Running"
 		textStatus.Color = colors.Green
 		textStatus.Refresh()
@@ -21217,7 +21332,26 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	}
 
 	btnServer.OnTapped = func() {
-		if btnServer.Text != "Start Application" {
+		telaLaunchingSCIDsGlobal.Lock()
+		isLaunching := telaLaunchingSCIDsGlobal.m[index.SCID]
+		telaLaunchingSCIDsGlobal.Unlock()
+
+		if isLaunching {
+			telaStoppingSCIDsGlobal.Lock()
+			telaStoppingSCIDsGlobal.m[index.SCID] = true
+			telaStoppingSCIDsGlobal.Unlock()
+
+			telaLaunchCancelChansGlobal.Lock()
+			if cancelChan, ok := telaLaunchCancelChansGlobal.m[index.SCID]; ok {
+				close(cancelChan)
+				delete(telaLaunchCancelChansGlobal.m, index.SCID)
+			}
+			telaLaunchCancelChansGlobal.Unlock()
+			if launchStatus != nil {
+				launchStatus.Text = "Stopping..."
+				launchStatus.Refresh()
+			}
+		} else if btnServer.Text == "Shutdown Application" {
 			tela.ShutdownServer(index.DURL)
 			errorText.Text = ""
 			errorText.Refresh()
@@ -21227,6 +21361,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			btnServer.Text = "Start Application"
 			btnServer.Refresh()
 			linkOpenInBrowser.Hide()
+			if callback != nil {
+				callback()
+			}
 		} else {
 			telaLaunchingSCIDsGlobal.Lock()
 			if telaLaunchingSCIDsGlobal.m[index.SCID] {
@@ -21236,22 +21373,33 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			telaLaunchingSCIDsGlobal.m[index.SCID] = true
 			telaLaunchingSCIDsGlobal.Unlock()
 
+			cancelChan := make(chan struct{})
+			telaLaunchCancelChansGlobal.Lock()
+			telaLaunchCancelChansGlobal.m[index.SCID] = cancelChan
+			telaLaunchCancelChansGlobal.Unlock()
+
 			launchProgress.Show()
 			launchProgress.SetValue(0)
 			launchStatus.Text = "Starting TELA app..."
 			launchStatus.Show()
-			btnServer.Disable()
+			btnServer.SetText("Cancel")
+			btnServer.SetIcon(theme.CancelIcon())
+			btnServer.Refresh()
 			launchProgress.Refresh()
 			launchStatus.Refresh()
 
 			progressDone := make(chan struct{})
 			progressStart := time.Now()
+			var cancelled atomic.Bool
 			go func() {
 				const cap = 0.95
 				const tau = 10.0
 				for {
 					select {
 					case <-progressDone:
+						return
+					case <-cancelChan:
+						cancelled.Store(true)
 						return
 					case <-time.After(200 * time.Millisecond):
 						elapsed := time.Since(progressStart).Seconds()
@@ -21279,14 +21427,20 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				}
 			}()
 
-			cleanupLaunch := func(failed bool) {
+			cleanupLaunch := func(failed, cancelledLaunch bool) {
 				close(progressDone)
 				telaLaunchingSCIDsGlobal.Lock()
 				delete(telaLaunchingSCIDsGlobal.m, index.SCID)
 				telaLaunchingSCIDsGlobal.Unlock()
+				telaLaunchCancelChansGlobal.Lock()
+				delete(telaLaunchCancelChansGlobal.m, index.SCID)
+				telaLaunchCancelChansGlobal.Unlock()
+				telaStoppingSCIDsGlobal.Lock()
+				delete(telaStoppingSCIDsGlobal.m, index.SCID)
+				telaStoppingSCIDsGlobal.Unlock()
 				uiDo(func() {
 					if launchProgress != nil {
-						if failed {
+						if failed || cancelledLaunch {
 							launchProgress.SetValue(launchProgress.value)
 							launchProgress.Refresh()
 						} else {
@@ -21295,7 +21449,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						}
 					}
 					if launchStatus != nil {
-						if failed {
+						if cancelledLaunch {
+							launchStatus.Text = "Cancelled"
+							launchStatus.Color = colors.Gray
+						} else if failed {
 							launchStatus.Text = "Failed"
 							launchStatus.Color = colors.Red
 						} else {
@@ -21312,7 +21469,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							if launchStatus != nil {
 								launchStatus.Hide()
 							}
-							btnServer.Enable()
+							btnServer.Text = "Start Application"
+							btnServer.SetIcon(theme.MediaPlayIcon())
+							btnServer.Refresh()
 						})
 					})
 				})
@@ -21328,7 +21487,16 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 					}
 				}
 
-				if link, err := tela.ServeTELA(index.SCID, session.Daemon); err == nil {
+				link, err := tela.ServeTELA(index.SCID, session.Daemon)
+				if cancelled.Load() {
+					if err == nil {
+						tela.ShutdownServer(index.SCID)
+					}
+					cleanupLaunch(false, true)
+					return
+				}
+
+				if err == nil {
 					pushTELANavigation(index.SCID)
 
 					if err := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); err != nil {
@@ -21342,17 +21510,22 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						textStatus.Color = colors.Green
 						textStatus.Refresh()
 						btnServer.Text = "Shutdown Application"
+						btnServer.SetIcon(theme.MediaStopIcon())
 						btnServer.Refresh()
 						linkOpenInBrowser.Show()
 					})
 
-					cleanupLaunch(false)
+					telaRunningAppsGlobal.Lock()
+					telaRunningAppsGlobal.m[index.SCID] = true
+					telaRunningAppsGlobal.Unlock()
+
+					cleanupLaunch(false, false)
 				} else {
 					if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 						generation := currentWalletGeneration()
 						go func() {
 							if !isWalletGenerationActive(generation) {
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
@@ -21363,12 +21536,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								errorText.Text = "error could not open TELA"
 								errorText.Color = colors.Red
 								errorText.Refresh()
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
 							if linkPermission != xswd.Allow {
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
@@ -21378,7 +21551,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								errorText.Text = telaErrorToString(serveErr)
 								errorText.Color = colors.Red
 								errorText.Refresh()
-								cleanupLaunch(true)
+								cleanupLaunch(true, false)
 								return
 							}
 
@@ -21429,15 +21602,20 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								textStatus.Color = colors.Green
 								textStatus.Refresh()
 								btnServer.Text = "Shutdown Application"
+								btnServer.SetIcon(theme.MediaStopIcon())
 								btnServer.Refresh()
 								linkOpenInBrowser.Show()
 							})
+
+							telaRunningAppsGlobal.Lock()
+							telaRunningAppsGlobal.m[index.SCID] = true
+							telaRunningAppsGlobal.Unlock()
 
 							if saveErr := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); saveErr != nil {
 								logger.Errorf("[Engram] Error saving TELA search result: %s\n", saveErr)
 							}
 
-							cleanupLaunch(false)
+							cleanupLaunch(false, false)
 						}()
 					} else {
 						fyne.Do(func() {
@@ -21446,7 +21624,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							errorText.Color = colors.Red
 							errorText.Refresh()
 						})
-						cleanupLaunch(true)
+						cleanupLaunch(true, false)
 					}
 				}
 			}()
