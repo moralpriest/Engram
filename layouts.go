@@ -5346,7 +5346,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 						rectSpacer,
 						entryAmount,
 						rectSpacer,
-						btnSend,
+						wrapMobileButton(btnSend),
 						wSpacer,
 					),
 					layout.NewSpacer(),
@@ -15728,9 +15728,9 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	assetTab := container.NewTabItem("Assets", assetTabContent)
 	tabs := container.NewAppTabs(
+		assetTab,
 		container.NewTabItem("Browse", browseTabContent),
 		container.NewTabItem("SCIDs", contractsTabContent),
-		assetTab,
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
