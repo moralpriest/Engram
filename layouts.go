@@ -17617,6 +17617,11 @@ func layoutTELA() fyne.CanvasObject {
 
 	resetTelaProgress = func() { displayedTelaProgress = 0 }
 
+	completeTelaScanProgress := func() {
+		displayedTelaProgress = 1
+		setTelaProgress(1)
+	}
+
 	hideTelaProgress := func() {
 		fyne.Do(func() {
 			telaProgress.Hide()
@@ -18033,49 +18038,13 @@ func layoutTELA() fyne.CanvasObject {
 						}
 					}
 
-					for _, s := range tela.GetServerInfo() {
-						if s.SCID == scid {
-							link := fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint)
-							pushTELANavigation(scid)
-							go openURLAfterDelay(link)
-							if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
-								logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
-							}
-							cleanupLaunch(false, false)
-							return
-						}
-					}
-
-					link, err := tela.ServeTELA(scid, session.Daemon)
+					link, err := serveTELAWithStaleRecovery(scid, session.Daemon)
 					if cancelled.Load() {
 						if err == nil {
 							tela.ShutdownServer(scid)
 						}
 						cleanupLaunch(false, true)
 						return
-					}
-
-					if err != nil && strings.Contains(err.Error(), "already exists") {
-						telaPath := tela.GetPath()
-						runningDirs := make(map[string]bool)
-						for _, s := range tela.GetServerInfo() {
-							runningDirs[s.Name] = true
-						}
-						if entries, readErr := os.ReadDir(telaPath); readErr == nil {
-							for _, entry := range entries {
-								if entry.IsDir() && !runningDirs[entry.Name()] {
-									os.RemoveAll(filepath.Join(telaPath, entry.Name()))
-								}
-							}
-						}
-						link, err = tela.ServeTELA(scid, session.Daemon)
-						if cancelled.Load() {
-							if err == nil {
-								tela.ShutdownServer(scid)
-							}
-							cleanupLaunch(false, true)
-							return
-						}
 					}
 
 					if err == nil {
@@ -18888,8 +18857,17 @@ func layoutTELA() fyne.CanvasObject {
 			time.Sleep(1 * time.Second)
 		}
 
+		// Re-evaluate after the sync wait: the value captured at the start of getSearchResults
+		// is stale if we blocked until Gnomon caught up, otherwise "defer cached only" can skip
+		// the full owner/SCID scan incorrectly.
+		allowTelaIndexMutations = isGnomonCaughtUp()
+
 		// Gnomon sync complete - record duration and initialize TELA timing
-		gnomonSyncDuration = time.Since(gnomonSyncStartTime)
+		if gnomonSyncStarted {
+			gnomonSyncDuration = time.Since(gnomonSyncStartTime)
+		} else {
+			gnomonSyncDuration = 0
+		}
 		telaStartTime = time.Now()
 		estimatedTelaDuration = 30 * time.Second // Initial estimate, will refine
 
@@ -19096,7 +19074,9 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			storedSCIDsCount = len(telaSCIDs)
 
-			if !allowTelaIndexMutations {
+			// Only defer the full scan when we have cached rows to show; otherwise continue
+			// into GetAllOwnersAndSCIDs so an initial or empty-cache run still enumerates.
+			if !allowTelaIndexMutations && (len(telaSearch) > 0 || len(telaSCIDs) > 0) {
 				cacheHitMode = "cached_syncing"
 				fullScanReason = ""
 				if len(telaSearch) == 0 && len(telaSCIDs) > 0 {
@@ -19135,6 +19115,7 @@ func layoutTELA() fyne.CanvasObject {
 				})
 
 				keepProgressVisible = false
+				completeTelaScanProgress()
 				logger.Printf("[TELA] Deferring full scan until Gnomon catches up; showing cached results only\n")
 				return
 			}
@@ -19143,6 +19124,7 @@ func layoutTELA() fyne.CanvasObject {
 				cacheHitMode = "cached_only"
 				fullScanReason = ""
 				keepProgressVisible = false
+				completeTelaScanProgress()
 				fyne.Do(func() {
 					searching = telaSearchDisplayAll(telaSearch, sortBy)
 					searchData.Set(searching)
@@ -19246,6 +19228,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 
 			setTelaStatus(fmt.Sprintf("Checking TELA candidates... (%d total)", len(candidates)), colors.Yellow)
+			displayedTelaProgress = 0.10
 			setTelaProgress(0.10)
 			uiDo(func() {
 				results.Refresh()
@@ -19287,7 +19270,12 @@ func layoutTELA() fyne.CanvasObject {
 					// Time-based progress calculation
 					now := time.Now()
 					elapsedTela := now.Sub(telaStartTime)
-					elapsedTotal := now.Sub(gnomonSyncStartTime)
+					var elapsedTotal time.Duration
+					if gnomonSyncStarted {
+						elapsedTotal = now.Sub(gnomonSyncStartTime)
+					} else {
+						elapsedTotal = elapsedTela
+					}
 
 					// Estimate remaining TELA time based on batch rate
 					if completed > 0 {
@@ -19725,6 +19713,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 		if allLen > 0 && atomic.LoadInt64(&scannedCandidates) >= int64(allLen) {
 			saveProgress(allLen, allLen, "", "completed")
+			completeTelaScanProgress()
 		} else {
 			saveProgress(int(atomic.LoadInt64(&scannedCandidates)), allLen, "", "interrupted")
 			logger.Printf("[Gnomon] Scan ended before completion: %d/%d\n", atomic.LoadInt64(&scannedCandidates), allLen)
@@ -19851,7 +19840,7 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					logger.Printf("[TELA-PREWARM] Pre-warming SCID %s (%d/3)\n", scid, preWarmCount+1)
-					if _, err := tela.ServeTELA(scid, session.Daemon); err != nil {
+					if _, err := serveTELACollisionRecovery(scid, session.Daemon); err != nil {
 						logger.Printf("[TELA-PREWARM] Failed to pre-warm %s: %v\n", scid, err)
 					} else {
 						preWarmCount++
@@ -20691,7 +20680,7 @@ func layoutTELA() fyne.CanvasObject {
 
 				entryServeSCID.SetText("")
 
-				if link, err := tela.ServeTELA(s, session.Daemon); err == nil {
+				if link, err := serveTELAWithStaleRecovery(s, session.Daemon); err == nil {
 					url, err := url.Parse(link)
 					if err != nil {
 						logger.Errorf("[Engram] TELA URL parse: %s\n", err)
@@ -21329,6 +21318,36 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	btnServer := widget.NewButton("Start Application", nil)
 
+	// Check if app is actually running via both SCID and DURL
+	appActuallyRunning := false
+	for _, s := range tela.GetServerInfo() {
+		if s.SCID == index.SCID || s.Name == index.DURL {
+			appActuallyRunning = true
+			break
+		}
+	}
+
+	// Clean up stale launch state if app is actually running
+	// This handles the case where user launches from TELA browser page and then
+	// inspects the app while it's loading - we need to show current state, not stale launch state
+	if appActuallyRunning {
+		telaLaunchingSCIDsGlobal.Lock()
+		delete(telaLaunchingSCIDsGlobal.m, index.SCID)
+		telaLaunchingSCIDsGlobal.Unlock()
+
+		telaStoppingSCIDsGlobal.Lock()
+		delete(telaStoppingSCIDsGlobal.m, index.SCID)
+		telaStoppingSCIDsGlobal.Unlock()
+
+		telaLaunchCancelChansGlobal.Lock()
+		delete(telaLaunchCancelChansGlobal.m, index.SCID)
+		telaLaunchCancelChansGlobal.Unlock()
+
+		telaLaunchStartTimesGlobal.Lock()
+		delete(telaLaunchStartTimesGlobal.m, index.SCID)
+		telaLaunchStartTimesGlobal.Unlock()
+	}
+
 	telaLaunchingSCIDsGlobal.Lock()
 	isLaunchingGlobal := telaLaunchingSCIDsGlobal.m[index.SCID]
 	telaLaunchingSCIDsGlobal.Unlock()
@@ -21364,7 +21383,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				stillLaunching := telaLaunchingSCIDsGlobal.m[index.SCID]
 				telaLaunchingSCIDsGlobal.Unlock()
 				if !stillLaunching {
-					return
+					break
 				}
 
 				elapsed := time.Since(startTime).Seconds()
@@ -21398,6 +21417,35 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				})
 				time.Sleep(200 * time.Millisecond)
 			}
+
+			uiDo(func() {
+				if tela.HasServer(index.DURL) {
+					textStatus.Text = "Running"
+					textStatus.Color = colors.Green
+					textStatus.Refresh()
+					btnServer.Text = "Shutdown Application"
+					btnServer.SetIcon(theme.MediaStopIcon())
+					btnServer.Refresh()
+					launchProgress.Hide()
+					launchStatus.Hide()
+					linkOpenInBrowser.Show()
+				} else {
+					if launchProgress != nil {
+						launchProgress.SetValue(launchProgress.value)
+						launchProgress.Refresh()
+					}
+					if launchStatus != nil {
+						launchStatus.Text = "Failed"
+						launchStatus.Color = colors.Red
+						launchStatus.Refresh()
+					}
+					if btnServer != nil {
+						btnServer.Text = "Start Application"
+						btnServer.SetIcon(theme.MediaPlayIcon())
+						btnServer.Refresh()
+					}
+				}
+			})
 		}()
 	} else if tela.HasServer(index.DURL) {
 		textStatus.Text = "Running"
@@ -21581,7 +21629,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 					}
 				}
 
-				link, err := tela.ServeTELA(index.SCID, session.Daemon)
+				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon)
 				if cancelled.Load() {
 					if err == nil {
 						tela.ShutdownServer(index.SCID)

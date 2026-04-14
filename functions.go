@@ -8286,6 +8286,84 @@ func isASCII(s string) bool {
 	return true
 }
 
+// telaStaleCloneDirFromServeErr extracts the clone directory to remove when ServeTELA fails with
+// a "file … already exists" collision inside the TELA shard path.
+func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
+	if err == nil {
+		return "", false
+	}
+	msg := err.Error()
+	const pfx = "file "
+	const sfx = " already exists"
+	idx := strings.LastIndex(msg, pfx)
+	if idx < 0 {
+		return "", false
+	}
+	rest := msg[idx+len(pfx):]
+	j := strings.Index(rest, sfx)
+	if j < 0 {
+		return "", false
+	}
+	filePath := filepath.Clean(rest[:j])
+	if filePath == "" || filePath == "." {
+		return "", false
+	}
+	telaRoot := filepath.Clean(tela.GetPath())
+	rel, errRel := filepath.Rel(telaRoot, filePath)
+	if errRel != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	dir = filepath.Dir(filePath)
+	relDir, errRel2 := filepath.Rel(telaRoot, dir)
+	if errRel2 != nil || relDir == ".." || strings.HasPrefix(relDir, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return dir, true
+}
+
+// serveTELACollisionRecovery calls ServeTELA and, on stale clone file collisions, removes the
+// affected clone tree and retries (then falls back to clearing non-running top-level dirs).
+func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) {
+	link, err = tela.ServeTELA(scid, endpoint)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		return link, err
+	}
+	if cloneDir, ok := telaStaleCloneDirFromServeErr(err); ok {
+		if rmErr := os.RemoveAll(cloneDir); rmErr != nil {
+			logger.Printf("[TELA] Remove stale clone dir %s: %v\n", cloneDir, rmErr)
+		}
+		link, err = tela.ServeTELA(scid, endpoint)
+		if err == nil {
+			return link, nil
+		}
+	}
+	telaPath := tela.GetPath()
+	runningDirs := make(map[string]bool)
+	for _, s := range tela.GetServerInfo() {
+		runningDirs[s.Name] = true
+	}
+	if entries, readErr := os.ReadDir(telaPath); readErr == nil {
+		for _, entry := range entries {
+			if entry.IsDir() && !runningDirs[entry.Name()] {
+				_ = os.RemoveAll(filepath.Join(telaPath, entry.Name()))
+			}
+		}
+	}
+	link, err = tela.ServeTELA(scid, endpoint)
+	return link, err
+}
+
+// serveTELAWithStaleRecovery reuses an already-running server for the SCID when possible,
+// otherwise serves with collision recovery for leftover clone files after shutdown.
+func serveTELAWithStaleRecovery(scid, endpoint string) (link string, err error) {
+	for _, s := range tela.GetServerInfo() {
+		if s.SCID == scid {
+			return fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint), nil
+		}
+	}
+	return serveTELACollisionRecovery(scid, endpoint)
+}
+
 // Wrapper for serving TELA content toggling tela.updates if disabled, updated content should be checked for and presented to the user before calling serveTELAUpdates
 func serveTELAUpdates(scid string) (link string, err error) {
 	var toggledUpdates bool
@@ -8294,7 +8372,7 @@ func serveTELAUpdates(scid string) (link string, err error) {
 		toggledUpdates = true
 	}
 
-	link, err = tela.ServeTELA(scid, session.Daemon)
+	link, err = serveTELACollisionRecovery(scid, session.Daemon)
 	if toggledUpdates {
 		tela.AllowUpdates(false)
 	}
@@ -8305,9 +8383,12 @@ func serveTELAUpdates(scid string) (link string, err error) {
 // Convert TELA error to shortened string for display
 func telaErrorToString(err error) string {
 	str := "serving TELA"
-	if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "user defined no updates and content has been updated to") {
 		str = "content has been updated"
-	} else if strings.Contains(err.Error(), "already exists") {
+	} else if strings.Contains(errMsg, "file ") && strings.Contains(errMsg, " already exists") {
+		str = "stale TELA files on disk (remove app folder or retry)"
+	} else if strings.Contains(errMsg, "already exists") {
 		str = "content already exists"
 	}
 
