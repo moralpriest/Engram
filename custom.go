@@ -61,7 +61,7 @@ func (e *returnEntry) FocusGained() {
 }
 
 // NewImageButton creates a button that displays an image with proper button styling
-func NewImageButton(res fyne.Resource, onTap func()) *fyne.Container {
+func NewImageButton(res fyne.Resource, onTap func(), width ...float32) *fyne.Container {
 	btn := widget.NewButton("", onTap)
 	btn.Importance = widget.MediumImportance
 
@@ -74,7 +74,15 @@ func NewImageButton(res fyne.Resource, onTap func()) *fyne.Container {
 	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(100, 40))
+	w := float32(100)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
 
 	return container.NewStack(sizeEnforcer, btn, container.NewCenter(imgSizer))
 }
@@ -282,7 +290,7 @@ func SetCurrentScrollBox(sb *container.Scroll) {
 	currentScrollBox = sb
 }
 
-func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
+func newSizedIconButton(icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
 	btn := widget.NewButtonWithIcon("", icon, onTap)
 	btn.Importance = widget.MediumImportance
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
@@ -290,7 +298,11 @@ func newSizedIconButton(icon fyne.Resource, onTap func()) *fyne.Container {
 	if isMobile() {
 		h = 48
 	}
-	sizeEnforcer.SetMinSize(scalePoint(100, h))
+	w := float32(100)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
 	return container.NewStack(sizeEnforcer, btn)
 }
 

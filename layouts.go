@@ -1076,6 +1076,8 @@ func layoutDashboard() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
+	buttonWidth := ui.Width * 0.9 / 3
+
 	btnLogout := newSizedIconButton(theme.LogoutIcon(), func() {
 		if session.Navigating {
 			return
@@ -1083,7 +1085,7 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Navigating = true
 		defer func() { session.Navigating = false }()
 		closeWallet()
-	})
+	}, buttonWidth)
 
 	// Settings button with cogwheel icon
 	btnSettings := newSizedIconButton(theme.SettingsIcon(), func() {
@@ -1091,7 +1093,7 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAppSettings())
 		removeOverlays()
-	})
+	}, buttonWidth)
 
 	// Datapad module button with icon
 	btnDatapad := newSizedIconButton(theme.DocumentIcon(), func() {
@@ -1099,7 +1101,7 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDatapad())
 		removeOverlays()
-	})
+	}, buttonWidth)
 
 	// Messages module button with icon
 	btnMessages := newSizedIconButton(theme.MailComposeIcon(), func() {
@@ -1107,7 +1109,7 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMessages())
 		removeOverlays()
-	})
+	}, buttonWidth)
 
 	// Files & Contracts module button (merged File Manager + Contract Builder)
 	btnFilesContracts := newSizedIconButton(theme.FolderIcon(), func() {
@@ -1115,7 +1117,7 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutFilesAndContracts())
 		removeOverlays()
-	})
+	}, buttonWidth)
 
 	// TELA module button with logo - custom image button with proper sizing
 	btnTELA := NewImageButton(resourceTelaPng, func() {
@@ -1329,7 +1331,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 		removeOverlays()
 		logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
-	})
+	}, buttonWidth)
 
 	linkHistory := newSmallIconButton("History", theme.HistoryIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -1497,20 +1499,22 @@ func layoutDashboard() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
+	bottomRowWidth := ui.Width * 0.9
+
 	bottom := container.NewStack(
 		container.NewVBox(
 			container.NewCenter(
-				container.New(layout.NewGridLayoutWithColumns(3),
-					btnDatapad,
-					btnTELA,
-					btnMessages,
+				container.NewHBox(
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnDatapad.MinSize().Height), btnDatapad),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnTELA.MinSize().Height), btnTELA),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnMessages.MinSize().Height), btnMessages),
 				),
 			),
 			container.NewCenter(
-				container.New(layout.NewGridLayoutWithColumns(3),
-					btnFilesContracts,
-					btnLogout,
-					btnSettings,
+				container.NewHBox(
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnFilesContracts.MinSize().Height), btnFilesContracts),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnLogout.MinSize().Height), btnLogout),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnSettings.MinSize().Height), btnSettings),
 				),
 			),
 			rectSpacer,
