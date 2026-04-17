@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"log"
 	"math"
 	"net"
 	"net/url"
@@ -49,6 +50,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	x "fyne.io/x/fyne/widget"
+	"github.com/DEROFDN/engram/internal/camera"
 	"github.com/civilware/Gnomon/structures"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
@@ -1831,6 +1833,25 @@ func layoutSend() fyne.CanvasObject {
 		rectSpacer,
 		rectSpacer,
 		wRings,
+		rectSpacer,
+		wrapMobileButton(widget.NewButtonWithIcon("Scan QR Code", theme.MediaPhotoIcon(), func() {
+			log.Println("QR: Scan button tapped")
+			if isMobile() {
+				// Immediate visual feedback on mobile to confirm tap registration
+				dialog.ShowInformation("Engram", "Starting QR Scanner...", session.Window)
+			}
+			s := camera.NewScanner(session.Window, func(code string) {
+				log.Println("QR: Scan result received:", code)
+				wReceiver.SetText(code)
+				wReceiver.SetValidationError(nil)
+				wReceiver.Refresh()
+			})
+			err := s.Start()
+			if err != nil {
+				log.Printf("QR: Start error: %v", err)
+				dialog.ShowError(err, session.Window)
+			}
+		})),
 		rectSpacer,
 		wReceiver,
 		wAmount,

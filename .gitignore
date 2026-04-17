@@ -19,3 +19,11 @@ coverage.html
 # IDEs
 .cursor*
 .opencode*
+
+# Build artifacts
+vendor/
+fyne-cross/
+classes.dex
+final_classes.dex
+engram_test
+engram_test_build

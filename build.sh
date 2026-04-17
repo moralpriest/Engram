@@ -22,3 +22,6 @@ else
     echo "Build failed!"
     exit 1
 fi
+
+# Android APK build (uncomment to build):
+# fyne package -os android -appID "com.derofdn.engram" -icon Icon.png -permissions "android.permission.CAMERA"

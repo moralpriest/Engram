@@ -1,6 +1,6 @@
 [Details]
-Icon = "Icon.png"
-Name = "Engram"
-ID = "com.derofdn.engram"
-Version = "0.6.6"
-Build = 237
+  Icon = "Icon.png"
+  Name = "Engram"
+  ID = "com.derofdn.engram"
+  Version = "0.6.6"
+  Build = 273
