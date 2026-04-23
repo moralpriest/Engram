@@ -1884,8 +1884,8 @@ func layoutSend() fyne.CanvasObject {
 		wrapMobileButton(widget.NewButtonWithIcon("Scan QR Code", theme.MediaPhotoIcon(), func() {
 			log.Println("QR: Scan button tapped")
 			if isMobile() {
-				// Immediate visual feedback on mobile to confirm tap registration
-				dialog.ShowInformation("Engram", "Starting QR Scanner...", session.Window)
+				dialog.ShowInformation("QR Scanner", "QR scanning not yet available on mobile", session.Window)
+				return
 			}
 			s := camera.NewScanner(session.Window, func(code string) {
 				log.Println("QR: Scan result received:", code)
@@ -1997,6 +1997,8 @@ func layoutReceive() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
+	qrExpanded := false
+
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 0))
 
@@ -2046,6 +2048,7 @@ btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 	})
 
+	var qrButton *widget.Button
 	var imageQR *canvas.Image
 	qr, err := qrcode.New(engram.Disk.GetAddress().String(), qrcode.Highest)
 	if err != nil {
@@ -2056,6 +2059,27 @@ btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 	}
 	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.65)))
 	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
+
+	qrButton = widget.NewButton("", func() {
+		qrExpanded = !qrExpanded
+		log.Printf("QR: Tapped, expanded=%v", qrExpanded)
+		if qrExpanded {
+			qr.BackgroundColor = color.White
+			qr.ForegroundColor = color.Black
+			imageQR.SetMinSize(fyne.NewSize(ui.Width*0.85, ui.Width*0.85))
+			imageQR.Image = qr.Image(int(ui.Width * 0.85))
+			rectBox.FillColor = color.White
+		} else {
+			qr.BackgroundColor = colors.DarkMatter
+			qr.ForegroundColor = colors.Green
+			imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
+			imageQR.Image = qr.Image(int(ui.Width * 0.65))
+			rectBox.FillColor = colors.DarkMatter
+		}
+		imageQR.Refresh()
+		rectBox.Refresh()
+	})
+	qrButton.Importance = widget.LowImportance
 
 	features := container.NewStack(
 		rectBox,
@@ -2080,7 +2104,7 @@ btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 				rectSpacer,
 				rectSpacer,
 				container.NewCenter(
-					imageQR,
+					container.NewStack(qrButton, imageQR),
 				),
 				rectSpacer,
 			),
