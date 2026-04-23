@@ -1349,15 +1349,15 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnTransfers := widget.NewButton("Transfers", nil)
-	btnTransfers.OnTapped = func() {
+	btnReceive := widget.NewButton("Receive", nil)
+	btnReceive.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutTransfers())
+		session.Window.SetContent(layoutReceive())
 		removeOverlays()
 	}
 
-	btnTransfersWrapper := wrapMobileButton(btnTransfers)
+	btnReceiveWrapper := wrapMobileButton(btnReceive)
 	gramSendWrapper := wrapMobileButton(gramSend)
 
 	separator := canvas.NewText(" | ", colors.Gray)
@@ -1408,7 +1408,7 @@ func layoutDashboard() fyne.CanvasObject {
 		rectSpacer,
 		gramSendWrapper,
 		rectSpacer,
-		btnTransfersWrapper,
+		btnReceiveWrapper,
 		rectSpacer,
 		container.NewCenter(
 			container.NewHBox(
@@ -1551,6 +1551,10 @@ func layoutSend() fyne.CanvasObject {
 	frame := &iframe{}
 
 	btnSend := widget.NewButton("Save", nil)
+	btnSend.Disable()
+
+	btnSendNow := widget.NewButton("Send", nil)
+	btnSendNow.Disable()
 
 	wAmount := widget.NewEntry()
 	wAmount.SetPlaceHolder("Amount")
@@ -1597,6 +1601,7 @@ func layoutSend() fyne.CanvasObject {
 			addr, _ := checkUsername(s, -1)
 			if addr == "" {
 				btnSend.Disable()
+				btnSendNow.Disable()
 				err = errors.New("invalid username or address")
 				wReceiver.SetValidationError(err)
 				tx.Address = nil
@@ -1608,6 +1613,7 @@ func layoutSend() fyne.CanvasObject {
 					balance, _ := engram.Disk.Get_Balance()
 					if tx.Amount <= balance {
 						btnSend.Enable()
+						btnSendNow.Enable()
 					}
 				}
 			}
@@ -1685,6 +1691,7 @@ func layoutSend() fyne.CanvasObject {
 			tx.Amount = 0
 			wAmount.SetValidationError(errors.New("invalid transaction amount"))
 			btnSend.Disable()
+			btnSendNow.Disable()
 		} else {
 			balance, _ := engram.Disk.Get_Balance()
 			entry, err := globals.ParseAmount(s)
@@ -1692,6 +1699,7 @@ func layoutSend() fyne.CanvasObject {
 				tx.Amount = 0
 				wAmount.SetValidationError(errors.New("invalid transaction amount"))
 				btnSend.Disable()
+				btnSendNow.Disable()
 				return errors.New("invalid transaction amount")
 			}
 
@@ -1699,6 +1707,7 @@ func layoutSend() fyne.CanvasObject {
 				tx.Amount = 0
 				wAmount.SetValidationError(errors.New("invalid transaction amount"))
 				btnSend.Disable()
+				btnSendNow.Disable()
 				return errors.New("invalid transaction amount")
 			}
 
@@ -1707,10 +1716,12 @@ func layoutSend() fyne.CanvasObject {
 				wAmount.SetValidationError(nil)
 				if wReceiver.Validate() == nil {
 					btnSend.Enable()
+					btnSendNow.Enable()
 				}
 			} else {
 				tx.Amount = 0
 				btnSend.Disable()
+				btnSendNow.Disable()
 				wAmount.SetValidationError(errors.New("insufficient funds"))
 			}
 			return nil
@@ -1765,6 +1776,42 @@ func layoutSend() fyne.CanvasObject {
 					session.LastDomain = session.Window.Content()
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutTransfers())
+					removeOverlays()
+				}
+			} else {
+				wReceiver.SetValidationError(errors.New("invalid address"))
+				wReceiver.Refresh()
+			}
+		}
+	}
+
+	btnTransfers := widget.NewButton("Transfers", nil)
+	btnTransfers.OnTapped = func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutTransfers())
+		removeOverlays()
+	}
+
+	btnSendNow.OnTapped = func() {
+		_, err := globals.ParseAmount(wAmount.Text)
+		if tx.Address != nil {
+			if wRings != nil && err == nil && tx.Address != nil {
+				err = addTransfer()
+				if err == nil {
+					showLoadingOverlay()
+					txid, err := sendTransfers()
+					if err != nil {
+						log.Printf("[Send] Error: %v\n", err)
+						removeOverlays()
+						dialog.ShowError(err, session.Window)
+						return
+					}
+					log.Printf("[Send] Transaction sent: %s\n", txid)
+					removeOverlays()
+					session.LastDomain = session.Window.Content()
+					session.Window.SetContent(layoutTransition())
+					session.Window.SetContent(layoutDashboard())
 					removeOverlays()
 				}
 			} else {
@@ -1895,11 +1942,25 @@ func layoutSend() fyne.CanvasObject {
 			rectSpacer,
 			container.NewHBox(
 				layout.NewSpacer(),
-				container.NewHBox(
-					layout.NewSpacer(),
-					linkCancel,
-					layout.NewSpacer(),
+				container.NewStack(
+					rect300,
+					wrapMobileButton(btnTransfers),
 				),
+				layout.NewSpacer(),
+			),
+			rectSpacer,
+			container.NewHBox(
+				layout.NewSpacer(),
+				container.NewStack(
+					rect300,
+					wrapMobileButton(btnSendNow),
+				),
+				layout.NewSpacer(),
+			),
+rectSpacer,
+			container.NewCenter(
+				layout.NewSpacer(),
+				linkCancel,
 				layout.NewSpacer(),
 			),
 			wSpacer,
@@ -1919,6 +1980,128 @@ func layoutSend() fyne.CanvasObject {
 	)
 
 	// Register with navigation stack (send allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
+
+	return NewVScroll(layout)
+}
+
+func layoutReceive() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+
+	rectWidth := canvas.NewRectangle(color.Transparent)
+	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, 10))
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(10, 0))
+
+	heading := canvas.NewText("R E C E I V E    D E R O", colors.Gray)
+	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
+
+	addressStr := engram.Disk.GetAddress().String()
+	addressLabel := canvas.NewText("", colors.Green)
+	addressLabel.TextSize = scaleFont(22)
+	addressLabel.Alignment = fyne.TextAlignCenter
+	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	var addressToggleBtn *widget.Button
+	addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		session.AddressHidden = !session.AddressHidden
+		if session.AddressHidden {
+			addressLabel.Text = "dE...••••••••"
+			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
+		} else {
+			addressLabel.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+			addressToggleBtn.SetIcon(theme.VisibilityIcon())
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
+		}
+		addressLabel.Refresh()
+	})
+	addressToggleBtn.Importance = widget.LowImportance
+
+	addressCopyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
+		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
+	})
+	addressCopyBtn.Importance = widget.LowImportance
+
+	if session.AddressHidden {
+		addressLabel.Text = "dE...••••••••"
+		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+	} else {
+		addressLabel.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+		addressToggleBtn.SetIcon(theme.VisibilityIcon())
+	}
+
+btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDashboard())
+		removeOverlays()
+	})
+
+	var imageQR *canvas.Image
+	qr, err := qrcode.New(engram.Disk.GetAddress().String(), qrcode.Highest)
+	if err != nil {
+		logger.Errorf("[Receive] Error generating QR: %v\n", err)
+	} else {
+		qr.BackgroundColor = colors.DarkMatter
+		qr.ForegroundColor = colors.Green
+	}
+	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.65)))
+	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
+
+	features := container.NewStack(
+		rectBox,
+		container.NewVScroll(
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				container.NewCenter(
+					container.NewVBox(
+						heading,
+						rectSpacer,
+					),
+				),
+				rectSpacer,
+				container.NewCenter(
+					container.NewHBox(
+						addressLabel,
+						addressToggleBtn,
+						addressCopyBtn,
+					),
+				),
+				rectSpacer,
+				rectSpacer,
+				container.NewCenter(
+					imageQR,
+				),
+				rectSpacer,
+			),
+		),
+	)
+
+	bottom := container.NewStack(
+		container.NewVBox(
+			container.NewCenter(
+				btnBack,
+			),
+		),
+	)
+
+	layout := container.NewBorder(
+		features,
+		bottom,
+		nil,
+		nil,
+	)
+
 	if session.NavStack != nil {
 		session.NavStack.Push(session.Domain, true)
 	}
@@ -3861,10 +4044,10 @@ func layoutAssetExplorer() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutFilesAndContracts())
+		session.Window.SetContent(layoutSend())
 		removeOverlays()
 	})
 
@@ -5484,7 +5667,7 @@ func layoutTransfers() fyne.CanvasObject {
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
+		session.Window.SetContent(layoutSend())
 		removeOverlays()
 	})
 
@@ -5747,7 +5930,7 @@ func layoutTransfers() fyne.CanvasObject {
 		if k.Name == fyne.KeyDown {
 			session.Dashboard = "main"
 			session.Window.SetContent(layoutTransition())
-			session.Window.SetContent(layoutDashboard())
+			session.Window.SetContent(layoutSend())
 			removeOverlays()
 		}
 	})
@@ -13128,6 +13311,11 @@ func layoutAccount() fyne.CanvasObject {
 	})
 	addressToggleBtn.Importance = widget.LowImportance
 
+	addressCopyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
+		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
+	})
+	addressCopyBtn.Importance = widget.LowImportance
+
 	if session.AddressHidden {
 		heading.Text = "dE...••••••••"
 		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
@@ -13146,13 +13334,8 @@ func layoutAccount() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-	})
-
-	linkCopyAddress := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCopyAddress.OnTapped = func() {
-		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
-	}
-
+})
+	
 	linkIdentity := widget.NewHyperlinkWithStyle("Identity Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkIdentity.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
@@ -13657,12 +13840,8 @@ func layoutAccount() fyne.CanvasObject {
 					container.NewHBox(
 						heading,
 						addressToggleBtn,
+						addressCopyBtn,
 					),
-				),
-				container.NewHBox(
-					layout.NewSpacer(),
-					linkCopyAddress,
-					layout.NewSpacer(),
 				),
 				rectSpacer,
 				buttonsRow,

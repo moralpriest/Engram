@@ -138,6 +138,7 @@ var layoutRegistry = map[string]LayoutFunc{
 	"app.main":             layoutMain,
 	"app.wallet":           layoutDashboard,
 	"app.send":             layoutSend,
+	"app.receive":          layoutReceive,
 	"app.service":          layoutServiceAddress,
 	"app.create":           layoutNewAccount,
 	"app.restore":          layoutRestore,
