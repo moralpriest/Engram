@@ -1577,6 +1577,12 @@ func layoutSend() fyne.CanvasObject {
 
 	wPaymentID := widget.NewEntry()
 	wPaymentID.Validator = func(s string) (err error) {
+		if strings.TrimSpace(s) == "" {
+			tx.PaymentID = 0
+			wPaymentID.SetValidationError(nil)
+			return nil
+		}
+
 		tx.PaymentID, err = strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			wPaymentID.SetValidationError(err)
