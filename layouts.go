@@ -1786,7 +1786,13 @@ func layoutSend() fyne.CanvasObject {
 	}
 
 	btnTransfers := widget.NewButton("Transfers", nil)
+	if len(tx.Pending) == 0 {
+		btnTransfers.Disable()
+	}
 	btnTransfers.OnTapped = func() {
+		if len(tx.Pending) == 0 {
+			return
+		}
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutTransfers())
@@ -1935,7 +1941,7 @@ func layoutSend() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					wrapMobileButton(btnSend),
+					wrapMobileButton(btnSendNow),
 				),
 				layout.NewSpacer(),
 			),
@@ -1953,7 +1959,7 @@ func layoutSend() fyne.CanvasObject {
 				layout.NewSpacer(),
 				container.NewStack(
 					rect300,
-					wrapMobileButton(btnSendNow),
+					wrapMobileButton(btnSend),
 				),
 				layout.NewSpacer(),
 			),
