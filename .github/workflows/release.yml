@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       fyne_version: ${{ steps.version.outputs.fyne_version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
@@ -51,6 +52,14 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
           fi
           VERSION="${TAG#v}"
+          TAG="v${VERSION}"
+
+          if [ "$EVENT_NAME" == "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/tags/$TAG" ]; then
+            echo "Manual releases must be run from the matching tag ref ($TAG). Current ref: $GITHUB_REF"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
           # Extract Fyne-compatible version (x.y.z only, no suffixes)
@@ -65,6 +74,7 @@ jobs:
           fi
 
           echo "Version: $VERSION"
+          echo "Tag: $TAG"
           echo "Fyne version: $FYNE_VERSION"
 
       - name: Validate semantic version
@@ -94,6 +104,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Generate changelog
         id: changelog
@@ -143,6 +154,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
@@ -188,6 +201,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
@@ -228,6 +243,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
@@ -268,6 +285,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Set up Go
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
@@ -326,6 +345,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
@@ -379,7 +400,7 @@ jobs:
   verify-artifacts:
     name: Verify Artifacts
     runs-on: ubuntu-latest
-    needs: sign-artifacts
+    needs: [verify, sign-artifacts]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -393,6 +414,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
       - name: Download signed artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
@@ -412,7 +435,7 @@ jobs:
               echo "Verifying $file..."
               cosign verify-blob "$file" \
                 --bundle "${file}.bundle" \
-                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ github.ref_name }}" \
+                --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ needs.verify.outputs.tag }}" \
                 --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
               if [ $? -ne 0 ]; then
                 echo "ERROR: Signature verification failed for $file"
@@ -480,6 +503,7 @@ jobs:
         uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
         with:
           name: Engram v${{ needs.verify.outputs.version }}
+          tag_name: ${{ needs.verify.outputs.tag }}
           body: |
             ## Engram v${{ needs.verify.outputs.version }}
 
@@ -493,7 +517,7 @@ jobs:
             ```bash
             cosign verify-blob <filename> \
               --bundle <filename>.bundle \
-              --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/v${{ needs.verify.outputs.version }} \
+              --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/${{ needs.verify.outputs.tag }} \
               --certificate-oidc-issuer=https://token.actions.githubusercontent.com
             ```
 
