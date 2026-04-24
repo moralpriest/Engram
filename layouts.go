@@ -947,7 +947,7 @@ func layoutDashboard() fyne.CanvasObject {
 	accountName.TextStyle = fyne.TextStyle{Bold: true}
 	accountName.TextSize = scaleFont(18)
 
-	gramSend := widget.NewButton(" Send ", nil)
+	gramSend := widget.NewButtonWithIcon(" Send ", theme.UploadIcon(), nil)
 
 	heading := canvas.NewText("B A L A N C E", colors.Gray)
 	heading.TextSize = scaleFont(16)
@@ -1349,7 +1349,7 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnReceive := widget.NewButton("Receive", nil)
+	btnReceive := widget.NewButtonWithIcon("Receive", theme.DownloadIcon(), nil)
 	btnReceive.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -1550,10 +1550,10 @@ func layoutSend() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 	frame := &iframe{}
 
-	btnSend := widget.NewButton("Save", nil)
+	btnSend := widget.NewButtonWithIcon("Save", theme.DocumentSaveIcon(), nil)
 	btnSend.Disable()
 
-	btnSendNow := widget.NewButton("Send", nil)
+	btnSendNow := widget.NewButtonWithIcon("Send", theme.UploadIcon(), nil)
 	btnSendNow.Disable()
 
 	wAmount := widget.NewEntry()
@@ -1791,7 +1791,7 @@ func layoutSend() fyne.CanvasObject {
 		}
 	}
 
-	btnTransfers := widget.NewButton("Transfers", nil)
+	btnTransfers := widget.NewButtonWithIcon("Transfers", theme.ListIcon(), nil)
 	if len(tx.Pending) == 0 {
 		btnTransfers.Disable()
 	}
