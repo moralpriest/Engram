@@ -1957,7 +1957,7 @@ func layoutSend() fyne.CanvasObject {
 				),
 				layout.NewSpacer(),
 			),
-rectSpacer,
+			rectSpacer,
 			container.NewCenter(
 				layout.NewSpacer(),
 				linkCancel,
@@ -2041,7 +2041,7 @@ func layoutReceive() fyne.CanvasObject {
 		addressToggleBtn.SetIcon(theme.VisibilityIcon())
 	}
 
-btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
@@ -3498,12 +3498,12 @@ func layoutRestore() fyne.CanvasObject {
 		case 1: // Hex Key
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
-			recoveryForm.Objects[8] = hexForm
+			recoveryForm.Objects[7] = hexForm
 			safeCanvasFocus(hexEntry)
 		case 0: // Recovery Words
 			wLanguage.Hide()
 			form.Objects[1].(*fyne.Container).Objects[2] = recoveryForm
-			recoveryForm.Objects[8] = seedForm
+			recoveryForm.Objects[7] = seedForm
 			safeCanvasFocus(seedEntry)
 		case 2: // Import File
 			btnCreate.Disable()
@@ -3511,6 +3511,9 @@ func layoutRestore() fyne.CanvasObject {
 			clearFormText(errorText)
 			form.Objects[1].(*fyne.Container).Objects[2] = importFileForm
 		}
+
+		recoveryForm.Refresh()
+		form.Refresh()
 	}
 
 	body := widget.NewLabel("Your account has been successfully recovered.")
@@ -4068,7 +4071,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutSend())
@@ -13358,8 +13361,8 @@ func layoutAccount() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-})
-	
+	})
+
 	linkIdentity := widget.NewHyperlinkWithStyle("Identity Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkIdentity.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
