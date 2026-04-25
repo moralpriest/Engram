@@ -112,27 +112,22 @@ jobs:
           VERSION="${{ needs.verify.outputs.version }}"
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
 
-          if [ -f "RELEASE_NOTES.md" ]; then
-            cp RELEASE_NOTES.md /tmp/changelog.md
-            echo "Using RELEASE_NOTES.md for release notes"
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
           else
-            if [ -z "$PREV_TAG" ]; then
-              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
-            else
-              COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
-            fi
-
-            # Build changelog with proper variable expansion
-            echo "## What's Changed" > /tmp/changelog.md
-            echo "" >> /tmp/changelog.md
-            echo "$COMMITS" >> /tmp/changelog.md
-            echo "" >> /tmp/changelog.md
-            echo "## Security" >> /tmp/changelog.md
-            echo "" >> /tmp/changelog.md
-            echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
-            echo "" >> /tmp/changelog.md
-            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges ${PREV_TAG}..HEAD)
           fi
+
+          # Build changelog with proper variable expansion
+          echo "## What's Changed" > /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "$COMMITS" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "## Security" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "This release includes signed artifacts and SBOM. See verification instructions below." >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG:-previous}...v${VERSION}" >> /tmp/changelog.md
           
           # Output for use in release
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
