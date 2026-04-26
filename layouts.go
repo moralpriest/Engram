@@ -18125,9 +18125,19 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				launchStatus.Show()
 			}
-			startCloseBtn.SetText("Cancel")
-			startCloseBtn.SetIcon(theme.CancelIcon())
-			startCloseBtn.Enable()
+			telaStoppingSCIDsGlobal.Lock()
+			isStopping := telaStoppingSCIDsGlobal.m[scid]
+			telaStoppingSCIDsGlobal.Unlock()
+
+			if isStopping {
+				startCloseBtn.SetText("Stopping...")
+				startCloseBtn.Disable()
+			} else {
+				startCloseBtn.SetText("Cancel")
+				startCloseBtn.SetIcon(theme.CancelIcon())
+				startCloseBtn.Enable()
+			}
+
 
 			// Sync UI with existing launch progress
 			if _, loaded := activeRowUpdaters.LoadOrStore(co, scid); !loaded {
@@ -18172,6 +18182,8 @@ func layoutTELA() fyne.CanvasObject {
 								telaStoppingSCIDsGlobal.Unlock()
 								if isStopping {
 									launchStatus.Text = "Stopping..."
+									startCloseBtn.SetText("Stopping...")
+									startCloseBtn.Disable()
 								} else {
 									if val < 0.30 {
 										launchStatus.Text = "Connecting to node..."
@@ -18183,6 +18195,7 @@ func layoutTELA() fyne.CanvasObject {
 										launchStatus.Text = "Almost ready..."
 									}
 								}
+
 							}
 						})
 					time.Sleep(1 * time.Second)
@@ -18363,7 +18376,8 @@ func layoutTELA() fyne.CanvasObject {
 						}
 					}
 
-					link, err := serveTELAWithStaleRecovery(scid, session.Daemon)
+					link, err := serveTELAWithStaleRecovery(scid, session.Daemon, &cancelled)
+
 					if cancelled.Load() {
 						logger.Printf("[TELA-LIST] Cancellation detected for %s, shutting down\n", scid)
 						if err == nil {
@@ -18390,7 +18404,12 @@ func layoutTELA() fyne.CanvasObject {
 					} else {
 						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", scid)}
-							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink, cancelChan)
+							if cancelled.Load() {
+								cleanupLaunch(false, true)
+								return
+							}
+
 							if permErr != nil {
 								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
 								fyne.Do(func() {
@@ -18407,7 +18426,8 @@ func layoutTELA() fyne.CanvasObject {
 								return
 							}
 
-							link, updateErr := serveTELAUpdates(scid)
+							link, updateErr := serveTELAUpdates(scid, &cancelled)
+
 							if updateErr != nil {
 								logger.Errorf("[Engram] Error serving TELA: %s\n", updateErr)
 								fyne.Do(func() {
@@ -21672,8 +21692,15 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			launchStatus.Text = "Starting TELA app..."
 		}
 		launchStatus.Show()
-		btnServer.Text = "Cancel"
-		btnServer.SetIcon(theme.CancelIcon())
+		if isStoppingGlobal {
+			btnServer.SetText("Stopping...")
+			btnServer.Disable()
+		} else {
+			btnServer.Text = "Cancel"
+			btnServer.SetIcon(theme.CancelIcon())
+			btnServer.Enable()
+		}
+
 
 		// Sync UI with existing launch progress
 		telaManagerUIsGlobal.Store(index.SCID, &telaManagerUI{progress: launchProgress, status: launchStatus})
@@ -21741,6 +21768,18 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 									ui.status.Text = status
 									ui.status.Refresh()
 								}
+								if btnServer != nil {
+									if isStopping {
+										btnServer.SetText("Stopping...")
+										btnServer.Disable()
+									} else {
+										btnServer.SetText("Cancel")
+										btnServer.SetIcon(theme.CancelIcon())
+										btnServer.Enable()
+									}
+									btnServer.Refresh()
+								}
+
 							}
 						})
 					}
@@ -21981,7 +22020,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				}
 
 				logger.Printf("[TELA-MANAGER] Calling serveTELAWithStaleRecovery for %s\n", index.SCID)
-				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon)
+				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon, &cancelled)
+
 				logger.Printf("[TELA-MANAGER] serveTELAWithStaleRecovery returned for %s: err=%v\n", index.SCID, err)
 				if cancelled.Load() {
 					logger.Printf("[TELA-MANAGER] Cancellation detected for %s, shutting down\n", index.SCID)
@@ -22028,7 +22068,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							}
 
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
-							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink, cancelChan)
+							if cancelled.Load() {
+								cleanupLaunch(false, true)
+								return
+							}
+
 							if permErr != nil {
 								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
 								uiDo(func() {
@@ -22045,7 +22090,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								return
 							}
 
-							servedLink, serveErr := serveTELAUpdates(index.SCID)
+							servedLink, serveErr := serveTELAUpdates(index.SCID, &cancelled)
+
 							if serveErr != nil {
 								logger.Errorf("[Engram] Error serving TELA: %s\n", serveErr)
 								uiDo(func() {

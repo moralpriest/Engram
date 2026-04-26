@@ -8168,7 +8168,12 @@ func DeleteAppPermissions(appName string) error {
 }
 
 // Ask permission to complete a specific Engram action, using xswd permissions to match existing requests that have params to display
-func AskPermissionForRequestE(headerText string, params interface{}) (choice xswd.Permission, err error) {
+func AskPermissionForRequestE(headerText string, params interface{}, cancelChans ...chan struct{}) (choice xswd.Permission, err error) {
+	var cancelChan chan struct{}
+	if len(cancelChans) > 0 {
+		cancelChan = cancelChans[0]
+	}
+
 	logger.Debugf("[AskPermissionForRequestE] Prompting for permission: %s\n", headerText)
 	choice = xswd.Deny
 
@@ -8312,8 +8317,14 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 		)
 	})
 
-	// Wait for user input
-	<-done
+	// Wait for user input or cancellation
+	select {
+	case <-done:
+	case <-cancelChan:
+		choice = xswd.Deny
+		err = fmt.Errorf("cancelled")
+	}
+
 	logger.Debugf("[AskPermissionForRequestE] User input received for: %s\n", headerText)
 
 	uiDo(func() {
@@ -8371,8 +8382,17 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 
 // serveTELACollisionRecovery calls ServeTELA and, on stale clone file collisions, removes the
 // affected clone tree and retries (then falls back to clearing non-running top-level dirs).
-func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) {
-	link, err = tela.ServeTELA(scid, endpoint)
+func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool) (link string, err error) {
+	var isCancelled *atomic.Bool
+	if len(cancelled) > 0 {
+		isCancelled = cancelled[0]
+	}
+
+	if isCancelled != nil && isCancelled.Load() {
+		return "", fmt.Errorf("cancelled")
+	}
+
+	link, err = tela.ServeTELA(scid, endpoint, cancelled...)
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		return link, err
 	}
@@ -8380,7 +8400,12 @@ func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) 
 		if rmErr := os.RemoveAll(cloneDir); rmErr != nil {
 			logger.Printf("[TELA] Remove stale clone dir %s: %v\n", cloneDir, rmErr)
 		}
-		link, err = tela.ServeTELA(scid, endpoint)
+
+		if isCancelled != nil && isCancelled.Load() {
+			return "", fmt.Errorf("cancelled")
+		}
+
+		link, err = tela.ServeTELA(scid, endpoint, cancelled...)
 		if err == nil {
 			return link, nil
 		}
@@ -8397,30 +8422,39 @@ func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) 
 			}
 		}
 	}
-	link, err = tela.ServeTELA(scid, endpoint)
+	if isCancelled != nil && isCancelled.Load() {
+		return "", fmt.Errorf("cancelled")
+	}
+
+	link, err = tela.ServeTELA(scid, endpoint, cancelled...)
+
 	return link, err
 }
 
 // serveTELAWithStaleRecovery reuses an already-running server for the SCID when possible,
 // otherwise serves with collision recovery for leftover clone files after shutdown.
-func serveTELAWithStaleRecovery(scid, endpoint string) (link string, err error) {
+func serveTELAWithStaleRecovery(scid, endpoint string, cancelled ...*atomic.Bool) (link string, err error) {
+
 	for _, s := range getTelaActiveServers() {
 		if s.SCID == scid {
 			return fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint), nil
 		}
 	}
-	return serveTELACollisionRecovery(scid, endpoint)
+	return serveTELACollisionRecovery(scid, endpoint, cancelled...)
+
 }
 
 // Wrapper for serving TELA content toggling tela.updates if disabled, updated content should be checked for and presented to the user before calling serveTELAUpdates
-func serveTELAUpdates(scid string) (link string, err error) {
+func serveTELAUpdates(scid string, cancelled ...*atomic.Bool) (link string, err error) {
+
 	var toggledUpdates bool
 	if !areTelaUpdatesAllowed() {
 		tela.AllowUpdates(true)
 		toggledUpdates = true
 	}
 
-	link, err = serveTELACollisionRecovery(scid, session.Daemon)
+	link, err = serveTELACollisionRecovery(scid, session.Daemon, cancelled...)
+
 	if toggledUpdates {
 		tela.AllowUpdates(false)
 	}
