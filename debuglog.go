@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,11 +20,12 @@ const (
 
 var (
 	debugLogMu          sync.Mutex
-	debugLogFile        *os.File
-	debugPipeWriter     *os.File
+	debugLogFile        atomic.Pointer[os.File]
+	debugPipeWriter     atomic.Pointer[os.File]
 	debugPipeDone       chan struct{}
-	debugOriginalStdout = os.Stdout
-	debugOriginalStderr = os.Stderr
+	debugLogChan        atomic.Pointer[chan []byte]
+	debugOriginalStdout atomic.Pointer[os.File]
+	debugOriginalStderr atomic.Pointer[os.File]
 )
 
 func getDebugLogPath() string {
@@ -52,19 +54,62 @@ func initDebugLog() error {
 		return err
 	}
 
-	debugLogMu.Lock()
-	debugLogFile = f
-	debugPipeWriter = w
+	debugLogFile.Store(f)
+	debugPipeWriter.Store(w)
 	debugPipeDone = make(chan struct{})
-	debugLogMu.Unlock()
+	ch := make(chan []byte, 5000)
+	debugLogChan.Store(&ch)
+	debugOriginalStdout.Store(os.Stdout)
+	debugOriginalStderr.Store(os.Stderr)
 
 	os.Stdout = w
 	os.Stderr = w
 
+	// Background worker to write logs to disk without blocking the main app
+	go func() {
+		for data := range ch {
+			file := debugLogFile.Load()
+			if file != nil {
+				_, _ = file.Write(data)
+			}
+
+			stdout := debugOriginalStdout.Load()
+			if stdout != nil {
+				_, _ = stdout.Write(data)
+			}
+		}
+	}()
+
 	go func() {
 		defer close(debugPipeDone)
 		defer r.Close()
-		_, _ = io.Copy(io.MultiWriter(debugOriginalStdout, f), r)
+		buf := make([]byte, 16*1024)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 {
+				data := make([]byte, n)
+				copy(data, buf[:n])
+
+				logChPtr := debugLogChan.Load()
+				if logChPtr != nil {
+					select {
+					case *logChPtr <- data:
+					default:
+						// Buffer full, dropping logs to prevent app freeze
+					}
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		debugLogMu.Lock()
+		logChPtr := debugLogChan.Load()
+		if logChPtr != nil {
+			close(*logChPtr)
+			debugLogChan.Store(nil)
+		}
+		debugLogMu.Unlock()
 	}()
 
 	writeDebugLogHeader()
@@ -129,28 +174,22 @@ func writeCrashLog(reason interface{}) {
 
 func writeDebugLine(format string, a ...interface{}) {
 	line := fmt.Sprintf(format+"\n", a...)
+	data := []byte(line)
 
-	debugLogMu.Lock()
-	defer debugLogMu.Unlock()
-
-	if debugLogFile != nil {
-		_, _ = debugLogFile.WriteString(line)
-		_ = debugLogFile.Sync()
-	}
-
-	if debugOriginalStderr != nil {
-		_, _ = debugOriginalStderr.WriteString(line)
+	logChPtr := debugLogChan.Load()
+	if logChPtr != nil {
+		select {
+		case *logChPtr <- data:
+		default:
+			// Buffer full, dropping logs to prevent app freeze
+		}
 	}
 }
 
 func closeDebugLog() {
+	writer := debugPipeWriter.Swap(nil)
 	debugLogMu.Lock()
-	writer := debugPipeWriter
 	done := debugPipeDone
-	file := debugLogFile
-	debugPipeWriter = nil
-	debugPipeDone = nil
-	debugLogFile = nil
 	debugLogMu.Unlock()
 
 	if writer != nil {
@@ -161,9 +200,10 @@ func closeDebugLog() {
 		<-done
 	}
 
-	os.Stdout = debugOriginalStdout
-	os.Stderr = debugOriginalStderr
+	os.Stdout = debugOriginalStdout.Load()
+	os.Stderr = debugOriginalStderr.Load()
 
+	file := debugLogFile.Swap(nil)
 	if file != nil {
 		_ = file.Close()
 	}

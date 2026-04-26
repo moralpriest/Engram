@@ -132,10 +132,13 @@ func HandleTELALinks(ctx context.Context, p TELALink_Params) (result TELALink_Re
 				pushTELANavigation(args[1])
 			}
 
-			err = fyne.CurrentApp().OpenURL(url)
-			if err != nil {
-				err = fmt.Errorf("could not open tela link: %s", err)
-				return
+			if fyne.CurrentApp().Driver().Device().IsMobile() {
+				go func() {
+					time.Sleep(2 * time.Second)
+					safeOpenURL(url)
+				}()
+			} else {
+				safeOpenURL(url)
 			}
 
 			result.TelaLinkResult = link

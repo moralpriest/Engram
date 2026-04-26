@@ -27,6 +27,7 @@ import (
 	"image/color"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -986,12 +987,14 @@ func buildINDEXFromVars(scid string, vars map[string]interface{}) (tela.INDEX, e
 	// Validate INDEX version (exported, pure computation)
 	sc, version, err := tela.ValidINDEXVersion(code, modTag)
 	if err != nil {
+		logger.Debugf("[TELA] SCID %s does not parse as TELA-INDEX-1 (code len: %d): %v\n", scid, len(code), err)
 		return index, fmt.Errorf("scid does not parse as TELA-INDEX-1: %s", err)
 	}
 
 	// dURL is required
 	d, ok := vars["dURL"].(string)
 	if !ok {
+		logger.Debugf("[TELA] SCID %s is missing dURL variable\n", scid)
 		return index, fmt.Errorf("could not get dURL from %s", scid)
 	}
 	dURL := decodeHex(d)
@@ -1041,10 +1044,26 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		batchSize = 50
 	}
 
-	if gnomon.Index == nil || gnomon.Index.RPC == nil || gnomon.Index.RPC.RPC == nil {
-		return nil, nil, fmt.Errorf("gnomon rpc client unavailable")
+	var rpcClient *jrpc2.Client
+	var transientCleanup func()
+	defer func() {
+		if transientCleanup != nil {
+			transientCleanup()
+		}
+	}()
+
+	// Try to use a dedicated RPC connection to avoid contention with Gnomon's active indexing
+	pool, cleanup, err := dialRPCPool(session.Daemon, 1)
+	if err == nil && len(pool) > 0 {
+		rpcClient = pool[0]
+		transientCleanup = cleanup
+	} else {
+		if gnomon.Index == nil || gnomon.Index.RPC == nil || gnomon.Index.RPC.RPC == nil {
+			return nil, nil, fmt.Errorf("gnomon rpc client unavailable and failed to dial pool: %v", err)
+		}
+		rpcClient = gnomon.Index.RPC.RPC
 	}
-	rpcClient := gnomon.Index.RPC.RPC
+
 	retryableFetchError := func(err error) bool {
 		if err == nil {
 			return false
@@ -1054,8 +1073,11 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			strings.Contains(msg, "use of closed network connection") ||
 			strings.Contains(msg, "broken pipe") ||
 			strings.Contains(msg, "connection reset by peer") ||
-			strings.Contains(msg, "eof")
+			strings.Contains(msg, "eof") ||
+			strings.Contains(msg, "timeout") ||
+			strings.Contains(msg, "deadline exceeded")
 	}
+
 	rebuildRPCClient := func() (*jrpc2.Client, func(), error) {
 		pool, cleanup, err := dialRPCPool(session.Daemon, 1)
 		if err != nil {
@@ -1067,12 +1089,6 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		}
 		return pool[0], cleanup, nil
 	}
-	var transientCleanup func()
-	defer func() {
-		if transientCleanup != nil {
-			transientCleanup()
-		}
-	}()
 
 	for i := 0; i < len(scids); i += batchSize {
 		select {
@@ -1094,7 +1110,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 				Params: rpc.GetSC_Params{
 					SCID:      scid,
 					Variables: true,
-					Code:      false,
+					Code:      true,
 				},
 			}
 		}
@@ -1102,7 +1118,7 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		var responses []*jrpc2.Response
 		var err error
 		for attempt := 0; attempt < 3; attempt++ {
-			batchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			responses, err = rpcClient.Batch(batchCtx, specs)
 			cancel()
 			if err == nil {
@@ -1133,7 +1149,11 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 		}
 
 		for j, resp := range responses {
-			if j >= len(batch) || resp == nil || resp.Error() != nil {
+			if j >= len(batch) || resp == nil {
+				continue
+			}
+			if resp.Error() != nil {
+				logger.Printf("[TELA] Batch INDEX fetch result error for %s: %v\n", batch[j], resp.Error())
 				continue
 			}
 
@@ -3324,12 +3344,32 @@ func uiDo(fn func()) {
 		return
 	}
 
+	start := time.Now()
 	fyne.Do(func() {
 		if appExitFlag.Load() {
 			return
 		}
+		elapsed := time.Since(start)
+		if elapsed > 1*time.Second {
+			logger.Debugf("[uiDo] LAGGING: took %v to start\n", elapsed)
+		}
 		fn()
 	})
+}
+
+func safeOpenURL(u *url.URL) {
+	if u == nil {
+		return
+	}
+	logger.Printf("[OpenURL] Requesting to open: %s\n", u.String())
+	go func() {
+		err := fyne.CurrentApp().OpenURL(u)
+		if err != nil {
+			logger.Errorf("[OpenURL] Error opening %s: %v\n", u.String(), err)
+		} else {
+			logger.Printf("[OpenURL] Successfully requested open for %s\n", u.String())
+		}
+	}()
 }
 
 func safeWalletOpen() bool {
@@ -8129,6 +8169,7 @@ func DeleteAppPermissions(appName string) error {
 
 // Ask permission to complete a specific Engram action, using xswd permissions to match existing requests that have params to display
 func AskPermissionForRequestE(headerText string, params interface{}) (choice xswd.Permission, err error) {
+	logger.Debugf("[AskPermissionForRequestE] Prompting for permission: %s\n", headerText)
 	choice = xswd.Deny
 
 	var paramString string
@@ -8231,48 +8272,55 @@ func AskPermissionForRequestE(headerText string, params interface{}) (choice xsw
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
-		),
-	)
+	uiDo(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+	})
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			container.NewCenter(
-				container.NewVBox(
-					span,
-					container.NewCenter(
-						header,
-					),
-					container.NewCenter(
-						container.NewStack(
-							span,
+	uiDo(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
 						),
+						container.NewCenter(
+							container.NewStack(
+								span,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						content,
+						btnRow,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
 					),
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					content,
-					btnRow,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
 				),
 			),
-		),
-	)
+		)
+	})
 
 	// Wait for user input
 	<-done
+	logger.Debugf("[AskPermissionForRequestE] User input received for: %s\n", headerText)
 
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
+	uiDo(func() {
+		overlay.Top().Hide()
+		overlay.Remove(overlay.Top())
+		overlay.Remove(overlay.Top())
+	})
 
 	return
 }
@@ -8308,7 +8356,7 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 	if filePath == "" || filePath == "." {
 		return "", false
 	}
-	telaRoot := filepath.Clean(tela.GetPath())
+	telaRoot := filepath.Clean(getTelaPath())
 	rel, errRel := filepath.Rel(telaRoot, filePath)
 	if errRel != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false
@@ -8337,9 +8385,9 @@ func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) 
 			return link, nil
 		}
 	}
-	telaPath := tela.GetPath()
+	telaPath := getTelaPath()
 	runningDirs := make(map[string]bool)
-	for _, s := range tela.GetServerInfo() {
+	for _, s := range getTelaActiveServers() {
 		runningDirs[s.Name] = true
 	}
 	if entries, readErr := os.ReadDir(telaPath); readErr == nil {
@@ -8356,7 +8404,7 @@ func serveTELACollisionRecovery(scid, endpoint string) (link string, err error) 
 // serveTELAWithStaleRecovery reuses an already-running server for the SCID when possible,
 // otherwise serves with collision recovery for leftover clone files after shutdown.
 func serveTELAWithStaleRecovery(scid, endpoint string) (link string, err error) {
-	for _, s := range tela.GetServerInfo() {
+	for _, s := range getTelaActiveServers() {
 		if s.SCID == scid {
 			return fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint), nil
 		}
@@ -8367,7 +8415,7 @@ func serveTELAWithStaleRecovery(scid, endpoint string) (link string, err error) 
 // Wrapper for serving TELA content toggling tela.updates if disabled, updated content should be checked for and presented to the user before calling serveTELAUpdates
 func serveTELAUpdates(scid string) (link string, err error) {
 	var toggledUpdates bool
-	if !tela.UpdatesAllowed() {
+	if !areTelaUpdatesAllowed() {
 		tela.AllowUpdates(true)
 		toggledUpdates = true
 	}
@@ -8450,7 +8498,7 @@ func telaFilterSearchExclusions(dURL, searchExclusions string) (err error) {
 // Sort and return search display strings for list widget
 func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string) (display []string) {
 	activeSCIDs := map[string]struct{}{}
-	for _, serv := range tela.GetServerInfo() {
+	for _, serv := range getTelaActiveServers() {
 		activeSCIDs[serv.SCID] = struct{}{}
 	}
 
