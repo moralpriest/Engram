@@ -109,6 +109,8 @@ var telaActiveServersCacheGlobal = struct {
 	updatesAllowed bool
 }{m: make(map[string]bool)}
 
+var heartbeatLoggingEnabled = false
+
 type telaManagerUI struct {
 	progress *slimProgressBar
 	status   *canvas.Text
@@ -126,7 +128,9 @@ func init() {
 		for {
 			time.Sleep(2 * time.Second)
 			uiDo(func() {
-				logger.Printf("[HEARTBEAT] UI thread is alive\n")
+				if heartbeatLoggingEnabled {
+					logger.Printf("[HEARTBEAT] UI thread is alive\n")
+				}
 			})
 		}
 	}()
