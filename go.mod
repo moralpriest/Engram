@@ -105,3 +105,5 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/civilware/tela => github.com/Capitao117/tela v0.0.0-20260427052059-05b3d4b06bdd

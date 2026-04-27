@@ -8,6 +8,8 @@ fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34/go.mod h1:TyPwb4pDTB8+btHM20AJ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/Capitao117/tela v0.0.0-20260427052059-05b3d4b06bdd h1:SBXUEsKsUw9unVPpYsb9jcv5oTajvqih0l7T/e2jCl8=
+github.com/Capitao117/tela v0.0.0-20260427052059-05b3d4b06bdd/go.mod h1:J+maI4zPRe7zpSpTyHDopUg3eQRqCKffvBIRnOhipB8=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/VictoriaMetrics/metrics v1.41.2 h1:pLQ4Mw9TqXFq3ZsZVJkz88JHpjL9LY5NHTY3v2gBNAw=
@@ -31,8 +33,6 @@ github.com/chengxilo/virtualterm v1.0.4 h1:Z6IpERbRVlfB8WkOmtbHiDbBANU7cimRIof7m
 github.com/chengxilo/virtualterm v1.0.4/go.mod h1:DyxxBZz/x1iqJjFxTFcr6/x+jSpqN0iwWCOK1q10rlY=
 github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb h1:ZM5hGZMiUvheyVjzJYgvY/A34NeDZ2WO8x7oMQA6Oyc=
 github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb/go.mod h1:aATobu9h/6BK9C+1e/DRBi6+dUNrHFqmykhhrxQvbTQ=
-github.com/civilware/tela v0.0.0-20250806221602-aa892d2ff8d4 h1:Coa5YQoaFcOd4fBEtUhbj3Kth3TX+9s5okjfulEis58=
-github.com/civilware/tela v0.0.0-20250806221602-aa892d2ff8d4/go.mod h1:J+maI4zPRe7zpSpTyHDopUg3eQRqCKffvBIRnOhipB8=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
