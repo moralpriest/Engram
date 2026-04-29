@@ -4723,43 +4723,6 @@ func startGnomon() {
 			if gnomon.telaBootstrapReady() {
 				gnomon.setBootstrapReady()
 			}
-
-			// Background TELA candidate backfill: scans existing SCIDs while user is on dashboard
-			// so first TELA visit can skip the expensive 49K-SCID prefilter.
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.Printf("[Gnomon] Backfill goroutine panic: %v\n", r)
-					}
-				}()
-				// Wait for indexer to have SCIDs and RPC connection
-				waitStart := time.Now()
-				for {
-					if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
-						return
-					}
-					if gnomon.Index == nil {
-						return
-					}
-					// Wait until we have some SCIDs indexed and RPC is up
-					scidCount := 0
-					if gnomon.Index.GravDBBackend != nil {
-						scidCount = len(gnomon.Index.GravDBBackend.GetAllOwnersAndSCIDs())
-					} else if gnomon.Index.BBSBackend != nil {
-						scidCount = len(gnomon.Index.BBSBackend.GetAllOwnersAndSCIDs())
-					}
-					if scidCount > 100 && walletapi.Connected {
-						break
-					}
-					if time.Since(waitStart) > 60*time.Second {
-						logger.Printf("[Gnomon] Backfill timeout waiting for SCIDs, skipping\n")
-						return
-					}
-					time.Sleep(2 * time.Second)
-				}
-				logger.Printf("[Gnomon] Starting background TELA candidate backfill...\n")
-				gnomon.Index.BackfillTelaCandidates()
-			}()
 		}
 	}
 }

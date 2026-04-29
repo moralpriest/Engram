@@ -55,7 +55,6 @@ import (
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
-	"github.com/creachadair/jrpc2"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
@@ -97,6 +96,9 @@ var telaLaunchStartTimesGlobal struct {
 	sync.Mutex
 	m map[string]time.Time
 }
+
+var telaBackfillActive atomic.Bool
+var telaBackfillFailed atomic.Bool
 
 func init() {
 	telaLaunchingSCIDsGlobal.m = make(map[string]bool)
@@ -19527,114 +19529,35 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				updateTelaProgress(0.60)
 			} else {
-				candidates := make([]string, 0, len(allSCIDs))
-				for _, sc := range allSCIDs {
-					if !rescanRecheck && isNegativeSCID(sc) {
-						prefilterAllowed[sc] = false
-						continue
+				// No pre-computed candidates yet. Start a background backfill
+				// and show a preparing message. The next scheduled warmup will
+				// pick up the candidates once the backfill completes.
+				if !telaBackfillActive.Load() && !telaBackfillFailed.Load() {
+					workers := 8
+					if a.Driver().Device().IsMobile() {
+						workers = 4
 					}
-					// Skip prefilter for SCIDs with cached INDEX data
-					if _, hasIndexData := indexCacheStore[sc]; hasIndexData {
-						prefilterAllowed[sc] = true
-						continue
-					}
-					// Skip prefilter for known TELA SCIDs from storage
-					if knownTelaSCIDs[sc] {
-						prefilterAllowed[sc] = true
-						continue
-					}
-					candidates = append(candidates, sc)
-				}
-
-				setTelaStatus(fmt.Sprintf("Checking TELA candidates... (%d total)", len(candidates)), colors.Yellow)
-				displayedTelaProgress = 0.10
-				setTelaProgress(0.10)
-				uiDo(func() {
-					results.Refresh()
-				})
-
-				prefilterStart := time.Now()
-
-				// Always create a dedicated RPC pool for prefilter.
-				// Reusing Gnomon's connection causes conflicts during active indexing
-				// (both share the same WebSocket, leading to "use of closed network connection" errors).
-				poolSize := 6
-				if !a.Driver().Device().IsMobile() {
-					poolSize = 8
-				}
-				pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
-				if poolErr != nil {
-					logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
-					if gnomon.Index != nil && gnomon.Index.RPC != nil && gnomon.Index.RPC.RPC != nil {
-						pool = []*jrpc2.Client{gnomon.Index.RPC.RPC}
-						poolCleanup = func() {} // Don't close Gnomon's connection
-					} else {
-						pool = nil
-						poolCleanup = func() {}
-					}
-				}
-
-				// Scale batch size based on device class for better progress granularity.
-				batchSize := 200
-				if !a.Driver().Device().IsMobile() {
-					batchSize = 500
-				}
-
-				var passed map[string]bool
-				var batchStats batchPrefilterStats
-				var batchErr error
-				if len(pool) > 0 {
-					passed, batchStats, batchErr = batchPrefilterTelaVersions(scanCtx, candidates, batchSize, 3, pool, func(completed, total int) {
-						results.Color = colors.Yellow
-						// Phase-based progress: prefilter is 15% -> 60%
-						var progress float64
-						if total > 0 {
-							progress = 0.15 + 0.45*float64(completed)/float64(total)
+					telaBackfillActive.Store(true)
+					go func() {
+						defer telaBackfillActive.Store(false)
+						defer func() {
+							if r := recover(); r != nil {
+								logger.Printf("[TELA] Backfill panic: %v\n", r)
+								telaBackfillFailed.Store(true)
+							}
+						}()
+						err := gnomon.Index.BackfillTelaCandidates(workers)
+						if err != nil {
+							logger.Printf("[TELA] Backfill failed: %v\n", err)
+							telaBackfillFailed.Store(true)
 						}
-						updateTelaProgress(progress)
-						setTelaStatus(fmt.Sprintf("Checking TELA candidates... (%d / %d)", completed, total), colors.Yellow)
-						uiDo(func() {
-							results.Refresh()
-						})
-					})
-					logger.Printf("[TELA] Prefilter returned, cleaning up %d pool connections...\n", len(pool))
-					poolCleanup()
-					logger.Printf("[TELA] Pool cleanup done\n")
-				} else {
-					batchErr = fmt.Errorf("no RPC connections available")
-				}
-				phasePrefilterMs = time.Since(prefilterStart).Milliseconds()
-				logger.Printf("[TELA] Prefilter phase took %dms, passed=%d err=%v\n", phasePrefilterMs, len(passed), batchErr)
-				if batchErr != nil {
-					logger.Printf("[TELA] Batch prefilter error: %v\n", batchErr)
-					if len(telaSearch) > 0 {
-						keepProgressVisible = false
-						logger.Printf("[TELA] Prefilter failed but %d cached results available, showing them\n", len(telaSearch))
-						fyne.Do(func() {
-							searching = telaSearchDisplayAll(telaSearch, sortBy)
-							searchData.Set(searching)
-							searchList.Refresh()
-							results.Text = fmt.Sprintf("  TELA Apps:  %d (prefilter error)", len(telaSearch))
-							results.Color = colors.Yellow
-							results.Refresh()
-						})
-						completeTelaScanProgress()
-						return
-					}
-					keepProgressVisible = true
-					setTelaStatus("Network error during prefilter, retrying...", colors.Yellow)
-					showInfiniteTelaProgress()
-					scheduleTelaWarmup()
-					return
+					}()
 				}
 
-				for sc := range passed {
-					prefilterAllowed[sc] = true
-					atomic.AddInt64(&prefilterPassed, 1)
-				}
-				atomic.AddInt64(&prefilterDropped, int64(len(candidates)-len(passed)))
-				atomic.AddInt64(&versionHits, batchStats.VersionHits)
-				logger.Printf("[TELA] Prefilter: passed=%d dropped=%d version_hits=%d\n", len(passed), len(candidates)-len(passed), batchStats.VersionHits)
+				setTelaStatus("Preparing TELA catalog (one-time)...", colors.Yellow)
+				showInfiniteTelaProgress()
+				scheduleTelaWarmup()
+				return
 			}
 		}
 
