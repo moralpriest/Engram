@@ -19028,7 +19028,39 @@ func layoutTELA() fyne.CanvasObject {
 			}
 		}()
 
+		// hasValidTelaJSONCache checks for a recent (< 24h) plain JSON cache.
+		// If present, we can skip the Gnomon sync wait entirely — we already
+		// know which SCIDs are TELA candidates from a previous prefilter run.
+		hasValidTelaJSONCache := func() bool {
+			cachePath := filepath.Join(AppPath(), "datashards", "tela_scid_cache.json")
+			raw, err := os.ReadFile(cachePath)
+			if err != nil || len(raw) == 0 {
+				return false
+			}
+			var cache struct {
+				SCIDs     []string `json:"scids"`
+				Timestamp int64    `json:"timestamp"`
+			}
+			if err := json.Unmarshal(raw, &cache); err != nil || len(cache.SCIDs) == 0 {
+				return false
+			}
+			if time.Now().Unix()-cache.Timestamp >= 86400 {
+				return false
+			}
+			return true
+		}
+
 		gnomonReadyForTela := func() bool {
+			// Embedded TELA SCIDs are always available — skip Gnomon sync wait entirely.
+			// This makes the first TELA click fast even on a fresh install.
+			if len(embeddedTelaSCIDs) > 0 {
+				return true
+			}
+			// If we have a recent JSON cache, Gnomon doesn't need to be fully synced.
+			// We already know which SCIDs are TELA candidates — skip the sync wait.
+			if hasValidTelaJSONCache() {
+				return true
+			}
 			if hasTelaCache() || len(telaSearch) > 0 {
 				return true
 			}
@@ -19487,9 +19519,57 @@ func layoutTELA() fyne.CanvasObject {
 					all[scid] = ""
 				}
 			} else {
-				logger.Printf("[TELA-SEARCH] Fetching all indexed owners and SCIDs...\n")
-				all = gnomon.GetAllOwnersAndSCIDs()
-				logger.Printf("[TELA-SEARCH] Found %d total indexed SCIDs\n", len(all))
+				// Fallback 1: plain JSON file cache (no encryption, no Graviton, survives abrupt kills)
+				cachePath := filepath.Join(AppPath(), "datashards", "tela_scid_cache.json")
+				if raw, err := os.ReadFile(cachePath); err == nil && len(raw) > 0 {
+					var cache struct {
+						SCIDs     []string `json:"scids"`
+						Timestamp int64    `json:"timestamp"`
+						Daemon    string   `json:"daemon"`
+					}
+					if err := json.Unmarshal(raw, &cache); err == nil && len(cache.SCIDs) > 0 {
+						if time.Now().Unix()-cache.Timestamp < 86400 {
+							usedPrecomputedCandidates = true
+							logger.Printf("[TELA-SEARCH] Using %d validated TELA SCIDs from JSON cache (age=%dh, cached_daemon=%s, current_daemon=%s)\n", len(cache.SCIDs), (time.Now().Unix()-cache.Timestamp)/3600, cache.Daemon, session.Daemon)
+							for _, scid := range cache.SCIDs {
+								all[scid] = ""
+							}
+						} else {
+							logger.Printf("[TELA-SEARCH] JSON cache stale (age=%dh, max=24h)\n", (time.Now().Unix()-cache.Timestamp)/3600)
+						}
+					} else {
+						logger.Printf("[TELA-SEARCH] JSON cache unmarshal failed or empty: %v\n", err)
+					}
+				} else {
+					logger.Printf("[TELA-SEARCH] JSON cache not found or unreadable: %v\n", err)
+				}
+
+				// Fallback 2: encrypted Graviton cache (legacy, often fails silently)
+				if !usedPrecomputedCandidates {
+					if raw, err := GetEncryptedValue("TELA Search", []byte("ValidatedSCIDs")); err == nil && len(raw) > 0 {
+						var validated []string
+						if err := json.Unmarshal(raw, &validated); err == nil && len(validated) > 0 {
+							if tsRaw, err := GetEncryptedValue("TELA Search", []byte("ValidatedSCIDsTimestamp")); err == nil {
+								var ts int64
+								if err := json.Unmarshal(tsRaw, &ts); err == nil {
+									if time.Now().Unix()-ts < 86400 {
+										usedPrecomputedCandidates = true
+										logger.Printf("[TELA-SEARCH] Using %d validated TELA SCIDs from encrypted cache (age=%dh)\n", len(validated), (time.Now().Unix()-ts)/3600)
+										for _, scid := range validated {
+											all[scid] = ""
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				if !usedPrecomputedCandidates {
+					logger.Printf("[TELA-SEARCH] Fetching all indexed owners and SCIDs...\n")
+					all = gnomon.GetAllOwnersAndSCIDs()
+					logger.Printf("[TELA-SEARCH] Found %d total indexed SCIDs\n", len(all))
+				}
 			}
 		}
 
@@ -19530,31 +19610,6 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				updateTelaProgress(0.60)
 			} else {
-				// No pre-computed candidates yet. Start a background backfill for
-				// future fast-path visits, but ALSO run the lightweight prefilter
-				// now so the user gets results within ~5-10s on this visit.
-				if !telaBackfillActive.Load() && !telaBackfillFailed.Load() {
-					workers := 8
-					if a.Driver().Device().IsMobile() {
-						workers = 4
-					}
-					telaBackfillActive.Store(true)
-					go func() {
-						defer telaBackfillActive.Store(false)
-						defer func() {
-							if r := recover(); r != nil {
-								logger.Printf("[TELA] Backfill panic: %v\n", r)
-								telaBackfillFailed.Store(true)
-							}
-						}()
-						err := gnomon.Index.BackfillTelaCandidates(workers)
-						if err != nil {
-							logger.Printf("[TELA] Backfill failed: %v\n", err)
-							telaBackfillFailed.Store(true)
-						}
-					}()
-				}
-
 				candidates := make([]string, 0, len(allSCIDs))
 				for _, sc := range allSCIDs {
 					if !rescanRecheck && isNegativeSCID(sc) {
@@ -19588,6 +19643,20 @@ func layoutTELA() fyne.CanvasObject {
 				if !a.Driver().Device().IsMobile() {
 					poolSize = 8
 				}
+				batchSize := 200
+				if !a.Driver().Device().IsMobile() {
+					batchSize = 500
+				}
+				// Reduce concurrency for remote daemons to avoid connection overwhelm.
+				daemonLower := strings.ToLower(session.Daemon)
+				if !strings.Contains(daemonLower, "127.0.0.1") && !strings.Contains(daemonLower, "localhost") && !strings.HasPrefix(daemonLower, ":") {
+					if poolSize > 4 {
+						poolSize = 4
+					}
+					if batchSize > 200 {
+						batchSize = 200
+					}
+				}
 				pool, poolCleanup, poolErr := dialRPCPool(session.Daemon, poolSize)
 				if poolErr != nil {
 					logger.Printf("[TELA] Failed to create RPC pool (%d connections): %v\n", poolSize, poolErr)
@@ -19598,11 +19667,6 @@ func layoutTELA() fyne.CanvasObject {
 						pool = nil
 						poolCleanup = func() {}
 					}
-				}
-
-				batchSize := 200
-				if !a.Driver().Device().IsMobile() {
-					batchSize = 500
 				}
 
 				var passed map[string]bool
@@ -19659,6 +19723,68 @@ func layoutTELA() fyne.CanvasObject {
 				atomic.AddInt64(&prefilterDropped, int64(len(candidates)-len(passed)))
 				atomic.AddInt64(&versionHits, batchStats.VersionHits)
 				logger.Printf("[TELA] Prefilter: passed=%d dropped=%d version_hits=%d\n", len(passed), len(candidates)-len(passed), batchStats.VersionHits)
+
+				// Persist validated TELA SCIDs to plain JSON cache for fast-path fallback on next startup.
+				if len(passed) > 0 {
+					validatedSCIDs := make([]string, 0, len(passed))
+					for scid := range passed {
+						validatedSCIDs = append(validatedSCIDs, scid)
+					}
+					cache := struct {
+						SCIDs     []string `json:"scids"`
+						Timestamp int64    `json:"timestamp"`
+						Daemon    string   `json:"daemon"`
+					}{
+						SCIDs:     validatedSCIDs,
+						Timestamp: time.Now().Unix(),
+						Daemon:    session.Daemon,
+					}
+					if raw, err := json.MarshalIndent(cache, "", "  "); err == nil {
+						cachePath := filepath.Join(AppPath(), "datashards", "tela_scid_cache.json")
+						if writeErr := os.WriteFile(cachePath, raw, 0600); writeErr != nil {
+							logger.Printf("[TELA] Failed to write JSON cache: %v\n", writeErr)
+						} else {
+							logger.Printf("[TELA] Persisted %d validated SCIDs to JSON cache\n", len(validatedSCIDs))
+						}
+					}
+
+					// Also try legacy encrypted cache (may help same-session reuse)
+					if raw, err := json.Marshal(validatedSCIDs); err == nil {
+						if encErr := StoreEncryptedValue("TELA Search", []byte("ValidatedSCIDs"), raw); encErr != nil {
+							logger.Printf("[TELA] Failed to write encrypted SCID cache: %v\n", encErr)
+						}
+						if tsRaw, err := json.Marshal(time.Now().Unix()); err == nil {
+							if encErr := StoreEncryptedValue("TELA Search", []byte("ValidatedSCIDsTimestamp"), tsRaw); encErr != nil {
+								logger.Printf("[TELA] Failed to write encrypted timestamp cache: %v\n", encErr)
+							}
+						}
+					}
+				}
+			}
+
+			// Always start a background backfill to discover NEW TELA apps published
+			// since the embedded list was compiled. This runs regardless of whether
+			// we used embedded SCIDs or ran the prefilter — new apps need discovery.
+			if !restrictiveMode && !telaBackfillActive.Load() && !telaBackfillFailed.Load() {
+				workers := 8
+				if a.Driver().Device().IsMobile() {
+					workers = 4
+				}
+				telaBackfillActive.Store(true)
+				go func() {
+					defer telaBackfillActive.Store(false)
+					defer func() {
+						if r := recover(); r != nil {
+							logger.Printf("[TELA] Backfill panic: %v\n", r)
+							telaBackfillFailed.Store(true)
+						}
+					}()
+					err := gnomon.Index.BackfillTelaCandidates(workers)
+					if err != nil {
+						logger.Printf("[TELA] Backfill failed: %v\n", err)
+						telaBackfillFailed.Store(true)
+					}
+				}()
 			}
 		}
 
@@ -22384,15 +22510,15 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				linkOpenInBrowser.Show()
 			})
 		} else if !appRunningNow && currentButtonText == "Shutdown Application" {
-		uiDo(func() {
-			textStatus.Text = "Offline"
-			textStatus.Color = colors.Gray
-			textStatus.Refresh()
-			btnServer.Text = "Start Application"
-			btnServer.SetIcon(theme.MediaPlayIcon())
-			btnServer.Refresh()
-			linkOpenInBrowser.Hide()
-		})
+			uiDo(func() {
+				textStatus.Text = "Offline"
+				textStatus.Color = colors.Gray
+				textStatus.Refresh()
+				btnServer.Text = "Start Application"
+				btnServer.SetIcon(theme.MediaPlayIcon())
+				btnServer.Refresh()
+				linkOpenInBrowser.Hide()
+			})
 		}
 	}()
 
