@@ -254,6 +254,12 @@ func clearTELANavigationHistory() {
 	telaNavigationStack.history = nil
 }
 
+// Add package variable to remember settings caller domain across sub-page visits
+var settingsCallerDomain string
+
+// Add package variable to remember TELA inspection page content for back navigation
+var cachedTelaManagerContent fyne.CanvasObject
+
 func layoutMain() fyne.CanvasObject {
 	// Set theme
 	a.Settings().SetTheme(themes.main)
@@ -6934,6 +6940,12 @@ func layoutSettings() fyne.CanvasObject {
 func layoutAppSettings() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	previousDomain := session.Domain // Save before overwriting
+
+	// Track the actual caller if we aren't coming from a settings sub-page
+	if previousDomain != "app.remoteaccess.manager" && previousDomain != "app.remoteaccess.permissions" {
+		settingsCallerDomain = previousDomain
+	}
+
 	session.Domain = "app.appsettings"
 
 	frame := &iframe{}
@@ -8238,9 +8250,23 @@ func layoutAppSettings() fyne.CanvasObject {
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
+
+		// Use the tracked caller domain to handle returning from sub-pages properly
+		targetDomain := previousDomain
+		if targetDomain == "app.remoteaccess.manager" || targetDomain == "app.remoteaccess.permissions" {
+			targetDomain = settingsCallerDomain
+		}
+
 		// Return to TELA if user came from there, otherwise dashboard
-		if previousDomain == "app.tela" || previousDomain == "app.tela.manager" || previousDomain == "app.tela.settings" {
+		if targetDomain == "app.tela" || targetDomain == "app.tela.settings" {
 			session.Window.SetContent(layoutTELA())
+		} else if targetDomain == "app.tela.manager" || targetDomain == "app.tela.manager.settings" {
+			if cachedTelaManagerContent != nil {
+				session.Domain = "app.tela.manager"
+				session.Window.SetContent(cachedTelaManagerContent)
+			} else {
+				session.Window.SetContent(layoutDashboard())
+			}
 		} else {
 			session.Window.SetContent(layoutDashboard())
 		}
@@ -8265,42 +8291,30 @@ func layoutAppSettings() fyne.CanvasObject {
 		),
 	)
 
-	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+	top := container.NewVBox(
+		rectSpacer,
+		heading,
+		rectSpacer,
+	)
 
-	if isMobile() {
-		SetCurrentScrollBox(scrollBox)
-	}
-
-	gridItem1 := container.NewCenter(
+	footer := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			heading,
-			scrollBox,
-			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1),
+					btnBack,
+				),
+			),
 			rectSpacer,
 		),
-	)
-
-	features := container.NewCenter(
-		layout.NewSpacer(),
-		gridItem1,
-		layout.NewSpacer(),
-	)
-
-	footer := container.NewVBox(
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnBack,
-			layout.NewSpacer(),
-		),
-		widget.NewLabel(" "),
 	)
 
 	c := container.NewBorder(
-		features,
+		top,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
 
 	layout := container.NewStack(
@@ -9300,9 +9314,12 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	_ = line2
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
-		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
+		if session.LastDomain != nil {
+			session.Window.SetContent(session.LastDomain)
+		} else {
+			session.Window.SetContent(layoutDashboard())
+		}
 		removeOverlays()
 	})
 
@@ -9748,17 +9765,11 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	subContainer := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1),
+					btnBack,
+				),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -10099,19 +10110,11 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1),
+					btnBack,
+				),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -10121,6 +10124,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		container.NewBorder(
 			top,
 			bottom,
+			nil,
 			nil,
 			center,
 		),
@@ -10785,19 +10789,11 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1),
+					btnBack,
+				),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -10805,10 +10801,11 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	layout := container.NewStack(
 		frame,
 		container.NewBorder(
-			center,
+			nil,
 			bottom,
 			nil,
 			nil,
+			center,
 		),
 	)
 
@@ -15425,6 +15422,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 }
 
 func layoutFilesAndContracts() fyne.CanvasObject {
+	previousDomain := session.Domain
 	session.Domain = "app.filescontracts"
 
 	frame := &iframe{}
@@ -15446,12 +15444,18 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	// Back button to return to dashboard
+	// Back button to return to dashboard or previous screen
 	btnBack := wrapMobileButton(newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDashboard())
+		if previousDomain == "app.tela.manager.files" && cachedTelaManagerContent != nil {
+			session.Window.SetContent(layoutTransition())
+			session.Domain = "app.tela.manager"
+			session.Window.SetContent(cachedTelaManagerContent)
+		} else {
+			session.LastDomain = session.Window.Content()
+			session.Window.SetContent(layoutTransition())
+			session.Window.SetContent(layoutDashboard())
+		}
 		removeOverlays()
 	}))
 
@@ -21505,6 +21509,7 @@ func layoutTELA() fyne.CanvasObject {
 // Layout details of a TELA INDEX
 func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	session.Domain = "app.tela.manager"
+	originalCallerDomain := session.LastDomain // Safely capture the original TELA browser content
 
 	var cachedData *TELAFavoriteData
 	if engram.Disk != nil {
@@ -21632,10 +21637,30 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		removeOverlays()
 		capture := session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(session.LastDomain)
+		if originalCallerDomain != nil {
+			session.Window.SetContent(originalCallerDomain)
+		} else {
+			session.Window.SetContent(session.LastDomain)
+		}
 		session.Domain = "app.tela"
 		session.LastDomain = capture
 		go callback()
+	})
+
+	btnFilesContracts := newSizedIconButton(theme.FolderIcon(), func() {
+		session.Domain = "app.tela.manager.files" // Mark as coming from TELA Manager
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutFilesAndContracts())
+		removeOverlays()
+	})
+
+	btnSettingsTela := newSizedIconButton(theme.SettingsIcon(), func() {
+		session.Domain = "app.tela.manager.settings" // Mark as coming from TELA Manager
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutAppSettings())
+		removeOverlays()
 	})
 
 	image := canvas.NewImageFromResource(resourceTelaIcon)
@@ -22385,9 +22410,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						),
 						rectSpacer,
 						rectSpacer,
-						widget.NewButton("Rate", func() {
+						rectSpacer,
+						wrapMobileButton(widget.NewButton("Rate", func() {
 							rateTELAOverlay(index.NameHdr, index.SCID)
-						}),
+						})),
 						rectSpacer,
 						container.NewHBox(
 							layout.NewSpacer(),
@@ -22455,19 +22481,13 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(3),
+					btnFilesContracts,
+					linkBack,
+					btnSettingsTela,
+				),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -22477,6 +22497,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		container.NewBorder(
 			top,
 			bottom,
+			nil,
 			nil,
 			center,
 		),
@@ -22522,5 +22543,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}
 	}()
 
-	return NewVScroll(layout)
+	vScroll := NewVScroll(layout)
+	cachedTelaManagerContent = vScroll
+	return vScroll
 }

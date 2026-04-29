@@ -5362,10 +5362,15 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 		rectSpacer := canvas.NewRectangle(color.Transparent)
-		rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+		rectSpacer.SetMinSize(compactSpacerSize())
+
+		isMobileLayout := ui.Width <= 360
+		if isMobileLayout {
+			rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
+		}
 
 		header := canvas.NewText("TELA  RATINGS", colors.Gray)
-		header.TextSize = 16
+		header.TextSize = scaleFont(16)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -5485,51 +5490,43 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		)
 		userRatingsBoxScroll.SetMinSize(fyne.NewSize(ui.Width*0.80, ui.Height*0.50))
 
-		overlayCont := container.NewVBox(
-			span,
-			container.NewCenter(
-				header,
-			),
+		// Build top section per TELA BROWSER layout
+		top := container.NewVBox(
 			rectSpacer,
 			rectSpacer,
-			rectSpacer,
-			container.NewCenter(
-				nameHdr,
-			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			labelSeparator,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
-			),
-			userRatingsBoxScroll,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
+			container.NewCenter(header),
 			rectSpacer,
 			rectSpacer,
 		)
 
+		// Build bottom section per TELA BROWSER layout
 		bottom := container.NewStack(
 			container.NewVBox(
 				rectSpacer,
-				rectSpacer,
-				rectSpacer,
-				rectSpacer,
 				container.NewCenter(
-					layout.NewSpacer(),
-					linkBack,
-					layout.NewSpacer(),
+					container.New(layout.NewGridLayoutWithColumns(1),
+						linkBack,
+					),
 				),
 				rectSpacer,
-				rectSpacer,
-				rectSpacer,
-				rectSpacer,
 			),
+		)
+
+		// Build center content using Border to allow scroll view to expand fully
+		topElements := container.NewVBox(
+			container.NewCenter(nameHdr),
+			rectSpacer,
+			rectSpacer,
+			labelSeparator,
+			rectSpacer,
+		)
+
+		overlayCont := container.NewBorder(
+			topElements,
+			nil,
+			nil,
+			nil,
+			userRatingsBoxScroll,
 		)
 
 		overlay.Add(
@@ -5543,7 +5540,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			container.NewStack(
 				&iframe{},
 				container.NewBorder(
-					nil,
+					top,
 					bottom,
 					nil,
 					nil,
@@ -5561,10 +5558,15 @@ func rateTELAOverlay(name, scid string) {
 	overlay := session.Window.Canvas().Overlays()
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
+	rectSpacer.SetMinSize(compactSpacerSize())
+
+	isMobileLayout := ui.Width <= 360
+	if isMobileLayout {
+		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
+	}
 
 	header := canvas.NewText("RATE  TELA  APP", colors.Gray)
-	header.TextSize = scaleFont(22)
+	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -5652,45 +5654,47 @@ func rateTELAOverlay(name, scid string) {
 
 		rating := (category * 10) + detail
 
-		verificationOverlay(
-			true,
-			"",
-			"",
-			"",
-			func(b bool) {
-				if !b {
-					btnConfirm.Enable()
-					return
-				}
+		txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
+		if err != nil {
+			logger.Errorf("[Engram] Rate TX: %s\n", err)
+			errorText.Text = "error submitting rating"
+			errorText.Color = colors.Red
+			errorText.Refresh()
+			btnConfirm.Enable()
+			return
+		}
 
-				overlay.Top().Hide()
-				overlay.Remove(overlay.Top())
-				overlay.Remove(overlay.Top())
-
-				txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
-				if err != nil {
-					logger.Errorf("[Engram] Rate TX: %s\n", err)
-					return
-				}
-
-				logger.Printf("[Engram] Rate TXID: %s\n", txid)
-			},
-		)
+		logger.Printf("[Engram] Rate TXID: %s\n", txid)
+		errorText.Text = "rating submitted"
+		errorText.Color = colors.Green
+		errorText.Refresh()
 	}
 
-	span := canvas.NewRectangle(color.Transparent)
-	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+	// Build top section per TELA BROWSER layout
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(header),
+		rectSpacer,
+		rectSpacer,
+	)
 
-	centerContent := container.NewVBox(
-		container.NewCenter(
-			header,
+	// Build bottom section per TELA BROWSER layout
+	bottom := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1),
+					btnBack,
+				),
+			),
+			rectSpacer,
 		),
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		container.NewCenter(
-			nameHdr,
-		),
+	)
+
+	// Build center section with full-width sliders
+	center := container.NewVBox(
+		container.NewCenter(nameHdr),
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
@@ -5712,16 +5716,7 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
-		btnConfirm,
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnBack,
-			layout.NewSpacer(),
-		),
-		rectSpacer,
-		rectSpacer,
+		wrapMobileButton(btnConfirm),
 	)
 
 	ratingSlider.OnChanged = func(value float64) {
@@ -5735,8 +5730,8 @@ func rateTELAOverlay(name, scid string) {
 
 	detailSlider.OnChanged = func(value float64) {
 		ratingVal := int(ratingSlider.Value)
-		detailVal := int(detailSlider.Value)
-		detailDesc.Text = fmt.Sprintf("%d - %s", detailVal, tela.Ratings.Detail(uint64(ratingVal), ratingVal > 4))
+		detailVal := int(value)
+		detailDesc.Text = fmt.Sprintf("%d - %s", detailVal, tela.Ratings.Detail(uint64(detailVal), ratingVal > 4))
 		detailDesc.Refresh()
 		totalRatingLabel.Text = fmt.Sprintf("Total: %d", (ratingVal*10)+detailVal)
 		totalRatingLabel.Refresh()
@@ -5753,9 +5748,7 @@ func rateTELAOverlay(name, scid string) {
 	overlay.Add(
 		container.NewStack(
 			&iframe{},
-			container.NewCenter(
-				centerContent,
-			),
+			container.NewBorder(top, bottom, nil, nil, center),
 		),
 	)
 }
