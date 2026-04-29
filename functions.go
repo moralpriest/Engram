@@ -5511,11 +5511,8 @@ func rateTELAOverlay(name, scid string) {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-	selectSpacer := canvas.NewRectangle(color.Transparent)
-	selectSpacer.SetMinSize(fyne.NewSize(80, 5))
-
-	header := canvas.NewText("RATE  TELA  INDEX", colors.Gray)
-	header.TextSize = 16
+	header := canvas.NewText("RATE  TELA  APP", colors.Gray)
+	header.TextSize = scaleFont(22)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -5527,51 +5524,43 @@ func rateTELAOverlay(name, scid string) {
 	nameHdr.Alignment = fyne.TextAlignCenter
 	nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnConfirm := widget.NewButton("Rate", nil)
+btnConfirm := widget.NewButton("Rate", nil)
 	btnConfirm.Disable()
 
-	var telaCategories, negativeDetails, positiveDetails []string
-	for i := uint64(0); i < 10; i++ {
-		telaCategories = append(telaCategories, tela.Ratings.Category(i))
-	}
-	categorySelect := widget.NewSelect(telaCategories, nil)
-
-	scidLabel := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
-	scidLabel.TextSize = 14
-	scidLabel.Alignment = fyne.TextAlignCenter
-	scidLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	scidText := widget.NewRichTextFromMarkdown(scid)
-	scidText.Wrapping = fyne.TextWrapWord
-
-	errorText := canvas.NewText(" ", colors.Green)
-	errorText.TextSize = 12
-	errorText.Alignment = fyne.TextAlignCenter
-
-	for i := uint64(0); i < 10; i++ {
-		negativeDetails = append(negativeDetails, tela.Ratings.Detail(i, false))
-		positiveDetails = append(positiveDetails, tela.Ratings.Detail(i, true))
-	}
-	negativeSelect := widget.NewSelect(negativeDetails, nil)
-	positiveSelect := widget.NewSelect(positiveDetails, nil)
-
-	categoryHeader := canvas.NewText("Category", colors.Account)
-	categoryHeader.Alignment = fyne.TextAlignLeading
-	categoryHeader.TextStyle = fyne.TextStyle{Bold: true}
-	categoryHeader.Refresh()
-
-	detailHeader := canvas.NewText("Detail", colors.Account)
-	detailHeader.Alignment = fyne.TextAlignLeading
-	detailHeader.TextStyle = fyne.TextStyle{Bold: true}
-	detailHeader.Refresh()
+	ratingSlider := widget.NewSlider(0, 9)
+	ratingSlider.Step = 1
+	ratingSlider.SetValue(5)
 
 	ratingHeader := canvas.NewText("Rating", colors.Account)
-	ratingHeader.Alignment = fyne.TextAlignLeading
+	ratingHeader.TextSize = scaleFont(18)
+	ratingHeader.Alignment = fyne.TextAlignCenter
 	ratingHeader.TextStyle = fyne.TextStyle{Bold: true}
-	ratingHeader.Refresh()
 
-	ratingText := widget.NewRichTextFromMarkdown("")
-	ratingText.Wrapping = fyne.TextWrapWord
+	ratingDesc := canvas.NewText("5 - Good", colors.Gray)
+	ratingDesc.TextSize = scaleFont(14)
+	ratingDesc.Alignment = fyne.TextAlignCenter
+
+	detailSlider := widget.NewSlider(0, 9)
+	detailSlider.Step = 1
+	detailSlider.SetValue(5)
+
+	detailHeader := canvas.NewText("Detail", colors.Account)
+	detailHeader.TextSize = scaleFont(18)
+	detailHeader.Alignment = fyne.TextAlignCenter
+	detailHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+	detailDesc := canvas.NewText("5 - Solid", colors.Gray)
+	detailDesc.TextSize = scaleFont(14)
+	detailDesc.Alignment = fyne.TextAlignCenter
+
+	totalRatingLabel := canvas.NewText("Total: 55", colors.Account)
+	totalRatingLabel.TextSize = scaleFont(24)
+	totalRatingLabel.Alignment = fyne.TextAlignCenter
+	totalRatingLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	errorText := canvas.NewText(" ", colors.Green)
+	errorText.TextSize = scaleFont(12)
+	errorText.Alignment = fyne.TextAlignCenter
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		overlay.Top().Hide()
@@ -5599,27 +5588,15 @@ func rateTELAOverlay(name, scid string) {
 			}
 		}
 
-		category := categorySelect.SelectedIndex()
+		category := int(ratingSlider.Value)
 		if category < 0 {
-			errorText.Text = "select a category"
+			errorText.Text = "select a rating"
 			errorText.Color = colors.Red
 			errorText.Refresh()
 			return
 		}
 
-		var detail int
-		if category > 4 {
-			detail = positiveSelect.SelectedIndex()
-		} else {
-			detail = negativeSelect.SelectedIndex()
-		}
-
-		if detail < 0 {
-			errorText.Text = "select a detail"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			return
-		}
+		detail := int(detailSlider.Value)
 
 		rating := (category * 10) + detail
 
@@ -5652,8 +5629,7 @@ func rateTELAOverlay(name, scid string) {
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlayCont := container.NewVBox(
-		span,
+	centerContent := container.NewVBox(
 		container.NewCenter(
 			header,
 		),
@@ -5666,67 +5642,22 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
-		scidLabel,
-		scidText,
-		widget.NewLabel(""),
-		container.NewCenter(
-			container.NewStack(
-				span,
-				container.NewBorder(
-					nil,
-					nil,
-					container.NewStack(
-						selectSpacer,
-						categoryHeader,
-					),
-					nil,
-					categorySelect,
-				),
-			),
-		),
+		ratingHeader,
+		ratingSlider,
+		ratingDesc,
 		rectSpacer,
 		rectSpacer,
+		detailHeader,
+		detailSlider,
+		detailDesc,
 		rectSpacer,
 		rectSpacer,
-		container.NewCenter(
-			container.NewStack(
-				span,
-				container.NewBorder(
-					nil,
-					nil,
-					container.NewStack(
-						selectSpacer,
-						detailHeader,
-					),
-					nil,
-					positiveSelect,
-				),
-			),
-		),
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		container.NewCenter(
-			container.NewStack(
-				span,
-				container.NewBorder(
-					nil,
-					nil,
-					container.NewStack(
-						selectSpacer,
-						ratingHeader,
-					),
-					nil,
-					ratingText,
-				),
-			),
-		),
-		rectSpacer,
+		totalRatingLabel,
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
 		errorText,
+		rectSpacer,
 		rectSpacer,
 		rectSpacer,
 		btnConfirm,
@@ -5741,63 +5672,23 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer,
 	)
 
-	categorySelect.OnChanged = func(s string) {
-		if positiveSelect.SelectedIndex() > -1 && negativeSelect.SelectedIndex() > -1 {
-			btnConfirm.Enable()
-		}
-
-		if categorySelect.SelectedIndex() > 4 {
-			overlayCont.Objects[17] = container.NewCenter(
-				container.NewStack(
-					span,
-					container.NewBorder(
-						nil,
-						nil,
-						container.NewStack(
-							selectSpacer,
-							detailHeader,
-						),
-						nil,
-
-						positiveSelect,
-					),
-				),
-			)
-			positiveSelect.SetSelectedIndex(0)
-			ratingText.ParseMarkdown(fmt.Sprintf("%d", (categorySelect.SelectedIndex()*10)+positiveSelect.SelectedIndex()))
-		} else {
-			overlayCont.Objects[17] = container.NewCenter(
-				container.NewStack(
-					span,
-					container.NewBorder(
-						nil,
-						nil,
-						container.NewStack(
-							selectSpacer,
-							detailHeader,
-						),
-						nil,
-						negativeSelect,
-					),
-				),
-			)
-			negativeSelect.SetSelectedIndex(0)
-			ratingText.ParseMarkdown(fmt.Sprintf("%d", (categorySelect.SelectedIndex()*10)+negativeSelect.SelectedIndex()))
-		}
+	ratingSlider.OnChanged = func(value float64) {
+		ratingVal := int(value)
+		ratingDesc.Text = fmt.Sprintf("%d - %s", ratingVal, tela.Ratings.Category(uint64(ratingVal)))
+		ratingDesc.Refresh()
+		totalRatingLabel.Text = fmt.Sprintf("Total: %d", (ratingVal*10)+int(detailSlider.Value))
+		totalRatingLabel.Refresh()
+		btnConfirm.Enable()
 	}
 
-	positiveSelect.OnChanged = func(s string) {
-		if categorySelect.SelectedIndex() > -1 {
-			btnConfirm.Enable()
-			ratingText.ParseMarkdown(fmt.Sprintf("%d", (categorySelect.SelectedIndex()*10)+positiveSelect.SelectedIndex()))
-		}
-	}
-
-	negativeSelect.OnChanged = func(s string) {
-		if categorySelect.SelectedIndex() > -1 {
-			btnConfirm.Enable()
-			ratingText.ParseMarkdown(fmt.Sprintf("%d", (categorySelect.SelectedIndex()*10)+negativeSelect.SelectedIndex()))
-		}
+	detailSlider.OnChanged = func(value float64) {
+		ratingVal := int(ratingSlider.Value)
+		detailVal := int(detailSlider.Value)
+		detailDesc.Text = fmt.Sprintf("%d - %s", detailVal, tela.Ratings.Detail(uint64(ratingVal), ratingVal > 4))
+		detailDesc.Refresh()
+		totalRatingLabel.Text = fmt.Sprintf("Total: %d", (ratingVal*10)+detailVal)
+		totalRatingLabel.Refresh()
+		btnConfirm.Enable()
 	}
 
 	overlay.Add(
@@ -5811,7 +5702,7 @@ func rateTELAOverlay(name, scid string) {
 		container.NewStack(
 			&iframe{},
 			container.NewCenter(
-				overlayCont,
+				centerContent,
 			),
 		),
 	)

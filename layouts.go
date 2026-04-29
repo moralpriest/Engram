@@ -5418,7 +5418,14 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 					selectRingMembers.SetSelectedIndex(3)
 				}
 
-				btnExecute := widget.NewButton("Execute", nil)
+				btnExecuteBase := widget.NewButton("Execute", nil)
+				var btnExecuteObj fyne.CanvasObject = btnExecuteBase
+				if isMobile() {
+					btnExecuteBase.Importance = widget.MediumImportance
+					sizeEnforcer := canvas.NewRectangle(color.Transparent)
+					sizeEnforcer.SetMinSize(scalePoint(100, 48))
+					btnExecuteObj = container.NewStack(sizeEnforcer, btnExecuteBase)
+				}
 
 				overlay.Add(
 					container.NewStack(
@@ -5441,7 +5448,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 								paramsContainer,
 								rectSpacer,
 								rectSpacer,
-								btnExecute,
+								btnExecuteObj,
 								rectSpacer,
 								rectSpacer,
 								container.NewHBox(
@@ -5498,7 +5505,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				}
 
-				btnExecute.OnTapped = func() {
+				btnExecuteBase.OnTapped = func() {
 					for f := range contract.Functions {
 						if contract.Functions[f].Name == funcName.Text {
 							params = contract.Functions[f].Params
@@ -5521,27 +5528,27 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 					logger.Printf("[Engram] Ringsize: %d\n", ringsize)
 
-					btnExecute.Text = "Executing..."
-					btnExecute.Disable()
-					btnExecute.Refresh()
+					btnExecuteBase.Text = "Executing..."
+					btnExecuteBase.Disable()
+					btnExecuteBase.Refresh()
 
 					storage, err := executeContractFunction(hash, ringsize, dero_amount, asset_amount, funcName.Text, params)
 					if err != nil {
 						if strings.Contains(err.Error(), "somehow the tx could not be built") {
-							btnExecute.Text = fmt.Sprintf("Insufficient Balance: Need %v", globals.FormatMoney(storage))
+							btnExecuteBase.Text = fmt.Sprintf("Insufficient Balance: Need %v", globals.FormatMoney(storage))
 						} else if strings.Contains(err.Error(), "Discarded knowingly") {
-							btnExecute.Text = "Error... discarded knowingly"
+							btnExecuteBase.Text = "Error: Check wallet registration, daemon sync, and network status"
 						} else if strings.Contains(err.Error(), "Recovered in function") {
-							btnExecute.Text = "Error... invalid input"
+							btnExecuteBase.Text = "Error... invalid input"
 						} else {
-							btnExecute.Text = "Error executing function..."
+							btnExecuteBase.Text = "Error executing function..."
 						}
-						btnExecute.Disable()
-						btnExecute.Refresh()
+						btnExecuteBase.Disable()
+						btnExecuteBase.Refresh()
 					} else {
-						btnExecute.Text = "Function executed successfully!"
-						btnExecute.Disable()
-						btnExecute.Refresh()
+						btnExecuteBase.Text = "Function executed successfully!"
+						btnExecuteBase.Disable()
+						btnExecuteBase.Refresh()
 					}
 				}
 
@@ -22363,6 +22370,10 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 							),
 						),
 						rectSpacer,
+						rectSpacer,
+						widget.NewButton("Rate", func() {
+							rateTELAOverlay(index.NameHdr, index.SCID)
+						}),
 						rectSpacer,
 						container.NewHBox(
 							layout.NewSpacer(),
