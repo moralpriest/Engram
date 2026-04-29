@@ -181,9 +181,9 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 ## TELA Performance Notes
 
 - See `TELA_PERFORMANCE.md` for the current TELA app discovery architecture and timing expectations.
-- First TELA browser visit is typically ~2 seconds when Gnomon candidates are ready; ~6-7 seconds as a fallback.
+- First TELA browser visit is typically ~5-10 seconds (fast prefilter with dedicated RPC pool); ~2 seconds on subsequent visits once the background backfill populates the candidate cache.
 - After modifying Gnomon code, remember to run `go mod vendor` to sync Engram's vendor directory.
-- Gnomon dependency may point to a local path during active development (`replace github.com/civilware/Gnomon => /home/priest/Projects/Gnomon`).
+- Gnomon dependency points to the remote fork (`replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260429054005-02f3d30e2477`).
 
 ## Final Notes
 
