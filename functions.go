@@ -5057,11 +5057,18 @@ func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 }
 
 // GetTelaCandidates returns pre-computed TELA candidate SCIDs from Gnomon DB.
+// Falls back to an embedded list when the DB is empty (fresh install), making
+// the first TELA click fast without waiting for the background backfill.
 func (g *Gnomon) GetTelaCandidates() []string {
 	if g.Index == nil {
 		return nil
 	}
-	return g.Index.GetTelaCandidates()
+	candidates := g.Index.GetTelaCandidates()
+	if len(candidates) == 0 && len(embeddedTelaSCIDs) > 0 {
+		logger.Printf("[Gnomon] DB telacandidates empty, using %d embedded TELA SCIDs\n", len(embeddedTelaSCIDs))
+		return embeddedTelaSCIDs
+	}
+	return candidates
 }
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
@@ -5569,7 +5576,7 @@ func rateTELAOverlay(name, scid string) {
 	nameHdr.Alignment = fyne.TextAlignCenter
 	nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-btnConfirm := widget.NewButton("Rate", nil)
+	btnConfirm := widget.NewButton("Rate", nil)
 	btnConfirm.Disable()
 
 	ratingSlider := widget.NewSlider(0, 9)
