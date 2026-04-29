@@ -22343,11 +22343,6 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			tempMap[s.Name] = true
 		}
 
-		telaActiveServersCacheGlobal.Lock()
-		telaActiveServersCacheGlobal.info = servers
-		telaActiveServersCacheGlobal.m = tempMap
-		telaActiveServersCacheGlobal.Unlock()
-
 		appRunningNow := tempMap[index.SCID] || tempMap[index.DURL]
 
 		currentButtonText := btnServer.Text
