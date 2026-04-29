@@ -22457,5 +22457,50 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		),
 	)
 
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		servers := tela.GetServerInfo()
+
+		tempMap := make(map[string]bool)
+		for _, s := range servers {
+			tempMap[s.SCID] = true
+			tempMap[s.Name] = true
+		}
+
+		telaActiveServersCacheGlobal.Lock()
+		telaActiveServersCacheGlobal.info = servers
+		telaActiveServersCacheGlobal.m = tempMap
+		telaActiveServersCacheGlobal.Unlock()
+
+		appRunningNow := tempMap[index.SCID] || tempMap[index.DURL]
+
+		currentButtonText := btnServer.Text
+
+		if appRunningNow && currentButtonText != "Shutdown Application" {
+			uiDo(func() {
+				launchProgress.Hide()
+				launchStatus.Hide()
+				textStatus.Text = "Running"
+				textStatus.Color = colors.Green
+				textStatus.Refresh()
+				btnServer.Text = "Shutdown Application"
+				btnServer.SetIcon(theme.MediaStopIcon())
+				btnServer.Refresh()
+				linkOpenInBrowser.Show()
+			})
+		} else if !appRunningNow && currentButtonText == "Shutdown Application" {
+		uiDo(func() {
+			textStatus.Text = "Offline"
+			textStatus.Color = colors.Gray
+			textStatus.Refresh()
+			btnServer.Text = "Start Application"
+			btnServer.SetIcon(theme.MediaPlayIcon())
+			btnServer.Refresh()
+			linkOpenInBrowser.Hide()
+		})
+		}
+	}()
+
 	return NewVScroll(layout)
 }
