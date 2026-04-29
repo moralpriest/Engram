@@ -8,7 +8,7 @@ replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.4
 
 replace github.com/go-text/typesetting => github.com/go-text/typesetting v0.3.3
 
-replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260429054005-02f3d30e2477
+replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260429195944-6adfbe3cc75c
 
 require (
 	fyne.io/fyne/v2 v2.7.3

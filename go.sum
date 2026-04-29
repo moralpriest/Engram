@@ -148,8 +148,8 @@ github.com/minio/sha256-simd v1.0.1 h1:6kaan5IFmwTNynnKKpDHe6FWHohJOHhCPchzK49dz
 github.com/minio/sha256-simd v1.0.1/go.mod h1:Pz6AKMiUdngCLpeTL/RJY1M9rUuPMYujV5xJjtbRSN8=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2EmQ4l5rM/4FEfDWcRD+abF5XlKShorW5LRoQ=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
-github.com/moralpriest/Gnomon v0.0.0-20260429054005-02f3d30e2477 h1:UubxYoVWmSk6nltTN5i4OZabWJWEQqtA6OFbG+oR8Tc=
-github.com/moralpriest/Gnomon v0.0.0-20260429054005-02f3d30e2477/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
+github.com/moralpriest/Gnomon v0.0.0-20260429195944-6adfbe3cc75c h1:B2KuSTDN3wP7kwt4CSDOFAXHCAtcw39kFaNLUQDOz+c=
+github.com/moralpriest/Gnomon v0.0.0-20260429195944-6adfbe3cc75c/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 h1:zYyBkD/k9seD2A7fsi6Oo2LfFZAehjjQMERAvZLEDnQ=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646/go.mod h1:jpp1/29i3P1S/RLdc7JQKbRpFeM1dOBd8T9ki5s+AY8=
 github.com/nicksnyder/go-i18n/v2 v2.6.1 h1:JDEJraFsQE17Dut9HFDHzCoAWGEQJom5s0TRd17NIEQ=
