@@ -14,7 +14,7 @@
 - [x]  Encrypted Notepad
 - [x]  Websocket support for dApp/web3 connections
 - [x]  Sign files using your wallet to guarantee authenticity
-- [x]  Explore [TELA](https://github.com/civilware/tela) dApps and websites
+- [x]  Explore [TELA](https://github.com/civilware/tela) dApps and websites (significantly faster discovery)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
 
 ### Upcoming Features

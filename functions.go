@@ -198,6 +198,23 @@ type INDEXwithRatings struct {
 	tela.INDEX
 }
 
+// deduplicateTelaSearch removes duplicate SCIDs, keeping the first occurrence.
+func deduplicateTelaSearch(search []INDEXwithRatings) []INDEXwithRatings {
+	seen := make(map[string]struct{}, len(search))
+	result := make([]INDEXwithRatings, 0, len(search))
+	for _, entry := range search {
+		if entry.SCID == "" {
+			continue
+		}
+		if _, ok := seen[entry.SCID]; ok {
+			continue
+		}
+		seen[entry.SCID] = struct{}{}
+		result = append(result, entry)
+	}
+	return result
+}
+
 type telaDisplayCache []INDEXwithRatings
 
 type Engram struct {
@@ -1033,35 +1050,17 @@ func buildINDEXFromVars(scid string, vars map[string]interface{}) (tela.INDEX, e
 // batchFetchINDEXes fetches SC variables for multiple SCIDs in batched RPC calls
 // and constructs tela.INDEX for each, using Gnomon's existing connection.
 // This replaces individual tela.GetINDEXInfo() calls which each open a new WebSocket.
-func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[string]tela.INDEX, map[string]bool, error) {
+func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[string]tela.INDEX, map[string]tela.Rating_Result, map[string]bool, error) {
 	result := make(map[string]tela.INDEX, len(scids))
+	ratings := make(map[string]tela.Rating_Result, len(scids))
 	invalid := make(map[string]bool)
 	var batchErr error
+	var resultMu sync.Mutex
 	if len(scids) == 0 {
-		return result, invalid, nil
+		return result, ratings, invalid, nil
 	}
 	if batchSize < 1 {
 		batchSize = 50
-	}
-
-	var rpcClient *jrpc2.Client
-	var transientCleanup func()
-	defer func() {
-		if transientCleanup != nil {
-			transientCleanup()
-		}
-	}()
-
-	// Try to use a dedicated RPC connection to avoid contention with Gnomon's active indexing
-	pool, cleanup, err := dialRPCPool(session.Daemon, 1)
-	if err == nil && len(pool) > 0 {
-		rpcClient = pool[0]
-		transientCleanup = cleanup
-	} else {
-		if gnomon.Index == nil || gnomon.Index.RPC == nil || gnomon.Index.RPC.RPC == nil {
-			return nil, nil, fmt.Errorf("gnomon rpc client unavailable and failed to dial pool: %v", err)
-		}
-		rpcClient = gnomon.Index.RPC.RPC
 	}
 
 	retryableFetchError := func(err error) bool {
@@ -1078,106 +1077,144 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 			strings.Contains(msg, "deadline exceeded")
 	}
 
-	rebuildRPCClient := func() (*jrpc2.Client, func(), error) {
-		pool, cleanup, err := dialRPCPool(session.Daemon, 1)
-		if err != nil {
-			return nil, nil, err
-		}
-		if len(pool) == 0 || pool[0] == nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("rebuilt rpc pool was empty")
-		}
-		return pool[0], cleanup, nil
+	// Use multiple RPC connections for parallel batch processing
+	workerCount := 4
+	if len(scids) < workerCount*batchSize {
+		workerCount = 1
 	}
+	pool, cleanup, err := dialRPCPool(session.Daemon, workerCount)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to dial rpc pool: %v", err)
+	}
+	defer cleanup()
 
+	// Create work queue of batches
+	type batchWork struct {
+		offset int
+		scids  []string
+	}
+	var batches []batchWork
 	for i := 0; i < len(scids); i += batchSize {
-		select {
-		case <-ctx.Done():
-			return result, invalid, ctx.Err()
-		default:
-		}
-
 		end := i + batchSize
 		if end > len(scids) {
 			end = len(scids)
 		}
-		batch := scids[i:end]
-
-		specs := make([]jrpc2.Spec, len(batch))
-		for j, scid := range batch {
-			specs[j] = jrpc2.Spec{
-				Method: "DERO.GetSC",
-				Params: rpc.GetSC_Params{
-					SCID:      scid,
-					Variables: true,
-					Code:      true,
-				},
-			}
-		}
-
-		var responses []*jrpc2.Response
-		var err error
-		for attempt := 0; attempt < 3; attempt++ {
-			batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			responses, err = rpcClient.Batch(batchCtx, specs)
-			cancel()
-			if err == nil {
-				break
-			}
-			if !retryableFetchError(err) || attempt == 2 {
-				break
-			}
-			logger.Printf("[TELA] Batch INDEX fetch retry %d for offset %d after rpc error: %v\n", attempt+1, i, err)
-			if transientCleanup != nil {
-				transientCleanup()
-				transientCleanup = nil
-			}
-			rebuilt, cleanup, rebuildErr := rebuildRPCClient()
-			if rebuildErr != nil {
-				logger.Printf("[TELA] Failed rebuilding rpc client for INDEX fetch retry: %v\n", rebuildErr)
-				break
-			}
-			rpcClient = rebuilt
-			transientCleanup = cleanup
-		}
-		if err != nil {
-			logger.Printf("[TELA] Batch INDEX fetch error at offset %d: %v\n", i, err)
-			if batchErr == nil {
-				batchErr = err
-			}
-			continue
-		}
-
-		for j, resp := range responses {
-			if j >= len(batch) || resp == nil {
-				continue
-			}
-			if resp.Error() != nil {
-				logger.Printf("[TELA] Batch INDEX fetch result error for %s: %v\n", batch[j], resp.Error())
-				continue
-			}
-
-			var out rpc.GetSC_Result
-			if err := resp.UnmarshalResult(&out); err != nil {
-				continue
-			}
-
-			scid := batch[j]
-			index, err := buildINDEXFromVars(scid, out.VariableStringKeys)
-			if err != nil {
-				invalid[scid] = true
-				continue // Not a valid TELA INDEX — skip silently
-			}
-
-			result[scid] = index
-		}
+		batches = append(batches, batchWork{offset: i, scids: scids[i:end]})
 	}
+
+	// Process batches in parallel using worker pool
+	var wg sync.WaitGroup
+	batchChan := make(chan batchWork, len(batches))
+	for _, b := range batches {
+		batchChan <- b
+	}
+	close(batchChan)
+
+	for w := 0; w < workerCount && w < len(pool); w++ {
+		rpcClient := pool[w]
+		wg.Add(1)
+		go func(client *jrpc2.Client) {
+			defer wg.Done()
+			for work := range batchChan {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				batch := work.scids
+				specs := make([]jrpc2.Spec, len(batch))
+				for j, scid := range batch {
+					specs[j] = jrpc2.Spec{
+						Method: "DERO.GetSC",
+						Params: rpc.GetSC_Params{
+							SCID:      scid,
+							Variables: true,
+							Code:      true,
+						},
+					}
+				}
+
+				var responses []*jrpc2.Response
+				var err error
+				for attempt := 0; attempt < 3; attempt++ {
+					batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					responses, err = client.Batch(batchCtx, specs)
+					cancel()
+					if err == nil {
+						break
+					}
+					if !retryableFetchError(err) || attempt == 2 {
+						break
+					}
+					logger.Printf("[TELA] Batch INDEX fetch retry %d for offset %d after rpc error: %v\n", attempt+1, work.offset, err)
+				}
+				if err != nil {
+					logger.Printf("[TELA] Batch INDEX fetch error at offset %d: %v\n", work.offset, err)
+					resultMu.Lock()
+					if batchErr == nil {
+						batchErr = err
+					}
+					resultMu.Unlock()
+					continue
+				}
+
+				for j, resp := range responses {
+					if j >= len(batch) || resp == nil {
+						continue
+					}
+					if resp.Error() != nil {
+						logger.Printf("[TELA] Batch INDEX fetch result error for %s: %v\n", batch[j], resp.Error())
+						continue
+					}
+
+					var out rpc.GetSC_Result
+					if err := resp.UnmarshalResult(&out); err != nil {
+						continue
+					}
+
+					scid := batch[j]
+					index, err := buildINDEXFromVars(scid, out.VariableStringKeys)
+					if err != nil {
+						resultMu.Lock()
+						invalid[scid] = true
+						resultMu.Unlock()
+						continue
+					}
+
+					// Extract likes/dislikes while we have the variables
+					var r tela.Rating_Result
+					if likesVal, ok := out.VariableStringKeys["likes"]; ok {
+						if likesFloat, ok := likesVal.(float64); ok {
+							r.Likes = uint64(likesFloat)
+						} else if likesInt, ok := likesVal.(uint64); ok {
+							r.Likes = likesInt
+						}
+					}
+					if dislikesVal, ok := out.VariableStringKeys["dislikes"]; ok {
+						if dislikesFloat, ok := dislikesVal.(float64); ok {
+							r.Dislikes = uint64(dislikesFloat)
+						} else if dislikesInt, ok := dislikesVal.(uint64); ok {
+							r.Dislikes = dislikesInt
+						}
+					}
+
+					resultMu.Lock()
+					result[scid] = index
+					ratings[scid] = r
+					resultMu.Unlock()
+				}
+			}
+		}(rpcClient)
+	}
+
+	wg.Wait()
 
 	if batchErr != nil {
-		return result, invalid, batchErr
+		return result, ratings, invalid, batchErr
 	}
 
-	return result, invalid, nil
+	return result, ratings, invalid, nil
 }
 
 // Get the Engram settings from the local Graviton tree
@@ -4686,6 +4723,43 @@ func startGnomon() {
 			if gnomon.telaBootstrapReady() {
 				gnomon.setBootstrapReady()
 			}
+
+			// Background TELA candidate backfill: scans existing SCIDs while user is on dashboard
+			// so first TELA visit can skip the expensive 49K-SCID prefilter.
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Printf("[Gnomon] Backfill goroutine panic: %v\n", r)
+					}
+				}()
+				// Wait for indexer to have SCIDs and RPC connection
+				waitStart := time.Now()
+				for {
+					if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+						return
+					}
+					if gnomon.Index == nil {
+						return
+					}
+					// Wait until we have some SCIDs indexed and RPC is up
+					scidCount := 0
+					if gnomon.Index.GravDBBackend != nil {
+						scidCount = len(gnomon.Index.GravDBBackend.GetAllOwnersAndSCIDs())
+					} else if gnomon.Index.BBSBackend != nil {
+						scidCount = len(gnomon.Index.BBSBackend.GetAllOwnersAndSCIDs())
+					}
+					if scidCount > 100 && walletapi.Connected {
+						break
+					}
+					if time.Since(waitStart) > 60*time.Second {
+						logger.Printf("[Gnomon] Backfill timeout waiting for SCIDs, skipping\n")
+						return
+					}
+					time.Sleep(2 * time.Second)
+				}
+				logger.Printf("[Gnomon] Starting background TELA candidate backfill...\n")
+				gnomon.Index.BackfillTelaCandidates()
+			}()
 		}
 	}
 }
@@ -5017,6 +5091,14 @@ func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 	default:
 		return
 	}
+}
+
+// GetTelaCandidates returns pre-computed TELA candidate SCIDs from Gnomon DB.
+func (g *Gnomon) GetTelaCandidates() []string {
+	if g.Index == nil {
+		return nil
+	}
+	return g.Index.GetTelaCandidates()
 }
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
@@ -8369,6 +8451,28 @@ func telaErrorToString(err error) string {
 }
 
 // Get the ratio of likes for a TELA SCID, if ratio < minLines an error will be returned
+func getLikesRatioCached(scid, dURL, searchExclusions string, minLikes float64, cachedRatings map[string]tela.Rating_Result) (ratio float64, ratings tela.Rating_Result, err error) {
+	if r, ok := cachedRatings[scid]; ok {
+		// Check URL exclusion still
+		err = telaFilterSearchExclusions(dURL, searchExclusions)
+		if err != nil {
+			return
+		}
+		ratings = r
+		total := float64(r.Likes + r.Dislikes)
+		if total == 0 {
+			ratio = 50
+		} else {
+			ratio = (float64(r.Likes) / total) * 100
+		}
+		if ratio < minLikes {
+			err = fmt.Errorf("%s is below min rating setting", scid)
+		}
+		return
+	}
+	return getLikesRatio(scid, dURL, searchExclusions, minLikes)
+}
+
 func getLikesRatio(scid, dURL, searchExclusions string, minLikes float64) (ratio float64, ratings tela.Rating_Result, err error) {
 	if gnomon.Index == nil {
 		err = fmt.Errorf("gnomon is not online")
