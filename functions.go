@@ -5230,21 +5230,28 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 		}
 	}
 
-	subHeader := canvas.NewText(subText, colors.Account)
+	subHeader := widget.NewRichText()
+	subHeader.Wrapping = fyne.TextWrapWord
+
 	if password {
 		subText = "Confirm Password"
-		subHeader.TextSize = 22
 	} else {
-		subHeader.TextSize = 18
 		entryPassword.Hide()
 		btnConfirm.Enable()
 		btnConfirm.Refresh()
 	}
 
-	subHeader.Text = subText
-	subHeader.Alignment = fyne.TextAlignCenter
-	subHeader.TextStyle = fyne.TextStyle{Bold: true}
-	subHeader.Refresh()
+	subHeader.Segments = []widget.RichTextSegment{
+		&widget.TextSegment{
+			Text: subText,
+			Style: widget.RichTextStyle{
+				Alignment: fyne.TextAlignCenter,
+				TextStyle: fyne.TextStyle{Bold: true},
+				ColorName: theme.ColorNameForeground,
+				SizeName:  theme.SizeNameHeadingText,
+			},
+		},
+	}
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		callback(false)
@@ -5636,7 +5643,6 @@ func rateTELAOverlay(name, scid string) {
 	btnConfirm.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
-		btnConfirm.Disable()
 		if gnomon.Index != nil {
 			var ratingStore []string
 			switch gnomon.Index.DBType {
@@ -5662,23 +5668,27 @@ func rateTELAOverlay(name, scid string) {
 		}
 
 		detail := int(detailSlider.Value)
-
 		rating := (category * 10) + detail
 
-		txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
-		if err != nil {
-			logger.Errorf("[Engram] Rate TX: %s\n", err)
-			errorText.Text = "error submitting rating"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-			btnConfirm.Enable()
-			return
-		}
+		verificationOverlay(false, "CONFIRM RATING", "Rating costs : 0.001 DERO. Do you wish to continue?", "Yes", func(confirm bool) {
+			if confirm {
+				btnConfirm.Disable()
+				txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
+				if err != nil {
+					logger.Errorf("[Engram] Rate TX: %s\n", err)
+					errorText.Text = "error submitting rating"
+					errorText.Color = colors.Red
+					errorText.Refresh()
+					btnConfirm.Enable()
+					return
+				}
 
-		logger.Printf("[Engram] Rate TXID: %s\n", txid)
-		errorText.Text = "rating submitted"
-		errorText.Color = colors.Green
-		errorText.Refresh()
+				logger.Printf("[Engram] Rate TXID: %s\n", txid)
+				errorText.Text = "rating submitted"
+				errorText.Color = colors.Green
+				errorText.Refresh()
+			}
+		})
 	}
 
 	// Build top section per TELA BROWSER layout
