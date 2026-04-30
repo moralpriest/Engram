@@ -62,7 +62,7 @@ const (
 
 // Version info - injected at build time via ldflags
 // Build with: go build -ldflags "-X main.versionString=1.0.0"
-var versionString = "0.6.6"
+var versionString = "0.6.7"
 var version semver.Version
 var a fyne.App
 var engram Engram
@@ -165,6 +165,7 @@ func main() {
 	colors.Yellow = color.RGBA{244, 208, 11, 255}
 	colors.Cold = color.RGBA{60, 73, 92, 255}
 	colors.Flint = color.RGBA{44, 44, 52, 0xff}
+	colors.Purple = color.RGBA{191, 64, 191, 0xff}
 
 	// Init objects
 	status.Canvas = canvas.NewText("", colors.Network)

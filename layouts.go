@@ -915,6 +915,68 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	return layout
 }
 
+func layoutDashboardMarquee() fyne.CanvasObject {
+	messages := []string{
+		strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
+		"DERO PRIVACY TOGETHER",
+		"THERE'S A CAPTAIN IN ALL OF US!",
+	}
+
+	text := canvas.NewText(messages[0], colors.Purple)
+	text.TextStyle = fyne.TextStyle{Symbol: true}
+	text.TextSize = scaleFont(16)
+	text.Alignment = fyne.TextAlignCenter
+
+	go func() {
+		time.Sleep(4 * time.Second)
+		index := 1
+		for {
+			if appExiting {
+				return
+			}
+			if session.Dashboard != "main" {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			// Fade out to black
+			fadeOut := canvas.NewColorRGBAAnimation(
+				colors.Purple.(color.RGBA),
+				color.RGBA{0, 0, 0, 0},
+				400*time.Millisecond,
+				func(c color.Color) {
+					text.Color = c
+					text.Refresh()
+				})
+			fadeOut.Start()
+			time.Sleep(450 * time.Millisecond)
+
+			// Swap text while invisible
+			fyne.Do(func() {
+				text.Text = messages[index]
+				text.Refresh()
+			})
+			time.Sleep(100 * time.Millisecond)
+
+			// Fade in from black
+			fadeIn := canvas.NewColorRGBAAnimation(
+				color.RGBA{0, 0, 0, 0},
+				colors.Purple.(color.RGBA),
+				400*time.Millisecond,
+				func(c color.Color) {
+					text.Color = c
+					text.Refresh()
+				})
+			fadeIn.Start()
+
+			index = (index + 1) % len(messages)
+			time.Sleep(4 * time.Second)
+		}
+	}()
+
+	return container.NewCenter(text)
+}
+
 func layoutDashboard() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 
@@ -1592,6 +1654,7 @@ func layoutDashboard() fyne.CanvasObject {
 		bottom,
 		nil,
 		nil,
+		container.NewCenter(layoutDashboardMarquee()),
 	)
 
 	layout := container.NewStack(

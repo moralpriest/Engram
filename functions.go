@@ -101,6 +101,7 @@ type Colors struct {
 	DarkMatter color.Color
 	Cold       color.Color
 	Flint      color.Color
+	Purple     color.Color
 }
 
 type Navigation struct {

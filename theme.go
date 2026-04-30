@@ -67,6 +67,9 @@ func (eTheme) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 }
 
 func (eTheme) Font(s fyne.TextStyle) fyne.Resource {
+	if s.Symbol {
+		return resourceAstrolytTtf
+	}
 	if s.Monospace {
 		return resourceRegularTtf
 		//return resourceGoNotoCurrentTtf
@@ -166,6 +169,9 @@ func (eTheme2) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 }
 
 func (eTheme2) Font(s fyne.TextStyle) fyne.Resource {
+	if s.Symbol {
+		return resourceAstrolytTtf
+	}
 	if s.Monospace {
 		//return resourceRegularTtf
 		return resourceGoNotoCurrentTtf

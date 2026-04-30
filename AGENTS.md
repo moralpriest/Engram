@@ -194,3 +194,10 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 
 - Prefer evidence-driven debugging in this repo, especially around messaging, wallet history, and Gnomon.
 - If runtime behavior contradicts code inspection, verify the actual binary being run before patching further.
+
+<!-- lean-ctx -->
+## lean-ctx
+
+Prefer lean-ctx MCP tools over native equivalents for token savings.
+Full rules: @LEAN-CTX.md
+<!-- /lean-ctx -->

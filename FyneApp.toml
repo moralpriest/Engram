@@ -3,8 +3,4 @@ Icon = "Icon.png"
 Name = "Engram"
 ID = "com.derofdn.engram"
 Version = "0.6.6"
-Build = 321
-
-[macOS]
-[macOS.Privilege]
-Camera = "This application requires camera access to scan QR codes."
+Build = 326
