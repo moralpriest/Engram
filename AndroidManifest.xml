@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.derofdn.engram"
     android:versionCode="1"
-    android:versionName="0.6.6">
+    android:versionName="0.6.8">
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />

@@ -1,4 +1,4 @@
-// Copyright 2023-2024 DERO Foundation. All rights reserved.
+// Copyright 2023-2026 DERO Foundation. All rights reserved.
 // Use of this source code in any form is governed by RESEARCH license.
 // license can be found in the LICENSE file.
 //

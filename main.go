@@ -62,7 +62,7 @@ const (
 
 // Version info - injected at build time via ldflags
 // Build with: go build -ldflags "-X main.versionString=1.0.0"
-var versionString = "0.6.7"
+var versionString = "0.6.8"
 var version semver.Version
 var a fyne.App
 var engram Engram
@@ -193,7 +193,7 @@ func main() {
 	status.EPOCH.Refresh()
 
 	fmt.Printf("Engram v%s (Beta)\n", version)
-	fmt.Printf("Copyright 2023-2025 DERO Foundation. All rights reserved.\n")
+	fmt.Printf("Copyright 2023-2026 DERO Foundation. All rights reserved.\n")
 	fmt.Printf("OS: %s ARCH: %s GOMAXPROCS: %d\n\n", runtime.GOOS, runtime.GOARCH, runtime.GOMAXPROCS(0))
 
 	// Map arguments for DERO network (TODO: Fully support console arguments)
