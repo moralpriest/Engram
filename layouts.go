@@ -2928,7 +2928,7 @@ func layoutRestore() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnCopyAddress := widget.NewButton("Copy Address", nil)
+	btnCopyAddress := widget.NewButtonWithIcon("Copy Address", theme.ContentCopyIcon(), nil)
 
 	wPassword := NewMobileEntry()
 	wPassword.Password = true
@@ -5694,32 +5694,14 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 func layoutTransfers() fyne.CanvasObject {
 	session.Domain = "app.transfers"
 
-	wSpacer := widget.NewLabel(" ")
-
-	sendTitle := canvas.NewText("T R A N S F E R S", colors.Gray)
-	sendTitle.TextStyle = fyne.TextStyle{Bold: true}
-	sendTitle.TextSize = scaleFont(16)
-
-	sendDesc := canvas.NewText("", colors.Gray)
-	sendDesc.TextSize = scaleFont(18)
-	sendDesc.Alignment = fyne.TextAlignCenter
-	sendDesc.TextStyle = fyne.TextStyle{Bold: true}
-
 	sendHeading := canvas.NewText("T R A N S F E R S", colors.Gray)
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 	sendHeading.TextSize = scaleFont(16)
 
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(standardSpacerSize())
-
 	top := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		container.NewCenter(
-			sendHeading,
-		),
-		rectSpacer,
-		rectSpacer,
+		NewSpacer(0, scaleSize(10)),
+		container.NewCenter(sendHeading),
+		NewSpacer(0, scaleSize(10)),
 	)
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
@@ -5728,8 +5710,6 @@ func layoutTransfers() fyne.CanvasObject {
 	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 	frame := &iframe{}
 	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
-	rectSpacer = canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(standardSpacerSize())
 	rect.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
 	rectEmpty.SetMinSize(statusDotSize())
@@ -5808,9 +5788,9 @@ func layoutTransfers() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransfersDetail(id))
 	}
 
-	btnSend := widget.NewButton("Send Transfers", nil)
+	btnSend := widget.NewButtonWithIcon("Send Transfers", theme.UploadIcon(), nil)
 
-	btnClear := widget.NewButton("Clear", func() {
+	btnClear := widget.NewButtonWithIcon("Clear", theme.WindowCloseIcon(), func() {
 		pendingList = pendingList[:0]
 		tx = Transfers{}
 		session.Window.SetContent(layoutTransition())
@@ -5986,8 +5966,8 @@ func layoutTransfers() fyne.CanvasObject {
 						container.NewCenter(
 							header,
 						),
-						rectSpacer,
-						rectSpacer,
+						NewSpacer(0, scaleSize(10)),
+						NewSpacer(0, scaleSize(10)),
 						subHeader,
 						widget.NewLabel(""),
 						container.NewCenter(
@@ -5996,18 +5976,18 @@ func layoutTransfers() fyne.CanvasObject {
 								entryPassword,
 							),
 						),
-						rectSpacer,
-						rectSpacer,
+						NewSpacer(0, scaleSize(10)),
+						NewSpacer(0, scaleSize(10)),
 						btnSubmit,
-						rectSpacer,
-						rectSpacer,
+						NewSpacer(0, scaleSize(10)),
+						NewSpacer(0, scaleSize(10)),
 						container.NewHBox(
 							layout.NewSpacer(),
 							linkClose,
 							layout.NewSpacer(),
 						),
-						rectSpacer,
-						rectSpacer,
+						NewSpacer(0, scaleSize(10)),
+						NewSpacer(0, scaleSize(10)),
 					),
 				),
 			),
@@ -6030,21 +6010,15 @@ func layoutTransfers() fyne.CanvasObject {
 	})
 
 	sendForm := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		sendHeading,
-		rectSpacer,
-		rectSpacer,
 		container.NewStack(
 			rectListBox,
 			scrollBox,
 		),
-		wSpacer,
+		widget.NewLabel(" "),
 		wrapMobileButton(btnSend),
-		rectSpacer,
+		NewSpacer(0, scaleSize(10)),
 		wrapMobileButton(btnClear),
-		rectSpacer,
-		rectSpacer,
+		NewSpacer(0, scaleSize(20)),
 	)
 
 	gridItem1 := container.NewCenter(
@@ -6076,11 +6050,10 @@ func layoutTransfers() fyne.CanvasObject {
 
 	bottom := container.NewStack(
 		container.NewVBox(
-			rectSpacer,
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
+			NewSpacer(0, scaleSize(10)),
 		),
 	)
 
@@ -6097,7 +6070,7 @@ func layoutTransfers() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutTransfersDetail(index int) fyne.CanvasObject {
