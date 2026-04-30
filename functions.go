@@ -5625,10 +5625,20 @@ func rateTELAOverlay(name, scid string) {
 	detailDesc.TextSize = scaleFont(14)
 	detailDesc.Alignment = fyne.TextAlignCenter
 
-	totalRatingLabel := canvas.NewText("Total: 55", colors.Account)
-	totalRatingLabel.TextSize = scaleFont(24)
-	totalRatingLabel.Alignment = fyne.TextAlignCenter
-	totalRatingLabel.TextStyle = fyne.TextStyle{Bold: true}
+	labelRatingAverage := canvas.NewText("5.5", colors.Account)
+	labelRatingAverage.TextSize = scaleFont(24)
+	labelRatingAverage.Alignment = fyne.TextAlignCenter
+	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
+
+	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(5.5))
+	hexagonImg.SetMinSize(fyne.NewSize(80, 86))
+
+	hexagonContainer := container.NewStack(
+		hexagonImg,
+		container.NewCenter(
+			labelRatingAverage,
+		),
+	)
 
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = scaleFont(12)
@@ -5729,7 +5739,7 @@ func rateTELAOverlay(name, scid string) {
 		detailDesc,
 		rectSpacer,
 		rectSpacer,
-		totalRatingLabel,
+		container.NewCenter(hexagonContainer),
 		rectSpacer,
 		rectSpacer,
 		rectSpacer,
@@ -5744,8 +5754,11 @@ func rateTELAOverlay(name, scid string) {
 		ratingVal := int(value)
 		ratingDesc.Text = fmt.Sprintf("%d - %s", ratingVal, tela.Ratings.Category(uint64(ratingVal)))
 		ratingDesc.Refresh()
-		totalRatingLabel.Text = fmt.Sprintf("Total: %d", (ratingVal*10)+int(detailSlider.Value))
-		totalRatingLabel.Refresh()
+		ratingFloat := float64((ratingVal*10)+int(detailSlider.Value)) / 10.0
+		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
+		labelRatingAverage.Refresh()
+		hexagonImg.Resource = telaHexagonColor(ratingFloat)
+		hexagonImg.Refresh()
 		btnConfirm.Enable()
 	}
 
@@ -5754,8 +5767,11 @@ func rateTELAOverlay(name, scid string) {
 		detailVal := int(value)
 		detailDesc.Text = fmt.Sprintf("%d - %s", detailVal, tela.Ratings.Detail(uint64(detailVal), ratingVal > 4))
 		detailDesc.Refresh()
-		totalRatingLabel.Text = fmt.Sprintf("Total: %d", (ratingVal*10)+detailVal)
-		totalRatingLabel.Refresh()
+		ratingFloat := float64((ratingVal*10)+detailVal) / 10.0
+		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
+		labelRatingAverage.Refresh()
+		hexagonImg.Resource = telaHexagonColor(ratingFloat)
+		hexagonImg.Refresh()
 		btnConfirm.Enable()
 	}
 
