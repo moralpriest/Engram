@@ -2070,17 +2070,16 @@ func layoutReceive() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
-	qrExpanded := false
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText("R E C E I V E    D E R O", colors.Gray)
+	heading := canvas.NewText("R E C E I V E    D E R O", colors.DarkGreen)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
 	addressStr := engram.Disk.GetAddress().String()
-	addressLabel := canvas.NewText("", colors.Green)
+	addressLabel := canvas.NewText("", colors.DarkGreen)
 	addressLabel.TextSize = scaleFont(22)
 	addressLabel.Alignment = fyne.TextAlignCenter
 	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -2099,12 +2098,12 @@ func layoutReceive() fyne.CanvasObject {
 		}
 		addressLabel.Refresh()
 	})
-	addressToggleBtn.Importance = widget.LowImportance
+	addressToggleBtn.Importance = widget.HighImportance
 
 	addressCopyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
 	})
-	addressCopyBtn.Importance = widget.LowImportance
+	addressCopyBtn.Importance = widget.HighImportance
 
 	if session.AddressHidden {
 		addressLabel.Text = "dE...••••••••"
@@ -2120,39 +2119,24 @@ func layoutReceive() fyne.CanvasObject {
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
 	})
+	if len(btnBack.Objects) > 1 {
+		if btn, ok := btnBack.Objects[1].(*widget.Button); ok {
+			btn.Importance = widget.HighImportance
+		}
+	}
 
-	var qrButton *widget.Button
 	var imageQR *canvas.Image
 	qr, err := qrcode.New(engram.Disk.GetAddress().String(), qrcode.Highest)
 	if err != nil {
 		logger.Errorf("[Receive] Error generating QR: %v\n", err)
 	} else {
-		qr.BackgroundColor = colors.DarkMatter
-		qr.ForegroundColor = colors.Green
+		qr.BackgroundColor = color.White
+		qr.ForegroundColor = color.Black
 	}
-	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.65)))
-	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
+	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.85)))
+	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.85, ui.Width*0.85))
 
-	qrButton = widget.NewButton("", func() {
-		qrExpanded = !qrExpanded
-		log.Printf("QR: Tapped, expanded=%v", qrExpanded)
-		if qrExpanded {
-			qr.BackgroundColor = color.White
-			qr.ForegroundColor = color.Black
-			imageQR.SetMinSize(fyne.NewSize(ui.Width*0.85, ui.Width*0.85))
-			imageQR.Image = qr.Image(int(ui.Width * 0.85))
-			rectBox.FillColor = color.White
-		} else {
-			qr.BackgroundColor = colors.DarkMatter
-			qr.ForegroundColor = colors.Green
-			imageQR.SetMinSize(fyne.NewSize(ui.Width*0.65, ui.Width*0.65))
-			imageQR.Image = qr.Image(int(ui.Width * 0.65))
-			rectBox.FillColor = colors.DarkMatter
-		}
-		imageQR.Refresh()
-		rectBox.Refresh()
-	})
-	qrButton.Importance = widget.LowImportance
+
 
 	top := container.NewVBox(
 		rectSpacer,
@@ -2175,11 +2159,12 @@ func layoutReceive() fyne.CanvasObject {
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
-			container.NewStack(qrButton, imageQR),
+			imageQR,
 		),
 		rectSpacer,
 	)
 
+	rectBox.FillColor = color.White
 	features := container.NewStack(
 		rectBox,
 		NewVScroll(content),
@@ -2207,7 +2192,7 @@ func layoutReceive() fyne.CanvasObject {
 		session.NavStack.Push(session.Domain, true)
 	}
 
-	return NewVScroll(layout)
+	return NewVScroll(container.NewStack(canvas.NewRectangle(color.White), layout))
 }
 
 func layoutServiceAddress() fyne.CanvasObject {
