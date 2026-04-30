@@ -18260,15 +18260,21 @@ func layoutTELA() fyne.CanvasObject {
 					launchStatus.Text = "Stopping..."
 					launchStatus.Refresh()
 				}
+				startCloseBtn.SetIcon(theme.ContentCutIcon())
+				startCloseBtn.Refresh()
 			} else if isTelaActive(scid) {
 				entry := findTelaSearchEntry(scid)
 				if entry != nil {
-					tela.ShutdownServer(entry.DURL)
-					if refreshServerList != nil {
-						refreshServerList()
-					}
-					searchList.Refresh()
-					favoritesList.Refresh()
+					go func() {
+						tela.ShutdownServer(entry.DURL)
+						if refreshServerList != nil {
+							refreshServerList()
+						}
+						uiDo(func() {
+							searchList.Refresh()
+							favoritesList.Refresh()
+						})
+					}()
 				}
 			} else {
 				if engram.Disk == nil {
@@ -18339,7 +18345,7 @@ func layoutTELA() fyne.CanvasObject {
 								launchStatus.Text = "Cancelled"
 								launchStatus.Color = colors.Gray
 							} else if failed {
-								launchStatus.Text = "Failed"
+								launchStatus.Text = "Launch Error"
 								launchStatus.Color = colors.Red
 							} else {
 								launchStatus.Text = "Done!"
@@ -18355,9 +18361,13 @@ func layoutTELA() fyne.CanvasObject {
 						}
 						activeBg.SetMinSize(fyne.NewSize(0, scaleSize(40)))
 						activeBg.Refresh()
-						if refreshServerList != nil {
-							refreshServerList()
-						}
+					})
+
+					if refreshServerList != nil {
+						refreshServerList()
+					}
+
+					uiDo(func() {
 						searchList.Refresh()
 						favoritesList.Refresh()
 					})
@@ -21952,7 +21962,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						launchProgress.Refresh()
 					}
 					if launchStatus != nil {
-						launchStatus.Text = "Failed"
+						launchStatus.Text = "Launch Error"
 						launchStatus.Color = colors.Red
 						launchStatus.Refresh()
 					}
@@ -21993,6 +22003,8 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 				launchStatus.Text = "Stopping..."
 				launchStatus.Refresh()
 			}
+			btnServer.SetIcon(theme.ContentCutIcon())
+			btnServer.Refresh()
 		} else if btnServer.Text == "Shutdown Application" {
 			tela.ShutdownServer(index.DURL)
 			errorText.Text = ""
