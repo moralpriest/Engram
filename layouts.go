@@ -83,9 +83,10 @@ var telaLaunchCancelChansGlobal struct {
 	m map[string]chan struct{}
 }
 
-var telaRunningAppsGlobal struct {
-	sync.Mutex
-	m map[string]bool
+var telaActiveServersGlobal struct {
+	sync.RWMutex
+	info   []tela.ServerInfo
+	active map[string]bool
 }
 
 var telaStoppingSCIDsGlobal struct {
@@ -104,9 +105,35 @@ var telaBackfillFailed atomic.Bool
 func init() {
 	telaLaunchingSCIDsGlobal.m = make(map[string]bool)
 	telaLaunchCancelChansGlobal.m = make(map[string]chan struct{})
-	telaRunningAppsGlobal.m = make(map[string]bool)
+	telaActiveServersGlobal.active = make(map[string]bool)
 	telaStoppingSCIDsGlobal.m = make(map[string]bool)
 	telaLaunchStartTimesGlobal.m = make(map[string]time.Time)
+
+	// Background goroutine to periodically update TELA server state
+	// This prevents blocking the UI thread if the tela package lock is held
+	go func() {
+		for {
+			if appExitFlag.Load() {
+				return
+			}
+
+			// This call might block if ServeTELA is holding the exclusive lock,
+			// but since we're in a goroutine, it won't freeze the UI.
+			servers := tela.GetServerInfo()
+
+			activeMap := make(map[string]bool)
+			for _, s := range servers {
+				activeMap[s.SCID] = true
+			}
+
+			telaActiveServersGlobal.Lock()
+			telaActiveServersGlobal.info = servers
+			telaActiveServersGlobal.active = activeMap
+			telaActiveServersGlobal.Unlock()
+
+			time.Sleep(2 * time.Second)
+		}
+	}()
 }
 
 func isMobileDevice() bool {
@@ -114,16 +141,23 @@ func isMobileDevice() bool {
 }
 
 func getTelaActiveServers() []tela.ServerInfo {
-	return tela.GetServerInfo()
+	telaActiveServersGlobal.RLock()
+	defer telaActiveServersGlobal.RUnlock()
+
+	if telaActiveServersGlobal.info == nil {
+		return []tela.ServerInfo{}
+	}
+
+	// Return a copy to avoid race conditions if the caller modifies the slice
+	res := make([]tela.ServerInfo, len(telaActiveServersGlobal.info))
+	copy(res, telaActiveServersGlobal.info)
+	return res
 }
 
 func isTelaActive(scid string) bool {
-	for _, s := range tela.GetServerInfo() {
-		if s.SCID == scid {
-			return true
-		}
-	}
-	return false
+	telaActiveServersGlobal.RLock()
+	defer telaActiveServersGlobal.RUnlock()
+	return telaActiveServersGlobal.active[scid]
 }
 
 func getTelaPath() string {
@@ -1049,7 +1083,7 @@ func layoutDashboard() fyne.CanvasObject {
 	telaLabel.TextStyle = fyne.TextStyle{Bold: false}
 
 	telaStatus := canvas.NewCircle(colors.Gray)
-	if len(tela.GetServerInfo()) > 0 {
+	if len(getTelaActiveServers()) > 0 {
 		telaStatus.FillColor = colors.Green
 	}
 
@@ -1912,15 +1946,17 @@ func layoutSend() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	form := container.NewVBox(
+	top := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
-			rect300,
 			sendHeading,
 		),
 		rectSpacer,
 		rectSpacer,
+	)
+
+	form := container.NewVBox(
 		wRings,
 		rectSpacer,
 		wrapMobileButton(widget.NewButtonWithIcon("Scan QR Code", theme.MediaPhotoIcon(), func() {
@@ -1960,52 +1996,46 @@ func layoutSend() fyne.CanvasObject {
 		wSpacer,
 	)
 
-	grid := container.NewCenter(
-		form,
-	)
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.95, 10))
 
-	top := container.NewCenter(
+	grid := container.NewHBox(
 		layout.NewSpacer(),
-		grid,
+		container.NewStack(
+			rectWidth90,
+			container.NewVScroll(form),
+		),
 		layout.NewSpacer(),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
+			container.NewCenter(
 				container.NewStack(
 					rect300,
 					wrapMobileButton(btnSendNow),
 				),
-				layout.NewSpacer(),
 			),
 			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
+			container.NewCenter(
 				container.NewStack(
 					rect300,
 					wrapMobileButton(btnTransfers),
 				),
-				layout.NewSpacer(),
 			),
 			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
+			container.NewCenter(
 				container.NewStack(
 					rect300,
 					wrapMobileButton(btnSend),
 				),
-				layout.NewSpacer(),
 			),
 			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkCancel,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), linkCancel),
 			),
-			wSpacer,
+			rectSpacer,
 		),
 	)
 
@@ -2014,6 +2044,7 @@ func layoutSend() fyne.CanvasObject {
 		bottom,
 		nil,
 		nil,
+		grid,
 	)
 
 	layout := container.NewStack(
@@ -2042,7 +2073,7 @@ func layoutReceive() fyne.CanvasObject {
 	qrExpanded := false
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 0))
+	rectSpacer.SetMinSize(standardSpacerSize())
 
 	heading := canvas.NewText("R E C E I V E    D E R O", colors.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -2123,49 +2154,53 @@ func layoutReceive() fyne.CanvasObject {
 	})
 	qrButton.Importance = widget.LowImportance
 
-	features := container.NewStack(
-		rectBox,
-		container.NewVScroll(
-			container.NewVBox(
-				rectSpacer,
-				rectSpacer,
-				container.NewCenter(
-					container.NewVBox(
-						heading,
-						rectSpacer,
-					),
-				),
-				rectSpacer,
-				container.NewCenter(
-					container.NewHBox(
-						addressLabel,
-						addressToggleBtn,
-						addressCopyBtn,
-					),
-				),
-				rectSpacer,
-				rectSpacer,
-				container.NewCenter(
-					container.NewStack(qrButton, imageQR),
-				),
-				rectSpacer,
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			heading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
+
+	content := container.NewVBox(
+		container.NewCenter(
+			container.NewHBox(
+				addressLabel,
+				addressToggleBtn,
+				addressCopyBtn,
 			),
 		),
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewStack(qrButton, imageQR),
+		),
+		rectSpacer,
+	)
+
+	features := container.NewStack(
+		rectBox,
+		NewVScroll(content),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
+			rectSpacer,
 			container.NewCenter(
-				btnBack,
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
+			rectSpacer,
 		),
 	)
 
 	layout := container.NewBorder(
-		features,
+		top,
 		bottom,
 		nil,
 		nil,
+		features,
 	)
 
 	if session.NavStack != nil {
@@ -2434,15 +2469,17 @@ func layoutServiceAddress() fyne.CanvasObject {
 		}
 	}
 
-	form := container.NewVBox(
+	top := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
-			rect300,
 			sendHeading,
 		),
 		rectSpacer,
 		rectSpacer,
+	)
+
+	form := container.NewVBox(
 		wReceiver,
 		wPaymentID,
 		rectSpacer,
@@ -2461,38 +2498,32 @@ func layoutServiceAddress() fyne.CanvasObject {
 		wSpacer,
 	)
 
-	grid := container.NewCenter(
-		form,
-	)
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.95, 10))
 
-	top := container.NewCenter(
+	grid := container.NewHBox(
 		layout.NewSpacer(),
-		grid,
+		container.NewStack(
+			rectWidth90,
+			container.NewVScroll(form),
+		),
 		layout.NewSpacer(),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
+			container.NewCenter(
 				container.NewStack(
 					rect300,
 					wrapMobileButton(btnCreate),
 				),
-				layout.NewSpacer(),
 			),
 			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
-				container.NewHBox(
-					layout.NewSpacer(),
-					btnBack,
-					layout.NewSpacer(),
-				),
-				layout.NewSpacer(),
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			wSpacer,
+			rectSpacer,
 		),
 	)
 
@@ -2501,6 +2532,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 		bottom,
 		nil,
 		nil,
+		grid,
 	)
 
 	layout := container.NewStack(
@@ -2714,13 +2746,14 @@ func layoutNewAccount() fyne.CanvasObject {
 		wrapMobileButton(btnCreate),
 	)
 
-	footer := container.NewVBox(
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnBack,
-			layout.NewSpacer(),
+	footer := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			rectSpacer,
 		),
-		wSpacer,
 	)
 
 	body := widget.NewLabel("Please save the following 25 recovery words in a safe place. These are the keys to your account, so never share them with anyone.")
@@ -3269,7 +3302,6 @@ func layoutRestore() fyne.CanvasObject {
 		}
 	}
 
-	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("Recover Account", colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
@@ -4078,15 +4110,13 @@ func layoutRestore() fyne.CanvasObject {
 	rect1 := canvas.NewRectangle(color.Transparent)
 	rect1.SetMinSize(fyne.NewSize(ui.Width, scaleSize(1)))
 
-	footer := container.NewCenter(
-		rect1,
+	footer := container.NewStack(
 		container.NewVBox(
-			container.NewHBox(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			wSpacer,
+			rectSpacer,
 		),
 	)
 
@@ -5655,19 +5685,9 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -5678,11 +5698,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			top,
 			bottom,
 			nil,
+			nil,
 			center,
 		),
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutTransfers() fyne.CanvasObject {
@@ -5699,10 +5720,22 @@ func layoutTransfers() fyne.CanvasObject {
 	sendDesc.Alignment = fyne.TextAlignCenter
 	sendDesc.TextStyle = fyne.TextStyle{Bold: true}
 
-	sendHeading := canvas.NewText("S A V E D    T R A N S F E R S", colors.Gray)
-	sendHeading.TextSize = scaleFont(16)
-	sendHeading.Alignment = fyne.TextAlignCenter
+	sendHeading := canvas.NewText("T R A N S F E R S", colors.Gray)
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
+	sendHeading.TextSize = scaleFont(16)
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			sendHeading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(statusDotSize())
@@ -5710,7 +5743,7 @@ func layoutTransfers() fyne.CanvasObject {
 	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 	frame := &iframe{}
 	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
-	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer = canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 	rect.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
@@ -6059,26 +6092,19 @@ func layoutTransfers() fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
 
 	c := container.NewBorder(
-		features,
+		top,
 		bottom,
 		nil,
 		nil,
+		features,
 	)
 
 	layout := container.NewStack(
@@ -6101,12 +6127,21 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	frame := &iframe{}
 
 	heading := canvas.NewText("T R A N S F E R    D E T A I L", colors.Gray)
-	heading.TextSize = scaleFont(16)
-	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			heading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	labelDestination := canvas.NewText("   RECEIVER  ADDRESS", colors.Gray)
 	labelDestination.TextSize = scaleFont(14)
@@ -6255,7 +6290,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		session.Window.SetContent(layoutTransfers())
 	}
 
-	top := container.NewVBox(
+	top = container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
@@ -6333,7 +6368,6 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
 			container.NewStack(
 				rectWidth,
 				container.NewHBox(
@@ -6346,20 +6380,9 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 				),
 			),
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -6369,6 +6392,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		container.NewBorder(
 			top,
 			bottom,
+			nil,
 			nil,
 			center,
 		),
@@ -6903,36 +6927,32 @@ func layoutSettings() fyne.CanvasObject {
 		SetCurrentScrollBox(scrollBox)
 	}
 
-	gridItem1 := container.NewCenter(
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(heading),
+		rectSpacer,
+	)
+
+	footer := container.NewStack(
 		container.NewVBox(
-			heading,
-			scrollBox,
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
 			rectSpacer,
 		),
 	)
 
-	features := container.NewCenter(
-		layout.NewSpacer(),
-		gridItem1,
-		layout.NewSpacer(),
-	)
-
-	footer := container.NewVBox(
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnBack,
-			layout.NewSpacer(),
-		),
-	)
-
 	c := container.NewBorder(
-		features,
+		top,
 		footer,
 		nil,
 		nil,
+		scrollBox,
 	)
 
-	return NewVScroll(c)
+	return c
 }
 
 // layoutAppSettings creates the centralized settings page with 3 tabs:
@@ -8345,6 +8365,31 @@ func layoutMessages() fyne.CanvasObject {
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.95, 10))
+
+	// Move definitions up
+	contactInput := widget.NewEntry()
+	contactInput.MultiLine = false
+	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	contactInput.PlaceHolder = "Search username or address"
+	contactInput.SetIcon(theme.SearchIcon())
+
+	btnSend := widget.NewButton("New Message", func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutPM())
+		removeOverlays()
+	})
+	btnSend.Disable()
+
+	rebuildBtn := widget.NewButton("Rebuild Message History", func() {
+		rebuildMessageHistory()
+	})
+
 	checkLimit := widget.NewCheck(" Show only recent messages", nil)
 	checkLimit.OnChanged = func(b bool) {
 		if b {
@@ -8364,6 +8409,51 @@ func layoutMessages() fyne.CanvasObject {
 		checkLimit.Checked = true
 	}
 
+	top := container.NewVBox(
+		canvas.NewRectangle(color.Transparent),
+		container.NewCenter(
+			title,
+		),
+		canvas.NewRectangle(color.Transparent),
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectWidth90,
+				container.NewVBox(
+					contactInput,
+					canvas.NewRectangle(color.Transparent),
+					wrapMobileButton(btnSend),
+					canvas.NewRectangle(color.Transparent),
+					wrapMobileButton(rebuildBtn),
+					canvas.NewRectangle(color.Transparent),
+					container.NewCenter(checkLimit),
+				),
+			),
+			layout.NewSpacer(),
+		),
+		canvas.NewRectangle(color.Transparent),
+	)
+
+	// Set spacer sizes
+	for _, obj := range top.Objects {
+		if r, ok := obj.(*canvas.Rectangle); ok {
+			r.SetMinSize(standardSpacerSize())
+		}
+	}
+	// Also set sizes for spacers inside the nested VBox
+	if hbox, ok := top.Objects[2].(*fyne.Container); ok {
+		if stack, ok := hbox.Objects[1].(*fyne.Container); ok {
+			if vbox, ok := stack.Objects[1].(*fyne.Container); ok {
+				for _, obj := range vbox.Objects {
+					if r, ok := obj.(*canvas.Rectangle); ok {
+						r.SetMinSize(standardSpacerSize())
+					}
+				}
+			}
+		}
+	}
+
+
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -8375,13 +8465,7 @@ func layoutMessages() fyne.CanvasObject {
 	rectStatus.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
 	rectEmpty.SetMinSize(statusDotSize())
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(20)))
 	frame := &iframe{}
-	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(standardSpacerSize())
-	rect.SetMinSize(statusDotSize())
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
@@ -8479,33 +8563,6 @@ func layoutMessages() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	rebuildBtn := widget.NewButton("Rebuild Message History", func() {
-		rebuildMessageHistory()
-	})
-
-	btnSend := widget.NewButton("New Message", func() {
-		_, err := globals.ParseValidateAddress(messages.Contact)
-		if err != nil {
-			//_, err := engram.Disk.NameToAddress(messages.Contact)
-			_, err := checkUsername(messages.Contact, -1)
-			if err != nil {
-				return
-			}
-		}
-
-		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutPM())
-		removeOverlays()
-	})
-	btnSend.Disable()
-
-	contactInput := widget.NewEntry()
-	contactInput.MultiLine = false
-	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
-	contactInput.PlaceHolder = "Search username or address"
-	contactInput.SetIcon(theme.SearchIcon())
-
 	validateContactInput := func(value string) bool {
 		value = strings.TrimSpace(value)
 		if value == "" {
@@ -8555,55 +8612,12 @@ func layoutMessages() fyne.CanvasObject {
 		}
 	}
 
-	messageForm := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			title,
-			layout.NewSpacer(),
-		),
-		rectSpacer,
-		rectSpacer,
-		contactInput,
-		rectSpacer,
-		rectSpacer,
+	features := container.NewHBox(
+		layout.NewSpacer(),
 		container.NewStack(
-			rectListBox,
+			rectWidth90,
 			msgbox.List,
 		),
-		rectSpacer,
-		wrapMobileButton(btnSend),
-		rectSpacer,
-		wrapMobileButton(rebuildBtn),
-		rectSpacer,
-		checkLimit,
-	)
-
-	gridItem1 := container.NewCenter(
-		messageForm,
-	)
-
-	gridItem2 := container.NewCenter()
-
-	gridItem3 := container.NewCenter()
-
-	gridItem4 := container.NewCenter()
-
-	gridItem1.Hidden = false
-	gridItem2.Hidden = true
-	gridItem3.Hidden = true
-	gridItem4.Hidden = true
-
-	features := container.NewCenter(
-		layout.NewSpacer(),
-		gridItem1,
-		layout.NewSpacer(),
-		gridItem2,
-		layout.NewSpacer(),
-		gridItem3,
-		layout.NewSpacer(),
-		gridItem4,
 		layout.NewSpacer(),
 	)
 
@@ -8626,33 +8640,37 @@ func layoutMessages() fyne.CanvasObject {
 
 	subContainer := container.NewStack(
 		container.NewVBox(
-			rectSpacer,
-			rectSpacer,
+			canvas.NewRectangle(color.Transparent),
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
+			canvas.NewRectangle(color.Transparent),
 		),
 	)
 
+	// Set spacer sizes for subContainer
+	if vbox, ok := subContainer.Objects[0].(*fyne.Container); ok {
+		for _, obj := range vbox.Objects {
+			if r, ok := obj.(*canvas.Rectangle); ok {
+				r.SetMinSize(standardSpacerSize())
+			}
+		}
+	}
+
 	c := container.NewBorder(
-		features,
+		top,
 		subContainer,
 		nil,
 		nil,
+		features,
 	)
 
-	layout := container.NewStack(
+	mainLayout := container.NewStack(
 		frame,
 		c,
 	)
 
-	return layout
+	return mainLayout
 }
 
 func layoutPM() fyne.CanvasObject {
@@ -8700,16 +8718,13 @@ func layoutPM() fyne.CanvasObject {
 		removeOverlays()
 	}
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), backFromThread)
-	if isMobile() {
-		btnBack = wrapMobileButton(btnBack).(*fyne.Container)
-	}
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(statusDotSize())
 	rectEmpty := canvas.NewRectangle(color.Transparent)
 	rectEmpty.SetMinSize(statusDotSize())
 	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width*0.7, 30))
+	rect.SetMinSize(statusDotSize())
 	frame := &iframe{}
 	subframe := canvas.NewRectangle(color.Transparent)
 	if isMobile() {
@@ -8717,9 +8732,6 @@ func layoutPM() fyne.CanvasObject {
 	} else {
 		subframe.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.36))
 	}
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(standardSpacerSize())
-	rect.SetMinSize(statusDotSize())
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
 	rectListBox := canvas.NewRectangle(color.Transparent)
@@ -9134,57 +9146,81 @@ func layoutPM() fyne.CanvasObject {
 		}()
 	}
 
-	var topBlock *fyne.Container
-	if isMobile() {
-		topBlock = container.NewVBox(
-			container.NewMax(container.NewCenter(heading)),
-			rectSpacer,
-			lastActive,
-			rectSpacer,
-			threadSearch,
-			rectSpacer,
-		)
-	} else {
-		topBlock = container.NewVBox(
-			rectSpacer,
-			container.NewHBox(
-				layout.NewSpacer(),
-				heading,
-				layout.NewSpacer(),
-			),
-			rectSpacer,
-			lastActive,
-			rectSpacer,
-			threadSearch,
-			rectSpacer,
-		)
+	top := container.NewVBox(
+		canvas.NewRectangle(color.Transparent),
+		canvas.NewRectangle(color.Transparent),
+		container.NewCenter(
+			heading,
+		),
+		canvas.NewRectangle(color.Transparent),
+		canvas.NewRectangle(color.Transparent),
+	)
+
+	// Set spacer sizes for top
+	for _, obj := range top.Objects {
+		if r, ok := obj.(*canvas.Rectangle); ok {
+			r.SetMinSize(standardSpacerSize())
+		}
+	}
+
+	topContent := container.NewVBox(
+		lastActive,
+		canvas.NewRectangle(color.Transparent),
+		threadSearch,
+		canvas.NewRectangle(color.Transparent),
+	)
+
+	// Set spacer sizes for topContent
+	for _, obj := range topContent.Objects {
+		if r, ok := obj.(*canvas.Rectangle); ok {
+			r.SetMinSize(standardSpacerSize())
+		}
 	}
 
 	middle := container.NewStack(subframe, chatbox)
 
-	bottomItems := []fyne.CanvasObject{
-		rectSpacer,
+	composerItems := []fyne.CanvasObject{
+		canvas.NewRectangle(color.Transparent),
 		labelLimit,
-		rectSpacer,
+		canvas.NewRectangle(color.Transparent),
 		entry,
-		rectSpacer,
+		canvas.NewRectangle(color.Transparent),
 		wrapMobileButton(btnSend),
+		canvas.NewRectangle(color.Transparent),
 	}
-	if isMobile() {
-		composerPad := canvas.NewRectangle(color.Transparent)
-		composerPad.SetMinSize(fyne.NewSize(ui.Width, scaleSize(16)))
-		bottomItems = append(bottomItems, composerPad)
-	}
-	bottomItems = append(bottomItems, rectSpacer)
-	bottomItems = append(bottomItems, container.NewHBox(layout.NewSpacer(), btnBack, layout.NewSpacer()))
-	bottomItems = append(bottomItems, rectSpacer)
-	bottomBlock := container.NewVBox(bottomItems...)
 
-	column := container.NewBorder(topBlock, bottomBlock, nil, nil, middle)
+	for _, obj := range composerItems {
+		if r, ok := obj.(*canvas.Rectangle); ok {
+			r.SetMinSize(standardSpacerSize())
+		}
+	}
+
+	bottomBlock := container.NewVBox(composerItems...)
+
+	bottom := container.NewStack(
+		container.NewVBox(
+			canvas.NewRectangle(color.Transparent),
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			canvas.NewRectangle(color.Transparent),
+		),
+	)
+
+	// Set spacer sizes for bottom
+	if vbox, ok := bottom.Objects[0].(*fyne.Container); ok {
+		for _, obj := range vbox.Objects {
+			if r, ok := obj.(*canvas.Rectangle); ok {
+				r.SetMinSize(standardSpacerSize())
+			}
+		}
+	}
+
+	center := container.NewBorder(topContent, bottomBlock, nil, nil, middle)
 
 	var gridItem1 *fyne.Container
 	if isMobile() {
-		pmScroll := container.NewVScroll(column)
+		pmScroll := container.NewVScroll(center)
 		SetCurrentScrollBox(pmScroll)
 		entry.OnFocusGained = func() {
 			showVirtualKeyboard(entry)
@@ -9192,7 +9228,7 @@ func layoutPM() fyne.CanvasObject {
 		gridItem1 = container.NewMax(pmScroll)
 	} else {
 		SetCurrentScrollBox(nil)
-		gridItem1 = container.NewMax(column)
+		gridItem1 = container.NewMax(center)
 	}
 
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
@@ -9217,32 +9253,11 @@ func layoutPM() fyne.CanvasObject {
 		}
 	})
 
-	var subContainer *fyne.Container
-	if isMobile() {
-		subContainer = container.NewStack(container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-		))
-	} else {
-		subContainer = container.NewStack(container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-		))
-	}
-
 	// Center slot receives all space between window edges and bottom bar; do not put
 	// main content in Border "top" — top height is only MinSize() (see Fyne borderLayout).
 	c := container.NewBorder(
-		nil,
-		subContainer,
+		top,
+		bottom,
 		nil,
 		nil,
 		gridItem1,
@@ -9980,7 +9995,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	// Check if the application is TELA
 	telaURL := "http://localhost"
 	if strings.HasPrefix(ad.Url, telaURL) {
-		for _, serv := range tela.GetServerInfo() {
+		for _, serv := range getTelaActiveServers() {
 			if strings.HasPrefix(ad.Url, telaURL+serv.Address) {
 				name, _, icon, _, _ := getContractHeader(crypto.HashHexToHash(serv.SCID))
 				if icon != "" {
@@ -11085,16 +11100,17 @@ func layoutIdentity() fyne.CanvasObject {
 		userBox.UnselectAll()
 	}
 
-	shardForm := container.NewVBox(
+	top := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
-			container.NewVBox(
-				title,
-				rectSpacer,
-			),
+			title,
 		),
 		rectSpacer,
+		rectSpacer,
+	)
+
+	shardForm := container.NewVBox(
 		container.NewStack(
 			container.NewCenter(
 				textUsername,
@@ -11112,9 +11128,6 @@ func layoutIdentity() fyne.CanvasObject {
 		entryReg,
 		rectSpacer,
 		wrapMobileButton(btnReg),
-		rectSpacer,
-		rectSpacer,
-		rectSpacer,
 		rectSpacer,
 	)
 
@@ -11145,26 +11158,19 @@ func layoutIdentity() fyne.CanvasObject {
 	subContainer := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
 
 	c := container.NewBorder(
-		features,
+		top,
 		subContainer,
 		nil,
 		nil,
+		features,
 	)
 
 	layout := container.NewStack(
@@ -11188,13 +11194,31 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText("I D E N T I T Y    D E T A I L", colors.Gray)
-	heading.TextSize = scaleFont(16)
-	heading.Alignment = fyne.TextAlignCenter
+	heading := canvas.NewText("C O N T A C T    I N F O", colors.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(compactSpacerSize())
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	top := container.NewVBox(
+		canvas.NewRectangle(color.Transparent),
+		canvas.NewRectangle(color.Transparent),
+		container.NewCenter(
+			heading,
+		),
+		canvas.NewRectangle(color.Transparent),
+		canvas.NewRectangle(color.Transparent),
+	)
+
+	for _, obj := range top.Objects {
+		if r, ok := obj.(*canvas.Rectangle); ok {
+			r.SetMinSize(standardSpacerSize())
+		}
+	}
+
+	rectSpacerCompact := canvas.NewRectangle(color.Transparent)
+	rectSpacerCompact.SetMinSize(compactSpacerSize())
 
 	labelUsername := canvas.NewText("REGISTERED  USERNAME", colors.Gray)
 	labelUsername.TextSize = scaleFont(11)
@@ -11381,15 +11405,6 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		}
 	}
 
-	top := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
-		container.NewCenter(
-			heading,
-		),
-		rectSpacer,
-		rectSpacer,
-	)
 
 	center := container.NewStack(
 		container.NewVScroll(
@@ -11398,9 +11413,9 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 				container.NewHBox(
 					layout.NewSpacer(),
 					container.NewVBox(
-						rectSpacer,
+						canvas.NewRectangle(color.Transparent),
 						valueUsername,
-						rectSpacer,
+						canvas.NewRectangle(color.Transparent),
 						labelUsername,
 						wSpacer,
 						container.NewHBox(
@@ -11433,8 +11448,8 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							),
 							layout.NewSpacer(),
 						),
-						rectSpacer,
-						rectSpacer,
+						canvas.NewRectangle(color.Transparent),
+						canvas.NewRectangle(color.Transparent),
 						container.NewHBox(
 							layout.NewSpacer(),
 							container.NewStack(
@@ -11450,37 +11465,51 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		),
 	)
 
+	// Set spacer sizes for the inner VBox in center
+	if vscroll, ok := center.Objects[0].(*container.Scroll); ok {
+		if stack, ok := vscroll.Content.(*fyne.Container); ok {
+			if hbox, ok := stack.Objects[1].(*fyne.Container); ok {
+				if vbox, ok := hbox.Objects[1].(*fyne.Container); ok {
+					for _, obj := range vbox.Objects {
+						if r, ok := obj.(*canvas.Rectangle); ok {
+							r.SetMinSize(standardSpacerSize())
+						}
+					}
+				}
+			}
+		}
+	}
+
 	bottom := container.NewStack(
 		container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
+			canvas.NewRectangle(color.Transparent),
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
+			canvas.NewRectangle(color.Transparent),
 		),
 	)
 
-	layout := container.NewStack(
+	if vbox, ok := bottom.Objects[0].(*fyne.Container); ok {
+		for _, obj := range vbox.Objects {
+			if r, ok := obj.(*canvas.Rectangle); ok {
+				r.SetMinSize(standardSpacerSize())
+			}
+		}
+	}
+
+	mainLayout := container.NewStack(
 		frame,
 		container.NewBorder(
 			top,
 			bottom,
 			nil,
+			nil,
 			center,
 		),
 	)
 
-	return layout
+	return mainLayout
 }
 
 func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, link *widget.Hyperlink) fyne.CanvasObject {
@@ -11513,14 +11542,19 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	session.Gif.Resize(rect.MinSize())
 	session.Gif.Start()
 
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			title,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
+
 	waitForm := container.NewVBox(
 		widget.NewLabel(""),
-		container.NewHBox(
-			layout.NewSpacer(),
-			title,
-			layout.NewSpacer(),
-		),
-		widget.NewLabel(""),
+		rect2,
 		heading,
 		rectSpacer,
 		sub,
@@ -11552,20 +11586,22 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 		layout.NewSpacer(),
 	)
 
-	footer := container.NewVBox(
-		container.NewHBox(
-			layout.NewSpacer(),
-			link,
-			layout.NewSpacer(),
+	footer := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), link),
+			),
+			rectSpacer,
 		),
-		widget.NewLabel(""),
 	)
 
 	c := container.NewBorder(
-		grid,
+		top,
 		footer,
 		nil,
 		nil,
+		grid,
 	)
 
 	layout := container.NewStack(
@@ -11706,9 +11742,21 @@ func layoutHistory() fyne.CanvasObject {
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
 	heading := canvas.NewText("H I S T O R Y", colors.Gray)
-	heading.TextSize = scaleFont(16)
-	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			heading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.3, 35))
@@ -11751,7 +11799,7 @@ func layoutHistory() fyne.CanvasObject {
 			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
 		})
 
-	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer = canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.60))
@@ -11956,52 +12004,45 @@ func layoutHistory() fyne.CanvasObject {
 	// Load Normal by default
 	loadNormal()
 
-	center := container.NewStack(
-		rectWidth,
-		container.NewHBox(
-			layout.NewSpacer(),
+	headerContent := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewStack(
+			rectWidth90,
 			container.NewVBox(
 				tabs,
 				rectSpacer,
-				results,
-				rectSpacer,
-				rectSpacer,
-				container.NewStack(
-					rectList,
-					listBox,
-				),
+				container.NewCenter(results),
 			),
-			layout.NewSpacer(),
 		),
+		layout.NewSpacer(),
 	)
 
-	top := container.NewVBox(
+	top = container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
 			heading,
 		),
 		rectSpacer,
+		headerContent,
 		rectSpacer,
-		container.NewCenter(
-			center,
+	)
+
+	center := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewStack(
+			rectWidth90,
+			listBox,
 		),
+		layout.NewSpacer(),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -12013,6 +12054,7 @@ func layoutHistory() fyne.CanvasObject {
 			bottom,
 			nil,
 			nil,
+			center,
 		),
 	)
 
@@ -12031,12 +12073,21 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	frame := &iframe{}
 
 	heading := canvas.NewText("T R A N S A C T I O N    D E T A I L", colors.Gray)
-	heading.TextSize = scaleFont(16)
-	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			heading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	labelTXID := canvas.NewText("   TRANSACTION  ID", colors.Gray)
 	labelTXID.TextSize = scaleFont(14)
@@ -12351,7 +12402,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		}
 	}
 
-	top := container.NewVBox(
+	top = container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
@@ -12522,19 +12573,9 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), linkBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -12545,6 +12586,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 			top,
 			bottom,
 			nil,
+			nil,
 			center,
 		),
 	)
@@ -12554,14 +12596,16 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 
 func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
+
 	title := canvas.NewText("S E C U R E   N O T E S", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
-	heading := canvas.NewText("", colors.Green)
-	heading.TextSize = scaleFont(22)
-	heading.Alignment = fyne.TextAlignCenter
-	heading.TextStyle = fyne.TextStyle{Bold: true}
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.95, 10))
 
 	entryNewPad := widget.NewEntry()
 	entryNewPad.MultiLine = false
@@ -12569,6 +12613,28 @@ func layoutDatapad() fyne.CanvasObject {
 
 	btnAdd := widget.NewButton(" Create ", nil)
 	btnAdd.Disable()
+
+	top := container.NewVBox(
+		rectSpacer,
+		container.NewCenter(
+			title,
+		),
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectWidth90,
+				container.NewVBox(
+					entryNewPad,
+					rectSpacer,
+					wrapMobileButton(btnAdd),
+				),
+			),
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+	)
+
 	btnAdd.OnTapped = func() {
 		err := StoreEncryptedValue("Datapads", []byte(entryNewPad.Text), []byte(""))
 		if err != nil {
@@ -12649,7 +12715,7 @@ func layoutDatapad() fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer = canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(10, 4))
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, scaleSize(35)))
@@ -12687,13 +12753,8 @@ func layoutDatapad() fyne.CanvasObject {
 		}
 	}
 
-	if len(padData) > 0 {
-		listHeight := float32(len(padData) * 42)
-		if listHeight > 280 {
-			listHeight = 280
-		}
-		rectListBox.SetMinSize(fyne.NewSize(ui.Width, listHeight))
-	}
+	// Remove artificial height cap to allow list to expand in NewBorder center
+	_ = rectListBox
 
 	padList := binding.BindStringList(&padData)
 
@@ -12737,55 +12798,28 @@ func layoutDatapad() fyne.CanvasObject {
 		padBox.Refresh()
 	}
 
-	shardForm := container.NewVBox(
-		rectSpacer,
-		container.NewCenter(container.NewVBox(title, rectSpacer)),
-		rectSpacer,
-		entryNewPad,
-		rectSpacer,
-		wrapMobileButton(btnAdd),
-		rectSpacer,
+	features := container.NewHBox(
+		layout.NewSpacer(),
 		container.NewStack(
-			rectListBox,
+			rectWidth90,
 			padBox,
 		),
-		rectSpacer,
-		rectSpacer,
-	)
-
-	gridItem1 := container.NewCenter(
-		shardForm,
-	)
-
-	features := container.NewCenter(
-		layout.NewSpacer(),
-		gridItem1,
 		layout.NewSpacer(),
 	)
 
-	subContainer := container.NewStack(
-		container.NewVBox(
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
-			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
+	subContainer := container.NewVBox(
+		container.NewCenter(
+			btnBack,
 		),
+		rectSpacer,
 	)
 
 	c := container.NewBorder(
-		features,
+		top,
 		subContainer,
 		nil,
 		nil,
+		features,
 	)
 
 	layout := container.NewStack(
@@ -12793,7 +12827,7 @@ func layoutDatapad() fyne.CanvasObject {
 		c,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutPad() fyne.CanvasObject {
@@ -12806,13 +12840,22 @@ func layoutPad() fyne.CanvasObject {
 	rectEntry := canvas.NewRectangle(color.Transparent)
 	rectEntry.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.52))
 
-	heading := canvas.NewText(session.Datapad, colors.Green)
-	heading.TextSize = scaleFont(20)
-	heading.Alignment = fyne.TextAlignCenter
-	heading.TextStyle = fyne.TextStyle{Bold: true}
-
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
+
+	heading := canvas.NewText(session.Datapad, colors.Gray)
+	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.TextSize = scaleFont(16)
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			heading,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	selectOptions := widget.NewSelect([]string{"Clear", "Export (Plaintext)", "Import From File", "Delete"}, nil)
 	selectOptions.PlaceHolder = "Select an Option ..."
@@ -13273,7 +13316,7 @@ func layoutPad() fyne.CanvasObject {
 		}
 	})
 
-	top := container.NewVBox(
+	top = container.NewVBox(
 		rectSpacer,
 		rectSpacer,
 		container.NewCenter(
@@ -13291,39 +13334,33 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	center := container.NewStack(
-		rectWidth,
-		container.NewCenter(
-			container.NewVBox(
-				container.NewStack(
-					rectEntry,
-					entryPad,
+	center := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewStack(
+			rectWidth90,
+			container.NewVScroll(
+				container.NewVBox(
+					container.NewStack(
+						rectEntry,
+						entryPad,
+					),
+					rectSpacer,
+					errorText,
+					rectSpacer,
+					wrapMobileButton(btnSave),
+					rectSpacer,
 				),
-				rectSpacer,
-				errorText,
-				rectSpacer,
-				wrapMobileButton(btnSave),
-				rectSpacer,
 			),
 		),
+		layout.NewSpacer(),
 	)
 
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				linkBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), linkBack),
 			),
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 			rectSpacer,
 		),
 	)
@@ -13336,7 +13373,7 @@ func layoutPad() fyne.CanvasObject {
 		center,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutAccount() fyne.CanvasObject {
@@ -13349,12 +13386,22 @@ func layoutAccount() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 0))
-
-	title := canvas.NewText("M Y    A C C O U N T", colors.Gray)
+	title := canvas.NewText("M Y   A C C O U N T", colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			title,
+		),
+		rectSpacer,
+		rectSpacer,
+	)
 
 	addressStr := engram.Disk.GetAddress().String()
 	heading := canvas.NewText("", colors.Green)
@@ -13515,36 +13562,49 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
+		top := container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			container.NewCenter(header),
+			rectSpacer,
+			rectSpacer,
+		)
+
+		center := container.NewCenter(
+			container.NewVBox(
+				subHeader,
+				widget.NewLabel(""),
+				container.NewCenter(
+					container.NewStack(
+						span,
+						entryPassword,
+					),
+				),
+				rectSpacer,
+				rectSpacer,
+				wrapMobileButton(btnConfirm),
+			),
+		)
+
+		bottom := container.NewStack(
+			container.NewVBox(
+				rectSpacer,
+				container.NewCenter(
+					container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+				),
+				rectSpacer,
+			),
+		)
+
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(header),
-						rectSpacer,
-						rectSpacer,
-						subHeader,
-						widget.NewLabel(""),
-						container.NewCenter(
-							container.NewStack(
-								span,
-								entryPassword,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						wrapMobileButton(btnConfirm),
-						rectSpacer,
-						rectSpacer,
-						container.NewHBox(
-							layout.NewSpacer(),
-							btnBack,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
-						rectSpacer,
-					),
+				container.NewBorder(
+					top,
+					bottom,
+					nil,
+					nil,
+					center,
 				),
 			),
 		)
@@ -13622,36 +13682,49 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
+		top := container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			container.NewCenter(header),
+			rectSpacer,
+			rectSpacer,
+		)
+
+		center := container.NewCenter(
+			container.NewVBox(
+				subHeader,
+				widget.NewLabel(""),
+				container.NewCenter(
+					container.NewStack(
+						span,
+						entryPassword,
+					),
+				),
+				rectSpacer,
+				rectSpacer,
+				wrapMobileButton(btnConfirm),
+			),
+		)
+
+		bottom := container.NewStack(
+			container.NewVBox(
+				rectSpacer,
+				container.NewCenter(
+					container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+				),
+				rectSpacer,
+			),
+		)
+
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(header),
-						rectSpacer,
-						rectSpacer,
-						subHeader,
-						widget.NewLabel(""),
-						container.NewCenter(
-							container.NewStack(
-								span,
-								entryPassword,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						wrapMobileButton(btnConfirm),
-						rectSpacer,
-						rectSpacer,
-						container.NewHBox(
-							layout.NewSpacer(),
-							btnBack,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
-						rectSpacer,
-					),
+				container.NewBorder(
+					top,
+					bottom,
+					nil,
+					nil,
+					center,
 				),
 			),
 		)
@@ -13757,41 +13830,55 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
+		top := container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			container.NewCenter(header),
+			rectSpacer,
+			rectSpacer,
+		)
+
+		center := container.NewCenter(
+			container.NewVBox(
+				subHeader,
+				widget.NewLabel(""),
+				container.NewCenter(
+					container.NewStack(
+						span,
+						curPass,
+					),
+				),
+				widget.NewLabel(""),
+				widget.NewSeparator(),
+				widget.NewLabel(""),
+				newPass,
+				rectSpacer,
+				confirm,
+				rectSpacer,
+				rectSpacer,
+				wrapMobileButton(btnChange),
+			),
+		)
+
+		bottom := container.NewStack(
+			container.NewVBox(
+				rectSpacer,
+				container.NewCenter(
+					container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+				),
+				rectSpacer,
+			),
+		)
+
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(header),
-						rectSpacer,
-						rectSpacer,
-						subHeader,
-						widget.NewLabel(""),
-						container.NewCenter(
-							container.NewStack(
-								span,
-								curPass,
-							),
-						),
-						widget.NewLabel(""),
-						widget.NewSeparator(),
-						widget.NewLabel(""),
-						newPass,
-						rectSpacer,
-						confirm,
-						rectSpacer,
-						rectSpacer,
-						wrapMobileButton(btnChange),
-						widget.NewLabel(""),
-						container.NewHBox(
-							layout.NewSpacer(),
-							btnBack,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
-						rectSpacer,
-					),
+				container.NewBorder(
+					top,
+					bottom,
+					nil,
+					nil,
+					center,
 				),
 			),
 		)
@@ -13896,12 +13983,7 @@ func layoutAccount() fyne.CanvasObject {
 			container.NewVBox(
 				rectSpacer,
 				rectSpacer,
-				container.NewCenter(
-					container.NewVBox(
-						title,
-						rectSpacer,
-					),
-				),
+
 				rectSpacer,
 				container.NewCenter(
 					container.NewHBox(
@@ -13937,20 +14019,23 @@ func layoutAccount() fyne.CanvasObject {
 
 	bottom := container.NewStack(
 		container.NewVBox(
+			rectSpacer,
 			container.NewCenter(
-				btnBack,
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
+			rectSpacer,
 		),
 	)
 
 	layout := container.NewBorder(
-		features,
+		top,
 		bottom,
 		nil,
 		nil,
+		features,
 	)
 
-	return NewVScroll(layout)
+	return layout
 }
 
 func layoutRecovery() fyne.CanvasObject {
@@ -15445,7 +15530,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Back button to return to dashboard or previous screen
-	btnBack := wrapMobileButton(newSizedIconButton(theme.NavigateBackIcon(), func() {
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		removeOverlays()
 		if previousDomain == "app.tela.manager.files" && cachedTelaManagerContent != nil {
 			session.Window.SetContent(layoutTransition())
@@ -15457,7 +15542,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			session.Window.SetContent(layoutDashboard())
 		}
 		removeOverlays()
-	}))
+	})
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
 	labelResults := canvas.NewText("   RESULTS", colors.Gray)
@@ -16132,31 +16217,21 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
-			rectSpacer,
 			container.NewCenter(
-				layout.NewSpacer(),
-				btnBack,
-				layout.NewSpacer(),
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
 			rectSpacer,
-			rectSpacer,
-			rectSpacer,
-			rectSpacer,
 		),
-	)
-
-	body := container.NewVBox(
-		top,
-		center,
 	)
 
 	layout := container.NewStack(
 		frame,
 		container.NewBorder(
-			body,
+			top,
 			bottom,
 			nil,
 			nil,
+			center,
 		),
 	)
 
@@ -17773,16 +17848,6 @@ func layoutTELA() fyne.CanvasObject {
 		return nil
 	}
 
-	isTelaActive := func(scid string) bool {
-		for _, serv := range tela.GetServerInfo() {
-			if serv.SCID == scid {
-				return true
-			}
-		}
-
-		return false
-	}
-
 	isDisplayableTelaApp := func(index tela.INDEX) bool {
 		if len(index.DOCs) < 1 {
 			return false
@@ -18316,6 +18381,16 @@ func layoutTELA() fyne.CanvasObject {
 				errorText.Text = ""
 				errorText.Refresh()
 				go func() {
+					select {
+					case <-progressDone:
+						return
+					case <-cancelChan:
+						cancelled.Store(true)
+						return
+					}
+				}()
+
+				go func() {
 					openURLAfterDelay := func(link string) {
 						if a.Driver().Device().IsMobile() {
 							time.Sleep(2 * time.Second)
@@ -18325,7 +18400,7 @@ func layoutTELA() fyne.CanvasObject {
 						}
 					}
 
-					link, err := serveTELAWithStaleRecovery(scid, session.Daemon)
+					link, err := serveTELAWithStaleRecovery(scid, session.Daemon, &cancelled)
 					if cancelled.Load() {
 						if err == nil {
 							tela.ShutdownServer(scid)
@@ -20241,7 +20316,7 @@ func layoutTELA() fyne.CanvasObject {
 
 					// Check if already served
 					alreadyServed := false
-					for _, s := range tela.GetServerInfo() {
+					for _, s := range getTelaActiveServers() {
 						if s.SCID == scid {
 							alreadyServed = true
 							break
@@ -20582,7 +20657,7 @@ func layoutTELA() fyne.CanvasObject {
 		}()
 		time.Sleep(time.Second * 2)
 		var serversRunning []string
-		for _, serv := range tela.GetServerInfo() {
+		for _, serv := range getTelaActiveServers() {
 			serversRunning = append(serversRunning, serv.Name+";;;"+serv.Address+";;;;;;"+serv.SCID)
 		}
 
@@ -21777,7 +21852,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	// Check if app is actually running via both SCID and DURL
 	appActuallyRunning := false
-	for _, s := range tela.GetServerInfo() {
+	for _, s := range getTelaActiveServers() {
 		if s.SCID == index.SCID || s.Name == index.DURL {
 			appActuallyRunning = true
 			break
@@ -22086,7 +22161,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 					}
 				}
 
-				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon)
+				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon, &cancelled)
 				if cancelled.Load() {
 					if err == nil {
 						tela.ShutdownServer(index.SCID)
@@ -22114,9 +22189,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						linkOpenInBrowser.Show()
 					})
 
-					telaRunningAppsGlobal.Lock()
-					telaRunningAppsGlobal.m[index.SCID] = true
-					telaRunningAppsGlobal.Unlock()
+					telaActiveServersGlobal.Lock()
+					telaActiveServersGlobal.active[index.SCID] = true
+					telaActiveServersGlobal.Unlock()
 
 					cleanupLaunch(false, false)
 				} else {
@@ -22210,9 +22285,9 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 								linkOpenInBrowser.Show()
 							})
 
-							telaRunningAppsGlobal.Lock()
-							telaRunningAppsGlobal.m[index.SCID] = true
-							telaRunningAppsGlobal.Unlock()
+							telaActiveServersGlobal.Lock()
+							telaActiveServersGlobal.active[index.SCID] = true
+							telaActiveServersGlobal.Unlock()
 
 							if saveErr := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); saveErr != nil {
 								logger.Errorf("[Engram] Error saving TELA search result: %s\n", saveErr)
@@ -22506,7 +22581,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 
-		servers := tela.GetServerInfo()
+		servers := getTelaActiveServers()
 
 		tempMap := make(map[string]bool)
 		for _, s := range servers {

@@ -5285,38 +5285,49 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 		),
 	)
 
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(header),
+		rectSpacer,
+		rectSpacer,
+	)
+
+	center := container.NewCenter(
+		container.NewVBox(
+			subHeader,
+			widget.NewLabel(""),
+			container.NewCenter(
+				container.NewStack(
+					span,
+					entryPassword,
+				),
+			),
+			rectSpacer,
+			rectSpacer,
+			wrapMobileButton(btnConfirm),
+		),
+	)
+
+	bottom := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			rectSpacer,
+		),
+	)
+
 	overlay.Add(
 		container.NewStack(
 			&iframe{},
-			container.NewCenter(
-				container.NewVBox(
-					span,
-					container.NewCenter(
-						header,
-					),
-					rectSpacer,
-					rectSpacer,
-					subHeader,
-					widget.NewLabel(""),
-					container.NewCenter(
-						container.NewStack(
-							span,
-							entryPassword,
-						),
-					),
-					rectSpacer,
-					rectSpacer,
-					wrapMobileButton(btnConfirm),
-					rectSpacer,
-					rectSpacer,
-					container.NewHBox(
-						layout.NewSpacer(),
-						btnBack,
-						layout.NewSpacer(),
-					),
-					rectSpacer,
-					rectSpacer,
-				),
+			container.NewBorder(
+				top,
+				bottom,
+				nil,
+				nil,
+				center,
 			),
 		),
 	)
