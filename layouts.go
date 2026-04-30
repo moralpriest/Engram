@@ -1584,7 +1584,6 @@ func layoutDashboard() fyne.CanvasObject {
 				),
 			),
 			rectSpacer,
-			rectSpacer,
 		),
 	)
 
@@ -2070,7 +2069,6 @@ func layoutReceive() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
-
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
@@ -2135,8 +2133,6 @@ func layoutReceive() fyne.CanvasObject {
 	}
 	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.85)))
 	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.85, ui.Width*0.85))
-
-
 
 	top := container.NewVBox(
 		rectSpacer,
@@ -8411,7 +8407,6 @@ func layoutMessages() fyne.CanvasObject {
 		}
 	}
 
-
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -11362,7 +11357,6 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 			}
 		}
 	}
-
 
 	center := container.NewStack(
 		container.NewVScroll(
