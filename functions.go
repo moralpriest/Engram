@@ -2158,6 +2158,7 @@ func closeWallet() {
 
 		engram.Disk.Close_Encrypted_Wallet()
 		session.WalletOpen = false
+		introShownThisSession = false
 		session.Domain = "app.main"
 		session.BalanceUSD = ""
 		session.LastBalance = 0

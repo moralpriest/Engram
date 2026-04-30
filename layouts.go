@@ -102,6 +102,10 @@ var telaLaunchStartTimesGlobal struct {
 var telaBackfillActive atomic.Bool
 var telaBackfillFailed atomic.Bool
 
+var introShownThisSession bool
+var appFirstOpenDone bool
+var marqueeMu sync.Mutex
+
 func init() {
 	telaLaunchingSCIDsGlobal.m = make(map[string]bool)
 	telaLaunchCancelChansGlobal.m = make(map[string]chan struct{})
@@ -916,10 +920,32 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 }
 
 func layoutDashboardMarquee() fyne.CanvasObject {
-	messages := []string{
-		strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
-		"DERO PRIVACY TOGETHER",
-		"THERE'S A CAPTAIN IN ALL OF US!",
+	marqueeMu.Lock()
+	if introShownThisSession {
+		marqueeMu.Unlock()
+		return layout.NewSpacer()
+	}
+	// Mark as shown for this login session
+	introShownThisSession = true
+
+	// Determine if this is the very first time the app is opened
+	isFirstAppOpen := !appFirstOpenDone
+	appFirstOpenDone = true
+	marqueeMu.Unlock()
+
+	var messages []string
+	if isFirstAppOpen {
+		messages = []string{
+			strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
+			"DERO PRIVACY TOGETHER",
+			"THERE'S A CAPTAIN IN ALL OF US!",
+		}
+	} else {
+		// "Reopened" case: show version and privacy together
+		messages = []string{
+			strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
+			"DERO PRIVACY TOGETHER",
+		}
 	}
 
 	text := canvas.NewText(messages[0], colors.Purple)
@@ -928,18 +954,16 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 	text.Alignment = fyne.TextAlignCenter
 
 	go func() {
+		// Initial display
 		time.Sleep(4 * time.Second)
-		index := 1
-		for {
+
+		// Loop through remaining messages once
+		for i := 1; i < len(messages); i++ {
 			if appExiting {
 				return
 			}
-			if session.Dashboard != "main" {
-				time.Sleep(1 * time.Second)
-				continue
-			}
 
-			// Fade out to black
+			// Fade out
 			fadeOut := canvas.NewColorRGBAAnimation(
 				colors.Purple.(color.RGBA),
 				color.RGBA{0, 0, 0, 0},
@@ -951,14 +975,14 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 			fadeOut.Start()
 			time.Sleep(450 * time.Millisecond)
 
-			// Swap text while invisible
+			// Swap text
 			fyne.Do(func() {
-				text.Text = messages[index]
+				text.Text = messages[i]
 				text.Refresh()
 			})
 			time.Sleep(100 * time.Millisecond)
 
-			// Fade in from black
+			// Fade in
 			fadeIn := canvas.NewColorRGBAAnimation(
 				color.RGBA{0, 0, 0, 0},
 				colors.Purple.(color.RGBA),
@@ -968,10 +992,22 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 					text.Refresh()
 				})
 			fadeIn.Start()
-
-			index = (index + 1) % len(messages)
 			time.Sleep(4 * time.Second)
 		}
+
+		// Final fade to black
+		if appExiting {
+			return
+		}
+		fadeOutFinal := canvas.NewColorRGBAAnimation(
+			colors.Purple.(color.RGBA),
+			color.RGBA{0, 0, 0, 0},
+			400*time.Millisecond,
+			func(c color.Color) {
+				text.Color = c
+				text.Refresh()
+			})
+		fadeOutFinal.Start()
 	}()
 
 	return container.NewCenter(text)
