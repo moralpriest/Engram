@@ -1225,17 +1225,10 @@ func initSettings() {
 	getNetwork()
 	getMode()
 	getDaemon()
-	_, _ = getGnomon()
 	getRPCCredentials()
 
 	// Load and apply TELA settings on startup
 	initTELAPreferences()
-
-	// CRITICAL FIX: Initialize WebSocket state FIRST, independent of Gnomon
-	// This ensures WebSocket settings load even if Gnomon fails
-	logger.Printf("[Engram] Initializing WebSocket state (independent of Gnomon)")
-	initWebSocketState()
-	logger.Printf("[Engram] WebSocket state initialization completed")
 
 	// Initialize EPOCH max hashes to 10000 (hard limit) to support dApps like Dero Beats
 	// Default from epoch package is 1000, which causes "hashes exceeds maxHashes" errors
@@ -1245,9 +1238,6 @@ func initSettings() {
 		logger.Printf("[Engram] EPOCH max hashes set to 10000 (was %d)", 1000)
 	}
 
-	// NOW initialize Gnomon with error handling so failure doesn't prevent other features
-	logger.Printf("[Engram] Initializing Gnomon database...")
-	_, _ = getGnomon()
 	logger.Printf("[Engram] initSettings() completed")
 
 	if a.Driver().Device().IsMobile() {
@@ -2145,69 +2135,78 @@ func closeWallet() {
 	defer finishWalletShutdown()
 
 	if engram.Disk != nil {
-		logger.Printf("[Engram] Shutting down wallet services...\n")
+		logger.Printf("[Engram] Initiating asynchronous wallet shutdown...\n")
 
-		// CRITICAL FIX: Stop Gnomon FIRST to release database lock before closing wallet
-		// This prevents "database timeout" errors when reopening the wallet
-		if gnomon.Index != nil {
-			logger.Printf("[Gnomon] Shutting down indexers...\n")
-			stopGnomon()
-			// Increased delay to ensure database file is fully released by OS
-			time.Sleep(3 * time.Second)
-		}
+		// Capture resources for background cleanup
+		disk := engram.Disk
+		rpcServer := remoteAccess.RPC.server
+		wsServer := remoteAccess.WS.server
+		wsClient := rpc_client.WS
+		rpcClient := rpc_client.RPC
 
-		stopEPOCH()
-		engram.Disk.SetOfflineMode()
-		walletapi.Connected = false
-		globals.Exit_In_Progress = true
-		if shouldSkipWalletSave() {
-			logger.Printf("[Engram] Skipping wallet save on close because runtime-only fields are attached")
-		} else if err := engram.Disk.Save_Wallet(); err != nil {
-			logger.Errorf("[Engram] Failed to save wallet on close: %s\n", err)
-		}
-
-		engram.Disk.Close_Encrypted_Wallet()
+		// Immediate state reset
+		engram.Disk = nil
 		session.WalletOpen = false
 		introShownThisSession = false
 		session.Domain = "app.main"
 		session.BalanceUSD = ""
 		session.LastBalance = 0
-		engram.Disk = nil
 		tx = Transfers{}
 
-		if remoteAccess.RPC.server != nil {
-			remoteAccess.RPC.server.RPCServer_Stop()
-			remoteAccess.RPC.server = nil
-			logger.Printf("[Engram] Remote Access RPC closed.\n")
-		}
+		remoteAccess.RPC.server = nil
+		remoteAccess.WS.server = nil
+		rpc_client.WS = nil
+		rpc_client.RPC = nil
 
-		if remoteAccess.WS.server != nil {
-			remoteAccess.WS.server.Stop()
-			remoteAccess.WS.server = nil
-			remoteAccess.WS.apps = nil
-			remoteAccess.WS.list = nil
-			logger.Printf("[Engram] Remote Access XSWD closed.\n")
-		}
-		// CRITICAL FIX: Don't reset enabled state here - it should persist across wallet sessions
-		// The enabled state is saved to encrypted storage and should be restored on wallet open
-		remoteAccess.WS.advanced = false
-		remoteAccess.WS.global.connect = false
+		go func() {
+			// CRITICAL FIX: Stop Gnomon FIRST to release database lock
+			if gnomon.Index != nil {
+				logger.Printf("[Gnomon] Shutting down indexers (background)...\n")
+				stopGnomon()
+				// Reduced delay - startGnomon has retry logic if lock is still held
+				time.Sleep(1 * time.Second)
+			}
 
-		tela.ShutdownTELA()
+			stopEPOCH()
 
-		if rpc_client.WS != nil {
-			rpc_client.WS.Close()
-			rpc_client.WS = nil
-			logger.Printf("[Engram] Websocket client closed.\n")
-		}
+			// Stop network services to release ports as early as possible
+			if rpcServer != nil {
+				rpcServer.RPCServer_Stop()
+				logger.Printf("[Engram] Remote Access RPC closed (background).\n")
+			}
 
-		if rpc_client.RPC != nil {
-			rpc_client.RPC.Close()
-			rpc_client.RPC = nil
-			logger.Printf("[Engram] RPC client closed.\n")
-		}
+			if wsServer != nil {
+				wsServer.Stop()
+				logger.Printf("[Engram] Remote Access XSWD closed (background).\n")
+			}
 
-		resetMessageCache()
+			if wsClient != nil {
+				wsClient.Close()
+				logger.Printf("[Engram] Websocket client closed (background).\n")
+			}
+
+			if rpcClient != nil {
+				rpcClient.Close()
+				logger.Printf("[Engram] RPC client closed (background).\n")
+			}
+
+			// Save and close wallet disk
+			if disk != nil {
+				disk.SetOfflineMode()
+				walletapi.Connected = false
+				globals.Exit_In_Progress = true
+				if shouldSkipWalletSave() {
+					logger.Printf("[Engram] Skipping wallet save on close (background)")
+				} else if err := disk.Save_Wallet(); err != nil {
+					logger.Errorf("[Engram] Failed to save wallet on close (background): %s\n", err)
+				}
+				disk.Close_Encrypted_Wallet()
+			}
+
+			tela.ShutdownTELA()
+			resetMessageCache()
+			logger.Printf("[Engram] Background wallet shutdown completed.\n")
+		}()
 
 		session.Path = ""
 		session.Name = ""
@@ -2223,8 +2222,7 @@ func closeWallet() {
 		if gnomon.Active == 0 {
 			gnomon.Active = 1
 		}
-		//session.Window.CenterOnScreen()
-		logger.Printf("[Engram] Wallet saved and closed successfully.\n")
+		logger.Printf("[Engram] Wallet sign-out initiated successfully.\n")
 		return
 	}
 }
@@ -2397,6 +2395,10 @@ func login() {
 		go func() {
 			logger.Printf("[DEBUG] login goroutine starting\n")
 			generation := currentWalletGeneration()
+
+			// Initialize WebSocket and Gnomon state in background
+			initWebSocketState()
+			_, _ = getGnomon()
 
 			// Wait for StartPulse to actually establish connection
 			logger.Printf("[DEBUG] waiting for walletapi.Connected to become true...\n")
