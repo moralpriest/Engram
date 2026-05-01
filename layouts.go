@@ -18805,10 +18805,8 @@ func layoutTELA() fyne.CanvasObject {
 	})
 	btnTela.Importance = widget.LowImportance
 
-	favoritesLabel := ""
-	if isMobileDevice() {
-		favoritesLabel = "Favorites"
-	}
+	favoritesLabel := "Favorites"
+
 	btnFavorites := widget.NewButtonWithIcon(favoritesLabel, resourceFavsPng, func() {
 		wSelect.SetSelected("Favorites")
 	})
