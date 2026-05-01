@@ -305,11 +305,11 @@ jobs:
           path: engram-*.exe
           retention-days: 5
 
-  build-macos-arm64:
-    name: 🍎 Build macOS ARM64
+  build-macos:
+    name: 🍎 Build macOS
     runs-on: macos-latest
     needs: verify
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -335,59 +335,28 @@ jobs:
       - name: 🍎 Build macOS ARM64
         env:
           GOFLAGS: -trimpath -mod=mod -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOOS: darwin
           GOARCH: arm64
         run: |
           fyne package --target darwin --name Engram --appVersion ${{ needs.verify.outputs.fyne_version }} \
             --icon Icon.png --tags migrated_fynedo
           tar -czvf engram-${{ needs.verify.outputs.version }}-macos-arm64.tar.gz Engram.app
 
-      - name: 📤 Upload artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: macos-arm64-build
-          path: engram-*.tar.gz
-          retention-days: 5
-
-  build-macos-amd64:
-    name: 🍎 Build macOS Intel
-    runs-on: macos-13
-    needs: verify
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ needs.verify.outputs.tag }}
-
-      - name: Set up Go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
-
       - name: 🍎 Build macOS Intel
         env:
           GOFLAGS: -trimpath -mod=mod -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
+          GOOS: darwin
           GOARCH: amd64
         run: |
+          rm -rf Engram.app
           fyne package --target darwin --name Engram --appVersion ${{ needs.verify.outputs.fyne_version }} \
             --icon Icon.png --tags migrated_fynedo
           tar -czvf engram-${{ needs.verify.outputs.version }}-macos-amd64.tar.gz Engram.app
 
-      - name: 📤 Upload artifact
+      - name: 📤 Upload artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
-          name: macos-amd64-build
+          name: macos-build
           path: engram-*.tar.gz
           retention-days: 5
 
@@ -450,7 +419,7 @@ jobs:
   sign-artifacts:
     name: 🔏 Sign Artifacts
     runs-on: ubuntu-latest
-    needs: [verify, changelog, build-linux, build-windows, build-macos-arm64, build-macos-amd64, build-android]
+    needs: [verify, changelog, build-linux, build-windows, build-macos, build-android]
     timeout-minutes: 10
     permissions:
       contents: write
