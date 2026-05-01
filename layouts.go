@@ -7493,8 +7493,8 @@ func layoutAppSettings() fyne.CanvasObject {
 	// Min Likes entry
 	entryMinLikes := NewMobileEntry()
 	entryMinLikes.SetPlaceHolder("30")
-	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
-		entryMinLikes.SetText(string(storedMinLikes))
+	if storedMinLikes, found := getTELADual("Min Likes"); found {
+		entryMinLikes.SetText(storedMinLikes)
 	} else {
 		entryMinLikes.SetText("30")
 	}
@@ -7513,21 +7513,21 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 	entryMinLikes.OnChanged = func(s string) {
 		if s != "" {
-			StoreEncryptedValue("TELA Settings", []byte("Min Likes"), []byte(s))
+			setTELADual("Min Likes", []byte(s))
 		}
 	}
 
 	// Exclusions entry
 	entryExclusions := NewMobileEntry()
 	entryExclusions.SetPlaceHolder("dURL Exclusions (exclude1,exclude2)")
-	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
-		entryExclusions.SetText(string(storedExclusions))
+	if storedExclusions, found := getTELADual("Exclusions"); found {
+		entryExclusions.SetText(storedExclusions)
 	}
 	entryExclusions.OnChanged = func(s string) {
 		if s != "" {
-			StoreEncryptedValue("TELA Settings", []byte("Exclusions"), []byte(s))
+			setTELADual("Exclusions", []byte(s))
 		} else {
-			DeleteKey("TELA Settings", []byte("Exclusions"))
+			deleteTELADual("Exclusions")
 		}
 	}
 
@@ -7545,8 +7545,8 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 	} else {
 		// Also check the old "Mode" key for backward compatibility
-		if storedTelaMode, err := GetEncryptedValue("TELA Settings", []byte("Mode")); err == nil {
-			if string(storedTelaMode) == "Unrestrictive" {
+		if storedTelaMode, found := getTELADual("Mode"); found {
+			if storedTelaMode == "Unrestrictive" {
 				restrictiveModeEnabled = false
 				logger.Printf("[Engram] TELA Restrictive Mode loaded from legacy Mode key: Disabled")
 			} else {
@@ -7567,12 +7567,8 @@ func layoutAppSettings() fyne.CanvasObject {
 			logger.Printf("[Engram] TELA Restrictive Mode enabled (saved true)")
 		} else {
 			// For unrestricted mode, delete both keys since unrestrictive is the default
-			if engram.Disk != nil {
-				DeleteKey("TELA Settings", []byte("Restrictive Mode"))
-				DeleteKey("TELA Settings", []byte("Mode"))
-			}
-			DeleteKey("TELASettingsUnencrypted", []byte("Restrictive Mode"))
-			DeleteKey("TELASettingsUnencrypted", []byte("Mode"))
+			deleteTELADual("Restrictive Mode")
+			deleteTELADual("Mode")
 			logger.Printf("[Engram] TELA Restrictive Mode disabled (deleted keys)")
 		}
 	}
@@ -7609,8 +7605,8 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Rescan Recheck dropdown
 	wRescanRecheck := widget.NewSelect([]string{"No", "Yes"}, nil)
-	if storedRescanRecheck, err := GetEncryptedValue("TELA Settings", []byte("Rescan Recheck")); err == nil {
-		if string(storedRescanRecheck) == "Yes" {
+	if storedRescanRecheck, found := getTELADual("Rescan Recheck"); found {
+		if storedRescanRecheck == "Yes" {
 			wRescanRecheck.SetSelectedIndex(1)
 		} else {
 			wRescanRecheck.SetSelectedIndex(0)
@@ -7619,20 +7615,20 @@ func layoutAppSettings() fyne.CanvasObject {
 		wRescanRecheck.SetSelectedIndex(0)
 	}
 	wRescanRecheck.OnChanged = func(s string) {
-		StoreEncryptedValue("TELA Settings", []byte("Rescan Recheck"), []byte(s))
+		setTELADual("Rescan Recheck", []byte(s))
 	}
 
 	// Sort By dropdown
 	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
 	wSortBy := widget.NewSelect(sortByOptions, nil)
-	if storedSortBy, err := GetEncryptedValue("TELA Settings", []byte("Sort By")); err == nil {
-		wSortBy.SetSelected(string(storedSortBy))
+	if storedSortBy, found := getTELADual("Sort By"); found {
+		wSortBy.SetSelected(storedSortBy)
 	} else {
 		wSortBy.SetSelected(sortByOptions[0])
 	}
 	wSortBy.OnChanged = func(s string) {
 		if s != "" {
-			StoreEncryptedValue("TELA Settings", []byte("Sort By"), []byte(s))
+			setTELADual("Sort By", []byte(s))
 		}
 	}
 
@@ -18841,27 +18837,27 @@ func layoutTELA() fyne.CanvasObject {
 	var telaSCIDs []string
 	var sAll = map[string]bool{}
 	// Initialize TELA settings from storage
-	if storedMinLikes, err := GetEncryptedValue("TELA Settings", []byte("Min Likes")); err == nil {
-		if f, err := strconv.ParseFloat(string(storedMinLikes), 64); err == nil {
+	if storedMinLikes, found := getTELADual("Min Likes"); found {
+		if f, err := strconv.ParseFloat(storedMinLikes, 64); err == nil {
 			minLikes = f
 		}
 	} else {
 		minLikes = 30
 	}
 
-	if storedExclusions, err := GetEncryptedValue("TELA Settings", []byte("Exclusions")); err == nil {
-		searchExclusions = string(storedExclusions)
+	if storedExclusions, found := getTELADual("Exclusions"); found {
+		searchExclusions = storedExclusions
 	}
 
-	if storedRescanRecheck, err := GetEncryptedValue("TELA Settings", []byte("Rescan Recheck")); err == nil {
-		if string(storedRescanRecheck) == "Yes" {
+	if storedRescanRecheck, found := getTELADual("Rescan Recheck"); found {
+		if storedRescanRecheck == "Yes" {
 			rescanRecheck = true
 		}
 	}
 
 	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
-	if storedSortBy, err := GetEncryptedValue("TELA Settings", []byte("Sort By")); err == nil {
-		sortBy = string(storedSortBy)
+	if storedSortBy, found := getTELADual("Sort By"); found {
+		sortBy = storedSortBy
 	} else {
 		sortBy = sortByOptions[0]
 	}
@@ -18874,8 +18870,8 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	} else {
 		// Fallback to legacy "Mode" key for backward compatibility
-		if storedTelaMode, err := GetEncryptedValue("TELA Settings", []byte("Mode")); err == nil {
-			if string(storedTelaMode) == "Restrictive" {
+		if storedTelaMode, found := getTELADual("Mode"); found {
+			if storedTelaMode == "Restrictive" {
 				restrictiveMode = true
 			}
 		}

@@ -1306,6 +1306,15 @@ func getTELADual(key string) (value string, found bool) {
 	return "", false
 }
 
+// Delete TELA setting from dual storage
+func deleteTELADual(key string) {
+	if engram.Disk != nil {
+		DeleteKey("TELA Settings", []byte(key))
+	}
+	DeleteKey("TELASettingsUnencrypted", []byte(key))
+	logger.Printf("[Engram] deleteTELADual: Deleted %s from dual storage", key)
+}
+
 // Initialize TELA preferences from dual storage (works with or without wallet)
 func initTELAPreferences() {
 	logger.Printf("[Engram] initTELAPreferences() called - wallet available: %v", engram.Disk != nil)
