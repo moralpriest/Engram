@@ -161,13 +161,35 @@ tasks:
       - dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
 
   package-macos:
-    desc: Package for macOS
+    desc: Package for macOS (native architecture)
     env:
     cmds:
       - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - ./fix_macos_permissions.sh {{.APP_NAME}}.app
-      - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
+      - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-$(uname -m | sed 's/x86_64/amd64/').tar.gz {{.APP_NAME}}.app
       - mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app
+
+  package-macos-arm64:
+    desc: Package for macOS Apple Silicon
+    env:
+      GOOS: darwin
+      GOARCH: arm64
+    cmds:
+      - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
+      - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz {{.APP_NAME}}.app
+    generates:
+      - dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz
+
+  package-macos-amd64:
+    desc: Package for macOS Intel
+    env:
+      GOOS: darwin
+      GOARCH: amd64
+    cmds:
+      - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
+      - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz
 
@@ -187,7 +209,8 @@ tasks:
       - mkdir -p dist
       - task: package-linux
       - task: package-windows
-      - task: package-macos
+      - task: package-macos-arm64
+      - task: package-macos-amd64
       - task: package-android
 
   release:
@@ -201,7 +224,8 @@ tasks:
       - task: test
       - task: package-linux
       - task: package-windows
-      - task: package-macos
+      - task: package-macos-arm64
+      - task: package-macos-amd64
       - task: package-android
       - task: sbom
       - task: sign
