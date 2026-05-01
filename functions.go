@@ -4872,6 +4872,7 @@ func clearAllTELACache() {
 		[]byte("NegativeCache"),
 		[]byte("IndexCache"),
 		[]byte("CandidateCache"),
+		[]byte("DisplayCache"),
 		[]byte("Last Scan"),
 		[]byte("Last Indexed Height"),
 	}
@@ -5078,12 +5079,28 @@ func (g *Gnomon) GetTelaCandidates() []string {
 		return nil
 	}
 	candidates := g.Index.GetTelaCandidates()
-	if len(candidates) == 0 && len(embeddedTelaSCIDs) > 0 {
-		logger.Printf("[Gnomon] DB telacandidates empty, using %d embedded TELA SCIDs\n", len(embeddedTelaSCIDs))
-		return embeddedTelaSCIDs
+
+	// Merge with embedded list to ensure we don't miss anything known,
+	// especially during fresh sync when DB is partially populated.
+	if len(embeddedTelaSCIDs) > 0 {
+		candidateMap := make(map[string]bool)
+		for _, c := range candidates {
+			candidateMap[c] = true
+		}
+		added := 0
+		for _, ec := range embeddedTelaSCIDs {
+			if !candidateMap[ec] {
+				candidates = append(candidates, ec)
+				added++
+			}
+		}
+		if added > 0 {
+			logger.Printf("[Gnomon] Added %d embedded TELA SCIDs to %d DB candidates\n", added, len(candidates)-added)
+		}
 	}
 	return candidates
 }
+
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetAllSCIDVariableDetails(scid string) (vars []*structures.SCIDVariable) {

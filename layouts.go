@@ -18737,7 +18737,7 @@ func layoutTELA() fyne.CanvasObject {
 	wSelect.SetSelectedIndex(0)
 
 	btnRescanTela := newSizedIconButton(theme.ViewRefreshIcon(), func() {
-		rescanLabel := widget.NewLabel("Force Full Rescan?\n\nThis will clear all cached results, reset the Gnomon index, and perform a complete fresh scan. This may take several minutes.")
+		rescanLabel := widget.NewLabel("Force Full Rescan?\n\nThis will clear all cached results, reset the Gnomon index, and perform a complete fresh scan. This usually takes less than a minute.")
 		rescanLabel.Wrapping = fyne.TextWrapWord
 
 		dlg := dialog.NewCustomWithoutButtons("TELA BROWSER", rescanLabel, session.Window)
@@ -18746,6 +18746,10 @@ func layoutTELA() fyne.CanvasObject {
 			dlg.Hide()
 			clearAllTELACache()
 			forceFreshScan = true
+			searching = []string{}
+			telaSearch = []INDEXwithRatings{}
+			searchData.Set(searching)
+
 			generation := currentWalletGeneration()
 
 			results.Text = "  Resetting Gnomon index..."
@@ -19314,6 +19318,16 @@ func layoutTELA() fyne.CanvasObject {
 		// Re-evaluate after the sync wait: the value captured at the start of getSearchResults
 		// is stale if we blocked until Gnomon caught up, otherwise "defer cached only" can skip
 		// the full owner/SCID scan incorrectly.
+		if forceFreshScan {
+			logger.Printf("[TELA] Force fresh scan observed after sync wait - clearing state\n")
+			telaSearch = []INDEXwithRatings{}
+			telaSCIDs = []string{}
+			sAll = map[string]bool{}
+			_ = DeleteKey("TELA Search", []byte("DisplayCache"))
+			forceFreshScan = false
+			clearScanProgress()
+			fullScanReason = "force_fresh_scan"
+		}
 		allowTelaIndexMutations = isGnomonCaughtUp()
 
 		// Gnomon sync complete - record duration and initialize TELA timing
@@ -21084,10 +21098,14 @@ func layoutTELA() fyne.CanvasObject {
 
 		entrySearch.SetPlaceHolder("Search Apps")
 		results.Text = "  No scanned TELA apps yet."
+		if forceFreshScan {
+			results.Text = "  Resetting TELA results..."
+		}
 		results.Color = colors.Gray
 		results.Refresh()
 
 		searchList.Refresh()
+		maybeStartTelaWork(true)
 	}
 
 	wSelect.OnChanged = func(s string) {
