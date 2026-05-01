@@ -928,29 +928,16 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 	// Mark as shown for this login session
 	introShownThisSession = true
 
-	// Determine if this is the very first time the app is opened
-	isFirstAppOpen := !appFirstOpenDone
-	appFirstOpenDone = true
 	marqueeMu.Unlock()
 
-	var messages []string
-	if isFirstAppOpen {
-		messages = []string{
-			strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
-			"DERO PRIVACY TOGETHER",
-			"THERE'S A CAPTAIN IN ALL OF US!",
-		}
-	} else {
-		// "Reopened" case: show version and privacy together
-		messages = []string{
-			strings.ToUpper(fmt.Sprintf("Engram Dev v%s", versionString)),
-			"DERO PRIVACY TOGETHER",
-		}
+	messages := []string{
+		"0.6.8",
+		"DERO PRIVACY TOGHETER",
 	}
 
-	text := canvas.NewText(messages[0], colors.Purple)
+	text := canvas.NewText(messages[0], colors.LightBlue)
 	text.TextStyle = fyne.TextStyle{Symbol: true}
-	text.TextSize = scaleFont(16)
+	text.TextSize = scaleFont(14)
 	text.Alignment = fyne.TextAlignCenter
 
 	go func() {
@@ -965,7 +952,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 
 			// Fade out
 			fadeOut := canvas.NewColorRGBAAnimation(
-				colors.Purple.(color.RGBA),
+				colors.LightBlue.(color.RGBA),
 				color.RGBA{0, 0, 0, 0},
 				400*time.Millisecond,
 				func(c color.Color) {
@@ -985,7 +972,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 			// Fade in
 			fadeIn := canvas.NewColorRGBAAnimation(
 				color.RGBA{0, 0, 0, 0},
-				colors.Purple.(color.RGBA),
+				colors.LightBlue.(color.RGBA),
 				400*time.Millisecond,
 				func(c color.Color) {
 					text.Color = c
@@ -1000,7 +987,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 			return
 		}
 		fadeOutFinal := canvas.NewColorRGBAAnimation(
-			colors.Purple.(color.RGBA),
+			colors.LightBlue.(color.RGBA),
 			color.RGBA{0, 0, 0, 0},
 			400*time.Millisecond,
 			func(c color.Color) {

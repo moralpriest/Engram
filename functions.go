@@ -102,6 +102,7 @@ type Colors struct {
 	Cold       color.Color
 	Flint      color.Color
 	Purple     color.Color
+	LightBlue  color.Color
 }
 
 type Navigation struct {

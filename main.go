@@ -166,6 +166,7 @@ func main() {
 	colors.Cold = color.RGBA{60, 73, 92, 255}
 	colors.Flint = color.RGBA{44, 44, 52, 0xff}
 	colors.Purple = color.RGBA{191, 64, 191, 0xff}
+	colors.LightBlue = color.RGBA{56, 182, 255, 255}
 
 	// Init objects
 	status.Canvas = canvas.NewText("", colors.Network)
