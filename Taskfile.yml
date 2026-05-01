@@ -164,8 +164,10 @@ tasks:
     desc: Package for macOS
     env:
     cmds:
-      - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - fyne package --target darwin --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
+      - mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz
 
