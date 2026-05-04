@@ -1,5 +1,5 @@
 #!/bin/bash
-# Fix macOS camera permissions for QR scanning
+# Fix macOS camera permissions and stability for QR scanning
 APP_PATH="$1"
 
 if [ -z "$APP_PATH" ]; then
@@ -7,26 +7,21 @@ if [ -z "$APP_PATH" ]; then
     exit 1
 fi
 
-echo "Adding camera usage descriptions to Info.plist..."
-defaults write "$APP_PATH/Contents/Info.plist" NSCameraUsageDescription "Engram needs camera access to scan QR codes"
-defaults write "$APP_PATH/Contents/Info.plist" NSMicrophoneUsageDescription "Engram needs microphone access for audio features"
+echo "Adding usage descriptions to Info.plist..."
+# Use plutil for more robust Info.plist modification
+plutil -replace NSCameraUsageDescription -string "Engram needs camera access to scan QR codes for wallet authentication" "$APP_PATH/Contents/Info.plist"
+plutil -replace NSMicrophoneUsageDescription -string "Engram needs microphone access for audio features" "$APP_PATH/Contents/Info.plist"
+plutil -replace NSBluetoothAlwaysUsageDescription -string "Engram uses Bluetooth for communication with hardware wallets" "$APP_PATH/Contents/Info.plist"
 plutil -convert xml1 "$APP_PATH/Contents/Info.plist"
 
-echo "Creating entitlements file..."
-cat > /tmp/engram_entitlements.plist << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.device-camera</key>
-    <true/>
-    <key>com.apple.security.device-microphone</key>
-    <true/>
-</dict>
-</plist>
-EOF
+ENTITLEMENTS_PATH="$(dirname "$0")/Engram.entitlements"
+if [ ! -f "$ENTITLEMENTS_PATH" ]; then
+    echo "Error: Entitlements file not found at $ENTITLEMENTS_PATH"
+    exit 1
+fi
 
-echo "Re-signing app with entitlements..."
-codesign --force --deep --sign - --entitlements /tmp/engram_entitlements.plist "$APP_PATH"
+echo "Re-signing app with entitlements and hardened runtime..."
+# Use --options runtime for hardened runtime compatibility on modern macOS
+codesign --force --deep --sign - --options runtime --entitlements "$ENTITLEMENTS_PATH" "$APP_PATH"
 
-echo "Done! App should now have camera access."
+echo "Done! App should now be stable and have camera access."
