@@ -10,7 +10,7 @@ package main
 // The background backfill still runs and populates the DB with the current
 // live list, so subsequent clicks use the DB and pick up any new apps.
 //
-// Last updated: 2026-04-29 (88 candidates)
+// Last updated: 2026-05-04 (89 candidates)
 var embeddedTelaSCIDs = []string{
 	"98bfbc3445c749224d293228841a4182fd4c08a1209f6094ca601129a733bbd7",
 	"99aff8fa211748f26dedc89109474a3dda2a80f239587b45ca34935c720cde91",
@@ -100,4 +100,5 @@ var embeddedTelaSCIDs = []string{
 	"cf4b048128558b2ebbee1bf53b531029f579284471d65a8dbe774f71b7b7449a",
 	"f80faf4b0d0d8a16dd3863bbc1366eb5398326db4bdd7aff02031cb014b41baf",
 	"9794026fedf2f41ee502fdf1fbd7b3f5cdb4512be1a2db29b1851298b713b3a8",
+	"986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8",
 }

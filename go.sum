@@ -146,8 +146,8 @@ github.com/minio/sha256-simd v1.0.1 h1:6kaan5IFmwTNynnKKpDHe6FWHohJOHhCPchzK49dz
 github.com/minio/sha256-simd v1.0.1/go.mod h1:Pz6AKMiUdngCLpeTL/RJY1M9rUuPMYujV5xJjtbRSN8=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2EmQ4l5rM/4FEfDWcRD+abF5XlKShorW5LRoQ=
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
-github.com/moralpriest/Gnomon v0.0.0-20260429195944-6adfbe3cc75c h1:B2KuSTDN3wP7kwt4CSDOFAXHCAtcw39kFaNLUQDOz+c=
-github.com/moralpriest/Gnomon v0.0.0-20260429195944-6adfbe3cc75c/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
+github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409 h1:Ui/Z2KqSa4Oj0irjKqVPQldMG8m6YFkudqxR97+4ISM=
+github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
 github.com/moralpriest/tela v0.0.0-20260427053904-541f29f7126d h1:qZeh/34wmPQABWKaNYvSFmOCzz47jSURgvfU0++9TP0=
 github.com/moralpriest/tela v0.0.0-20260427053904-541f29f7126d/go.mod h1:J+maI4zPRe7zpSpTyHDopUg3eQRqCKffvBIRnOhipB8=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 h1:zYyBkD/k9seD2A7fsi6Oo2LfFZAehjjQMERAvZLEDnQ=

@@ -101,6 +101,7 @@ var telaLaunchStartTimesGlobal struct {
 
 var telaBackfillActive atomic.Bool
 var telaBackfillFailed atomic.Bool
+var lastBackfillHeight int64 // Tracks the Gnomon height at which backfill last ran
 
 var introShownThisSession bool
 var appFirstOpenDone bool
@@ -18952,6 +18953,7 @@ func layoutTELA() fyne.CanvasObject {
 		var uiRefreshCount int64
 		var progressWriteCount int64
 		var interruptReason string
+		var currentHeight int64
 		var phasePrefilterMs int64
 		var phaseScanMs int64
 		var phaseFinalizeMs int64
@@ -19653,6 +19655,8 @@ func layoutTELA() fyne.CanvasObject {
 				for _, scid := range candidates {
 					all[scid] = ""
 				}
+				logger.Printf("[TELA-SEARCH] Candidate pool ready: %d total (backfillActive=%v backfillFailed=%v lastHeight=%d gnomonHeight=%d)\n",
+					len(all), telaBackfillActive.Load(), telaBackfillFailed.Load(), lastBackfillHeight, currentHeight)
 			} else {
 				// Fallback 1: plain JSON file cache (no encryption, no Graviton, survives abrupt kills)
 				cachePath := filepath.Join(AppPath(), "datashards", "tela_scid_cache.json")
@@ -19900,7 +19904,17 @@ func layoutTELA() fyne.CanvasObject {
 			// Always start a background backfill to discover NEW TELA apps published
 			// since the embedded list was compiled. This runs regardless of whether
 			// we used embedded SCIDs or ran the prefilter — new apps need discovery.
-			if !restrictiveMode && !telaBackfillActive.Load() && !telaBackfillFailed.Load() {
+			// Also re-trigger when Gnomon has indexed new blocks since the last backfill.
+			currentHeight = 0
+			if gnomon.Index != nil {
+				currentHeight = gnomon.Index.LastIndexedHeight
+			}
+			heightGrew := currentHeight > lastBackfillHeight && lastBackfillHeight > 0
+			if !restrictiveMode && !telaBackfillActive.Load() && (!telaBackfillFailed.Load() || heightGrew) {
+				if heightGrew {
+					logger.Printf("[TELA] Gnomon height grew %d -> %d; resetting backfill failure state\n", lastBackfillHeight, currentHeight)
+					telaBackfillFailed.Store(false)
+				}
 				workers := 8
 				if a.Driver().Device().IsMobile() {
 					workers = 4
@@ -19918,6 +19932,9 @@ func layoutTELA() fyne.CanvasObject {
 					if err != nil {
 						logger.Printf("[TELA] Backfill failed: %v\n", err)
 						telaBackfillFailed.Store(true)
+					} else {
+						lastBackfillHeight = currentHeight
+						logger.Printf("[TELA] Backfill completed at height %d\n", currentHeight)
 					}
 				}()
 			}
@@ -20334,6 +20351,8 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d prefilter_passed=%d prefilter_dropped=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, allCandidates, atomic.LoadInt64(&scannedCandidates), atomic.LoadInt64(&versionHits), atomic.LoadInt64(&indexInfoCalls), atomic.LoadInt64(&retryCount), len(telaSearch), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), atomic.LoadInt64(&prefilterPassed), atomic.LoadInt64(&prefilterDropped), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+		logger.Printf("[TELA] Discovery state: backfillActive=%v backfillFailed=%v lastBackfillHeight=%d gnomonHeight=%d displayed=%d\n",
+			telaBackfillActive.Load(), telaBackfillFailed.Load(), lastBackfillHeight, currentHeight, len(displayedSCIDs))
 		keepProgressVisible = false
 
 		// Start background pre-warm for TELA apps on mobile to reduce launch latency.
@@ -20797,6 +20816,10 @@ func layoutTELA() fyne.CanvasObject {
 						telaSCIDs = []string{}
 						sAll = map[string]bool{}
 						forceFreshScan = true
+						// Reset backfill failure so a rescan can trigger fresh discovery
+						telaBackfillFailed.Store(false)
+						lastBackfillHeight = 0
+						logger.Printf("[TELA] Rescan triggered: reset backfill state\n")
 						errorText.Text = ""
 						errorText.Refresh()
 						go getSearchResults()
