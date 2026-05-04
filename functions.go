@@ -7564,15 +7564,23 @@ func handleTELALinkRequest(linkParams TELALink_Params) (params string, err error
 
 			// Engram will check content rating and show it in prompt
 			var rating tela.Rating_Result
-			rating, err = tela.GetRating(args[1], session.Daemon, 0)
-			if err != nil {
-				return
-			}
+			rating, _ = tela.GetRating(args[1], session.Daemon, 0)
 
 			var index tela.INDEX
 			index, err = tela.GetINDEXInfo(args[1], session.Daemon)
 			if err != nil {
-				return
+				// Fallback to cache or placeholder if Gnomon isn't ready
+				cache := loadTelaIndexCache()
+				if cached, ok := cache[args[1]]; ok {
+					index = cached
+					err = nil
+				} else {
+					// Minimal placeholder so the prompt can still show
+					index.SCID = args[1]
+					index.NameHdr = "TELA App (" + args[1][:8] + "...)"
+					index.DescrHdr = "SCID: " + args[1]
+					err = nil
+				}
 			}
 
 			var linkDisplay TELALink_Display

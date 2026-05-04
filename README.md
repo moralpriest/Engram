@@ -1,4 +1,4 @@
-<img src="ss1.png" alt="Engram Enigma" title="Powered by DERO">
+<img src="Icon.png" width="128" height="128" alt="Engram Enigma" title="Powered by DERO">
 
 # *One Wallet. All of DERO.*
 
@@ -14,12 +14,17 @@
 - [x]  Encrypted Notepad
 - [x]  Websocket support for dApp/web3 connections
 - [x]  Sign files using your wallet to guarantee authenticity
-- [x]  Explore [TELA](https://github.com/civilware/tela) dApps and websites (significantly faster discovery)
+- [x]  **Instant TELA discovery (~2s)** using three-layer cache (Embedded, DB, JSON)
+- [x]  **Desktop QR Code Scanning** (Linux, Windows, MacOS)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
 
 ### Upcoming Features
 - [ ]  Multi-language support
-- [ ]  Mobile camera support
+- [ ]  Mobile QR Scanning (Android/iOS)
+
+### TELA Performance
+Engram Dev features a significant overhaul of the TELA discovery architecture, reducing first-click discovery from >60s to ~2s.
+See [TELA_PERFORMANCE.md](TELA_PERFORMANCE.md) for technical details on the three-layer cache and Gnomon optimizations.
 
 ### Watch the Beta Release Video
 [<img src="https://img.youtube.com/vi/00-gpNbkRW4/hqdefault.jpg" width="100%" />](https://www.youtube.com/watch?v=00-gpNbkRW4)
@@ -28,7 +33,7 @@
 We plan to deploy releases on the following platforms:
 - [x]  Windows
 - [x]  Linux
-- [x]  Mac OS
+- [x]  Mac OS (with Camera/QR support)
 - [ ]  iOS
 - [x]  Android
 
@@ -36,59 +41,67 @@ See [releases](https://github.com/DEROFDN/Engram/releases) for the latest builds
 
 ## Development
 
-### Using Taskfile
+### Using Taskfile (Recommended)
 
-We provide a [Taskfile](https://taskfile.dev/) for common development tasks:
+We provide a [Taskfile](https://taskfile.dev/) to automate development, testing, and packaging:
 
 ```bash
 # Install task
 go install github.com/go-task/task/v3/cmd/task@latest
 
-# List available tasks
+# List all available tasks
 task --list
 
-# Common tasks
-task build          # Build the application
-task test           # Run tests
-task lint           # Run linters
-task ci             # Run CI pipeline locally
-task security       # Run all security checks
+# Common development tasks
+task build          # Build the application (bin/engram)
+task run            # Build and run immediately
+task test           # Run tests with race detector
+task lint           # Run linters (golangci-lint)
+
+# Packaging for different platforms
+task package-linux
+task package-windows
+task package-macos
+task package-android
 ```
 
-### Manual Build
+### Manual Build Requirements
 
-<b>Required Processes</b>
+Please see: https://developer.fyne.io/ for Fyne dependencies.
 
-Please see: https://developer.fyne.io/
-
-You are required to have all the dependencies for Fyne installed. Specifically (if you are on windows), <b>TDM-GCC-64</b>.
+**Important Build Tags:**
+Always use `-tags migrated_fynedo` when building manually.
 
 * Install fyne cmd tools: `go install fyne.io/fyne/v2/cmd/fyne@latest`
-* Add `~/go/bin` to your `$PATH` environment variable if not done already: `export PATH=$PATH:~/go/bin/`
-* Clone Engram repository and navigate to its directory:
+* Add `~/go/bin` to your `$PATH` environment variable.
 
+#### Building for MacOS
+MacOS builds require specific entitlements for camera and microphone access.
+```bash
+task package-macos
 ```
-git clone https://github.com/DEROFDN/Engram.git
-cd Engram
-go mod tidy
-```
+This task automatically runs `./fix_macos_permissions.sh` to apply the necessary entitlements to the `.app` bundle.
 
 #### Building for Windows
-
-* Build from within the repo directory:
-```
-fyne package -name Engram -os windows -appVersion 0.6.5 -icon Icon.png -tags migrated_fynedo
+```bash
+fyne package -name Engram -os windows -appVersion 0.6.9 -icon Icon.png -tags migrated_fynedo
 ```
 
-#### Building for Android APK (Linux)
+#### Building for Android
+```bash
+task package-android
+# or manually:
+fyne package -name Engram -os android/arm64 -appVersion 0.6.9 -appID com.engram.main -icon ./Icon.png -tags migrated_fynedo
+```
 
-* Install android-sdk: `sudo apt install android-sdk`
-* Download r26b android NDK - https://developer.android.com/ndk/downloads
-* Add environment variable for ANDROID_NDK_HOME to point at the downloaded and extracted ndk directory
-* Build from within the repo directory:
-```
-fyne package -name Engram -os android/arm64 -appVersion 0.6.5 -appID com.engram.main -icon ./Icon.png -tags migrated_fynedo
-```
+### Custom Dependencies & Vendoring
+
+Engram Dev relies on optimized forks of Gnomon and TELA. These are managed via `go.mod` replacements and vendored for stability.
+
+If you modify vendored code:
+1. Make changes in the respective fork repositories.
+2. Update `go.mod` to point to the new commits.
+3. Run `go mod vendor` to synchronize the local vendor directory.
 
 ## CI/CD & Security
 
@@ -103,13 +116,4 @@ See [Security Audit](docs/SECURITY_AUDIT.md) for details.
 
 ## Contributing
 
-Issues and pull requests are welcome, but will need to be reviewed by DERO Foundation developers.
-
-Please follow [Conventional Commits](https://www.conventionalcommits.org/) for pull request titles.
-
-
-
-
-
-
-
+Issues and pull requests are welcome. Please follow [Conventional Commits](https://www.conventioncommits.org/) for pull request titles.

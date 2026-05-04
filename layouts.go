@@ -932,7 +932,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 	marqueeMu.Unlock()
 
 	messages := []string{
-		"0.6.8",
+		"0.6.9",
 		"DERO PRIVACY TOGHETER",
 	}
 
