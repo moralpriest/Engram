@@ -148,8 +148,8 @@ github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2Em
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
 github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409 h1:Ui/Z2KqSa4Oj0irjKqVPQldMG8m6YFkudqxR97+4ISM=
 github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
-github.com/moralpriest/tela v0.0.0-20260427053904-541f29f7126d h1:qZeh/34wmPQABWKaNYvSFmOCzz47jSURgvfU0++9TP0=
-github.com/moralpriest/tela v0.0.0-20260427053904-541f29f7126d/go.mod h1:J+maI4zPRe7zpSpTyHDopUg3eQRqCKffvBIRnOhipB8=
+github.com/moralpriest/tela v0.0.0-20260321215354-202c8ca5ce79 h1:NmakLfq9dePuYgw+aAkSP1m9ZKvkN5UYixE1hKmV8Rw=
+github.com/moralpriest/tela v0.0.0-20260321215354-202c8ca5ce79/go.mod h1:J+maI4zPRe7zpSpTyHDopUg3eQRqCKffvBIRnOhipB8=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 h1:zYyBkD/k9seD2A7fsi6Oo2LfFZAehjjQMERAvZLEDnQ=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646/go.mod h1:jpp1/29i3P1S/RLdc7JQKbRpFeM1dOBd8T9ki5s+AY8=
 github.com/nicksnyder/go-i18n/v2 v2.6.1 h1:JDEJraFsQE17Dut9HFDHzCoAWGEQJom5s0TRd17NIEQ=

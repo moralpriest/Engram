@@ -8384,6 +8384,35 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 	return dir, true
 }
 
+// serveTELAWithCancel runs tela.ServeTELA in a background goroutine and returns
+// early if the cancelled flag is set, preserving the cancel-during-launch UX.
+func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string, error) {
+	type result struct {
+		link string
+		err  error
+	}
+	done := make(chan result, 1)
+
+	go func() {
+		link, err := tela.ServeTELA(scid, endpoint)
+		done <- result{link, err}
+	}()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case r := <-done:
+			return r.link, r.err
+		case <-ticker.C:
+			if cancelled != nil && cancelled.Load() {
+				return "", fmt.Errorf("cancelled")
+			}
+		}
+	}
+}
+
 // serveTELACollisionRecovery calls ServeTELA and, on stale clone file collisions, removes the
 // affected clone tree and retries (then falls back to clearing non-running top-level dirs).
 func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool) (link string, err error) {
@@ -8396,7 +8425,12 @@ func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 		return "", fmt.Errorf("cancelled")
 	}
 
-	link, err = tela.ServeTELA(scid, endpoint, cancelled...)
+	link, err = serveTELAWithCancel(scid, endpoint, isCancelled)
+	if err != nil {
+		if strings.Contains(err.Error(), "cancelled") {
+			return "", err
+		}
+	}
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		return link, err
 	}
@@ -8409,7 +8443,12 @@ func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 			return "", fmt.Errorf("cancelled")
 		}
 
-		link, err = tela.ServeTELA(scid, endpoint, cancelled...)
+		link, err = serveTELAWithCancel(scid, endpoint, isCancelled)
+		if err != nil {
+			if strings.Contains(err.Error(), "cancelled") {
+				return "", err
+			}
+		}
 		if err == nil {
 			return link, nil
 		}
@@ -8430,7 +8469,7 @@ func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 		return "", fmt.Errorf("cancelled")
 	}
 
-	link, err = tela.ServeTELA(scid, endpoint, cancelled...)
+	link, err = serveTELAWithCancel(scid, endpoint, isCancelled)
 
 	return link, err
 }
