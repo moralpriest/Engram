@@ -8662,7 +8662,9 @@ func handleImageURL(nameHdr, imageURL string, size fyne.Size) (image *canvas.Ima
 	image = canvas.NewImageFromResource(nil)
 
 	if scImage != "" {
-		resource = fyne.NewStaticResource(nameHdr, []byte(scImage))
+		// Clean the SVG/image code of any null bytes or leading/trailing whitespace
+		cleanCode := bytes.Trim( []byte(scImage), "\x00\n\r\t ")
+		resource = fyne.NewStaticResource(nameHdr, cleanCode)
 	} else {
 		resource, err = fyne.LoadResourceFromURLString(imageURL)
 		if err != nil {
