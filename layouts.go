@@ -18859,7 +18859,7 @@ func layoutTELA() fyne.CanvasObject {
 					return
 				}
 
-				for i := 0; i < 60; i++ {
+				for i := 0; i < 15; i++ {
 					if !isWalletGenerationActive(generation) {
 						return
 					}
