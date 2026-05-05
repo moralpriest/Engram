@@ -106,9 +106,28 @@ type TELA struct {
 		docs  []Version
 	}
 	client struct {
-		WS  *websocket.Conn
-		RPC *jrpc2.Client
+		sync.Mutex
+		WS           *websocket.Conn
+		RPC          *jrpc2.Client
+		lastEndpoint string
 	}
+}
+
+var (
+	rpcSem = make(chan struct{}, 16) // Limit total concurrent RPC calls across all TELA operations
+)
+
+func isConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection") ||
+		strings.Contains(s, "abort") ||
+		strings.Contains(s, "EOF") ||
+		strings.Contains(s, "closed") ||
+		strings.Contains(s, "broken pipe") ||
+		strings.Contains(s, "no such host")
 }
 
 // Versioning structure used for package and contracts
@@ -370,20 +389,80 @@ func getSCErrors(result string) bool {
 	return false
 }
 
+// getRPC connects to a DERO node via WebSocket and returns a jrpc2 client,
+// it reuses the existing connection if it is already connected to the same endpoint
+func (t *TELA) getRPC(endpoint string) (*jrpc2.Client, error) {
+	t.client.Lock()
+	defer t.client.Unlock()
+
+	if t.client.WS != nil && t.client.lastEndpoint == endpoint {
+		return t.client.RPC, nil
+	}
+
+	if t.client.WS != nil {
+		t.client.WS.Close()
+	}
+
+	var err error
+	t.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
+	if err != nil {
+		t.client.WS = nil
+		t.client.lastEndpoint = ""
+		return nil, err
+	}
+
+	t.client.lastEndpoint = endpoint
+	input_output := rwc.New(t.client.WS)
+	t.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
+	return t.client.RPC, nil
+}
+
+// closeRPC closes the current WebSocket connection and clears the client
+func (t *TELA) closeRPC() {
+	t.client.Lock()
+	defer t.client.Unlock()
+	if t.client.WS != nil {
+		t.client.WS.Close()
+		t.client.WS = nil
+		t.client.RPC = nil
+		t.client.lastEndpoint = ""
+	}
+}
+
+// callRPC handles RPC calls with concurrency limiting and retry logic
+func (t *TELA) callRPC(ctx context.Context, endpoint, method string, params, result interface{}) error {
+	rpcSem <- struct{}{}
+	defer func() { <-rpcSem }()
+
+	for i := 0; i < 2; i++ {
+		client, err := t.getRPC(endpoint)
+		if err != nil {
+			if i == 0 && isConnectionError(err) {
+				continue
+			}
+			return err
+		}
+
+		err = client.CallResult(ctx, method, params, &result)
+		if err == nil {
+			return nil
+		}
+
+		if i == 0 && isConnectionError(err) {
+			t.closeRPC()
+			continue
+		}
+		return err
+	}
+	return fmt.Errorf("RPC call failed after retry")
+}
+
 // Get a string key from smart contract at endpoint
 func getContractVar(scid, key, endpoint string) (variable string, err error) {
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: false, KeysString: []string{key}}
 	var result rpc.GetSC_Result
 
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
-	err = tela.client.RPC.CallResult(context.Background(), "DERO.GetSC", params, &result)
+	err = tela.callRPC(context.Background(), endpoint, "DERO.GetSC", params, &result)
 	if err != nil {
 		return
 	}
@@ -410,15 +489,7 @@ func getTXID(txid, endpoint string) (txidAsHex string, height int64, err error) 
 	var params = rpc.GetTransaction_Params{Tx_Hashes: []string{txid}}
 	var result rpc.GetTransaction_Result
 
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
-	err = tela.client.RPC.CallResult(context.Background(), "DERO.GetTransaction", params, &result)
+	err = tela.callRPC(context.Background(), endpoint, "DERO.GetTransaction", params, &result)
 	if err != nil {
 		return
 	}
@@ -440,15 +511,7 @@ func getContractVars(scid, endpoint string) (vars map[string]interface{}, err er
 	var params = rpc.GetSC_Params{SCID: scid, Variables: true, Code: false}
 	var result rpc.GetSC_Result
 
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
-	err = tela.client.RPC.CallResult(context.Background(), "DERO.GetSC", params, &result)
+	err = tela.callRPC(context.Background(), endpoint, "DERO.GetSC", params, &result)
 	if err != nil {
 		return
 	}
@@ -463,15 +526,7 @@ func getContractCode(scid, endpoint string) (code string, err error) {
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: true}
 	var result rpc.GetSC_Result
 
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
-	err = tela.client.RPC.CallResult(context.Background(), "DERO.GetSC", params, &result)
+	err = tela.callRPC(context.Background(), endpoint, "DERO.GetSC", params, &result)
 	if err != nil {
 		return
 	}
@@ -491,15 +546,7 @@ func getContractCodeAtHeight(height int64, scid, endpoint string) (code string, 
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: true, TopoHeight: height}
 	var result rpc.GetSC_Result
 
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
-	err = tela.client.RPC.CallResult(context.Background(), "DERO.GetSC", params, &result)
+	err = tela.callRPC(context.Background(), endpoint, "DERO.GetSC", params, &result)
 	if err != nil {
 		return
 	}
@@ -583,17 +630,8 @@ func GetGasEstimate(wallet *walletapi.Wallet_Disk, ringsize uint64, transfers []
 	}
 
 	endpoint := walletapi.Daemon_Endpoint_Active
-	tela.client.WS, _, err = websocket.DefaultDialer.Dial("ws://"+endpoint+"/ws", nil)
-	if err != nil {
-		err = fmt.Errorf("could not dial daemon endpoint %s: %s", endpoint, err)
-		return
-	}
-
-	input_output := rwc.New(tela.client.WS)
-	tela.client.RPC = jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
-
 	var gasResult rpc.GasEstimate_Result
-	if err = tela.client.RPC.CallResult(context.Background(), "DERO.GetGasEstimate", gasParams, &gasResult); err != nil {
+	if err = tela.callRPC(context.Background(), endpoint, "DERO.GetGasEstimate", gasParams, &gasResult); err != nil {
 		err = fmt.Errorf("could not estimate fees: %s", err)
 		return
 	}
