@@ -4795,34 +4795,34 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	labelSigner := canvas.NewText("   SMART  CONTRACT  AUTHOR", colors.Gray)
+	labelSigner := canvas.NewText("SMART  CONTRACT  AUTHOR", colors.Gray)
 	labelSigner.TextSize = scaleFont(14)
-	labelSigner.Alignment = fyne.TextAlignLeading
+	labelSigner.Alignment = fyne.TextAlignCenter
 	labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelOwner := canvas.NewText("   SMART  CONTRACT  OWNER", colors.Gray)
+	labelOwner := canvas.NewText("SMART  CONTRACT  OWNER", colors.Gray)
 	labelOwner.TextSize = scaleFont(14)
-	labelOwner.Alignment = fyne.TextAlignLeading
+	labelOwner.Alignment = fyne.TextAlignCenter
 	labelOwner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
+	labelSCID := canvas.NewText("SMART  CONTRACT  ID", colors.Gray)
 	labelSCID.TextSize = scaleFont(14)
-	labelSCID.Alignment = fyne.TextAlignLeading
+	labelSCID.Alignment = fyne.TextAlignCenter
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelBalance := canvas.NewText("   ASSET  BALANCE", colors.Gray)
+	labelBalance := canvas.NewText("ASSET  BALANCE", colors.Gray)
 	labelBalance.TextSize = scaleFont(14)
-	labelBalance.Alignment = fyne.TextAlignLeading
+	labelBalance.Alignment = fyne.TextAlignCenter
 	labelBalance.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelTransfer := canvas.NewText("   TRANSFER  ASSET", colors.Gray)
+	labelTransfer := canvas.NewText("TRANSFER  ASSET", colors.Gray)
 	labelTransfer.TextSize = scaleFont(14)
-	labelTransfer.Alignment = fyne.TextAlignLeading
+	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelExecute := canvas.NewText("   EXECUTE  ACTION", colors.Gray)
+	labelExecute := canvas.NewText("EXECUTE  ACTION", colors.Gray)
 	labelExecute.TextSize = scaleFont(14)
-	labelExecute.Alignment = fyne.TextAlignLeading
+	labelExecute.Alignment = fyne.TextAlignCenter
 	labelExecute.TextStyle = fyne.TextStyle{Bold: true}
 
 	var ringsize uint64
@@ -5211,6 +5211,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	linkMessageAuthor.OnTapped = func() {
 		if signer != "" && signer != "--" {
 			messages.Contact = signer
+			session.PreviousDomain = session.Domain
+			session.LastDomain = session.Window.Content()
 			session.Window.Canvas().SetContent(layoutTransition())
 			removeOverlays()
 			session.Window.Canvas().SetContent(layoutPM())
@@ -5221,6 +5223,8 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	linkMessageOwner.OnTapped = func() {
 		if owner != "" && owner != "--" {
 			messages.Contact = owner
+			session.PreviousDomain = session.Domain
+			session.LastDomain = session.Window.Content()
 			session.Window.Canvas().SetContent(layoutTransition())
 			removeOverlays()
 			session.Window.Canvas().SetContent(layoutPM())
@@ -8748,9 +8752,17 @@ func layoutPM() fyne.CanvasObject {
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
 
 	backFromThread := func() {
+		prev := session.LastDomain
+		prevDom := session.PreviousDomain
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMessages())
+		if prevDom != "" && prev != nil {
+			session.Window.SetContent(prev)
+			session.Domain = prevDom
+			session.PreviousDomain = ""
+		} else {
+			session.Window.SetContent(layoutMessages())
+		}
 		removeOverlays()
 	}
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), backFromThread)
@@ -21705,24 +21717,23 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 		}})
 	labelDesc.Wrapping = fyne.TextWrapWord
 
-	labelDURL := canvas.NewText("   DURL", colors.Gray)
+	labelDURL := canvas.NewText("DURL", colors.Gray)
 	labelDURL.TextSize = scaleFont(14)
-	labelDURL.Alignment = fyne.TextAlignLeading
+	labelDURL.Alignment = fyne.TextAlignCenter
 	labelDURL.TextStyle = fyne.TextStyle{Bold: true}
 
 	textDURL := widget.NewRichTextFromMarkdown(index.DURL)
 	textDURL.Wrapping = fyne.TextWrapWord
 
-	labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
+	labelSCID := canvas.NewText("SMART  CONTRACT  ID", colors.Gray)
 	labelSCID.TextSize = scaleFont(14)
-	labelSCID.Alignment = fyne.TextAlignLeading
+	labelSCID.Alignment = fyne.TextAlignCenter
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
 	textSCID := widget.NewRichTextFromMarkdown(index.SCID)
 	textSCID.Wrapping = fyne.TextWrapWord
 
-	linkViewExplorer := widget.NewHyperlinkWithStyle("View in Explorer", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	linkViewExplorer.OnTapped = func() {
+	btnViewExplorer := widget.NewButtonWithIcon("", resourceBrowserGlobeSvg, func() {
 		if engram.Disk.GetNetwork() {
 			link, _ := url.Parse("https://explorer.derofoundation.org/tx/" + index.SCID)
 			_ = fyne.CurrentApp().OpenURL(link)
@@ -21730,16 +21741,15 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			link, _ := url.Parse("https://testnetexplorer.derofoundation.org/tx/" + index.SCID)
 			_ = fyne.CurrentApp().OpenURL(link)
 		}
-	}
+	})
 
-	linkCopySCID := widget.NewHyperlinkWithStyle("Copy SCID", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCopySCID.OnTapped = func() {
+	btnCopySCID := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		a.Clipboard().SetContent(index.SCID)
-	}
+	})
 
-	labelAuthor := canvas.NewText("   SMART  CONTRACT  AUTHOR", colors.Gray)
+	labelAuthor := canvas.NewText("SMART  CONTRACT  AUTHOR", colors.Gray)
 	labelAuthor.TextSize = scaleFont(14)
-	labelAuthor.Alignment = fyne.TextAlignLeading
+	labelAuthor.Alignment = fyne.TextAlignCenter
 	labelAuthor.TextStyle = fyne.TextStyle{Bold: true}
 
 	author := index.Author
@@ -21749,20 +21759,20 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	textAuthor := widget.NewRichTextFromMarkdown(author)
 	textAuthor.Wrapping = fyne.TextWrapWord
 
-	linkMessageAuthor := widget.NewHyperlinkWithStyle("Message the Author", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	linkMessageAuthor.OnTapped = func() {
+	btnMessageAuthor := widget.NewButtonWithIcon("", theme.MailComposeIcon(), func() {
 		if index.Author != "" {
 			messages.Contact = index.Author
+			session.PreviousDomain = session.Domain
+			session.LastDomain = session.Window.Content()
 			session.Window.Canvas().SetContent(layoutTransition())
 			removeOverlays()
 			session.Window.Canvas().SetContent(layoutPM())
 		}
-	}
+	})
 
-	linkCopyAuthor := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	linkCopyAuthor.OnTapped = func() {
+	btnCopyAuthor := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		a.Clipboard().SetContent(index.Author)
-	}
+	})
 
 	labelStatus := canvas.NewText("APPLICATION  STATUS", colors.Gray)
 	labelStatus.TextSize = scaleFont(14)
@@ -22594,13 +22604,11 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						labelAuthor,
 						textAuthor,
-						container.NewHBox(
-							linkMessageAuthor,
-							layout.NewSpacer(),
-						),
-						container.NewHBox(
-							linkCopyAuthor,
-							layout.NewSpacer(),
+						container.NewCenter(
+							container.NewHBox(
+								btnCopyAuthor,
+								btnMessageAuthor,
+							),
 						),
 						rectSpacer,
 						rectSpacer,
@@ -22609,13 +22617,11 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						labelSCID,
 						textSCID,
-						container.NewHBox(
-							linkViewExplorer,
-							layout.NewSpacer(),
-						),
-						container.NewHBox(
-							linkCopySCID,
-							layout.NewSpacer(),
+						container.NewCenter(
+							container.NewHBox(
+								btnViewExplorer,
+								btnCopySCID,
+							),
 						),
 						rectSpacer,
 						rectSpacer,

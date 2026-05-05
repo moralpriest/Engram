@@ -156,6 +156,7 @@ type Session struct {
 	TrackRecentBlocks int64
 	NavStack          *NavigationStack
 	Navigating        bool
+	PreviousDomain    string
 }
 
 type RemoteAccess struct {
