@@ -17869,48 +17869,29 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	var telaSearch []INDEXwithRatings
+	var searchMu sync.RWMutex
 
-	parseTelaListEntry := func(raw string) (name, scid string) {
-		split := strings.Split(raw, ";;;")
-		if len(split) > 0 {
-			name = split[0]
-		}
-		if len(split) > 1 {
-			scid = split[1]
-		}
-		return
-	}
 
-	normalizeSearch := func(s string) string {
-		return strings.ToLower(strings.TrimSpace(s))
-	}
-
-	findTelaSearchEntry := func(scid string) *INDEXwithRatings {
-		for i := range telaSearch {
-			if telaSearch[i].SCID == scid {
-				return &telaSearch[i]
+	findTelaSearchEntry := func(scid string) (INDEXwithRatings, bool) {
+		searchMu.RLock()
+		defer searchMu.RUnlock()
+		for _, entry := range telaSearch {
+			if entry.SCID == scid {
+				return entry, true
 			}
 		}
-
-		return nil
+		return INDEXwithRatings{}, false
 	}
 
-	isDisplayableTelaApp := func(index tela.INDEX) bool {
-		if len(index.DOCs) < 1 {
-			return false
+	updateTelaSearchEntry := func(scid string, update func(*INDEXwithRatings)) {
+		searchMu.Lock()
+		defer searchMu.Unlock()
+		for i := range telaSearch {
+			if telaSearch[i].SCID == scid {
+				update(&telaSearch[i])
+				return
+			}
 		}
-
-		if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
-			return false
-		}
-
-		name := strings.TrimSpace(index.NameHdr)
-		descr := strings.TrimSpace(index.DescrHdr)
-		if name == "" || descr == "" {
-			return false
-		}
-
-		return true
 	}
 
 	setTelaStatus := func(text string, clr color.Color) {
@@ -18130,8 +18111,8 @@ func layoutTELA() fyne.CanvasObject {
 			errorText.Text = "Removed from favorites"
 			errorText.Color = colors.Green
 		} else {
-			entry := findTelaSearchEntry(scid)
-			if entry == nil {
+			entry, ok := findTelaSearchEntry(scid)
+			if !ok {
 				errorText.Text = "Could not load TELA metadata"
 				errorText.Color = colors.Red
 				errorText.Refresh()
@@ -18221,7 +18202,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		if appIcon != nil {
 			appIcon.Resource = resourceTelaIcon
-			if entry := findTelaSearchEntry(scid); entry != nil && entry.IconHdr != "" {
+			if entry, ok := findTelaSearchEntry(scid); ok && entry.IconHdr != "" {
 				go func(currentSCID, iconURL, nameHdr string, imgObj *canvas.Image) {
 					if img, err := handleImageURL(nameHdr, iconURL, fyne.NewSize(scaleSize(26), scaleSize(26))); err == nil {
 						uiDo(func() {
@@ -18241,7 +18222,7 @@ func layoutTELA() fyne.CanvasObject {
 			ratingLabel.Text = ""
 			ratingHex.Resource = nil
 
-			if entry := findTelaSearchEntry(scid); entry != nil {
+			if entry, ok := findTelaSearchEntry(scid); ok {
 				if entry.ratings.Average > 0 {
 					ratingLabel.Text = fmt.Sprintf("%.1f", entry.ratings.Average)
 					ratingHex.Resource = telaHexagonColor(entry.ratings.Average)
@@ -18257,9 +18238,9 @@ func layoutTELA() fyne.CanvasObject {
 									label.Refresh()
 									hex.Refresh()
 								}
-								if e := findTelaSearchEntry(currentSCID); e != nil {
+								updateTelaSearchEntry(currentSCID, func(e *INDEXwithRatings) {
 									e.ratings = ratings
-								}
+								})
 							})
 						}
 					}(scid, ratingLabel, ratingHex)
@@ -18404,8 +18385,8 @@ func layoutTELA() fyne.CanvasObject {
 				startCloseBtn.SetIcon(theme.ContentCutIcon())
 				startCloseBtn.Refresh()
 			} else if isTelaActive(scid) {
-				entry := findTelaSearchEntry(scid)
-				if entry != nil {
+				entry, ok := findTelaSearchEntry(scid)
+				if ok {
 					go func() {
 						tela.ShutdownServer(entry.DURL)
 						if refreshServerList != nil {
@@ -18838,9 +18819,11 @@ func layoutTELA() fyne.CanvasObject {
 			dlg.Hide()
 			clearAllTELACache()
 			forceFreshScan = true
+			searchMu.Lock()
 			searching = []string{}
 			telaSearch = []INDEXwithRatings{}
 			searchData.Set(searching)
+			searchMu.Unlock()
 
 			generation := currentWalletGeneration()
 
@@ -18859,7 +18842,7 @@ func layoutTELA() fyne.CanvasObject {
 					return
 				}
 
-				for i := 0; i < 15; i++ {
+				for i := 0; i < 60; i++ {
 					if !isWalletGenerationActive(generation) {
 						return
 					}
@@ -19124,8 +19107,10 @@ func layoutTELA() fyne.CanvasObject {
 		// Handle force fresh scan - clear all caches and proceed
 		if forceFreshScan {
 			logger.Printf("[TELA] Force fresh scan requested - clearing all caches\n")
+			searchMu.Lock()
 			telaSearch = []INDEXwithRatings{}
 			telaSCIDs = []string{}
+			searchMu.Unlock()
 			sAll = map[string]bool{}
 			_ = DeleteKey("TELA Search", []byte("DisplayCache"))
 			forceFreshScan = false
@@ -19135,6 +19120,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		// On re-visit telaSearch is empty because it's a local variable in layoutTELA().
 		// Load cached display results so we can show them immediately.
+		searchMu.Lock()
 		if len(telaSearch) == 0 {
 			cachedDisplay := loadTelaDisplayCache()
 			if len(cachedDisplay) > 0 {
@@ -19148,6 +19134,7 @@ func layoutTELA() fyne.CanvasObject {
 				logger.Printf("[TELA] Loaded %d apps from display cache into telaSearch\n", len(telaSearch))
 			}
 		}
+		searchMu.Unlock()
 
 		// Check for existing progress and handle resume scenarios
 		progress := loadScanProgress()
@@ -19191,13 +19178,20 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		// Already scanned - only skip if no updates are expected
-		if len(telaSearch) > 0 && heightDelta == 0 && !rescanRecheck {
+		searchMu.RLock()
+		hasCached := len(telaSearch) > 0
+		searchMu.RUnlock()
+		if hasCached && heightDelta == 0 && !rescanRecheck {
 			keepProgressVisible = false
 			fyne.Do(func() {
+				searchMu.Lock()
 				searching = telaSearchDisplayAll(telaSearch, sortBy)
 				searchData.Set(searching)
+				searchMu.Unlock()
 				searchList.Refresh()
+				searchMu.RLock()
 				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+				searchMu.RUnlock()
 				results.Color = colors.Green
 				entrySearch.Enable()
 				entryAddSCID.Enable()
@@ -19217,8 +19211,10 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		if !keepProgressVisible && heightDelta == 0 && !rescanRecheck {
+			searchMu.Lock()
 			telaSearch = []INDEXwithRatings{}
 			searchData.Set(nil)
+			searchMu.Unlock()
 		}
 		labelLastScan.Text = ""
 
@@ -19413,9 +19409,11 @@ func layoutTELA() fyne.CanvasObject {
 		// the full owner/SCID scan incorrectly.
 		if forceFreshScan {
 			logger.Printf("[TELA] Force fresh scan observed after sync wait - clearing state\n")
+			searchMu.Lock()
 			telaSearch = []INDEXwithRatings{}
 			telaSCIDs = []string{}
 			sAll = map[string]bool{}
+			searchMu.Unlock()
 			_ = DeleteKey("TELA Search", []byte("DisplayCache"))
 			forceFreshScan = false
 			clearScanProgress()
@@ -19473,12 +19471,16 @@ func layoutTELA() fyne.CanvasObject {
 				if !isDisplayableTelaApp(entry.INDEX) {
 					continue
 				}
+				searchMu.Lock()
 				telaSearch = append(telaSearch, entry)
 				telaSCIDs = append(telaSCIDs, entry.SCID)
+				searchMu.Unlock()
 				indexCacheStore[entry.SCID] = entry.INDEX
 			}
 		}
+		searchMu.Lock()
 		telaSearch = deduplicateTelaSearch(telaSearch)
+		searchMu.Unlock()
 
 		storedSCIDs, err := GetEncryptedValue("TELA Search", []byte("SCIDs"))
 		if err != nil {
@@ -19510,12 +19512,14 @@ func layoutTELA() fyne.CanvasObject {
 
 			// Batch-fetch INDEX data for cached SCIDs missing from indexCacheStore
 			// This replaces per-SCID tela.GetINDEXInfo() calls that each open a new WebSocket
+			searchMu.RLock()
 			var cacheMissed []string
 			for _, sc := range telaSCIDs {
 				if _, ok := indexCacheStore[sc]; !ok {
 					cacheMissed = append(cacheMissed, sc)
 				}
 			}
+			searchMu.RUnlock()
 			if len(cacheMissed) > 0 {
 				setResultsText("  Fetching INDEX data... (%d SCIDs)", len(cacheMissed))
 				results.Color = colors.Yellow
@@ -19542,10 +19546,12 @@ func layoutTELA() fyne.CanvasObject {
 				atomic.AddInt64(&indexInfoCalls, int64(len(cacheMissed)))
 			}
 
+			searchMu.RLock()
 			var searchMap = make(map[string]bool)
 			for _, entry := range telaSearch {
 				searchMap[entry.SCID] = true
 			}
+			searchMu.RUnlock()
 			var missingSCIDs []string
 			for _, sc := range telaSCIDs {
 				if !searchMap[sc] {
@@ -19555,7 +19561,6 @@ func layoutTELA() fyne.CanvasObject {
 
 			if len(missingSCIDs) > 0 {
 				cachedAdded := int64(0)
-				var cachedMu sync.Mutex
 				cachedWorkers := workerPoolSize / 2
 				if cachedWorkers < 8 {
 					cachedWorkers = 8
@@ -19622,9 +19627,9 @@ func layoutTELA() fyne.CanvasObject {
 						setCandidateCache(scid, telaCandidateValidIndex)
 						setNegativeSCID(scid, false)
 
-						cachedMu.Lock()
+						searchMu.Lock()
 						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
-						cachedMu.Unlock()
+						searchMu.Unlock()
 					}(i, sc)
 				}
 
@@ -19634,23 +19639,36 @@ func layoutTELA() fyne.CanvasObject {
 
 			// Only defer the full scan when we have cached rows to show; otherwise continue
 			// into GetAllOwnersAndSCIDs so an initial or empty-cache run still enumerates.
-			if !allowTelaIndexMutations && (len(telaSearch) > 0 || len(telaSCIDs) > 0) {
+			searchMu.RLock()
+			hasSearch := len(telaSearch) > 0
+			hasSCIDs := len(telaSCIDs) > 0
+			searchMu.RUnlock()
+			if !allowTelaIndexMutations && (hasSearch || hasSCIDs) {
 				cacheHitMode = "cached_syncing"
 				fullScanReason = ""
-				if len(telaSearch) == 0 && len(telaSCIDs) > 0 {
-					for _, scid := range telaSCIDs {
+				if !hasSearch && hasSCIDs {
+					searchMu.RLock()
+					localSCIDs := make([]string, len(telaSCIDs))
+					copy(localSCIDs, telaSCIDs)
+					searchMu.RUnlock()
+					for _, scid := range localSCIDs {
 						if index, ok := indexCacheStore[scid]; ok {
 							if !isDisplayableTelaApp(index) {
 								continue
 							}
+							searchMu.Lock()
 							telaSearch = append(telaSearch, INDEXwithRatings{INDEX: index})
+							searchMu.Unlock()
 						}
 					}
 				}
 				fyne.Do(func() {
+					searchMu.Lock()
 					searching = telaSearchDisplayAll(telaSearch, sortBy)
 					searchData.Set(searching)
+					searchMu.Unlock()
 					searchList.Refresh()
+					searchMu.RLock()
 					if len(telaSearch) > 0 {
 						results.Text = fmt.Sprintf("  TELA cache loaded while Gnomon syncs: %d", len(telaSearch))
 					} else {
@@ -19684,10 +19702,14 @@ func layoutTELA() fyne.CanvasObject {
 				keepProgressVisible = false
 				completeTelaScanProgress()
 				fyne.Do(func() {
+					searchMu.Lock()
 					searching = telaSearchDisplayAll(telaSearch, sortBy)
 					searchData.Set(searching)
+					searchMu.Unlock()
 					searchList.Refresh()
+					searchMu.RLock()
 					results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+					searchMu.RUnlock()
 					results.Color = colors.Green
 					entrySearch.Enable()
 					entryAddSCID.Enable()
@@ -19929,10 +19951,14 @@ func layoutTELA() fyne.CanvasObject {
 						keepProgressVisible = false
 						logger.Printf("[TELA] Prefilter failed but %d cached results available, showing them\n", len(telaSearch))
 						fyne.Do(func() {
+							searchMu.Lock()
 							searching = telaSearchDisplayAll(telaSearch, sortBy)
 							searchData.Set(searching)
+							searchMu.Unlock()
 							searchList.Refresh()
+							searchMu.RLock()
 							results.Text = fmt.Sprintf("  TELA Apps:  %d (prefilter error)", len(telaSearch))
+							searchMu.RUnlock()
 							results.Color = colors.Yellow
 							results.Refresh()
 						})
@@ -20259,9 +20285,9 @@ func layoutTELA() fyne.CanvasObject {
 						setCandidateCache(scid, telaCandidateValidIndex)
 						setNegativeSCID(scid, false)
 
-						scanMu.Lock()
+						searchMu.Lock()
 						telaSearch = append(telaSearch, INDEXwithRatings{ratings: ratings, INDEX: index})
-						scanMu.Unlock()
+						searchMu.Unlock()
 					} else {
 						atomic.AddInt64(&filteredNonDisplayable, 1)
 						setCandidateCache(scid, telaCandidateNoDocs)
@@ -20339,15 +20365,21 @@ func layoutTELA() fyne.CanvasObject {
 		finalizeStart := time.Now()
 
 		fyne.Do(func() {
+			searchMu.Lock()
 			searching = telaSearchDisplayAll(telaSearch, sortBy)
 			searchData.Set(searching)
+			searchMu.Unlock()
 			searchList.Refresh()
 			results.Show()
 			if networkErrorDuringFetch {
+				searchMu.RLock()
 				results.Text = fmt.Sprintf("  TELA Apps:  %d (some apps may be missing - network error during fetch)", len(telaSearch))
+				searchMu.RUnlock()
 				results.Color = colors.Yellow
 			} else {
+				searchMu.RLock()
 				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+				searchMu.RUnlock()
 				results.Color = colors.Green
 			}
 			results.Refresh()
@@ -20391,11 +20423,13 @@ func layoutTELA() fyne.CanvasObject {
 			logger.Printf("[TELA] Failed storing INDEX cache: entries=%d err=%v\n", len(indexCacheStore), err)
 		}
 
+		searchMu.Lock()
 		telaSearch = deduplicateTelaSearch(telaSearch)
 		if err := saveTelaDisplayCache(telaDisplayCache(telaSearch)); err != nil {
 			cacheIntegrity = "write_failed"
 			logger.Printf("[TELA] Failed storing display cache: entries=%d err=%v\n", len(telaSearch), err)
 		}
+		searchMu.Unlock()
 
 		candidateCacheMu.RLock()
 		candidateCacheSnapshot := make(telaCandidateCache, len(candidateCache))
@@ -20425,6 +20459,7 @@ func layoutTELA() fyne.CanvasObject {
 		})
 		phaseFinalizeMs = time.Since(finalizeStart).Milliseconds()
 
+		searchMu.RLock()
 		displayedSCIDs := make([]string, 0, len(telaSearch))
 		seenDisplayed := make(map[string]struct{}, len(telaSearch))
 		for _, entry := range telaSearch {
@@ -20437,6 +20472,7 @@ func layoutTELA() fyne.CanvasObject {
 			seenDisplayed[entry.SCID] = struct{}{}
 			displayedSCIDs = append(displayedSCIDs, entry.SCID)
 		}
+		searchMu.RUnlock()
 		if !restrictiveMode && len(displayedSCIDs) > 0 {
 			telaSCIDs = displayedSCIDs
 		}
@@ -20573,7 +20609,7 @@ func layoutTELA() fyne.CanvasObject {
 	entrySearch.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
-		normalizedInput := normalizeSearch(s)
+		normalizedInput := normalizeTelaSearch(s)
 
 		if s == "" {
 			if wSelect.Selected == "Favorites" {
@@ -20623,7 +20659,7 @@ func layoutTELA() fyne.CanvasObject {
 			var queryResult []string
 			for _, data := range favorites {
 				for _, split := range strings.Split(data, ";;;") {
-					if strings.Contains(normalizeSearch(split), normalizedInput) {
+					if strings.Contains(normalizeTelaSearch(split), normalizedInput) {
 						queryResult = append(queryResult, data)
 						break
 					}
@@ -20673,7 +20709,7 @@ func layoutTELA() fyne.CanvasObject {
 					}
 
 					for _, split := range data {
-						if strings.Contains(normalizeSearch(split), normalizedInput) {
+						if strings.Contains(normalizeTelaSearch(split), normalizedInput) {
 							queryResult = append(queryResult, ind)
 							break
 						}
@@ -20693,26 +20729,34 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		switch normalizeSearch(query[0]) {
+		switch normalizeTelaSearch(query[0]) {
 		case "name":
-			for _, ind := range telaSearch {
+			searchMu.RLock()
+			snapshot := make([]INDEXwithRatings, len(telaSearch))
+			copy(snapshot, telaSearch)
+			searchMu.RUnlock()
+			for _, ind := range snapshot {
 				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
 				if err != nil {
 					continue
 				}
 
-				if strings.Contains(normalizeSearch(ind.NameHdr), normalizeSearch(query[1])) {
+				if strings.Contains(normalizeTelaSearch(ind.NameHdr), normalizeTelaSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
 		case "durl":
-			for _, ind := range telaSearch {
+			searchMu.RLock()
+			snapshot := make([]INDEXwithRatings, len(telaSearch))
+			copy(snapshot, telaSearch)
+			searchMu.RUnlock()
+			for _, ind := range snapshot {
 				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
 				if err != nil {
 					continue
 				}
 
-				if strings.Contains(normalizeSearch(ind.DURL), normalizeSearch(query[1])) {
+				if strings.Contains(normalizeTelaSearch(ind.DURL), normalizeTelaSearch(query[1])) {
 					queryResult = append(queryResult, ind)
 				}
 			}
@@ -21128,12 +21172,12 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		normalizedInput := normalizeSearch(s)
+		normalizedInput := normalizeTelaSearch(s)
 
 		var queryResult []string
 		for _, data := range history {
 			for _, split := range strings.Split(data, ";;;") {
-				if strings.Contains(normalizeSearch(split), normalizedInput) {
+				if strings.Contains(normalizeTelaSearch(split), normalizedInput) {
 					queryResult = append(queryResult, data)
 					break
 				}

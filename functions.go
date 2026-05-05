@@ -8673,7 +8673,6 @@ func handleImageURL(nameHdr, imageURL string, size fyne.Size) (image *canvas.Ima
 	image.Resource = resource
 	image.SetMinSize(size)
 	image.FillMode = canvas.ImageFillContain
-	image.Refresh()
 
 	return
 }
@@ -8894,4 +8893,34 @@ func (d *Debouncer) Debounce(fn func()) {
 	}
 
 	d.timer = time.AfterFunc(d.duration, fn)
+}
+
+// parseTelaListEntry parses a raw TELA list string into name and SCID
+func parseTelaListEntry(raw string) (name, scid string) {
+	split := strings.Split(raw, ";;;")
+	if len(split) > 0 {
+		name = split[0]
+	}
+	if len(split) > 1 {
+		scid = split[1]
+	}
+	return
+}
+
+// normalizeTelaSearch normalizes a search string for TELA
+func normalizeTelaSearch(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+// isDisplayableTelaApp checks if a TELA index should be displayed in the browser
+func isDisplayableTelaApp(index tela.INDEX) bool {
+	if len(index.DOCs) < 1 {
+		return false
+	}
+
+	if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
+		return false
+	}
+
+	return true
 }

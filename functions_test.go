@@ -112,3 +112,73 @@ func TestBuildINDEXFromVarsErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestParseTelaListEntry(t *testing.T) {
+	tests := []struct {
+		input string
+		name  string
+		scid  string
+	}{
+		{"Name;;;scid123", "Name", "scid123"},
+		{"OnlyName", "OnlyName", ""},
+		{";;;scid456", "", "scid456"},
+		{"", "", ""},
+	}
+
+	for _, tt := range tests {
+		n, s := parseTelaListEntry(tt.input)
+		if n != tt.name || s != tt.scid {
+			t.Errorf("parseTelaListEntry(%q) = %q, %q; want %q, %q", tt.input, n, s, tt.name, tt.scid)
+		}
+	}
+}
+
+func TestNormalizeTelaSearch(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"  Hello  ", "hello"},
+		{"WORLD", "world"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		if got := normalizeTelaSearch(tt.input); got != tt.expected {
+			t.Errorf("normalizeTelaSearch(%q) = %q; want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestTelaHexagonColor(t *testing.T) {
+	if got := telaHexagonColor(7.0); got != resourceTelaHexagonGreen {
+		t.Error("expected green for 7.0")
+	}
+	if got := telaHexagonColor(5.0); got != resourceTelaHexagonYellow {
+		t.Error("expected yellow for 5.0")
+	}
+	if got := telaHexagonColor(2.0); got != resourceTelaHexagonRed {
+		t.Error("expected red for 2.0")
+	}
+}
+
+func TestSessionDomainToString(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"app.wallet", "Dashboard"},
+		{"wallet", "Dashboard"},
+		{"app.explorer", "Asset Explorer"},
+		{"app.tela", "TELA"},
+		{"tela.manager", "TELA"},
+		{"app.send", "Send"},
+		{"random", "Random"},
+	}
+
+	for _, tt := range tests {
+		if got := sessionDomainToString(tt.input); got != tt.expected {
+			t.Errorf("sessionDomainToString(%q) = %q; want %q", tt.input, got, tt.expected)
+		}
+	}
+}
