@@ -124,7 +124,7 @@ func ParseDocType(fileName string) (language string) {
 
 // Parse an INDEX contract string for its DOC SCIDs
 func ParseINDEXForDOCs(code string) (scids []string, err error) {
-	sc, _, err := dvm.ParseSmartContract(code)
+	sc, _, err := dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
 	if err != nil {
 		err = fmt.Errorf("could not parse SCID: %s", err)
 		return
@@ -526,7 +526,7 @@ func ParseSignature(input []byte) (address, c, s string, err error) {
 // ParseHeaders takes a headerType and SC code string then returns a formatted SC string with those header values
 // See ART-NFA and TELA docs for detailed header info
 func ParseHeaders(code string, headerType interface{}) (formatted string, err error) {
-	sc, _, err := dvm.ParseSmartContract(code)
+	sc, _, err := dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
 	if err != nil {
 		err = fmt.Errorf("error parsing code: %s", err)
 		return
@@ -870,13 +870,13 @@ func GetSmartContractFuncNames(code string) (names []string) {
 // it compares all functions other than InitializePrivate/Initialize,
 // contract returned is dvm.SmartContract of v when equal
 func EqualSmartContracts(c, v string) (contract dvm.SmartContract, err error) {
-	sc1, _, err := dvm.ParseSmartContract(c)
+	sc1, _, err := dvm.ParseSmartContract(strings.ReplaceAll(c, "\x00", ""))
 	if err != nil {
 		err = fmt.Errorf("could not parse c contract")
 		return
 	}
 
-	sc2, _, err := dvm.ParseSmartContract(v)
+	sc2, _, err := dvm.ParseSmartContract(strings.ReplaceAll(v, "\x00", ""))
 	if err != nil {
 		err = fmt.Errorf("could not parse v contract")
 		return
@@ -1011,7 +1011,7 @@ func createContractVersions(isDOC bool, modTag string) (versions []Version, scCo
 
 		// Inject the SC version number
 		newCode := fmt.Sprintf("%s%s%s", code[:lineIndex], versionLine+newVersion, code[lineIndex+len(versionLine)+len(newVersion):])
-		sc, _, err := dvm.ParseSmartContract(newCode)
+		sc, _, err := dvm.ParseSmartContract(strings.ReplaceAll(newCode, "\x00", ""))
 		if err != nil {
 			continue
 		}

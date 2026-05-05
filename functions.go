@@ -5200,7 +5200,7 @@ func getContractCode(scid string) (code string, err error) {
 		return
 	}
 
-	code = result.Code
+	code = strings.ReplaceAll(result.Code, "\x00", "")
 
 	return
 }
@@ -6043,7 +6043,7 @@ func getContractHeader(scid crypto.Hash) (name string, desc string, icon string,
 			}
 
 			if key == "C" {
-				code = h.Value.(string)
+				code = strings.ReplaceAll(h.Value.(string), "\x00", "")
 			}
 		}
 	}

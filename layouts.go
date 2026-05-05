@@ -5254,7 +5254,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	var deroFunctions []string
 	var assetFunctions []string
 
-	contract, _, err = dvm.ParseSmartContract(code)
+	contract, _, err = dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
 	if err != nil {
 		contract = dvm.SmartContract{}
 	}
@@ -16645,7 +16645,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 	// Get headers from contract code initialize func
 	if filedata != "" {
-		contract, _, err := dvm.ParseSmartContract(filedata)
+		contract, _, err := dvm.ParseSmartContract(strings.ReplaceAll(filedata, "\x00", ""))
 		if err == nil {
 			for n, f := range contract.Functions {
 				if n == "InitializePrivate" || n == "Initialize" {
@@ -17007,7 +17007,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				}
 
 				entrypoint := entryEntrypoint.Text
-				contract, pos, err := dvm.ParseSmartContract(code)
+				contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
 				if err != nil {
 					logger.Errorf("[Engram] Editor import parsing error: %s %s\n", err, pos)
 					errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
@@ -17112,7 +17112,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				return
 			}
 
-			_, pos, err := dvm.ParseSmartContract(entryCode.Text)
+			_, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
 				errorText.Color = colors.Red
@@ -17132,7 +17132,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				return
 			}
 
-			contract, pos, err := dvm.ParseSmartContract(entryCode.Text)
+			contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
 				errorText.Color = colors.Red
@@ -17367,7 +17367,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				return
 			}
 
-			contract, pos, err := dvm.ParseSmartContract(entryCode.Text)
+			contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
 				errorText.Color = colors.Red
@@ -17473,7 +17473,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				return
 			}
 
-			contract, pos, err := dvm.ParseSmartContract(code)
+			contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
 			if err != nil {
 				logger.Errorf("[Engram] Install SC: %s %s\n", err, pos)
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
