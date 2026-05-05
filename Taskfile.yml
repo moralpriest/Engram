@@ -63,8 +63,8 @@ tasks:
   fmt:
     desc: Format code
     cmds:
-      - gofmt -w -s $(find . -name '*.go' -not -name 'bundled*')
-      - goimports -w $(find . -name '*.go' -not -name 'bundled*')
+      - gofmt -w -s $(find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*")
+      - goimports -w $(find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*")
 
   tidy:
     desc: Tidy go modules
