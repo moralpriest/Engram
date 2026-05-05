@@ -18049,14 +18049,32 @@ func layoutTELA() fyne.CanvasObject {
 
 		launchStatus := canvas.NewText("", colors.Yellow)
 		launchStatus.TextSize = scaleFont(10)
+		launchStatus.Alignment = fyne.TextAlignCenter
 		launchStatus.Hide()
+
+		ratingLabel := canvas.NewText("", colors.Account)
+		ratingLabel.TextSize = scaleFont(10)
+		ratingLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+		ratingHex := canvas.NewImageFromResource(resourceTelaHexagonGreen)
+		ratingHex.SetMinSize(fyne.NewSize(scaleSize(24), scaleSize(28)))
+		ratingHex.FillMode = canvas.ImageFillContain
+
+		ratingContainer := container.NewStack(
+			ratingHex,
+			container.NewCenter(ratingLabel),
+		)
 
 		bottomSpacer := canvas.NewRectangle(color.Transparent)
 		bottomSpacer.SetMinSize(fyne.NewSize(0, 1))
 
+		appIcon := canvas.NewImageFromResource(resourceTelaIcon)
+		appIcon.SetMinSize(fyne.NewSize(scaleSize(26), scaleSize(26)))
+		appIcon.FillMode = canvas.ImageFillContain
+
 		topRow := container.NewBorder(
 			nil, bottomSpacer,
-			container.NewPadded(heartBtn),
+			container.NewHBox(appIcon, heartBtn, ratingContainer),
 			container.NewPadded(startCloseBtn),
 			container.NewPadded(nameLabel),
 		)
@@ -18155,6 +18173,9 @@ func layoutTELA() fyne.CanvasObject {
 		var startCloseBtn *widget.Button
 		var launchProgress *slimProgressBar
 		var launchStatus *canvas.Text
+		var appIcon *canvas.Image
+		var ratingLabel *canvas.Text
+		var ratingHex *canvas.Image
 
 		var walk func(fyne.CanvasObject)
 		walk = func(obj fyne.CanvasObject) {
@@ -18172,8 +18193,16 @@ func layoutTELA() fyne.CanvasObject {
 			case *slimProgressBar:
 				launchProgress = v
 			case *canvas.Text:
-				if launchStatus == nil {
+				if v.Color == colors.Yellow {
 					launchStatus = v
+				} else if v.Color == colors.Account {
+					ratingLabel = v
+				}
+			case *canvas.Image:
+				if appIcon == nil {
+					appIcon = v
+				} else if ratingHex == nil {
+					ratingHex = v
 				}
 			case *fyne.Container:
 				for _, child := range v.Objects {
@@ -18189,6 +18218,56 @@ func layoutTELA() fyne.CanvasObject {
 
 		name, scid := parseTelaListEntry(raw)
 		nameLabel.SetText(name)
+
+		if appIcon != nil {
+			appIcon.Resource = resourceTelaIcon
+			if entry := findTelaSearchEntry(scid); entry != nil && entry.IconHdr != "" {
+				go func(currentSCID, iconURL, nameHdr string, imgObj *canvas.Image) {
+					if img, err := handleImageURL(nameHdr, iconURL, fyne.NewSize(scaleSize(26), scaleSize(26))); err == nil {
+						uiDo(func() {
+							_, checkSCID := parseTelaListEntry(raw)
+							if checkSCID == currentSCID {
+								imgObj.Resource = img.Resource
+								imgObj.Refresh()
+							}
+						})
+					}
+				}(scid, entry.IconHdr, entry.NameHdr, appIcon)
+			}
+			appIcon.Refresh()
+		}
+
+		if ratingLabel != nil && ratingHex != nil {
+			ratingLabel.Text = ""
+			ratingHex.Resource = nil
+
+			if entry := findTelaSearchEntry(scid); entry != nil {
+				if entry.ratings.Average > 0 {
+					ratingLabel.Text = fmt.Sprintf("%.1f", entry.ratings.Average)
+					ratingHex.Resource = telaHexagonColor(entry.ratings.Average)
+				} else {
+					go func(currentSCID string, label *canvas.Text, hex *canvas.Image) {
+						ratings, err := tela.GetRating(currentSCID, session.Daemon, 0)
+						if err == nil && ratings.Average > 0 {
+							uiDo(func() {
+								_, checkSCID := parseTelaListEntry(raw)
+								if checkSCID == currentSCID {
+									label.Text = fmt.Sprintf("%.1f", ratings.Average)
+									hex.Resource = telaHexagonColor(ratings.Average)
+									label.Refresh()
+									hex.Refresh()
+								}
+								if e := findTelaSearchEntry(currentSCID); e != nil {
+									e.ratings = ratings
+								}
+							})
+						}
+					}(scid, ratingLabel, ratingHex)
+				}
+			}
+			ratingLabel.Refresh()
+			ratingHex.Refresh()
+		}
 
 		telaLaunchingSCIDsGlobal.Lock()
 		isLaunching := telaLaunchingSCIDsGlobal.m[scid]
