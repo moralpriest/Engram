@@ -3841,7 +3841,7 @@ func layoutRestore() fyne.CanvasObject {
 				engram.Disk = temp
 				session.Password = ""
 
-				if cachedNetwork == NETWORK_MAINNET {
+				if cachedNetwork == NETWORK_MAINNET || cachedNetwork == NETWORK_SIMULATOR {
 					engram.Disk.SetNetwork(true)
 				} else {
 					engram.Disk.SetNetwork(false)
@@ -4088,7 +4088,7 @@ func layoutRestore() fyne.CanvasObject {
 
 		engram.Disk = temp
 
-		if cachedNetwork == NETWORK_MAINNET {
+		if cachedNetwork == NETWORK_MAINNET || cachedNetwork == NETWORK_SIMULATOR {
 			engram.Disk.SetNetwork(true)
 		} else {
 			engram.Disk.SetNetwork(false)
@@ -17870,7 +17870,6 @@ func layoutTELA() fyne.CanvasObject {
 
 	var telaSearch []INDEXwithRatings
 	var searchMu sync.RWMutex
-
 
 	findTelaSearchEntry := func(scid string) (INDEXwithRatings, bool) {
 		searchMu.RLock()

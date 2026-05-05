@@ -1713,7 +1713,7 @@ func getNetwork() (network string) {
 		} else if string(result) == NETWORK_SIMULATOR {
 			network = NETWORK_SIMULATOR
 			session.Network = network
-			globals.Arguments["--testnet"] = true
+			globals.Arguments["--testnet"] = false
 			globals.Arguments["--simulator"] = true
 			return
 		} else {
@@ -1735,7 +1735,7 @@ func setNetwork(network string) (err error) {
 		globals.Arguments["--simulator"] = false
 	} else if network == NETWORK_SIMULATOR {
 		s = network
-		globals.Arguments["--testnet"] = true
+		globals.Arguments["--testnet"] = false
 		globals.Arguments["--simulator"] = true
 	} else {
 		s = NETWORK_TESTNET
@@ -2261,8 +2261,8 @@ func create() (address string, seed string, err error) {
 				globals.Arguments["--testnet"] = true
 				globals.Arguments["--simulator"] = false
 			case NETWORK_SIMULATOR:
-				engram.Disk.SetNetwork(false)
-				globals.Arguments["--testnet"] = true
+				engram.Disk.SetNetwork(true)
+				globals.Arguments["--testnet"] = false
 				globals.Arguments["--simulator"] = true
 			default:
 				engram.Disk.SetNetwork(true)
@@ -2330,8 +2330,8 @@ func login() {
 		globals.Arguments["--testnet"] = true
 		globals.Arguments["--simulator"] = false
 	case NETWORK_SIMULATOR:
-		engram.Disk.SetNetwork(false)
-		globals.Arguments["--testnet"] = true
+		engram.Disk.SetNetwork(true)
+		globals.Arguments["--testnet"] = false
 		globals.Arguments["--simulator"] = true
 	default:
 		engram.Disk.SetNetwork(true)
@@ -5101,7 +5101,6 @@ func (g *Gnomon) GetTelaCandidates() []string {
 	}
 	return candidates
 }
-
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
 func (g *Gnomon) GetAllSCIDVariableDetails(scid string) (vars []*structures.SCIDVariable) {
@@ -8663,7 +8662,7 @@ func handleImageURL(nameHdr, imageURL string, size fyne.Size) (image *canvas.Ima
 
 	if scImage != "" {
 		// Clean the SVG/image code of any null bytes or leading/trailing whitespace
-		cleanCode := bytes.Trim( []byte(scImage), "\x00\n\r\t ")
+		cleanCode := bytes.Trim([]byte(scImage), "\x00\n\r\t ")
 		resource = fyne.NewStaticResource(nameHdr, cleanCode)
 	} else {
 		resource, err = fyne.LoadResourceFromURLString(imageURL)
