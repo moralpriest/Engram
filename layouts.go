@@ -19674,6 +19674,7 @@ func layoutTELA() fyne.CanvasObject {
 					} else {
 						results.Text = "  Loading cached TELA data..."
 					}
+					searchMu.RUnlock()
 					results.Color = colors.Yellow
 					entrySearch.Enable()
 					entryAddSCID.Enable()
