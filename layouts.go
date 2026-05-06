@@ -17888,8 +17888,8 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				searchMu.Lock()
 				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-				searchData.Set(searching)
 				searchMu.Unlock()
+				searchData.Set(searching)
 				if searchList != nil {
 					searchList.Refresh()
 				}
@@ -18875,8 +18875,8 @@ func layoutTELA() fyne.CanvasObject {
 			searchMu.Lock()
 			searching = []string{}
 			telaSearch = []INDEXwithRatings{}
-			searchData.Set(searching)
 			searchMu.Unlock()
+			searchData.Set(searching)
 
 			generation := currentWalletGeneration()
 
@@ -18940,7 +18940,9 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		if wSelect.Selected == "Search" {
+			searchMu.RLock()
 			searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+			searchMu.RUnlock()
 			_ = searchData.Set(searching)
 			searchList.Refresh()
 		}
@@ -19276,8 +19278,8 @@ func layoutTELA() fyne.CanvasObject {
 			fyne.Do(func() {
 				searchMu.Lock()
 				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-				searchData.Set(searching)
 				searchMu.Unlock()
+				searchData.Set(searching)
 				searchList.Refresh()
 				searchMu.RLock()
 				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
@@ -19303,8 +19305,8 @@ func layoutTELA() fyne.CanvasObject {
 		if !keepProgressVisible && heightDelta == 0 && !rescanRecheck {
 			searchMu.Lock()
 			telaSearch = []INDEXwithRatings{}
-			searchData.Set(nil)
 			searchMu.Unlock()
+			searchData.Set(nil)
 		}
 		labelLastScan.Text = ""
 
@@ -19756,8 +19758,8 @@ func layoutTELA() fyne.CanvasObject {
 				fyne.Do(func() {
 					searchMu.Lock()
 					searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-					searchData.Set(searching)
 					searchMu.Unlock()
+					searchData.Set(searching)
 					searchList.Refresh()
 					searchMu.RLock()
 					if len(telaSearch) > 0 {
@@ -19796,8 +19798,8 @@ func layoutTELA() fyne.CanvasObject {
 				fyne.Do(func() {
 					searchMu.Lock()
 					searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-					searchData.Set(searching)
 					searchMu.Unlock()
+					searchData.Set(searching)
 					searchList.Refresh()
 					searchMu.RLock()
 					results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
@@ -20045,8 +20047,8 @@ func layoutTELA() fyne.CanvasObject {
 						fyne.Do(func() {
 							searchMu.Lock()
 							searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-							searchData.Set(searching)
 							searchMu.Unlock()
+							searchData.Set(searching)
 							searchList.Refresh()
 							searchMu.RLock()
 							results.Text = fmt.Sprintf("  TELA Apps:  %d (prefilter error)", len(telaSearch))
@@ -20459,8 +20461,8 @@ func layoutTELA() fyne.CanvasObject {
 		fyne.Do(func() {
 			searchMu.Lock()
 			searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
-			searchData.Set(searching)
 			searchMu.Unlock()
+			searchData.Set(searching)
 			searchList.Refresh()
 			results.Show()
 			if networkErrorDuringFetch {
@@ -21002,11 +21004,14 @@ func layoutTELA() fyne.CanvasObject {
 	}
 
 	refreshAppsList = func() {
+		searchMu.RLock()
 		if len(telaSearch) == 0 {
+			searchMu.RUnlock()
 			return
 		}
 
 		updated := telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+		searchMu.RUnlock()
 		fyne.Do(func() {
 			searching = updated
 			searchData.Set(searching)

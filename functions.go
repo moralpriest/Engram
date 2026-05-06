@@ -8614,7 +8614,9 @@ func telaFilterSearchExclusions(dURL, searchExclusions string) (err error) {
 }
 
 // Sort and return search display strings for list widget
-func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string, descending bool) (display []string) {
+func telaSearchDisplayAll(in []INDEXwithRatings, sortBy string, descending bool) (display []string) {
+	telaSearch := make([]INDEXwithRatings, len(in))
+	copy(telaSearch, in)
 	activeSCIDs := map[string]struct{}{}
 	for _, serv := range getTelaActiveServers() {
 		activeSCIDs[serv.SCID] = struct{}{}
