@@ -17870,6 +17870,32 @@ func layoutTELA() fyne.CanvasObject {
 
 	var telaSearch []INDEXwithRatings
 	var searchMu sync.RWMutex
+	var sortBy string
+	var sortDescending bool = true
+	searchData = binding.BindStringList(&searching)
+	var refreshTimer *time.Timer
+	var refreshMu sync.Mutex
+	refreshSearch := func() {
+		refreshMu.Lock()
+		defer refreshMu.Unlock()
+		if refreshTimer != nil {
+			refreshTimer.Stop()
+		}
+		refreshTimer = time.AfterFunc(1500*time.Millisecond, func() {
+			fyne.Do(func() {
+				if sortBy != "Ratings" {
+					return
+				}
+				searchMu.Lock()
+				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+				searchData.Set(searching)
+				searchMu.Unlock()
+				if searchList != nil {
+					searchList.Refresh()
+				}
+			})
+		})
+	}
 
 	findTelaSearchEntry := func(scid string) (INDEXwithRatings, bool) {
 		searchMu.RLock()
@@ -17884,13 +17910,42 @@ func layoutTELA() fyne.CanvasObject {
 
 	updateTelaSearchEntry := func(scid string, update func(*INDEXwithRatings)) {
 		searchMu.Lock()
-		defer searchMu.Unlock()
+		updated := false
 		for i := range telaSearch {
 			if telaSearch[i].SCID == scid {
 				update(&telaSearch[i])
-				return
+				updated = true
+				break
 			}
 		}
+		searchMu.Unlock()
+		if updated {
+			refreshSearch()
+		}
+	}
+
+	warmRatings := func() {
+		searchMu.RLock()
+		if len(telaSearch) == 0 {
+			searchMu.RUnlock()
+			return
+		}
+		localSearch := make([]INDEXwithRatings, len(telaSearch))
+		copy(localSearch, telaSearch)
+		searchMu.RUnlock()
+
+		go func() {
+			for _, entry := range localSearch {
+				if entry.ratings.Average == 0 {
+					ratings, err := tela.GetRating(entry.SCID, session.Daemon, 0)
+					if err == nil && (ratings.Average > 0 || ratings.Likes > 0 || ratings.Dislikes > 0) {
+						updateTelaSearchEntry(entry.SCID, func(e *INDEXwithRatings) {
+							e.ratings = ratings
+						})
+					}
+				}
+			}
+		}()
 	}
 
 	setTelaStatus := func(text string, clr color.Color) {
@@ -18032,11 +18087,11 @@ func layoutTELA() fyne.CanvasObject {
 		launchStatus.Alignment = fyne.TextAlignCenter
 		launchStatus.Hide()
 
-		ratingLabel := canvas.NewText("", colors.Account)
+		ratingLabel := canvas.NewText("0.0", colors.Account)
 		ratingLabel.TextSize = scaleFont(10)
 		ratingLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-		ratingHex := canvas.NewImageFromResource(resourceTelaHexagonGreen)
+		ratingHex := canvas.NewImageFromResource(resourceTelaHexagonGray)
 		ratingHex.SetMinSize(fyne.NewSize(scaleSize(24), scaleSize(28)))
 		ratingHex.FillMode = canvas.ImageFillContain
 
@@ -18218,22 +18273,22 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		if ratingLabel != nil && ratingHex != nil {
-			ratingLabel.Text = ""
-			ratingHex.Resource = nil
+			ratingLabel.Text = "0.0"
+			ratingHex.Resource = resourceTelaHexagonGray
 
 			if entry, ok := findTelaSearchEntry(scid); ok {
 				if entry.ratings.Average > 0 {
 					ratingLabel.Text = fmt.Sprintf("%.1f", entry.ratings.Average)
-					ratingHex.Resource = telaHexagonColor(entry.ratings.Average)
+					ratingHex.Resource = telaHexagonColor(entry.ratings)
 				} else {
 					go func(currentSCID string, label *canvas.Text, hex *canvas.Image) {
 						ratings, err := tela.GetRating(currentSCID, session.Daemon, 0)
-						if err == nil && ratings.Average > 0 {
+						if err == nil && (ratings.Average > 0 || ratings.Dislikes > ratings.Likes) {
 							uiDo(func() {
 								_, checkSCID := parseTelaListEntry(raw)
 								if checkSCID == currentSCID {
 									label.Text = fmt.Sprintf("%.1f", ratings.Average)
-									hex.Resource = telaHexagonColor(ratings.Average)
+									hex.Resource = telaHexagonColor(ratings)
 									label.Refresh()
 									hex.Refresh()
 								}
@@ -18606,7 +18661,6 @@ func layoutTELA() fyne.CanvasObject {
 		},
 	)
 
-	searchData = binding.BindStringList(&searching)
 	searchList = widget.NewListWithData(searchData,
 		newTelaListItem,
 		func(di binding.DataItem, co fyne.CanvasObject) {
@@ -18870,6 +18924,28 @@ func layoutTELA() fyne.CanvasObject {
 
 	activateTelaSearch := func() {}
 
+	btnSortOrder := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), nil)
+	if !sortDescending {
+		btnSortOrder.SetIcon(theme.MenuDropUpIcon())
+	}
+	btnSortOrder.Importance = widget.LowImportance
+	btnSortOrder.OnTapped = func() {
+		sortDescending = !sortDescending
+		if sortDescending {
+			btnSortOrder.SetIcon(theme.MenuDropDownIcon())
+			setTELADual("Sort Order", []byte("Descending"))
+		} else {
+			btnSortOrder.SetIcon(theme.MenuDropUpIcon())
+			setTELADual("Sort Order", []byte("Ascending"))
+		}
+
+		if wSelect.Selected == "Search" {
+			searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+			_ = searchData.Set(searching)
+			searchList.Refresh()
+		}
+	}
+
 	btnTela := widget.NewButtonWithIcon("Apps", resourceBrowserGlobeSvg, func() {
 		if wSelect.Selected == "Search" {
 			activateTelaSearch()
@@ -18894,13 +18970,15 @@ func layoutTELA() fyne.CanvasObject {
 	// Horizontal button row (like dashboard)
 	var tabButtons fyne.CanvasObject
 	if isMobileDevice() {
-		tabButtons = container.NewGridWithColumns(3,
+		tabButtons = container.NewGridWithColumns(4,
+			wrapMobileButton(btnSortOrder),
 			wrapMobileButton(btnTela),
 			wrapMobileButton(btnFavorites),
 			wrapMobileButton(btnHistory),
 		)
 	} else {
 		tabButtons = container.NewHBox(
+			btnSortOrder,
 			btnTela,
 			btnFavorites,
 			btnHistory,
@@ -18910,7 +18988,7 @@ func layoutTELA() fyne.CanvasObject {
 	btnShutdown := widget.NewButton("Shutdown TELA", nil)
 
 	var restrictiveMode, rescanRecheck bool
-	var lastScan, searchExclusions, sortBy string
+	var lastScan, searchExclusions string
 	var minLikes float64
 	var telaSCIDs []string
 	var sAll = map[string]bool{}
@@ -18938,6 +19016,12 @@ func layoutTELA() fyne.CanvasObject {
 		sortBy = storedSortBy
 	} else {
 		sortBy = sortByOptions[0]
+	}
+
+	if storedSortOrder, found := getTELADual("Sort Order"); found {
+		if storedSortOrder == "Ascending" {
+			sortDescending = false
+		}
 	}
 
 	restrictiveMode = false // Default OFF (unrestrictive)
@@ -19134,6 +19218,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 		}
 		searchMu.Unlock()
+		warmRatings()
 
 		// Check for existing progress and handle resume scenarios
 		progress := loadScanProgress()
@@ -19184,7 +19269,7 @@ func layoutTELA() fyne.CanvasObject {
 			keepProgressVisible = false
 			fyne.Do(func() {
 				searchMu.Lock()
-				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 				searchData.Set(searching)
 				searchMu.Unlock()
 				searchList.Refresh()
@@ -19660,10 +19745,11 @@ func layoutTELA() fyne.CanvasObject {
 							searchMu.Unlock()
 						}
 					}
+					warmRatings()
 				}
 				fyne.Do(func() {
 					searchMu.Lock()
-					searching = telaSearchDisplayAll(telaSearch, sortBy)
+					searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 					searchData.Set(searching)
 					searchMu.Unlock()
 					searchList.Refresh()
@@ -19703,7 +19789,7 @@ func layoutTELA() fyne.CanvasObject {
 				completeTelaScanProgress()
 				fyne.Do(func() {
 					searchMu.Lock()
-					searching = telaSearchDisplayAll(telaSearch, sortBy)
+					searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 					searchData.Set(searching)
 					searchMu.Unlock()
 					searchList.Refresh()
@@ -19952,7 +20038,7 @@ func layoutTELA() fyne.CanvasObject {
 						logger.Printf("[TELA] Prefilter failed but %d cached results available, showing them\n", len(telaSearch))
 						fyne.Do(func() {
 							searchMu.Lock()
-							searching = telaSearchDisplayAll(telaSearch, sortBy)
+							searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 							searchData.Set(searching)
 							searchMu.Unlock()
 							searchList.Refresh()
@@ -20366,7 +20452,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		fyne.Do(func() {
 			searchMu.Lock()
-			searching = telaSearchDisplayAll(telaSearch, sortBy)
+			searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 			searchData.Set(searching)
 			searchMu.Unlock()
 			searchList.Refresh()
@@ -20384,6 +20470,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			results.Refresh()
 		})
+		warmRatings()
 
 		timeNow := time.Now().Format(time.RFC822)
 		StoreEncryptedValue("TELA Search", []byte("Last Scan"), []byte(timeNow))
@@ -20628,7 +20715,7 @@ func layoutTELA() fyne.CanvasObject {
 				results.Refresh()
 			} else {
 				if len(telaSearch) > 0 {
-					searching = telaSearchDisplayAll(telaSearch, sortBy)
+					searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 					_ = searchData.Set(searching)
 					if refreshAppsList != nil {
 						refreshAppsList()
@@ -20717,7 +20804,7 @@ func layoutTELA() fyne.CanvasObject {
 				}
 			}
 
-			searching = telaSearchDisplayAll(queryResult, sortBy)
+			searching = telaSearchDisplayAll(queryResult, sortBy, sortDescending)
 			searchData.Set(searching)
 			searchList.Refresh()
 
@@ -20797,7 +20884,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		searching = telaSearchDisplayAll(queryResult, sortBy)
+		searching = telaSearchDisplayAll(queryResult, sortBy, sortDescending)
 		searchData.Set(searching)
 		searchList.Refresh()
 
@@ -20913,7 +21000,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		updated := telaSearchDisplayAll(telaSearch, sortBy)
+		updated := telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 		fyne.Do(func() {
 			searching = updated
 			searchData.Set(searching)
@@ -21217,7 +21304,7 @@ func layoutTELA() fyne.CanvasObject {
 
 		if len(searching) > 0 || len(telaSearch) > 0 {
 			if len(searching) == 0 && len(telaSearch) > 0 {
-				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 				_ = searchData.Set(searching)
 			}
 			if refreshAppsList != nil {
@@ -21243,7 +21330,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			telaSearch = deduplicateTelaSearch(telaSearch)
 			if len(telaSearch) > 0 {
-				searching = telaSearchDisplayAll(telaSearch, sortBy)
+				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 				_ = searchData.Set(searching)
 				searchList.Refresh()
 				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
@@ -22537,7 +22624,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	labelRatingAverage.Alignment = fyne.TextAlignCenter
 	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
 
-	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(ratings.Average))
+	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(ratings))
 	hexagonImg.SetMinSize(fyne.NewSize(80, 86))
 
 	go func() {
@@ -22551,7 +22638,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 			ratings = freshRatings
 			labelRatingAverage.Text = fmt.Sprintf("%.1f", ratings.Average)
 			labelRatingAverage.Refresh()
-			hexagonImg.Resource = telaHexagonColor(ratings.Average)
+			hexagonImg.Resource = telaHexagonColor(ratings)
 			hexagonImg.Refresh()
 		})
 

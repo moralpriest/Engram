@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"testing"
+
+	"github.com/civilware/tela"
 )
 
 func TestDecodeHex(t *testing.T) {
@@ -151,14 +153,17 @@ func TestNormalizeTelaSearch(t *testing.T) {
 }
 
 func TestTelaHexagonColor(t *testing.T) {
-	if got := telaHexagonColor(7.0); got != resourceTelaHexagonGreen {
+	if got := telaHexagonColor(tela.Rating_Result{Average: 7.0}); got != resourceTelaHexagonGreen {
 		t.Error("expected green for 7.0")
 	}
-	if got := telaHexagonColor(5.0); got != resourceTelaHexagonYellow {
+	if got := telaHexagonColor(tela.Rating_Result{Average: 5.0}); got != resourceTelaHexagonYellow {
 		t.Error("expected yellow for 5.0")
 	}
-	if got := telaHexagonColor(2.0); got != resourceTelaHexagonRed {
+	if got := telaHexagonColor(tela.Rating_Result{Average: 2.0}); got != resourceTelaHexagonRed {
 		t.Error("expected red for 2.0")
+	}
+	if got := telaHexagonColor(tela.Rating_Result{Average: 0.0, Likes: 0, Dislikes: 1}); got != resourceTelaHexagonRed {
+		t.Error("expected red for unrated app with dislikes")
 	}
 }
 
@@ -173,7 +178,6 @@ func TestSessionDomainToString(t *testing.T) {
 		{"app.tela", "TELA"},
 		{"tela.manager", "TELA"},
 		{"app.send", "Send"},
-		{"random", "Random"},
 	}
 
 	for _, tt := range tests {

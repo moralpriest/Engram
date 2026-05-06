@@ -80,8 +80,6 @@ type SmartContract struct {
 // SC authors must make sure code coverage is 100 %
 // we are doing away with AST
 func ParseSmartContract(src_code string) (SC SmartContract, pos string, err error) {
-	src_code = strings.ReplaceAll(src_code, "\x00", "")
-
 
 	defer func() {
 		if r := recover(); r != nil {

@@ -5387,7 +5387,20 @@ func telaRatingColor(r uint64) color.Color {
 }
 
 // Color for the TELA average rating number hexagon
-func telaHexagonColor(r float64) fyne.Resource {
+func telaHexagonColor(ratings tela.Rating_Result) fyne.Resource {
+	// If there are more dislikes than likes, it's a poor app - show Red
+	if ratings.Dislikes > ratings.Likes {
+		return resourceTelaHexagonRed
+	}
+
+	r := ratings.Average
+	if r <= 0 {
+		return resourceTelaHexagonGray
+	}
+
+	if r >= 9.0 {
+		return resourceTelaHexagonPurple
+	}
 	if r > 6.5 {
 		return resourceTelaHexagonGreen
 	} else if r > 3.2 {
@@ -5661,7 +5674,7 @@ func rateTELAOverlay(name, scid string) {
 	labelRatingAverage.Alignment = fyne.TextAlignCenter
 	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
 
-	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(5.5))
+	hexagonImg := canvas.NewImageFromResource(telaHexagonColor(tela.Rating_Result{Average: 5.5}))
 	hexagonImg.SetMinSize(fyne.NewSize(80, 86))
 
 	hexagonContainer := container.NewStack(
@@ -5788,7 +5801,7 @@ func rateTELAOverlay(name, scid string) {
 		ratingFloat := float64((ratingVal*10)+int(detailSlider.Value)) / 10.0
 		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
 		labelRatingAverage.Refresh()
-		hexagonImg.Resource = telaHexagonColor(ratingFloat)
+		hexagonImg.Resource = telaHexagonColor(tela.Rating_Result{Average: ratingFloat})
 		hexagonImg.Refresh()
 		btnConfirm.Enable()
 	}
@@ -5801,7 +5814,7 @@ func rateTELAOverlay(name, scid string) {
 		ratingFloat := float64((ratingVal*10)+detailVal) / 10.0
 		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
 		labelRatingAverage.Refresh()
-		hexagonImg.Resource = telaHexagonColor(ratingFloat)
+		hexagonImg.Resource = telaHexagonColor(tela.Rating_Result{Average: ratingFloat})
 		hexagonImg.Refresh()
 		btnConfirm.Enable()
 	}
@@ -8562,24 +8575,16 @@ func getLikesRatio(scid, dURL, searchExclusions string, minLikes float64) (ratio
 		return
 	}
 
-	_, up := gnomon.GetSCIDValuesByKey(scid, "likes")
-	_, down := gnomon.GetSCIDValuesByKey(scid, "dislikes")
-
-	if up == nil || down == nil || len(up) == 0 || len(down) == 0 {
-		ratings.Likes = 0
-		ratings.Dislikes = 0
-		ratio = 50
+	ratings, err = tela.GetRating(scid, session.Daemon, 0)
+	if err != nil {
 		return
 	}
 
-	ratings.Likes = up[0]
-	ratings.Dislikes = down[0]
-
-	total := float64(up[0] + down[0])
+	total := float64(ratings.Likes + ratings.Dislikes)
 	if total == 0 {
 		ratio = 50
 	} else {
-		ratio = (float64(up[0]) / total) * 100
+		ratio = (float64(ratings.Likes) / total) * 100
 	}
 
 	if ratio < minLikes {
@@ -8603,43 +8608,82 @@ func telaFilterSearchExclusions(dURL, searchExclusions string) (err error) {
 }
 
 // Sort and return search display strings for list widget
-func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string) (display []string) {
+func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string, descending bool) (display []string) {
 	activeSCIDs := map[string]struct{}{}
 	for _, serv := range getTelaActiveServers() {
 		activeSCIDs[serv.SCID] = struct{}{}
 	}
 
 	switch sortBy {
-	case "Z-A":
+	case "A-Z", "Z-A":
 		sort.Slice(telaSearch, func(i, j int) bool {
 			_, iActive := activeSCIDs[telaSearch[i].SCID]
 			_, jActive := activeSCIDs[telaSearch[j].SCID]
 			if iActive != jActive {
 				return iActive
 			}
-			return telaSearch[i].NameHdr > telaSearch[j].NameHdr
-		})
-	case "A-Z":
-		sort.Slice(telaSearch, func(i, j int) bool {
-			_, iActive := activeSCIDs[telaSearch[i].SCID]
-			_, jActive := activeSCIDs[telaSearch[j].SCID]
-			if iActive != jActive {
-				return iActive
+			if descending {
+				return telaSearch[i].NameHdr > telaSearch[j].NameHdr
 			}
 			return telaSearch[i].NameHdr < telaSearch[j].NameHdr
 		})
 	default: // Ratings
 		sort.Slice(telaSearch, func(i, j int) bool {
+			iNeg := telaSearch[i].ratings.Dislikes > telaSearch[i].ratings.Likes
+			jNeg := telaSearch[j].ratings.Dislikes > telaSearch[j].ratings.Likes
+
+			if descending {
+				// Default: Highest to Lowest, unrated at bottom, negative at very bottom
+				if iNeg != jNeg {
+					return !iNeg // Non-negative apps come first
+				}
+
+				if telaSearch[i].ratings.Average != telaSearch[j].ratings.Average {
+					return telaSearch[i].ratings.Average > telaSearch[j].ratings.Average
+				}
+			} else {
+				// Ascending: Unrated (0.0) at top, then lowest to highest, negative at bottom
+				iUnrated := telaSearch[i].ratings.Average == 0 && !iNeg
+				jUnrated := telaSearch[j].ratings.Average == 0 && !jNeg
+
+				if iUnrated != jUnrated {
+					return iUnrated // Unrated comes first
+				}
+
+				if iNeg != jNeg {
+					return !iNeg // Rated/Unrated before Negative
+				}
+
+				if telaSearch[i].ratings.Average != telaSearch[j].ratings.Average {
+					return telaSearch[i].ratings.Average < telaSearch[j].ratings.Average
+				}
+			}
+
+			// If averages are equal, check if one is currently active
 			_, iActive := activeSCIDs[telaSearch[i].SCID]
 			_, jActive := activeSCIDs[telaSearch[j].SCID]
 			if iActive != jActive {
 				return iActive
 			}
-			if telaSearch[i].ratings.Likes != telaSearch[j].ratings.Likes {
-				return telaSearch[i].ratings.Likes > telaSearch[j].ratings.Likes
+
+			// Finally sort by positive likes, then least dislikes
+			if descending {
+				if telaSearch[i].ratings.Likes != telaSearch[j].ratings.Likes {
+					return telaSearch[i].ratings.Likes > telaSearch[j].ratings.Likes
+				}
+				if telaSearch[i].ratings.Dislikes != telaSearch[j].ratings.Dislikes {
+					return telaSearch[i].ratings.Dislikes < telaSearch[j].ratings.Dislikes
+				}
+			} else {
+				if telaSearch[i].ratings.Likes != telaSearch[j].ratings.Likes {
+					return telaSearch[i].ratings.Likes < telaSearch[j].ratings.Likes
+				}
+				if telaSearch[i].ratings.Dislikes != telaSearch[j].ratings.Dislikes {
+					return telaSearch[i].ratings.Dislikes > telaSearch[j].ratings.Dislikes
+				}
 			}
 
-			return telaSearch[i].ratings.Dislikes < telaSearch[j].ratings.Dislikes
+			return telaSearch[i].NameHdr < telaSearch[j].NameHdr
 		})
 	}
 
@@ -8651,7 +8695,16 @@ func telaSearchDisplayAll(telaSearch []INDEXwithRatings, sortBy string) (display
 }
 
 // Validate the URL as URI or SC image and return it as a canvas.Image
+var telaImageCache sync.Map
+
 func handleImageURL(nameHdr, imageURL string, size fyne.Size) (image *canvas.Image, err error) {
+	if res, ok := telaImageCache.Load(imageURL); ok {
+		image = canvas.NewImageFromResource(res.(fyne.Resource))
+		image.SetMinSize(size)
+		image.FillMode = canvas.ImageFillContain
+		return
+	}
+
 	scImage, err := tela.ValidateImageURL(imageURL, session.Daemon)
 	if err != nil {
 		return
@@ -8669,6 +8722,18 @@ func handleImageURL(nameHdr, imageURL string, size fyne.Size) (image *canvas.Ima
 		if err != nil {
 			return
 		}
+	}
+
+	if resource != nil {
+		// Filter out HTML masked as images (prevents SVG parser console spam)
+		content := resource.Content()
+		if len(content) > 10 {
+			snippet := strings.ToLower(string(content[:min(len(content), 500)]))
+			if strings.Contains(snippet, "<html") || strings.Contains(snippet, "<!doctype") {
+				return nil, fmt.Errorf("URL returned HTML instead of image")
+			}
+		}
+		telaImageCache.Store(imageURL, resource)
 	}
 
 	image.Resource = resource

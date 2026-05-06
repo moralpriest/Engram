@@ -24,6 +24,7 @@ require (
 	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/svanichkin/gocam v0.1.0
+	golang.org/x/image v0.36.0
 	mvdan.cc/xurls/v2 v2.6.0
 )
 
@@ -31,6 +32,7 @@ require (
 	fyne.io/systray v1.12.0 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/VictoriaMetrics/metrics v1.41.2 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/beevik/ntp v1.4.3 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/caarlos0/env/v6 v6.10.1 // indirect
@@ -95,7 +97,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/image v0.36.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect

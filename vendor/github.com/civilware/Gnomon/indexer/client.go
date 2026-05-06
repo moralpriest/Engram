@@ -305,7 +305,7 @@ func (client *Client) GetSCVariables(scid string, topoheight int64, keysuint64 [
 // GetSCVariables so that batch callers can reuse it without re-issuing RPC calls.
 func parseGetSCResult(scid string, getSCResults rpc.GetSC_Result, keysuint64 []uint64, keysstring []string, keysbytes [][]byte) (variables []*structures.SCIDVariable, code string, balances map[string]uint64) {
 	isAlpha := regexp.MustCompile(`^[A-Za-z]+$`).MatchString
-	code = strings.ReplaceAll(getSCResults.Code, "\x00", "")
+	code = getSCResults.Code
 	balances = getSCResults.Balances
 
 	for k, v := range getSCResults.VariableStringKeys {
@@ -333,7 +333,7 @@ func parseGetSCResult(scid string, getSCResults rpc.GetSC_Result, keysuint64 []u
 				currVar.Value = addr.String()
 			} else {
 				// Check specific patterns which reflect STORE() operations of TXID(), SCID(), etc.
-				str := strings.ReplaceAll(string(dstr), "\x00", "")
+				str := string(dstr)
 				if len(str) == crypto.HashLength {
 					var h crypto.Hash
 					copy(h[:crypto.HashLength], []byte(str)[:])
@@ -353,7 +353,7 @@ func parseGetSCResult(scid string, getSCResults rpc.GetSC_Result, keysuint64 []u
 			}
 		default:
 			// non-string/uint64 (shouldn't be here actually since it's either uint64 or string conversion)
-			str := strings.ReplaceAll(fmt.Sprintf("%v", cval), "\x00", "")
+			str := fmt.Sprintf("%v", cval)
 			// Check specific patterns which reflect STORE() operations of TXID(), SCID(), etc.
 			if len(str) == crypto.HashLength {
 				var h crypto.Hash
@@ -389,7 +389,7 @@ func parseGetSCResult(scid string, getSCResults rpc.GetSC_Result, keysuint64 []u
 				currVar.Value = addr.String()
 			} else {
 				// Check specific patterns which reflect STORE() operations of TXID(), SCID(), etc.
-				str := strings.ReplaceAll(string(decd), "\x00", "")
+				str := string(decd)
 				if len(str) == crypto.HashLength {
 					var h crypto.Hash
 					copy(h[:crypto.HashLength], []byte(str)[:])
@@ -413,7 +413,7 @@ func parseGetSCResult(scid string, getSCResults rpc.GetSC_Result, keysuint64 []u
 			currVar.Value = uint64(cval)
 		default:
 			// non-string/uint64 (shouldn't be here actually since it's either uint64 or string conversion)
-			str := strings.ReplaceAll(fmt.Sprintf("%v", cval), "\x00", "")
+			str := fmt.Sprintf("%v", cval)
 			// Check specific patterns which reflect STORE() operations of TXID(), SCID(), etc.
 			if len(str) == crypto.HashLength {
 				var h crypto.Hash

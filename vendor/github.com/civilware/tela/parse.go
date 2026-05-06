@@ -26,6 +26,44 @@ const (
 	MAX_INDEX_INSTALL_SIZE = float64(11.64) // INDEX SC file size should be below this
 )
 
+// isShardFileName checks if fileName matches the DocShard pattern: name-N.ext or name-N.ext.gz
+func isShardFileName(fileName string) bool {
+	if fileName == "" {
+		return false
+	}
+
+	// Remove compression extension if present
+	fileName = TrimCompressedExt(fileName)
+
+	// Must have an extension after the number
+	ext := filepath.Ext(fileName)
+	if ext == "" {
+		return false
+	}
+
+	// Strip the remaining extension (e.g. .js) to get name-N
+	base := strings.TrimSuffix(fileName, ext)
+
+	// Find the last dash
+	lastDash := strings.LastIndex(base, "-")
+	if lastDash == -1 || lastDash == 0 {
+		return false
+	}
+
+	// Check if suffix after dash is a positive integer
+	suffix := base[lastDash+1:]
+	if suffix == "" {
+		return false
+	}
+
+	_, err := strconv.Atoi(suffix)
+	if err != nil {
+		return false
+	}
+
+	return true
+}
+
 // Append docCode to TELA-DOC-1 smart contract
 func appendDocCode(code, docCode string) (newCode string, err error) {
 	docSize := GetCodeSizeInKB(docCode)
@@ -870,13 +908,16 @@ func GetSmartContractFuncNames(code string) (names []string) {
 // it compares all functions other than InitializePrivate/Initialize,
 // contract returned is dvm.SmartContract of v when equal
 func EqualSmartContracts(c, v string) (contract dvm.SmartContract, err error) {
-	sc1, _, err := dvm.ParseSmartContract(strings.ReplaceAll(c, "\x00", ""))
+	c = strings.ReplaceAll(c, "\x00", "")
+	v = strings.ReplaceAll(v, "\x00", "")
+
+	sc1, _, err := dvm.ParseSmartContract(c)
 	if err != nil {
 		err = fmt.Errorf("could not parse c contract")
 		return
 	}
 
-	sc2, _, err := dvm.ParseSmartContract(strings.ReplaceAll(v, "\x00", ""))
+	sc2, _, err := dvm.ParseSmartContract(v)
 	if err != nil {
 		err = fmt.Errorf("could not parse v contract")
 		return

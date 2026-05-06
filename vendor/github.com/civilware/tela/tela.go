@@ -111,6 +111,24 @@ type TELA struct {
 		RPC          *jrpc2.Client
 		lastEndpoint string
 	}
+	varsCache struct {
+		sync.RWMutex
+		vars map[string]cachedVars
+	}
+	ratingCache struct {
+		sync.RWMutex
+		ratings map[string]cachedRating
+	}
+}
+
+type cachedVars struct {
+	vars map[string]interface{}
+	at   time.Time
+}
+
+type cachedRating struct {
+	ratings Rating_Result
+	at      time.Time
 }
 
 var (
@@ -285,6 +303,7 @@ func IsAcceptedLanguage(language string) bool {
 
 // Parse a TELA DOC that has been formatted for DocShards and get its code shard
 func parseDocShardCode(fileName, code string) (shard []byte, err error) {
+	code = strings.ReplaceAll(code, "\x00", "")
 	start := strings.Index(code, "/*")
 	end := strings.Index(code, "*/")
 
@@ -303,6 +322,7 @@ func parseDocShardCode(fileName, code string) (shard []byte, err error) {
 
 // Parse a TELA DOC for its multiline comment
 func parseDocCode(code string) (comment string, err error) {
+	code = strings.ReplaceAll(code, "\x00", "")
 	start := strings.Index(code, "/*")
 	end := strings.Index(code, "*/")
 
@@ -366,7 +386,7 @@ func parseAndSaveTELADoc(filePath, code, doctype, compression string) (err error
 // Decode a hex string if possible otherwise return it
 func decodeHexString(hexStr string) string {
 	if decode, err := hex.DecodeString(hexStr); err == nil {
-		return string(decode)
+		return strings.ReplaceAll(string(decode), "\x00", "")
 	}
 
 	return hexStr
@@ -443,7 +463,7 @@ func (t *TELA) callRPC(ctx context.Context, endpoint, method string, params, res
 			return err
 		}
 
-		err = client.CallResult(ctx, method, params, &result)
+		err = client.CallResult(ctx, method, params, result)
 		if err == nil {
 			return nil
 		}
@@ -508,6 +528,24 @@ func getTXID(txid, endpoint string) (txidAsHex string, height int64, err error) 
 
 // Get the current state of all string keys in a smart contract
 func getContractVars(scid, endpoint string) (vars map[string]interface{}, err error) {
+	tela.varsCache.RLock()
+	if tela.varsCache.vars == nil {
+		tela.varsCache.RUnlock()
+		tela.varsCache.Lock()
+		if tela.varsCache.vars == nil {
+			tela.varsCache.vars = make(map[string]cachedVars)
+		}
+		tela.varsCache.Unlock()
+		tela.varsCache.RLock()
+	}
+
+	if cv, ok := tela.varsCache.vars[scid+endpoint]; ok && time.Since(cv.at) < 30*time.Second {
+		vars = cv.vars
+		tela.varsCache.RUnlock()
+		return
+	}
+	tela.varsCache.RUnlock()
+
 	var params = rpc.GetSC_Params{SCID: scid, Variables: true, Code: false}
 	var result rpc.GetSC_Result
 
@@ -517,6 +555,10 @@ func getContractVars(scid, endpoint string) (vars map[string]interface{}, err er
 	}
 
 	vars = result.VariableStringKeys
+
+	tela.varsCache.Lock()
+	tela.varsCache.vars[scid+endpoint] = cachedVars{vars: vars, at: time.Now()}
+	tela.varsCache.Unlock()
 
 	return
 }
@@ -536,7 +578,7 @@ func getContractCode(scid, endpoint string) (code string, err error) {
 		return
 	}
 
-	code = result.Code
+	code = strings.ReplaceAll(result.Code, "\x00", "")
 
 	return
 }
@@ -556,7 +598,7 @@ func getContractCodeAtHeight(height int64, scid, endpoint string) (code string, 
 		return
 	}
 
-	code = result.Code
+	code = strings.ReplaceAll(result.Code, "\x00", "")
 
 	return
 }
@@ -675,26 +717,6 @@ func Transfer(wallet *walletapi.Wallet_Disk, ringsize uint64, transfers []rpc.Tr
 	return
 }
 
-// isShardFileName returns true if name matches the DocShard fragment naming pattern
-// (e.g. file-3.js or file-3.js.gz) where the numeric suffix is a positive integer.
-// Such files are fragments of a single compressed stream and must NOT be decompressed
-// individually — ConstructFromShards handles decompression after concatenation.
-func isShardFileName(name string) bool {
-	base := name
-	// Strip compression extension first (e.g. .gz)
-	if IsCompressedExt(filepath.Ext(base)) {
-		base = strings.TrimSuffix(base, filepath.Ext(base))
-	}
-	// Strip the remaining extension (e.g. .js)
-	base = strings.TrimSuffix(base, filepath.Ext(base))
-	// Check for name-N pattern
-	parts := strings.Split(base, "-")
-	if len(parts) < 2 {
-		return false
-	}
-	_, parseErr := strconv.Atoi(parts[len(parts)-1])
-	return parseErr == nil
-}
 
 // Clone a TELA-DOC SCID to path from endpoint
 func cloneDOC(scid, docNum, path, endpoint string, cancelled ...*atomic.Bool) (clone Cloning, err error) {
@@ -1858,6 +1880,25 @@ func DeleteVar(wallet *walletapi.Wallet_Disk, scid, key string) (txid string, er
 // Get the rating of a TELA scid from endpoint. Result is all individual ratings, likes and dislikes and the average rating category.
 // Using height will filter the individual ratings (including only >= height) this will not effect like and dislike results
 func GetRating(scid, endpoint string, height uint64) (ratings Rating_Result, err error) {
+	cacheKey := fmt.Sprintf("%s%s%d", scid, endpoint, height)
+	tela.ratingCache.RLock()
+	if tela.ratingCache.ratings == nil {
+		tela.ratingCache.RUnlock()
+		tela.ratingCache.Lock()
+		if tela.ratingCache.ratings == nil {
+			tela.ratingCache.ratings = make(map[string]cachedRating)
+		}
+		tela.ratingCache.Unlock()
+		tela.ratingCache.RLock()
+	}
+
+	if cr, ok := tela.ratingCache.ratings[cacheKey]; ok && time.Since(cr.at) < 30*time.Second {
+		ratings = cr.ratings
+		tela.ratingCache.RUnlock()
+		return
+	}
+	tela.ratingCache.RUnlock()
+
 	var vars map[string]interface{}
 	vars, err = getContractVars(scid, endpoint)
 	if err != nil {
@@ -1887,7 +1928,8 @@ func GetRating(scid, endpoint string, height uint64) (ratings Rating_Result, err
 	}
 
 	for k, v := range vars {
-		switch k {
+		key := decodeHexString(k)
+		switch key {
 		case "likes":
 			if f, ok := v.(float64); ok {
 				ratings.Likes = uint64(f)
@@ -1897,7 +1939,11 @@ func GetRating(scid, endpoint string, height uint64) (ratings Rating_Result, err
 				ratings.Dislikes = uint64(f)
 			}
 		default:
-			_, err := globals.ParseValidateAddress(k)
+			if len(key) < 60 || (!strings.HasPrefix(key, "dero") && !strings.HasPrefix(key, "deto")) {
+				continue
+			}
+
+			_, err := globals.ParseValidateAddress(key)
 			if err == nil {
 				if rStr, ok := v.(string); ok {
 					split := strings.Split(decodeHexString(rStr), "_")
@@ -1919,7 +1965,7 @@ func GetRating(scid, endpoint string, height uint64) (ratings Rating_Result, err
 						continue // not a valid rating number
 					}
 
-					ratings.Ratings = append(ratings.Ratings, Rating{Address: k, Rating: r, Height: h})
+					ratings.Ratings = append(ratings.Ratings, Rating{Address: key, Rating: r, Height: h})
 				}
 			}
 		}
@@ -1927,15 +1973,24 @@ func GetRating(scid, endpoint string, height uint64) (ratings Rating_Result, err
 
 	sort.Slice(ratings.Ratings, func(i, j int) bool { return ratings.Ratings[i].Height > ratings.Ratings[j].Height })
 
-	// Gather average rating from the category sum only
+	// Gather average rating from the full rating value (0-99) to include detail granularity
 	var sum uint64
 	for _, num := range ratings.Ratings {
-		sum += num.Rating / 10
+		sum += num.Rating
 	}
 
-	if sum > 0 {
-		ratings.Average = float64(sum) / float64(len(ratings.Ratings))
+	if len(ratings.Ratings) > 0 {
+		ratings.Average = float64(sum) / (float64(len(ratings.Ratings)) * 10)
+		// Ensure that even very low ratings don't result in an exact 0.0
+		// so they can be distinguished from unrated apps.
+		if ratings.Average <= 0 {
+			ratings.Average = 0.01
+		}
 	}
+
+	tela.ratingCache.Lock()
+	tela.ratingCache.ratings[cacheKey] = cachedRating{ratings: ratings, at: time.Now()}
+	tela.ratingCache.Unlock()
 
 	return
 }

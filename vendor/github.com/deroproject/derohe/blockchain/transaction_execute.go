@@ -316,7 +316,7 @@ func (chain *Blockchain) process_transaction_sc(cache map[crypto.Hash]*graviton.
 		pos := ""
 		var sc dvm.SmartContract
 
-		if sc, pos, err = dvm.ParseSmartContract(strings.ReplaceAll(sc_code, "\x00", "")); err != nil {
+		if sc, pos, err = dvm.ParseSmartContract(sc_code); err != nil {
 			logger.V(2).Error(err, "error Parsing sc", "txid", txhash, "pos", pos)
 			break
 		}

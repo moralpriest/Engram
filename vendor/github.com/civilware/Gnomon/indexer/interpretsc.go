@@ -1,8 +1,6 @@
 package indexer
 
 import (
-	"strings"
-
 	"github.com/deroproject/derohe/dvm"
 )
 
@@ -47,7 +45,7 @@ func (indexer *Indexer) InterpretSC(scid string, code string) {
 			}
 	*/
 
-	contract, _, err := dvm.ParseSmartContract(strings.ReplaceAll(code, "\x00", ""))
+	contract, _, err := dvm.ParseSmartContract(code)
 	if err != nil {
 		logger.Errorf("[InterpretSC] ERR on SC Parse SCID '%s' - %v", scid, err)
 		return
