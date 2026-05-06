@@ -5632,6 +5632,9 @@ func rateTELAOverlay(name, scid string) {
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(scalePoint(320, 1))
+
 	if len(name) > 30 {
 		name = fmt.Sprintf("%s...", name[0:30])
 	}
@@ -5789,9 +5792,12 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer,
 		errorText,
 		rectSpacer,
-		rectSpacer,
-		rectSpacer,
-		wrapMobileButton(btnConfirm),
+		container.NewCenter(
+			container.NewStack(
+				rectWidth90,
+				wrapMobileButton(btnConfirm),
+			),
+		),
 	)
 
 	ratingSlider.OnChanged = func(value float64) {

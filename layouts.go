@@ -18970,8 +18970,14 @@ func layoutTELA() fyne.CanvasObject {
 	// Horizontal button row (like dashboard)
 	var tabButtons fyne.CanvasObject
 	if isMobileDevice() {
-		tabButtons = container.NewGridWithColumns(4,
-			wrapMobileButton(btnSortOrder),
+		// Use HBox instead of Grid on mobile to allow wide buttons (with text) to fit correctly.
+		// We use a narrower size enforcer for the sort button to save space.
+		sortSize := canvas.NewRectangle(color.Transparent)
+		sortSize.SetMinSize(scalePoint(40, 48))
+		btnSortOrderMobile := container.NewStack(sortSize, btnSortOrder)
+
+		tabButtons = container.NewHBox(
+			btnSortOrderMobile,
 			wrapMobileButton(btnTela),
 			wrapMobileButton(btnFavorites),
 			wrapMobileButton(btnHistory),
@@ -21903,7 +21909,7 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.58))
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+	rectWidth90.SetMinSize(scalePoint(320, 1))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
@@ -22762,7 +22768,12 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						labelStatus,
 						rectSpacer,
-						wrapMobileButton(btnServer),
+						container.NewCenter(
+							container.NewStack(
+								rectWidth90,
+								wrapMobileButton(btnServer),
+							),
+						),
 						rectSpacer,
 						launchStatus,
 						launchProgress,
@@ -22791,9 +22802,16 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 						rectSpacer,
 						rectSpacer,
 						rectSpacer,
-						wrapMobileButton(widget.NewButton("Rate", func() {
-							rateTELAOverlay(index.NameHdr, index.SCID)
-						})),
+						rectSpacer,
+						container.NewCenter(
+							container.NewStack(
+								rectWidth90,
+								wrapMobileButton(widget.NewButton("Rate", func() {
+									rateTELAOverlay(index.NameHdr, index.SCID)
+								})),
+							),
+						),
+						rectSpacer,
 						rectSpacer,
 						container.NewHBox(
 							layout.NewSpacer(),
