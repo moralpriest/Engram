@@ -139,6 +139,7 @@ type Session struct {
 	IDText            *canvas.Text
 	LinkText          *canvas.Text
 	StatusText        *canvas.Text
+	ReceivingAddress  string
 	Path              string
 	Name              string
 	Password          string

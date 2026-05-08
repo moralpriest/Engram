@@ -2159,42 +2159,67 @@ func layoutReceive() fyne.CanvasObject {
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
-	addressStr := engram.Disk.GetAddress().String()
+	var activeAddress string
+	if session.ReceivingAddress != "" {
+		activeAddress = session.ReceivingAddress
+	} else {
+		activeAddress = engram.Disk.GetAddress().String()
+	}
+
 	addressLabel := canvas.NewText("", colors.DarkGreen)
 	addressLabel.TextSize = scaleFont(22)
 	addressLabel.Alignment = fyne.TextAlignCenter
 	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	var addressToggleBtn *widget.Button
-	addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
-		session.AddressHidden = !session.AddressHidden
+	var imageQR *canvas.Image
+
+	updateView := func() {
+		session.ReceivingAddress = activeAddress
 		if session.AddressHidden {
 			addressLabel.Text = "dE...••••••••"
 			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
-			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
 		} else {
-			addressLabel.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+			addressLabel.Text = activeAddress[0:5] + "..." + activeAddress[len(activeAddress)-10:]
 			addressToggleBtn.SetIcon(theme.VisibilityIcon())
-			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
 		}
 		addressLabel.Refresh()
+
+		if imageQR != nil {
+			qr, err := qrcode.New(activeAddress, qrcode.Highest)
+			if err == nil {
+				qr.BackgroundColor = color.White
+				qr.ForegroundColor = color.Black
+				imageQR.Image = qr.Image(int(ui.Width * 0.85))
+				imageQR.Refresh()
+			}
+		}
+	}
+
+	addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		session.AddressHidden = !session.AddressHidden
+		if session.AddressHidden {
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("true"))
+		} else {
+			StoreEncryptedValue("settings", []byte("AddressHidden"), []byte("false"))
+		}
+		updateView()
 	})
 	addressToggleBtn.Importance = widget.HighImportance
 
 	addressCopyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
-		a.Clipboard().SetContent(engram.Disk.GetAddress().String())
+		a.Clipboard().SetContent(activeAddress)
 	})
 	addressCopyBtn.Importance = widget.HighImportance
 
-	if session.AddressHidden {
-		addressLabel.Text = "dE...••••••••"
-		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
-	} else {
-		addressLabel.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
-		addressToggleBtn.SetIcon(theme.VisibilityIcon())
-	}
+	subAddressBtn := widget.NewButtonWithIcon("", theme.ViewRefreshIcon(), func() {
+		activeAddress = engram.Disk.GetRandomIAddress8().String()
+		updateView()
+	})
+	subAddressBtn.Importance = widget.HighImportance
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.ReceivingAddress = "" // Reset on exit
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDashboard())
@@ -2206,8 +2231,7 @@ func layoutReceive() fyne.CanvasObject {
 		}
 	}
 
-	var imageQR *canvas.Image
-	qr, err := qrcode.New(engram.Disk.GetAddress().String(), qrcode.Highest)
+	qr, err := qrcode.New(activeAddress, qrcode.Highest)
 	if err != nil {
 		logger.Errorf("[Receive] Error generating QR: %v\n", err)
 	} else {
@@ -2216,6 +2240,8 @@ func layoutReceive() fyne.CanvasObject {
 	}
 	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.85)))
 	imageQR.SetMinSize(fyne.NewSize(ui.Width*0.85, ui.Width*0.85))
+
+	updateView()
 
 	top := container.NewVBox(
 		rectSpacer,
@@ -2233,6 +2259,7 @@ func layoutReceive() fyne.CanvasObject {
 				addressLabel,
 				addressToggleBtn,
 				addressCopyBtn,
+				subAddressBtn,
 			),
 		),
 		rectSpacer,

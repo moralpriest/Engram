@@ -97,11 +97,8 @@ func (c *CompletionEntry) ShowCompletion() {
 // calculate the max size to make the popup to cover everything below the entry
 func (c *CompletionEntry) maxSize() fyne.Size {
 	cnv := fyne.CurrentApp().Driver().CanvasForObject(c)
-	if cnv == nil {
-		return fyne.NewSize(0, 0)
-	}
 
-	if c.itemHeight == 0 && c.navigableList != nil {
+	if c.itemHeight == 0 {
 		// set item height to cache
 		c.itemHeight = c.navigableList.CreateItem().MinSize().Height
 	}
@@ -121,10 +118,6 @@ func (c *CompletionEntry) maxSize() fyne.Size {
 
 // calculate where the popup should appear
 func (c *CompletionEntry) popUpPos() fyne.Position {
-	cnv := fyne.CurrentApp().Driver().CanvasForObject(c)
-	if cnv == nil {
-		return fyne.NewPos(0, 0)
-	}
 	entryPos := fyne.CurrentApp().Driver().AbsolutePositionForObject(c)
 	return entryPos.Add(fyne.NewPos(0, c.Size().Height))
 }
