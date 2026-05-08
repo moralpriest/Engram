@@ -16,11 +16,12 @@
 - [x]  Sign files using your wallet to guarantee authenticity
 - [x]  **Instant TELA discovery (~2s)** using three-layer cache (Embedded, DB, JSON)
 - [x]  **Desktop QR Code Scanning** (Linux, Windows, MacOS)
+- [x]  **Mobile QR Code Scanning** (Android)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
 
 ### Upcoming Features
 - [ ]  Multi-language support
-- [ ]  Mobile QR Scanning (Android/iOS)
+- [ ]  Mobile QR Scanning (iOS)
 
 ### TELA Performance
 Engram Dev features a significant overhaul of the TELA discovery architecture, reducing first-click discovery from >60s to ~2s.
@@ -88,10 +89,10 @@ fyne package -name Engram -os windows -appVersion 0.6.9 -icon Icon.png -tags mig
 ```
 
 #### Building for Android
+To package for Android with QR scanner support, you must first compile the custom Fyne CLI using the included script (requires `javac` and Android SDK `d8`):
 ```bash
+bash build_fyne_custom.sh
 task package-android
-# or manually:
-fyne package -name Engram -os android/arm64 -appVersion 0.6.9 -appID com.engram.main -icon ./Icon.png -tags migrated_fynedo
 ```
 
 ### Custom Dependencies & Vendoring

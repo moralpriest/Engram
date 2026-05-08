@@ -2047,10 +2047,6 @@ func layoutSend() fyne.CanvasObject {
 		rectSpacer,
 		wrapMobileButton(widget.NewButtonWithIcon("Scan QR Code", theme.MediaPhotoIcon(), func() {
 			log.Println("QR: Scan button tapped")
-			if isMobile() {
-				dialog.ShowInformation("QR Scanner", "QR scanning not yet available on mobile", session.Window)
-				return
-			}
 			s := camera.NewScanner(session.Window, func(code string) {
 				log.Println("QR: Scan result received:", code)
 				wReceiver.SetText(code)

@@ -195,12 +195,20 @@ tasks:
 
   package-android:
     desc: Package for Android
+    deps: [build-fyne]
     env:
     cmds:
-      - fyne package --target android/arm64 --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
+
+  build-fyne:
+    desc: Build custom Fyne CLI with QR scanner support
+    cmds:
+      - ./build_fyne_custom.sh
+    generates:
+      - bin/fyne-custom
 
   package-all:
     desc: Package for all platforms (requires cross-compilation setup)

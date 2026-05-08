@@ -1,23 +1,45 @@
 #!/bin/bash
 # Patch Fyne module cache with QR scanner changes
+# This MUST be run before `fyne package --os android` because the fyne CLI
+# compiles Java from the module cache, not the vendor directory.
+
+set -e
 
 MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.7.3/internal/driver/mobile/app"
-SOURCE_FILE="$(dirname "$0")/vendor/fyne.io/fyne/v2/internal/driver/mobile/app/GoNativeActivity.java"
+VENDOR_PATH="$(dirname "$0")/internal/patches/android"
 
-if [ ! -f "$SOURCE_FILE" ]; then
-    echo "Source file not found: $SOURCE_FILE"
+if [ ! -d "$VENDOR_PATH" ]; then
+    echo "ERROR: Vendor path not found: $VENDOR_PATH"
     exit 1
 fi
 
 if [ ! -d "$MODULE_PATH" ]; then
-    echo "Module path not found: $MODULE_PATH"
+    echo "ERROR: Module cache path not found: $MODULE_PATH"
+    echo "Run 'go mod download' first."
     exit 1
 fi
 
-# Backup original
-cp "$MODULE_PATH/GoNativeActivity.java" "$MODULE_PATH/GoNativeActivity.java.bak" 2>/dev/null || true
+# Make module cache writable (it's read-only by default)
+chmod -R u+w "$MODULE_PATH"
 
-# Copy patched version
-cp "$SOURCE_FILE" "$MODULE_PATH/GoNativeActivity.java"
+# Backup originals (only on first run)
+for f in GoNativeActivity.java android.c android.go; do
+    if [ -f "$MODULE_PATH/$f" ] && [ ! -f "$MODULE_PATH/$f.orig" ]; then
+        cp "$MODULE_PATH/$f" "$MODULE_PATH/$f.orig"
+        echo "Backed up $f -> $f.orig"
+    fi
+done
 
-echo "Patched GoNativeActivity.java in module cache"
+# Copy patched versions
+cp "$VENDOR_PATH/GoNativeActivity.java" "$MODULE_PATH/GoNativeActivity.java"
+cp "$VENDOR_PATH/android.c"             "$MODULE_PATH/android.c"
+cp "$VENDOR_PATH/android.go"            "$MODULE_PATH/android.go"
+
+echo "✅ Patched module cache at: $MODULE_PATH"
+echo ""
+echo "Files patched:"
+echo "  - GoNativeActivity.java (Camera2 QR scanner Java code)"
+echo "  - android.c             (JNI bridge for startCamera/stopCamera)"
+echo "  - android.go            (Go declarations)"
+echo ""
+echo "Now run: fyne package --os android --app-id com.derofdn.engram"
