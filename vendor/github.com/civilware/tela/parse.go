@@ -35,33 +35,23 @@ func isShardFileName(fileName string) bool {
 	// Remove compression extension if present
 	fileName = TrimCompressedExt(fileName)
 
-	// Must have an extension after the number
-	ext := filepath.Ext(fileName)
-	if ext == "" {
-		return false
-	}
-
-	// Strip the remaining extension (e.g. .js) to get name-N
-	base := strings.TrimSuffix(fileName, ext)
+	// Strip the file extension
+	fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
 	// Find the last dash
-	lastDash := strings.LastIndex(base, "-")
+	lastDash := strings.LastIndex(fileName, "-")
 	if lastDash == -1 || lastDash == 0 {
 		return false
 	}
 
 	// Check if suffix after dash is a positive integer
-	suffix := base[lastDash+1:]
+	suffix := fileName[lastDash+1:]
 	if suffix == "" {
 		return false
 	}
 
 	_, err := strconv.Atoi(suffix)
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 // Append docCode to TELA-DOC-1 smart contract

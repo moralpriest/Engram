@@ -107,4 +107,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/civilware/tela => ../tela
+replace github.com/civilware/tela => github.com/moralpriest/tela v0.0.0-20260507234742-2edd3a5771fc

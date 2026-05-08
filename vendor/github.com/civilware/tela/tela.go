@@ -717,7 +717,6 @@ func Transfer(wallet *walletapi.Wallet_Disk, ringsize uint64, transfers []rpc.Tr
 	return
 }
 
-
 // Clone a TELA-DOC SCID to path from endpoint
 func cloneDOC(scid, docNum, path, endpoint string, cancelled ...*atomic.Bool) (clone Cloning, err error) {
 	var isCancelled *atomic.Bool
