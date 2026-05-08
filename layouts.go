@@ -2382,8 +2382,9 @@ func layoutServiceAddress() fyne.CanvasObject {
 	wAmount.Validator = func(s string) error {
 		if s == "" {
 			tx.Amount = 0
-			wAmount.SetValidationError(errors.New("invalid transaction amount"))
-			btnCreate.Disable()
+			wAmount.SetValidationError(nil)
+			btnCreate.Enable()
+			return nil
 		} else {
 			amount, err := globals.ParseAmount(s)
 			if err != nil {
@@ -2398,29 +2399,27 @@ func layoutServiceAddress() fyne.CanvasObject {
 
 			return nil
 		}
-		return errors.New("invalid transaction amount")
 	}
 
 	wAmount.SetValidationError(nil)
 
 	wPaymentID.Validator = func(s string) (err error) {
+		if s == "" {
+			tx.PaymentID = 0
+			wPaymentID.SetValidationError(nil)
+			btnCreate.Enable()
+			return nil
+		}
 		tx.PaymentID, err = strconv.ParseUint(s, 10, 64)
 		if err != nil {
 			tx.PaymentID = 0
 			btnCreate.Disable()
 			wPaymentID.SetValidationError(err)
 			return
-		} else {
-			if wReceiver.Text != "" {
-				btnCreate.Enable()
-				wPaymentID.SetValidationError(nil)
-				return
-			} else {
-				err = errors.New("empty payment id")
-				wPaymentID.SetValidationError(err)
-				return
-			}
 		}
+		wPaymentID.SetValidationError(nil)
+		btnCreate.Enable()
+		return
 	}
 	wPaymentID.SetPlaceHolder("Payment ID / Service Port")
 
@@ -2472,7 +2471,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 
 	btnCreate.OnTapped = func() {
 		var err error
-		if tx.Address != nil && tx.PaymentID != 0 {
+		if tx.Address != nil {
 			if wAmount.Text != "" {
 				_, err = globals.ParseAmount(wAmount.Text)
 			}
@@ -2501,9 +2500,15 @@ func layoutServiceAddress() fyne.CanvasObject {
 				address := engram.Disk.GetRandomIAddress8()
 				address.Arguments = nil
 				address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_NEEDS_REPLYBACK_ADDRESS, DataType: rpc.DataUint64, Value: uint64(1)})
-				address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_VALUE_TRANSFER, DataType: rpc.DataUint64, Value: tx.Amount})
-				address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: tx.PaymentID})
-				address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: tx.Comment})
+				if tx.Amount != 0 {
+					address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_VALUE_TRANSFER, DataType: rpc.DataUint64, Value: tx.Amount})
+				}
+				if tx.PaymentID != 0 {
+					address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: tx.PaymentID})
+				}
+				if tx.Comment != "" {
+					address.Arguments = append(address.Arguments, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: tx.Comment})
+				}
 
 				err := address.Arguments.Validate_Arguments()
 				if err != nil {
