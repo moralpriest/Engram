@@ -89,11 +89,14 @@ fyne package -name Engram -os windows -appVersion 0.6.9 -icon Icon.png -tags mig
 ```
 
 #### Building for Android
-To package for Android with QR scanner support, you must first compile the custom Fyne CLI using the included script (requires `javac` and Android SDK `d8`):
-```bash
-bash build_fyne_custom.sh
-task package-android
-```
+### Android Packaging (with QR support)
+Packaging for Android requires patching the Fyne source and using a custom CLI tool to inject the QR scanner Java logic.
+1. Ensure `ANDROID_HOME` is set and you have `javac` and `d8` (Android SDK) in your `$PATH`.
+2. Run the automated packaging task:
+   ```bash
+   task package-android
+   ```
+   *Note: This task automatically handles source patching (including `vendor/` if present) and builds the necessary custom tooling (`bin/fyne-custom`).*
 
 ### Custom Dependencies & Vendoring
 
