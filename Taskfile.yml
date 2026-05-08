@@ -195,7 +195,7 @@ tasks:
 
   package-android:
     desc: Package for Android
-    deps: [build-fyne]
+    deps: [patch-android, build-fyne]
     env:
     cmds:
       - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
@@ -209,6 +209,17 @@ tasks:
       - ./build_fyne_custom.sh
     generates:
       - bin/fyne-custom
+
+  patch-android:
+    desc: Patch Fyne source (Module cache and Vendor if present)
+    cmds:
+      - ./patch_fyne.sh
+      - |
+        if [ -d "vendor/fyne.io/fyne/v2" ]; then
+          echo "Patching vendor directory..."
+          cp internal/patches/android/* vendor/fyne.io/fyne/v2/internal/driver/mobile/app/
+          echo "✅ Vendor directory patched."
+        fi
 
   package-all:
     desc: Package for all platforms (requires cross-compilation setup)
