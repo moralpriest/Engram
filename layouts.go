@@ -2368,9 +2368,16 @@ func layoutReceive() fyne.CanvasObject {
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
+	stealthVal, _ := GetValue("settings", []byte("StealthMode"))
+	stealthActive := string(stealthVal) == "true"
+	askedStealthVal, _ := GetValue("settings", []byte("AskedStealth"))
+	askedStealth := string(askedStealthVal) == "1"
+
 	var activeAddress string
 	if session.ReceivingAddress != "" {
 		activeAddress = session.ReceivingAddress
+	} else if stealthActive || !askedStealth {
+		activeAddress = engram.Disk.GetRandomIAddress8().String()
 	} else {
 		activeAddress = engram.Disk.GetAddress().String()
 	}
@@ -2495,7 +2502,105 @@ func layoutReceive() fyne.CanvasObject {
 		),
 	)
 
-	layout := container.NewBorder(
+	if !askedStealth {
+		StoreValue("settings", []byte("AskedStealth"), []byte("1"))
+
+		headerOverlay := canvas.NewText("Stealth Mode", colors.Gray)
+		headerOverlay.TextSize = 16
+		headerOverlay.Alignment = fyne.TextAlignCenter
+		headerOverlay.TextStyle = fyne.TextStyle{Bold: true}
+
+		message := widget.NewLabel("Enable Stealth Mode to automatically randomize your address in the Receive DERO page. Your default address remains hidden while active.")
+		message.Wrapping = fyne.TextWrapWord
+
+		rectBoxOverlay := canvas.NewRectangle(color.Transparent)
+		rectBoxOverlay.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+		rectSpacerOverlay := canvas.NewRectangle(color.Transparent)
+		rectSpacerOverlay.SetMinSize(fyne.NewSize(0, 10))
+
+		var overlayContainer *fyne.Container
+		var overlayBg *fyne.Container
+
+		closeOverlay := func() {
+			if session.Window != nil {
+				overlays := session.Window.Canvas().Overlays()
+				overlays.Remove(overlayContainer)
+				overlays.Remove(overlayBg)
+			}
+		}
+
+		btnAllow := widget.NewButton("Allow", func() {
+			StoreValue("settings", []byte("StealthMode"), []byte("true"))
+			closeOverlay()
+		})
+		btnAllow.Importance = widget.MediumImportance
+
+		btnDeny := widget.NewButton("Deny", func() {
+			StoreValue("settings", []byte("StealthMode"), []byte("false"))
+			session.ReceivingAddress = ""
+			activeAddress = engram.Disk.GetAddress().String()
+			updateView()
+			closeOverlay()
+		})
+		btnDeny.Importance = widget.MediumImportance
+
+		btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacerOverlay, btnDeny, layout.NewSpacer())
+
+		contentOverlay := container.NewStack(
+			container.NewBorder(
+				nil,
+				container.NewVBox(
+					rectSpacerOverlay,
+					rectSpacerOverlay,
+					btnRow,
+					rectSpacerOverlay,
+					rectSpacerOverlay,
+				),
+				nil,
+				nil,
+				container.NewStack(
+					rectBoxOverlay,
+					container.NewVScroll(
+						container.NewVBox(
+							message,
+							rectSpacerOverlay,
+						),
+					),
+				),
+			),
+		)
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+		overlayBg = container.NewStack(&iframe{}, canvas.NewRectangle(colors.DarkMatter))
+		overlayContainer = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(headerOverlay),
+					container.NewCenter(container.NewStack(span)),
+					rectSpacerOverlay, rectSpacerOverlay, rectSpacerOverlay,
+					contentOverlay,
+					rectSpacerOverlay, rectSpacerOverlay, rectSpacerOverlay, rectSpacerOverlay, rectSpacerOverlay,
+				),
+			),
+		)
+
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			fyne.Do(func() {
+				if session.Window != nil {
+					overlays := session.Window.Canvas().Overlays()
+					overlays.Add(overlayBg)
+					overlays.Add(overlayContainer)
+				}
+			})
+		}()
+	}
+
+	layoutObj := container.NewBorder(
 		top,
 		bottom,
 		nil,
@@ -2507,7 +2612,7 @@ func layoutReceive() fyne.CanvasObject {
 		session.NavStack.Push(session.Domain, true)
 	}
 
-	return NewVScroll(container.NewStack(canvas.NewRectangle(color.White), layout))
+	return NewVScroll(container.NewStack(canvas.NewRectangle(color.White), layoutObj))
 }
 
 func layoutServiceAddress() fyne.CanvasObject {
@@ -8034,6 +8139,30 @@ func layoutAppSettings() fyne.CanvasObject {
 		checkGnomon.SetChecked(false)
 	}
 
+	// STEALTH MODE Section
+	stealthTitle := canvas.NewText("STEALTH MODE", colors.Gray)
+	stealthTitle.TextSize = scaleFont(11)
+	stealthTitle.Alignment = fyne.TextAlignCenter
+	stealthTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	stealthDescription := widget.NewRichTextFromMarkdown("Automatically randomize your address in the Receive DERO page. Your default address remains hidden while active.")
+	stealthDescription.Wrapping = fyne.TextWrapWord
+
+	checkStealth := widget.NewCheck("Enable Stealth mode", func(b bool) {
+		if b {
+			StoreValue("settings", []byte("StealthMode"), []byte("true"))
+		} else {
+			StoreValue("settings", []byte("StealthMode"), []byte("false"))
+		}
+	})
+
+	stealthVal, err := GetValue("settings", []byte("StealthMode"))
+	if err == nil && string(stealthVal) == "true" {
+		checkStealth.SetChecked(true)
+	} else {
+		checkStealth.SetChecked(false)
+	}
+
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText("EPOCH STATISTICS", colors.Gray)
 	epochTitle.TextSize = scaleFont(11)
@@ -8172,6 +8301,8 @@ func layoutAppSettings() fyne.CanvasObject {
 					remoteAccess.RPC.pass = "password"
 					remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
 					setRemoteAccess(remoteAccess.RPC.port, "RPC")
+					StoreValue("settings", []byte("StealthMode"), []byte("false"))
+					StoreValue("settings", []byte("AskedStealth"), []byte("0"))
 
 					successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
 					successDialog.SetOnClosed(func() {})
@@ -8403,6 +8534,23 @@ func layoutAppSettings() fyne.CanvasObject {
 		gnomonDescription,
 		rectSpacer,
 		checkGnomon,
+
+		// STEALTH MODE Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			stealthTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		stealthDescription,
+		rectSpacer,
+		checkStealth,
 
 		// EPOCH STATISTICS Section
 		rectSpacer,
