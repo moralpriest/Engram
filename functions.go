@@ -158,6 +158,8 @@ type Session struct {
 	NavStack          *NavigationStack
 	Navigating        bool
 	PreviousDomain    string
+	VillagerHidden    bool
+	VillagerAddress   string
 }
 
 type RemoteAccess struct {
@@ -2597,6 +2599,8 @@ func updateDashboardAfterLogin() {
 			status.Sync.Refresh()
 		}
 	})
+
+	go updateVillagerAvatar()
 }
 
 // Remove all overlays

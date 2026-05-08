@@ -1516,6 +1516,48 @@ func layoutDashboard() fyne.CanvasObject {
 
 	res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 
+	logoContainer := container.NewStack()
+	var updateLogo func()
+	updateLogo = func() {
+		logoContainer.Objects = nil
+		res.villagerMu.Lock()
+		vImg := res.villager
+		res.villagerMu.Unlock()
+
+		if vImg != nil && !session.VillagerHidden {
+			vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
+			logoContainer.Add(vImg)
+		} else {
+			logoContainer.Add(res.gram)
+		}
+		logoContainer.Refresh()
+	}
+
+	updateLogo()
+
+	// Create a transparent button over the logo for toggling or refreshing
+	logoBtn := widget.NewButton("", func() {
+		res.villagerMu.Lock()
+		hasVillager := res.villager != nil
+		res.villagerMu.Unlock()
+
+		if hasVillager {
+			session.VillagerHidden = !session.VillagerHidden
+			updateLogo()
+			val := "false"
+			if session.VillagerHidden {
+				val = "true"
+			}
+			go setTELADual("VillagerHidden", []byte(val))
+		} else {
+			// If no villager found yet, try to fetch it on tap
+			go updateVillagerAvatar()
+		}
+	})
+	logoBtn.Importance = widget.LowImportance
+
+	logoStack := container.NewStack(logoContainer, logoBtn)
+
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
@@ -1538,7 +1580,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 	deroForm := container.NewVBox(
 		rectSpacer,
-		res.gram,
+		logoStack,
 		rectSpacer,
 		container.NewStack(
 			container.NewHBox(

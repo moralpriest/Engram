@@ -37,6 +37,8 @@ type Res struct {
 	header           *canvas.Image
 	dero             *canvas.Image
 	gram             *canvas.Image
+	villager         *canvas.Image
+	villagerMu       sync.Mutex
 	block            *canvas.Image
 	red_alert        *canvas.Image
 	green_alert      *canvas.Image
