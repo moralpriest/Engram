@@ -17826,7 +17826,8 @@ func layoutTELA() fyne.CanvasObject {
 	var telaWarmupScheduled atomic.Bool
 	var telaWorkActive atomic.Bool
 	var telaLaunchPending atomic.Bool
-	var activeRowUpdaters sync.Map // fyne.CanvasObject -> scid
+	var activeRowUpdaters sync.Map   // fyne.CanvasObject -> scid
+	var activeRatingFetches sync.Map // scid -> bool
 	var telaNetworkPaused atomic.Bool
 
 	frame := &iframe{}
@@ -17910,7 +17911,24 @@ func layoutTELA() fyne.CanvasObject {
 					return
 				}
 				searchMu.Lock()
-				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+				newList := telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+
+				// Compare with current 'searching' list to see if anything actually moved
+				if len(newList) == len(searching) {
+					changed := false
+					for i := range newList {
+						if newList[i] != searching[i] {
+							changed = true
+							break
+						}
+					}
+					if !changed {
+						searchMu.Unlock()
+						return
+					}
+				}
+
+				searching = newList
 				searchMu.Unlock()
 				searchData.Set(searching)
 				if searchList != nil {
@@ -17953,16 +17971,37 @@ func layoutTELA() fyne.CanvasObject {
 			searchMu.RUnlock()
 			return
 		}
-		localSearch := make([]INDEXwithRatings, len(telaSearch))
-		copy(localSearch, telaSearch)
+		var missing []string
+		for _, entry := range telaSearch {
+			if entry.ratings.Average == 0 {
+				missing = append(missing, entry.SCID)
+			}
+		}
 		searchMu.RUnlock()
 
+		if len(missing) == 0 {
+			return
+		}
+
 		go func() {
-			for _, entry := range localSearch {
-				if entry.ratings.Average == 0 {
-					ratings, err := tela.GetRating(entry.SCID, session.Daemon, 0)
-					if err == nil && (ratings.Average > 0 || ratings.Likes > 0 || ratings.Dislikes > 0) {
-						updateTelaSearchEntry(entry.SCID, func(e *INDEXwithRatings) {
+			// Process in batches of 50 to maximize RPC efficiency
+			for i := 0; i < len(missing); i += 50 {
+				end := i + 50
+				if end > len(missing) {
+					end = len(missing)
+				}
+				batch := missing[i:end]
+
+				// Use background context for async warmup
+				_, ratingsMap, _, err := batchFetchINDEXes(context.Background(), batch, 50)
+				if err != nil {
+					logger.Printf("[TELA] warmRatings batch fetch error: %v\n", err)
+					continue
+				}
+
+				for scid, ratings := range ratingsMap {
+					if ratings.Average > 0 || ratings.Likes > 0 || ratings.Dislikes > 0 {
+						updateTelaSearchEntry(scid, func(e *INDEXwithRatings) {
 							e.ratings = ratings
 						})
 					}
@@ -18305,6 +18344,11 @@ func layoutTELA() fyne.CanvasObject {
 					ratingHex.Resource = telaHexagonColor(entry.ratings)
 				} else {
 					go func(currentSCID string, label *canvas.Text, hex *canvas.Image) {
+						if _, loading := activeRatingFetches.LoadOrStore(currentSCID, true); loading {
+							return
+						}
+						defer activeRatingFetches.Delete(currentSCID)
+
 						ratings, err := tela.GetRating(currentSCID, session.Daemon, 0)
 						if err == nil && (ratings.Average > 0 || ratings.Dislikes > ratings.Likes) {
 							uiDo(func() {

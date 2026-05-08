@@ -1186,20 +1186,53 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 						continue
 					}
 
-					// Extract likes/dislikes while we have the variables
+					// Extract likes/dislikes and individual ratings while we have the variables
 					var r tela.Rating_Result
-					if likesVal, ok := out.VariableStringKeys["likes"]; ok {
-						if likesFloat, ok := likesVal.(float64); ok {
-							r.Likes = uint64(likesFloat)
-						} else if likesInt, ok := likesVal.(uint64); ok {
-							r.Likes = likesInt
+					var ratingSum uint64
+					var ratingCount uint64
+
+					for k, v := range out.VariableStringKeys {
+						switch k {
+						case "likes":
+							if f, ok := v.(float64); ok {
+								r.Likes = uint64(f)
+							} else if i, ok := v.(uint64); ok {
+								r.Likes = i
+							}
+						case "dislikes":
+							if f, ok := v.(float64); ok {
+								r.Dislikes = uint64(f)
+							} else if i, ok := v.(uint64); ok {
+								r.Dislikes = i
+							}
+						default:
+							// Key might be an address rating (dero... or deto...)
+							if len(k) >= 60 && (strings.HasPrefix(k, "dero") || strings.HasPrefix(k, "deto")) {
+								if rStr, ok := v.(string); ok {
+									decoded := decodeHex(rStr)
+									split := strings.Split(decoded, "_")
+									if len(split) >= 2 {
+										if ratingVal, err := strconv.ParseUint(split[0], 10, 64); err == nil {
+											if h, err := strconv.ParseUint(split[1], 10, 64); err == nil {
+												ratingSum += ratingVal
+												ratingCount++
+												r.Ratings = append(r.Ratings, tela.Rating{
+													Address: k,
+													Rating:  ratingVal,
+													Height:  h,
+												})
+											}
+										}
+									}
+								}
+							}
 						}
 					}
-					if dislikesVal, ok := out.VariableStringKeys["dislikes"]; ok {
-						if dislikesFloat, ok := dislikesVal.(float64); ok {
-							r.Dislikes = uint64(dislikesFloat)
-						} else if dislikesInt, ok := dislikesVal.(uint64); ok {
-							r.Dislikes = dislikesInt
+
+					if ratingCount > 0 {
+						r.Average = float64(ratingSum) / (float64(ratingCount) * 10)
+						if r.Average <= 0 {
+							r.Average = 0.01
 						}
 					}
 
