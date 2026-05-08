@@ -293,6 +293,174 @@ func clearTELANavigationHistory() {
 	telaNavigationStack.history = nil
 }
 
+func showVillagerPopup(parent *fyne.Container) {
+	rect := canvas.NewRectangle(color.NRGBA{R: 21, G: 23, B: 30, A: 220})
+	rect.CornerRadius = scaleSize(10)
+	rect.SetMinSize(fyne.NewSize(scaleSize(220), scaleSize(40)))
+
+	text := canvas.NewText("Click here to edit villager", colors.Green)
+	text.Alignment = fyne.TextAlignCenter
+	text.TextSize = scaleFont(14)
+
+	popup := container.NewCenter(container.NewStack(rect, text))
+
+	parent.Add(popup)
+	parent.Refresh()
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		fyne.Do(func() {
+			parent.Remove(popup)
+			parent.Refresh()
+		})
+	}()
+}
+
+func showVillagerMenu(updateLogo func()) {
+	res.villagerMu.Lock()
+	hasVillager := res.villager != nil
+	res.villagerMu.Unlock()
+
+	overlay := session.Window.Canvas().Overlays()
+
+	var menu *fyne.Container
+
+	btnEdit := widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
+		overlay.Remove(menu)
+		showLoadingOverlay()
+		go func() {
+			// For Villager Edit, if XSWD is not enabled, always prompt.
+			alreadyEnabled := remoteAccess.WS.global.enabled
+			if !alreadyEnabled {
+				if showXSWDPrompt() {
+					remoteAccess.WS.global.enabled = true
+					if remoteAccess.WS.port == "" {
+						remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+						setRemoteAccessDual(remoteAccess.WS.port, "WS")
+					}
+					setPermissions()
+					if remoteAccess.WS.server == nil {
+						toggleXSWD(remoteAccess.WS.port)
+					}
+				} else {
+					remoteAccess.WS.global.enabled = false
+					setPermissions()
+					if remoteAccess.WS.server != nil {
+						toggleXSWD(remoteAccess.WS.port)
+					}
+				}
+				setAskedXSWD()
+			}
+
+			scid := "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
+			index, err := tela.GetINDEXInfo(scid, session.Daemon)
+			if err != nil {
+				logger.Errorf("[Villager] Error getting index for %s: %v", scid, err)
+				removeOverlays()
+				return
+			}
+			fyne.Do(func() {
+				session.LastDomain = session.Window.Content()
+				session.Window.SetContent(layoutTELAManager(index, func() {
+					session.Window.SetContent(layoutDashboard())
+				}, true))
+				removeOverlays()
+			})
+		}()
+	})
+	btnEdit.Importance = widget.HighImportance
+
+	hideText := "Hide"
+	hideIcon := theme.VisibilityOffIcon()
+	if session.VillagerHidden {
+		hideText = "Show"
+		hideIcon = theme.VisibilityIcon()
+	}
+	btnHide := widget.NewButtonWithIcon(hideText, hideIcon, func() {
+		session.VillagerHidden = !session.VillagerHidden
+		updateLogo()
+		val := "false"
+		if session.VillagerHidden {
+			val = "true"
+		}
+		go setTELADual("VillagerHidden", []byte(val))
+		overlay.Remove(menu)
+	})
+	if !hasVillager {
+		btnHide.Disable()
+	}
+
+	btnBgToggle := widget.NewButtonWithIcon("Background Toggle", theme.ViewRefreshIcon(), func() {
+		session.VillagerBackground = !session.VillagerBackground
+		val := "false"
+		if session.VillagerBackground {
+			val = "true"
+		}
+		go setTELADual("VillagerBackground", []byte(val))
+
+		// Re-render villager
+		go func() {
+			if engram.Disk != nil {
+				address := engram.Disk.GetAddress().String()
+				pixels, err := fetchVillagerPixels(address)
+				if err == nil {
+					villagerImg := renderVillager(address, pixels)
+					res.villagerMu.Lock()
+					res.villager = villagerImg
+					res.villagerMu.Unlock()
+					fyne.Do(func() {
+						updateLogo()
+					})
+				}
+			}
+		}()
+		overlay.Remove(menu)
+	})
+	if !hasVillager {
+		btnBgToggle.Disable()
+	}
+
+	btnClose := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() {
+		overlay.Remove(menu)
+	})
+
+	btnSize := fyne.NewSize(scaleSize(240), scaleSize(40))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(compactSpacerSize())
+
+	menuContent := container.NewVBox(
+		rectSpacer,
+		container.NewHBox(layout.NewSpacer(), container.NewGridWrap(btnSize, btnEdit), layout.NewSpacer()),
+		rectSpacer,
+		container.NewHBox(layout.NewSpacer(), container.NewGridWrap(btnSize, btnHide), layout.NewSpacer()),
+		rectSpacer,
+		container.NewHBox(layout.NewSpacer(), container.NewGridWrap(btnSize, btnBgToggle), layout.NewSpacer()),
+		rectSpacer,
+		container.NewHBox(layout.NewSpacer(), container.NewGridWrap(btnSize, btnClose), layout.NewSpacer()),
+	)
+
+	// Use a transparent container for the dimming effect to avoid corner artifacts
+	background := canvas.NewRectangle(color.NRGBA{0, 0, 0, 150})
+
+	menuBg := canvas.NewRectangle(theme.BackgroundColor())
+	menuBg.CornerRadius = scaleSize(10)
+
+	// Combine everything into a stack that fills the window
+	menu = container.NewStack(
+		background,
+		container.NewCenter(
+			container.NewStack(
+				menuBg,
+				container.NewPadded(menuContent),
+			),
+		),
+	)
+
+	overlay.Add(menu)
+	menu.Resize(session.Window.Canvas().Size())
+}
+
 // Add package variable to remember settings caller domain across sub-page visits
 var settingsCallerDomain string
 
@@ -1384,6 +1552,7 @@ func layoutDashboard() fyne.CanvasObject {
 					fyne.Do(func() {
 						if session.Window != nil && session.WalletOpen {
 							session.Window.SetContent(layoutDashboard())
+							removeOverlays()
 						}
 					})
 				}
@@ -1537,26 +1706,24 @@ func layoutDashboard() fyne.CanvasObject {
 
 	// Create a transparent button over the logo for toggling or refreshing
 	logoBtn := widget.NewButton("", func() {
-		res.villagerMu.Lock()
-		hasVillager := res.villager != nil
-		res.villagerMu.Unlock()
-
-		if hasVillager {
-			session.VillagerHidden = !session.VillagerHidden
-			updateLogo()
-			val := "false"
-			if session.VillagerHidden {
-				val = "true"
-			}
-			go setTELADual("VillagerHidden", []byte(val))
-		} else {
-			// If no villager found yet, try to fetch it on tap
-			go updateVillagerAvatar()
-		}
+		showVillagerMenu(updateLogo)
 	})
 	logoBtn.Importance = widget.LowImportance
 
 	logoStack := container.NewStack(logoContainer, logoBtn)
+
+	res.villagerMu.Lock()
+	noVillager := res.villager == nil
+	res.villagerMu.Unlock()
+
+	if noVillager && !session.VillagerPopupShown {
+		seen, found := getTELADual("VillagerPopupSeen")
+		if !found || seen != "true" {
+			session.VillagerPopupShown = true
+			go setTELADual("VillagerPopupSeen", []byte("true"))
+			showVillagerPopup(logoStack)
+		}
+	}
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
@@ -22012,7 +22179,12 @@ func layoutTELA() fyne.CanvasObject {
 }
 
 // Layout details of a TELA INDEX
-func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
+func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fyne.CanvasObject {
+	shouldLaunch := false
+	if len(autoLaunch) > 0 {
+		shouldLaunch = autoLaunch[0]
+	}
+
 	session.Domain = "app.tela.manager"
 	originalCallerDomain := session.LastDomain // Safely capture the original TELA browser content
 
@@ -23058,5 +23230,13 @@ func layoutTELAManager(index tela.INDEX, callback func()) fyne.CanvasObject {
 
 	vScroll := NewVScroll(layout)
 	cachedTelaManagerContent = vScroll
+
+	if shouldLaunch && btnServer.Text == "Start Application" {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			fyne.Do(btnServer.OnTapped)
+		}()
+	}
+
 	return vScroll
 }

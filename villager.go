@@ -107,9 +107,11 @@ func renderVillager(address string, pixelStr string) *canvas.Image {
 	const renderSize = 1024
 	img := image.NewRGBA(image.Rect(0, 0, renderSize, renderSize))
 
-	drawBackground(img, uniquePart, bgSeed)
-	drawStars(img, uniquePart, renderSize)
-	drawFrame(img, uniquePart, frameSeed, renderSize)
+	if session.VillagerBackground {
+		drawBackground(img, uniquePart, bgSeed)
+		drawStars(img, uniquePart, renderSize)
+		drawFrame(img, uniquePart, frameSeed, renderSize)
+	}
 
 	// Render pixels (Avatar)
 	innerSize := 757
@@ -328,6 +330,13 @@ func updateVillagerAvatar() {
 		session.VillagerHidden = pref == "true"
 	} else {
 		session.VillagerHidden = false
+	}
+
+	bgPref, bgFound := getTELADual("VillagerBackground")
+	if bgFound {
+		session.VillagerBackground = bgPref == "true"
+	} else {
+		session.VillagerBackground = true
 	}
 
 	if session.Dashboard == "main" {
