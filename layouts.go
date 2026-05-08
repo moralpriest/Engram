@@ -11544,21 +11544,21 @@ func layoutIdentity() fyne.CanvasObject {
 	)
 
 	shardForm := container.NewVBox(
+		idCenter,
+		rectSpacer,
 		container.NewStack(
 			container.NewCenter(
 				textUsername,
 			),
 		),
 		rectSpacer,
-		idCenter,
 		rectSpacer,
+		entryReg,
 		rectSpacer,
 		container.NewStack(
 			rectListBox,
 			userBox,
 		),
-		rectSpacer,
-		entryReg,
 		rectSpacer,
 		wrapMobileButton(btnReg),
 		rectSpacer,
@@ -11854,7 +11854,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							layout.NewSpacer(),
 							container.NewStack(
 								rectWidth90,
-								btnSetPrimary,
+								wrapMobileButton(btnSetPrimary),
 							),
 							layout.NewSpacer(),
 						),
@@ -11886,7 +11886,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 							layout.NewSpacer(),
 							container.NewStack(
 								rectWidth90,
-								btnSend,
+								wrapMobileButton(btnSend),
 							),
 							layout.NewSpacer(),
 						),
