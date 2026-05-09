@@ -306,6 +306,22 @@ func newSizedIconButton(icon fyne.Resource, onTap func(), width ...float32) *fyn
 	return container.NewStack(sizeEnforcer, btn)
 }
 
+func newSizedTextButton(label string, onTap func(), width ...float32) *fyne.Container {
+	btn := widget.NewButton(label, onTap)
+	btn.Importance = widget.MediumImportance
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+	w := float32(160)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
+	return container.NewStack(sizeEnforcer, btn)
+}
+
 func newSmallIconLink(label string, icon fyne.Resource, onTap func()) *fyne.Container {
 	link := widget.NewHyperlinkWithStyle(label, nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	link.OnTapped = onTap

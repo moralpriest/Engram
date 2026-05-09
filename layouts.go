@@ -12148,8 +12148,6 @@ func layoutHistory() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 
 	var data []string
-	var entries []rpc.Entry
-	var zeroscid crypto.Hash
 	var listData binding.StringList
 	var listBox *widget.List
 	var cachedTransfers []rpc.Entry
@@ -12226,6 +12224,16 @@ func layoutHistory() fyne.CanvasObject {
 
 			split := strings.Split(str, ";;;")
 
+			if split[0] == "HEADER" {
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
+				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{Bold: true}
+				co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
+				co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
+				return
+			}
+
+			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{} // Reset
+			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{} // Reset
 			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
 			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
@@ -12256,23 +12264,12 @@ func layoutHistory() fyne.CanvasObject {
 	}
 
 	ensureHistoryRows := func() {
-		if transfers, normalRows, coinbaseRows, messageRows, ok := getHistoryRowCache(); ok {
-			cachedTransfers = transfers
-			historyNormalRows = normalRows
-			historyCoinbaseRows = coinbaseRows
-			historyMessageRows = messageRows
-			return
-		}
-
-		entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
-		cachedTransfers = append([]rpc.Entry(nil), entries...)
-		messages := scanMessageTransfers(0)
-		historyNormalRows, historyCoinbaseRows, historyMessageRows = buildHistoryRows(entries, messages)
-		setHistoryRowCache(cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows)
+		cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows = syncHistoryRows()
 	}
 
 	// Function to load Normal transactions
 	loadNormal := func() {
+		view = "Normal"
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
@@ -12289,6 +12286,10 @@ func layoutHistory() fyne.CanvasObject {
 
 			listBox.OnSelected = func(id widget.ListItemID) {
 				split := strings.Split(data[id], ";;;")
+				if split[0] == "HEADER" {
+					listBox.UnselectAll()
+					return
+				}
 				result := findCachedTransfer(split[4])
 
 				if result.TXID == "" {
@@ -12315,13 +12316,13 @@ func layoutHistory() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				listBox.Refresh()
-				listBox.ScrollToBottom()
 			})
 		}()
 	}
 
 	// Function to load Coinbase transactions
 	loadCoinbase := func() {
+		view = "Coinbase"
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
@@ -12338,6 +12339,10 @@ func layoutHistory() fyne.CanvasObject {
 
 			listBox.OnSelected = func(id widget.ListItemID) {
 				split := strings.Split(data[id], ";;;")
+				if split[0] == "HEADER" {
+					listBox.UnselectAll()
+					return
+				}
 				result := findCachedTransfer(split[4])
 
 				if result.TXID == "" {
@@ -12364,13 +12369,13 @@ func layoutHistory() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				listBox.Refresh()
-				listBox.ScrollToBottom()
 			})
 		}()
 	}
 
 	// Function to load Messages
 	loadMessages := func() {
+		view = "Messages"
 		listBox.UnselectAll()
 		results.Text = "  Scanning..."
 		results.Refresh()
@@ -12387,6 +12392,10 @@ func layoutHistory() fyne.CanvasObject {
 
 			listBox.OnSelected = func(id widget.ListItemID) {
 				split := strings.Split(data[id], ";;;")
+				if split[0] == "HEADER" {
+					listBox.UnselectAll()
+					return
+				}
 				result := findCachedTransfer(split[4])
 				overlay := session.Window.Canvas().Overlays()
 				overlay.Add(
@@ -12403,9 +12412,39 @@ func layoutHistory() fyne.CanvasObject {
 			fyne.Do(func() {
 				results.Refresh()
 				listBox.Refresh()
-				listBox.ScrollToBottom()
+
 			})
 		}()
+	}
+
+	startIcon := theme.MenuDropDownIcon()
+	if historySortOrder == "Ascending" {
+		startIcon = theme.MenuDropUpIcon()
+	}
+	btnSortOrder := widget.NewButtonWithIcon("", startIcon, nil)
+	btnSortOrder.Importance = widget.LowImportance
+	btnSortOrder.Refresh()
+
+	sortSize := canvas.NewRectangle(color.Transparent)
+	sortSize.SetMinSize(fyne.NewSize(scaleSize(35), scaleSize(35)))
+	btnSortOrderRow := container.NewStack(sortSize, btnSortOrder)
+
+	btnSortOrder.OnTapped = func() {
+		if historySortOrder == "Descending" {
+			historySortOrder = "Ascending"
+			btnSortOrder.SetIcon(theme.MenuDropUpIcon())
+		} else {
+			historySortOrder = "Descending"
+			btnSortOrder.SetIcon(theme.MenuDropDownIcon())
+		}
+		refreshHistoryAsync(true)
+		if view == "Normal" {
+			loadNormal()
+		} else if view == "Coinbase" {
+			loadCoinbase()
+		} else if view == "Messages" {
+			loadMessages()
+		}
 	}
 
 	// Create tab content containers (needed for proper tab rendering)
@@ -12441,7 +12480,7 @@ func layoutHistory() fyne.CanvasObject {
 		container.NewStack(
 			rectWidth90,
 			container.NewVBox(
-				tabs,
+				container.NewBorder(nil, nil, btnSortOrderRow, nil, tabs),
 				rectSpacer,
 				container.NewCenter(results),
 			),
@@ -12782,8 +12821,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	valueSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 	valueSourcePort.Text = "  " + strconv.FormatUint(details.SourcePort, 10)
 
-	btnView := widget.NewButton("View in Explorer", nil)
-	btnView.OnTapped = func() {
+	btnView := newSizedTextButton("View in Explorer", func() {
 		if engram.Disk.GetNetwork() {
 			link, _ := url.Parse("https://explorer.derofoundation.org/tx/" + txid)
 			_ = fyne.CurrentApp().OpenURL(link)
@@ -12791,7 +12829,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 			link, _ := url.Parse("https://testnetexplorer.derofoundation.org/tx/" + txid)
 			_ = fyne.CurrentApp().OpenURL(link)
 		}
-	}
+	})
 
 	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		overlay := session.Window.Canvas().Overlays()

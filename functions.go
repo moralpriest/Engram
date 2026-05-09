@@ -1612,6 +1612,10 @@ func refreshPulseWalletState(sentNotifications *bool) {
 		status.Gnomon.Refresh()
 		status.EPOCH.Refresh()
 	})
+
+	// Background update of history and messages to keep cache warm
+	refreshMessageHistoryAsync(false)
+	refreshHistoryAsync(false)
 }
 
 // Go routine to update the latest information from the connected daemon (Online Mode only)
@@ -3422,6 +3426,7 @@ type HistoryRowCache struct {
 	CoinbaseRows []string
 	MessageRows  []string
 	Loaded       bool
+	sync.RWMutex
 }
 
 var messageCache MessageCache
@@ -3526,29 +3531,28 @@ func setRenderedThreadCache(contact string, minHeight uint64, items []RenderedTh
 	renderedThreadCache[key] = append([]RenderedThreadMessage(nil), items...)
 }
 
-func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string, ok bool) {
-	historyRowCacheMu.RLock()
-	defer historyRowCacheMu.RUnlock()
+func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string, height uint64, ok bool) {
+	historyRowCache.RLock()
+	defer historyRowCache.RUnlock()
 
 	if engram.Disk == nil || !historyRowCache.Loaded {
-		return nil, nil, nil, nil, false
+		return nil, nil, nil, nil, 0, false
 	}
 
 	address := engram.Disk.GetAddress().String()
-	height := engram.Disk.Get_Height()
-	if historyRowCache.Address != address || historyRowCache.Height != height {
-		return nil, nil, nil, nil, false
+	if historyRowCache.Address != address {
+		return nil, nil, nil, nil, 0, false
 	}
 
 	transfers = append([]rpc.Entry(nil), historyRowCache.Transfers...)
 	normalRows = append([]string(nil), historyRowCache.NormalRows...)
 	coinbaseRows = append([]string(nil), historyRowCache.CoinbaseRows...)
 	messageRows = append([]string(nil), historyRowCache.MessageRows...)
-	return transfers, normalRows, coinbaseRows, messageRows, true
+	return transfers, normalRows, coinbaseRows, messageRows, historyRowCache.Height, true
 }
 
 func getTransferTime(txid string) time.Time {
-	transfers, _, _, _, ok := getHistoryRowCache()
+	transfers, _, _, _, _, ok := getHistoryRowCache()
 	if !ok {
 		return time.Time{}
 	}
@@ -3565,8 +3569,8 @@ func setHistoryRowCache(transfers []rpc.Entry, normalRows []string, coinbaseRows
 		return
 	}
 
-	historyRowCacheMu.Lock()
-	defer historyRowCacheMu.Unlock()
+	historyRowCache.Lock()
+	defer historyRowCache.Unlock()
 	historyRowCache.Address = engram.Disk.GetAddress().String()
 	historyRowCache.Height = engram.Disk.Get_Height()
 	historyRowCache.Transfers = append([]rpc.Entry(nil), transfers...)
@@ -3576,40 +3580,181 @@ func setHistoryRowCache(transfers []rpc.Entry, normalRows []string, coinbaseRows
 	historyRowCache.Loaded = true
 }
 
+// syncHistoryRows incrementally updates the history cache and returns the latest data.
+// It is optimized for fast loading on mobile and remote nodes.
+var historySortOrder string = "Descending"
+
+func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
+	if engram.Disk == nil {
+		return nil, nil, nil, nil
+	}
+
+	// 1. Check if we can use the cache as-is or as a starting point
+	cachedTransfers, cachedNormal, cachedCoinbase, _, cachedHeight, ok := getHistoryRowCache()
+
+	// Detect if cache needs a rebuild (e.g. after update adding headers or changing sort)
+	forceRebuild := false
+	if ok && len(cachedTransfers) > 0 && (len(cachedNormal) == 0 || !strings.Contains(cachedNormal[0], "HEADER")) {
+		forceRebuild = true
+	}
+
+	if ok && !forceRebuild && cachedHeight == engram.Disk.Get_Height() {
+		// Even if height matches, we return the cached rows (which include messages)
+		_, _, _, messageRows, _, _ := getHistoryRowCache()
+		return cachedTransfers, cachedNormal, cachedCoinbase, messageRows
+	}
+
+	// 2. Determine start height for delta fetch
+	startHeight := uint64(0)
+	if ok && !forceRebuild && cachedHeight > 0 && cachedHeight <= engram.Disk.Get_Height() {
+		// Massive overlap (5000 blocks ~ 20 hours) to ensure no transactions are ever missed
+		// due to indexing delays or network inconsistencies.
+		if cachedHeight > 5000 {
+			startHeight = cachedHeight - 5000
+		} else {
+			startHeight = 0
+		}
+	} else {
+		// For the very first load or forced rebuild, fetch EVERYTHING to ensure full history
+		startHeight = 0
+	}
+
+	// 3. Fetch delta transfers (Normal and Coinbase separately to be sure)
+	var zeroscid crypto.Hash
+	newEntries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, 0, "", "", 0, 0)
+	newCoinbase := engram.Disk.Show_Transfers(zeroscid, true, true, true, startHeight, 0, "", "", 0, 0)
+	newEntries = append(newEntries, newCoinbase...)
+	logger.Printf("[SyncHistory] Fetched %d new entries (%d normal, %d coinbase) starting from height %d\n", len(newEntries), len(newEntries)-len(newCoinbase), len(newCoinbase), startHeight)
+
+	// 4. Also sync messages incrementally
+	allMessages := scanMessageTransfers(0)
+
+	// 5. Merge and Deduplicate by TXID + Height + Amount (to handle multiple outputs/rewards in one TX)
+	uniqueTransfers := make(map[string]rpc.Entry)
+	if !forceRebuild {
+		for _, t := range cachedTransfers {
+			key := fmt.Sprintf("%s-%d-%d", t.TXID, t.Height, t.Amount)
+			uniqueTransfers[key] = t
+		}
+	}
+	for _, t := range newEntries {
+		key := fmt.Sprintf("%s-%d-%d", t.TXID, t.Height, t.Amount)
+		uniqueTransfers[key] = t
+	}
+
+	transfers = make([]rpc.Entry, 0, len(uniqueTransfers))
+	coinbaseCount := 0
+	normalCount := 0
+	for _, t := range uniqueTransfers {
+		transfers = append(transfers, t)
+		if t.Coinbase {
+			coinbaseCount++
+		} else {
+			normalCount++
+		}
+	}
+	logger.Printf("[SyncHistory] Deduplicated totals: %d coinbase, %d normal (from %d fetched)\n", coinbaseCount, normalCount, len(newEntries))
+
+	// 6. Sort according to user preference
+	sort.Slice(transfers, func(i, j int) bool {
+		if historySortOrder == "Descending" {
+			if transfers[i].Height != transfers[j].Height {
+				return transfers[i].Height > transfers[j].Height
+			}
+			return transfers[i].Time.After(transfers[j].Time)
+		} else {
+			if transfers[i].Height != transfers[j].Height {
+				return transfers[i].Height < transfers[j].Height
+			}
+			return transfers[i].Time.Before(transfers[j].Time)
+		}
+	})
+
+	// 6. Build ALL rows from the sorted list to ensure perfect order
+	normalRows, coinbaseRows, _ = buildHistoryRows(transfers, nil)
+	_, _, messageRows = buildHistoryRows(nil, allMessages)
+
+	// 7. Update cache
+	setHistoryRowCache(transfers, normalRows, coinbaseRows, messageRows)
+
+	return transfers, normalRows, coinbaseRows, messageRows
+}
+
+func getDateLabel(t time.Time) string {
+	now := time.Now().UTC()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	yesterday := today.AddDate(0, 0, -1)
+
+	txUTC := t.UTC()
+	txDate := time.Date(txUTC.Year(), txUTC.Month(), txUTC.Day(), 0, 0, 0, 0, time.UTC)
+
+	if txDate.Equal(today) {
+		return "T O D A Y  -  " + txUTC.Format("JAN 02, 2006")
+	} else if txDate.Equal(yesterday) {
+		return "Y E S T E R D A Y  -  " + txUTC.Format("JAN 02, 2006")
+	} else {
+		return strings.ToUpper(txUTC.Format("January 02, 2006"))
+	}
+}
+
 func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows []string, coinbaseRows []string, messageRows []string) {
 	normalRows = make([]string, 0, len(entries))
 	coinbaseRows = make([]string, 0, len(entries))
 	messageRows = make([]string, 0, len(messages))
 
+	// Track dates separately for each tab so headers aren't skipped
+	var lastNormalDate string
+	var lastCoinbaseDate string
 	for e := range entries {
 		var direction string
 		stamp := entries[e].Time.Format("2006-01-02")
 		height := strconv.FormatUint(entries[e].Height, 10)
 		txid := entries[e].TXID
+		status := fmt.Sprintf("%d", entries[e].Status)
+		comment := messageComment(entries[e])
+		if len(comment) > 20 {
+			comment = comment[0:20] + ".."
+		}
+
+		currentDateLabel := getDateLabel(entries[e].Time)
 
 		if entries[e].Coinbase {
+			if currentDateLabel != lastCoinbaseDate {
+				coinbaseRows = append(coinbaseRows, "HEADER;;;"+currentDateLabel+";;; ;;; ;;; ")
+			}
 			amount := entries[e].Amount
 			if amount < 0 {
 				amount = -amount
 			}
-			coinbaseRows = append(coinbaseRows, "Received;;;"+globals.FormatMoney(amount)+";;;"+height+";;;"+stamp+";;;"+txid)
-			continue
-		}
-
-		if !entries[e].Incoming {
-			direction = "Sent"
-			normalRows = append(normalRows, direction+";;;("+globals.FormatMoney(entries[e].Amount)+");;;"+height+";;;"+stamp+";;;"+txid)
+			coinbaseRows = append(coinbaseRows, "Received;;;"+globals.FormatMoney(amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+			lastCoinbaseDate = currentDateLabel
 		} else {
-			direction = "Received"
-			normalRows = append(normalRows, direction+";;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid)
+			if currentDateLabel != lastNormalDate {
+				normalRows = append(normalRows, "HEADER;;;"+currentDateLabel+";;; ;;; ;;; ")
+			}
+			if !entries[e].Incoming {
+				direction = "Sent"
+				normalRows = append(normalRows, direction+";;;("+globals.FormatMoney(entries[e].Amount)+");;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+			} else {
+				direction = "Received"
+				normalRows = append(normalRows, direction+";;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+			}
+			lastNormalDate = currentDateLabel
 		}
 	}
 
+	var lastMessageDate string
 	for _, message := range messages {
 		direction := "Received"
 		if !message.Entry.Incoming {
 			direction = "Sent    "
 		}
+
+		currentDateLabel := getDateLabel(message.Entry.Time)
+		if currentDateLabel != lastMessageDate {
+			messageRows = append(messageRows, "HEADER;;;"+currentDateLabel+";;; ;;; ;;; ")
+		}
+
 		username := message.Label
 		if username == "" {
 			username = message.ContactKey
@@ -3618,14 +3763,58 @@ func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows
 			username = username[0:10] + ".."
 		}
 		comment := message.Comment
-		if len(comment) > 10 {
-			comment = comment[0:10] + ".."
+		if len(comment) > 15 {
+			comment = comment[0:15] + ".."
 		}
 		stamp := message.Entry.Time.Format("2006-01-02")
+
 		messageRows = append(messageRows, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+message.Entry.TXID+";;;"+message.ContactKey)
+		lastMessageDate = currentDateLabel
 	}
 
 	return normalRows, coinbaseRows, messageRows
+}
+
+var historyRefreshState struct {
+	sync.Mutex
+	running bool
+}
+
+// refreshHistoryAsync performs a background update of the transaction history cache.
+func refreshHistoryAsync(force bool) {
+	if engram.Disk == nil {
+		return
+	}
+	generation := currentWalletGeneration()
+
+	historyRefreshState.Lock()
+	if historyRefreshState.running {
+		historyRefreshState.Unlock()
+		return
+	}
+	historyRefreshState.running = true
+	historyRefreshState.Unlock()
+
+	go func() {
+		defer func() {
+			historyRefreshState.Lock()
+			historyRefreshState.running = false
+			historyRefreshState.Unlock()
+		}()
+
+		if !isWalletGenerationActive(generation) || globals.Exit_In_Progress {
+			return
+		}
+
+		if force {
+			historyRowCache.Lock()
+			historyRowCache.Loaded = false
+			historyRowCache.Height = 0
+			historyRowCache.Unlock()
+		}
+
+		syncHistoryRows()
+	}()
 }
 
 type persistedMessageRecord struct {
@@ -4499,7 +4688,7 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Entry.Time.Before(result[j].Entry.Time)
+		return result[i].Entry.Time.After(result[j].Entry.Time)
 	})
 
 	if minHeight == 0 {
