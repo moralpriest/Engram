@@ -2421,7 +2421,6 @@ func layoutReceive() fyne.CanvasObject {
 	})
 	addressCopyBtn.Importance = widget.HighImportance
 
-
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.ReceivingAddress = "" // Reset on exit
 		session.LastDomain = session.Window.Content()
@@ -2488,7 +2487,6 @@ func layoutReceive() fyne.CanvasObject {
 			rectSpacer,
 		),
 	)
-
 
 	layoutObj := container.NewBorder(
 		top,
@@ -8017,7 +8015,6 @@ func layoutAppSettings() fyne.CanvasObject {
 		checkGnomon.SetChecked(false)
 	}
 
-
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText("EPOCH STATISTICS", colors.Gray)
 	epochTitle.TextSize = scaleFont(11)
@@ -8387,7 +8384,6 @@ func layoutAppSettings() fyne.CanvasObject {
 		gnomonDescription,
 		rectSpacer,
 		checkGnomon,
-
 
 		// EPOCH STATISTICS Section
 		rectSpacer,
@@ -18940,15 +18936,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	historyData = binding.BindStringList(&history)
 	historyList = widget.NewListWithData(historyData,
-		func() fyne.CanvasObject {
-			return container.NewStack(
-				container.NewVBox(
-					container.NewStack(
-						widget.NewLabel(""),
-					),
-				),
-			)
-		},
+		newTelaListItem,
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			dat := di.(binding.String)
 			str, err := dat.Get()
@@ -18956,9 +18944,7 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			split := strings.Split(str, ";;;")
-
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*fyne.Container).Objects[0].(*widget.Label).SetText(split[0])
+			configureTelaListRow(str, co)
 		},
 	)
 
@@ -21536,26 +21522,19 @@ func layoutTELA() fyne.CanvasObject {
 					title = scid.String()
 				}
 
-				if len(title) > 36 {
-					title = title[0:36] + "..."
-				}
-
 				if desc == "" {
 					desc = "N/A"
 				}
 
-				if len(desc) > 40 {
-					desc = desc[0:40] + "..."
-				}
-
-				historyResults = append(historyResults, title+";;;"+desc+";;;;;;"+scid.String())
+				historyResults = append(historyResults, title+";;;"+scid.String()+";;;"+desc)
 			}
 
 			sort.Strings(historyResults)
 			history = historyResults
 			historyData.Set(history)
 
-			results.Text = ""
+			results.Text = fmt.Sprintf("  Launched Apps:  %d", len(history))
+			results.Color = colors.Green
 
 			fyne.Do(func() {
 				historyList.Refresh()
@@ -21700,7 +21679,7 @@ func layoutTELA() fyne.CanvasObject {
 			favoritesBox.Show()
 			favoritesList.Refresh()
 		case "History":
-			results.Hide()
+			results.Show()
 			telaStatus.Hide()
 			refreshTelaStatusBox()
 			if gnomon.Index == nil {
