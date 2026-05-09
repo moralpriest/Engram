@@ -325,7 +325,7 @@ func showVillagerMenu(updateLogo func()) {
 
 	var menu *fyne.Container
 
-	btnEdit := widget.NewButtonWithIcon("Edit", theme.DocumentCreateIcon(), func() {
+	btnEdit := widget.NewButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), func() {
 		overlay.Remove(menu)
 		showLoadingOverlay()
 		go func() {
@@ -368,7 +368,7 @@ func showVillagerMenu(updateLogo func()) {
 			})
 		}()
 	})
-	btnEdit.Importance = widget.HighImportance
+	btnEdit.Importance = widget.LowImportance
 
 	hideText := "Hide"
 	hideIcon := theme.VisibilityOffIcon()
