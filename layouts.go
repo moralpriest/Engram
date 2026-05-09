@@ -5213,18 +5213,6 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	hash := crypto.HashHexToHash(scid)
 	name, desc, icon, owner, code := getContractHeader(hash)
 
-	image := canvas.NewImageFromResource(resourceBlankPng)
-	image.SetMinSize(fyne.NewSize(ui.Width*0.3, ui.Width*0.3))
-	image.FillMode = canvas.ImageFillContain
-
-	if icon != "" {
-		if img, err := handleImageURL(name, icon, fyne.NewSize(ui.Width*0.3, ui.Width*0.3)); err == nil {
-			image = img
-		} else {
-			logger.Errorf("[Engram] Could not validate icon image: %s\n", err)
-		}
-	}
-
 	if owner == "" {
 		owner = "--"
 	}
@@ -5497,7 +5485,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		session.LastDomain = capture
 	})
 
-	image = canvas.NewImageFromResource(resourceBlankPng)
+	image := canvas.NewImageFromResource(resourceBlankPng)
 	image.SetMinSize(fyne.NewSize(ui.Width*0.3, ui.Width*0.3))
 	image.FillMode = canvas.ImageFillContain
 
@@ -12726,9 +12714,6 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		valueMember.ParseMarkdown("  Network (Mining Reward)")
 		valueAmount.Color = colors.Green
 		amount := details.Amount
-		if amount < 0 {
-			amount = -amount
-		}
 		valueAmount.Text = "  + " + globals.FormatMoney(amount)
 	} else if details.Incoming {
 		valueDirection.Text = "  Received"

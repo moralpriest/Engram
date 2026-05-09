@@ -2690,9 +2690,6 @@ func loadResources() {
 	res.gram = canvas.NewImageFromResource(resourceDEROLogoPng)
 	res.gram.FillMode = canvas.ImageFillContain
 
-	res.block = canvas.NewImageFromResource(resourceBlankPng)
-	res.block.FillMode = canvas.ImageFillContain
-
 	res.red_alert = canvas.NewImageFromResource(resourceRedAlertPng)
 	res.red_alert.FillMode = canvas.ImageFillContain
 
@@ -3723,9 +3720,6 @@ func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows
 				coinbaseRows = append(coinbaseRows, "HEADER;;;"+currentDateLabel+";;; ;;; ;;; ")
 			}
 			amount := entries[e].Amount
-			if amount < 0 {
-				amount = -amount
-			}
 			coinbaseRows = append(coinbaseRows, "Received;;;"+globals.FormatMoney(amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
 			lastCoinbaseDate = currentDateLabel
 		} else {
