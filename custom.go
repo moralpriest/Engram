@@ -28,6 +28,18 @@ import (
 
 var appDriver fyne.Device
 
+type tintTheme struct {
+	fyne.Theme
+	iconColor color.Color
+}
+
+func (t *tintTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if name == theme.ColorNameForeground {
+		return t.iconColor
+	}
+	return t.Theme.Color(name, variant)
+}
+
 type returnEntry struct {
 	widget.Entry
 	OnReturn      func()
@@ -338,10 +350,104 @@ func newSmallIconLink(label string, icon fyne.Resource, onTap func()) *fyne.Cont
 	return container.NewStack(sizeEnforcer, linkContainer)
 }
 
-func newSmallIconButton(label string, icon fyne.Resource, onTap func()) *fyne.Container {
+func newSmallIconButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
 	btn := widget.NewButtonWithIcon(label, icon, onTap)
 	btn.Importance = widget.LowImportance
-	return container.NewGridWrap(scalePoint(110, 40), btn)
+	w := float32(110)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	return container.NewGridWrap(scalePoint(w, 40), btn)
+}
+
+func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
+	iconImg := widget.NewIcon(icon)
+	iconSizer := container.NewGridWrap(scalePoint(28, 28), iconImg)
+	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
+
+	labelText := canvas.NewText(label, color.White)
+	labelText.TextSize = scaleFont(11)
+	labelText.Alignment = fyne.TextAlignCenter
+
+	content := container.NewVBox(
+		container.NewCenter(themedIcon),
+		labelText,
+	)
+
+	btn := widget.NewButton("", onTap)
+	btn.Importance = widget.LowImportance
+
+	w := float32(100)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(60)
+	if isMobile() {
+		h = 68
+	}
+
+	outline := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	outline.StrokeWidth = 0
+	outline.CornerRadius = scaleSize(6)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
+
+	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
+}
+
+func newLargeIconButton(label string, icon fyne.Resource, onTap func(), width float32) *fyne.Container {
+	btn := widget.NewButtonWithIcon(label, icon, onTap)
+	btn.Importance = widget.MediumImportance
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	h := float32(48)
+	if isMobile() {
+		h = 56
+	}
+	sizeEnforcer.SetMinSize(scalePoint(width, h))
+	return container.NewStack(sizeEnforcer, btn)
+}
+
+func scaleSpacer(w float32) *canvas.Rectangle {
+	spacer := canvas.NewRectangle(color.Transparent)
+	spacer.SetMinSize(scalePoint(w, 1))
+	return spacer
+}
+
+func newTELAButton(onTap func(), width float32) *fyne.Container {
+	btn := widget.NewButton("", onTap)
+	btn.Importance = widget.LowImportance
+
+	img := canvas.NewImageFromResource(resourceTelaPng)
+	img.FillMode = canvas.ImageFillContain
+
+	imgWidth := scaleSize(70)
+	imgHeight := scaleSize(26)
+
+	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
+
+	labelText := canvas.NewText("TELA Web", color.White)
+	labelText.TextSize = scaleFont(11)
+	labelText.Alignment = fyne.TextAlignCenter
+
+	content := container.NewVBox(
+		container.NewCenter(imgSizer),
+		labelText,
+	)
+
+	h := float32(60)
+	if isMobile() {
+		h = 68
+	}
+
+	outline := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	outline.StrokeWidth = 0
+	outline.CornerRadius = scaleSize(6)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(width, h))
+
+	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
 }
 
 type slimProgressBar struct {
