@@ -99,6 +99,25 @@ var telaLaunchStartTimesGlobal struct {
 	m map[string]time.Time
 }
 
+func RefreshVillagerLogo() {
+	if res.logoContainer == nil {
+		return
+	}
+
+	res.logoContainer.Objects = nil
+	res.villagerMu.Lock()
+	vImg := res.villager
+	res.villagerMu.Unlock()
+
+	if vImg != nil && !session.VillagerHidden {
+		vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
+		res.logoContainer.Add(vImg)
+	} else {
+		res.logoContainer.Add(res.gram)
+	}
+	res.logoContainer.Refresh()
+}
+
 var telaBackfillActive atomic.Bool
 var telaBackfillFailed atomic.Bool
 var lastBackfillHeight int64 // Tracks the Gnomon height at which backfill last ran
@@ -398,20 +417,29 @@ func showVillagerMenu(updateLogo func()) {
 		}
 		go setTELADual("VillagerBackground", []byte(val))
 
-		// Re-render villager
+		// Re-render villager using cached pixels if available for instant response
 		go func() {
 			if engram.Disk != nil {
 				address := engram.Disk.GetAddress().String()
-				pixels, err := fetchVillagerPixels(address)
-				if err == nil {
-					villagerImg := renderVillager(address, pixels)
-					res.villagerMu.Lock()
-					res.villager = villagerImg
-					res.villagerMu.Unlock()
-					fyne.Do(func() {
-						updateLogo()
-					})
+				pixels := session.VillagerPixels
+				if pixels == "" {
+					// Fallback to fetching if cache is empty for some reason
+					var err error
+					pixels, err = fetchVillagerPixels(address)
+					if err != nil {
+						logger.Errorf("[Villager] Error fetching pixels for toggle: %v", err)
+						return
+					}
+					session.VillagerPixels = pixels
 				}
+
+				villagerImg := renderVillager(address, pixels)
+				res.villagerMu.Lock()
+				res.villager = villagerImg
+				res.villagerMu.Unlock()
+				fyne.Do(func() {
+					updateLogo()
+				})
 			}
 		}()
 		overlay.Remove(menu)
@@ -1467,21 +1495,24 @@ func layoutDashboard() fyne.CanvasObject {
 
 	res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 
-	logoContainer := container.NewStack()
+	res.logoContainer = container.NewStack()
 	var updateLogo func()
 	updateLogo = func() {
-		logoContainer.Objects = nil
+		if res.logoContainer == nil {
+			return
+		}
+		res.logoContainer.Objects = nil
 		res.villagerMu.Lock()
 		vImg := res.villager
 		res.villagerMu.Unlock()
 
 		if vImg != nil && !session.VillagerHidden {
 			vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
-			logoContainer.Add(vImg)
+			res.logoContainer.Add(vImg)
 		} else {
-			logoContainer.Add(res.gram)
+			res.logoContainer.Add(res.gram)
 		}
-		logoContainer.Refresh()
+		res.logoContainer.Refresh()
 	}
 
 	updateLogo()
@@ -1492,7 +1523,7 @@ func layoutDashboard() fyne.CanvasObject {
 	})
 	logoBtn.Importance = widget.LowImportance
 
-	logoStack := container.NewStack(logoContainer, logoBtn)
+	logoStack := container.NewStack(res.logoContainer, logoBtn)
 
 	res.villagerMu.Lock()
 	noVillager := res.villager == nil

@@ -318,6 +318,7 @@ func updateVillagerAvatar() {
 		return
 	}
 
+	session.VillagerPixels = pixels
 	villagerImg := renderVillager(address, pixels)
 
 	res.villagerMu.Lock()
@@ -325,24 +326,10 @@ func updateVillagerAvatar() {
 	session.VillagerAddress = address
 	res.villagerMu.Unlock()
 
-	pref, found := getTELADual("VillagerHidden")
-	if found {
-		session.VillagerHidden = pref == "true"
-	} else {
-		session.VillagerHidden = false
-	}
-
-	bgPref, bgFound := getTELADual("VillagerBackground")
-	if bgFound {
-		session.VillagerBackground = bgPref == "true"
-	} else {
-		session.VillagerBackground = true
-	}
-
 	if session.Dashboard == "main" {
 		fyne.Do(func() {
 			if session.Window != nil && session.Domain == "app.wallet" {
-				session.Window.SetContent(layoutDashboard())
+				RefreshVillagerLogo()
 			}
 		})
 	}

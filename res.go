@@ -45,6 +45,7 @@ type Res struct {
 	mainBg           *canvas.Image
 	telaBg           *canvas.Image
 	cachedTransition *fyne.Container
+	logoContainer    *fyne.Container
 	transitionMu     sync.Mutex
 }
 

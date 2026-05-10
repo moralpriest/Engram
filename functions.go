@@ -162,6 +162,7 @@ type Session struct {
 	VillagerBackground bool
 	VillagerPopupShown bool
 	VillagerAddress    string
+	VillagerPixels     string
 }
 
 type RemoteAccess struct {
@@ -1377,6 +1378,19 @@ func initTELAPreferences() {
 		logger.Printf("[Engram] TELA Restrictive Mode setting loaded: %s", restrictiveMode)
 	} else {
 		logger.Printf("[Engram] TELA Restrictive Mode not found, using default (Disabled)")
+	}
+
+	// Load Villager preferences
+	if pref, found := getTELADual("VillagerHidden"); found {
+		session.VillagerHidden = pref == "true"
+	} else {
+		session.VillagerHidden = false
+	}
+
+	if bgPref, found := getTELADual("VillagerBackground"); found {
+		session.VillagerBackground = bgPref == "true"
+	} else {
+		session.VillagerBackground = true
 	}
 }
 
@@ -7301,171 +7315,108 @@ func toggleXSWD(endpoint string) {
 
 		logger.Printf("[Engram] Starting XSWD server %s\n", endpoint)
 
-		// Check if port is already in use and wait up to 10 seconds for release
-		if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
-			if listener, err := net.ListenTCP("tcp", addr); err != nil {
-				logger.Printf("[Engram] Port %s in use, waiting up to 10 seconds for release...\n", endpoint)
-				for i := 0; i < 10; i++ {
-					time.Sleep(time.Second)
+		if remoteAccess.WS.toggle != nil {
+			uiDo(func() {
+				remoteAccess.WS.toggle.Disable()
+				remoteAccess.WS.toggle.Text = "Initializing"
+				remoteAccess.WS.toggle.Refresh()
+			})
+		}
+
+		go func() {
+			// Check if port is already in use and wait up to 5 seconds for release
+			if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
+				for i := 0; i < 5; i++ {
 					if listener, err := net.ListenTCP("tcp", addr); err == nil {
 						listener.Close()
-						logger.Printf("[Engram] Port %s now available\n", endpoint)
+						logger.Printf("[Engram] Port %s is available\n", endpoint)
 						break
 					}
-					if i == 9 {
-						logger.Errorf("[Engram] Port %s still in use after 10 seconds\n", endpoint)
-					}
-				}
-			} else {
-				listener.Close()
-			}
-		}
-
-		noStoreMethods := engramNoStoreMethods()
-
-		xswdStateMu.Lock()
-		remoteAccess.WS.server = xswd.NewXSWDServerWithPort(portInt, engram.Disk, false, noStoreMethods, func(ad *xswd.ApplicationData) bool {
-			return XSWDPrompt(ad)
-		}, func(ad *xswd.ApplicationData, r *jrpc2.Request) xswd.Permission {
-			return AskPermissionForRequest(ad, r)
-		})
-		xswdStateMu.Unlock()
-
-		// Only update UI if it exists (may be nil during auto-start at login)
-		if remoteAccess.WS.toggle != nil {
-			uiDo(func() {
-				if remoteAccess.WS.toggle != nil {
-					remoteAccess.WS.toggle.Disable()
-					remoteAccess.WS.toggle.Text = "Initializing"
-					remoteAccess.WS.toggle.Refresh()
-				}
-			})
-		}
-		time.Sleep(time.Second)
-		if engram.Disk == nil || !session.WalletOpen {
-			xswdStateMu.Lock()
-			remoteAccess.WS.server = nil
-			xswdStateMu.Unlock()
-			return
-		}
-		xswdStateMu.RLock()
-		server := remoteAccess.WS.server
-		xswdStateMu.RUnlock()
-		if server == nil || !server.IsRunning() {
-			// Retry after a brief delay (port may still be releasing)
-			logger.Printf("[Engram] XSWD server not running, retrying in 1 second...\n")
-			time.Sleep(time.Second)
-
-			xswdStateMu.RLock()
-			server = remoteAccess.WS.server
-			xswdStateMu.RUnlock()
-			if server == nil || !server.IsRunning() {
-				// Check port availability
-				if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
-					if listener, err := net.ListenTCP("tcp", addr); err != nil {
-						logger.Errorf("[Engram] Port %s still in use after retry: %v\n", endpoint, err)
+					if i < 4 {
+						logger.Printf("[Engram] Port %s in use, retrying in 1s... (%d/5)\n", endpoint, i+1)
+						time.Sleep(time.Second)
 					} else {
-						listener.Close()
+						logger.Errorf("[Engram] Port %s still in use after 5 seconds\n", endpoint)
 					}
 				}
+			}
 
-				xswdStateMu.Lock()
-				remoteAccess.WS.server = nil
+			noStoreMethods := engramNoStoreMethods()
+
+			xswdStateMu.Lock()
+			if remoteAccess.WS.server != nil {
 				xswdStateMu.Unlock()
-				logger.Errorf("[Engram] Error starting XSWD server: server=%v engram.Disk=%v WalletOpen=%v\n", server, engram.Disk != nil, session.WalletOpen)
-				if remoteAccess.WS.toggle != nil {
-					uiDo(func() {
-						if remoteAccess.WS.toggle != nil {
-							remoteAccess.WS.toggle.Text = "Error starting web sockets"
-							remoteAccess.WS.toggle.Refresh()
-						}
-					})
-					go func() {
-						time.Sleep(time.Second * 2)
-						uiDo(func() {
-							if remoteAccess.WS.toggle != nil {
-								remoteAccess.WS.toggle.Text = "Turn On"
-								remoteAccess.WS.toggle.Refresh()
-								remoteAccess.WS.toggle.Enable()
-							}
-						})
-					}()
-				}
 				return
 			}
-		}
-		if remoteAccess.WS.toggle != nil {
-			uiDo(func() {
-				if remoteAccess.WS.toggle != nil {
-					remoteAccess.WS.toggle.Enable()
-				}
+			remoteAccess.WS.server = xswd.NewXSWDServerWithPort(portInt, engram.Disk, false, noStoreMethods, func(ad *xswd.ApplicationData) bool {
+				return XSWDPrompt(ad)
+			}, func(ad *xswd.ApplicationData, r *jrpc2.Request) xswd.Permission {
+				return AskPermissionForRequest(ad, r)
 			})
-		}
 
-		xswdStateMu.RLock()
-		server = remoteAccess.WS.server
-		xswdStateMu.RUnlock()
-		if server == nil {
-			if remoteAccess.WS.status != nil {
-				remoteAccess.WS.status.Text = "Blocked"
-				remoteAccess.WS.status.Color = colors.Gray
-				remoteAccess.WS.status.Refresh()
+			server := remoteAccess.WS.server
+			xswdStateMu.Unlock()
+
+			if server == nil {
+				logger.Errorf("[Engram] Failed to create XSWD server")
+				uiDo(func() {
+					if remoteAccess.WS.toggle != nil {
+						remoteAccess.WS.toggle.Enable()
+						remoteAccess.WS.toggle.Text = "Turn On"
+						remoteAccess.WS.toggle.Refresh()
+					}
+				})
+				return
 			}
-			if remoteAccess.WS.toggle != nil {
-				remoteAccess.WS.toggle.Text = "Turn On"
-				remoteAccess.WS.toggle.Refresh()
-			}
-			if status.RemoteAccess != nil {
-				status.RemoteAccess.FillColor = colors.Gray
-				status.RemoteAccess.StrokeColor = colors.Gray
-				status.RemoteAccess.Refresh()
-			}
-		} else {
+
+			// Add handlers
 			for method, h := range EngramHandler {
-				remoteAccess.WS.server.SetCustomMethod(method, h)
+				server.SetCustomMethod(method, h)
 			}
-
-			remoteAccess.WS.server.SetCustomMethod("HandleTELALinks", handler.New(HandleTELALinks))
-
-			remoteAccess.WS.server.SetCustomMethod("AttemptEPOCHWithAddr", handler.New(AttemptEPOCHWithAddr))
-
+			server.SetCustomMethod("HandleTELALinks", handler.New(HandleTELALinks))
+			server.SetCustomMethod("AttemptEPOCHWithAddr", handler.New(AttemptEPOCHWithAddr))
 			for method, h := range epoch.GetHandler() {
-				remoteAccess.WS.server.SetCustomMethod(method, h)
+				server.SetCustomMethod(method, h)
 			}
 
-			if remoteAccess.WS.status != nil {
+			if server.IsRunning() {
+				logger.Printf("[Engram] WebSocket server started successfully on %s", endpoint)
 				uiDo(func() {
 					if remoteAccess.WS.status != nil {
 						remoteAccess.WS.status.Text = "Allowed"
 						remoteAccess.WS.status.Color = colors.Green
 						remoteAccess.WS.status.Refresh()
 					}
-				})
-			}
-			if remoteAccess.WS.toggle != nil {
-				uiDo(func() {
 					if remoteAccess.WS.toggle != nil {
+						remoteAccess.WS.toggle.Enable()
 						remoteAccess.WS.toggle.Text = "Turn Off"
 						remoteAccess.WS.toggle.Refresh()
 					}
-				})
-			}
-			if status.RemoteAccess != nil {
-				uiDo(func() {
+					if remoteAccess.WS.portText != nil {
+						remoteAccess.WS.portText.Disable()
+						remoteAccess.WS.portText.Refresh()
+					}
 					if status.RemoteAccess != nil {
 						status.RemoteAccess.FillColor = colors.Green
 						status.RemoteAccess.StrokeColor = colors.Green
 						status.RemoteAccess.Refresh()
 					}
 				})
-			}
 
-			// CRITICAL FIX: Save WebSocket enabled state to storage
-			remoteAccess.WS.global.enabled = true
-			remoteAccess.WS.advanced = true
-			setPermissions()
-			logger.Printf("[Engram] WebSocket enabled state saved to storage")
-		}
+				remoteAccess.WS.global.enabled = true
+				remoteAccess.WS.advanced = true
+				setPermissions()
+			} else {
+				logger.Errorf("[Engram] XSWD server failed to start on %s", endpoint)
+				uiDo(func() {
+					if remoteAccess.WS.toggle != nil {
+						remoteAccess.WS.toggle.Enable()
+						remoteAccess.WS.toggle.Text = "Turn On"
+						remoteAccess.WS.toggle.Refresh()
+					}
+				})
+			}
+		}()
 	}
 }
 
