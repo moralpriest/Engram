@@ -318,6 +318,11 @@ func updateVillagerAvatar() {
 		return
 	}
 
+	// Double check we're still on the same wallet before updating state
+	if engram.Disk == nil || engram.Disk.GetAddress().String() != address {
+		return
+	}
+
 	session.VillagerPixels = pixels
 	villagerImg := renderVillager(address, pixels)
 

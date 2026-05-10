@@ -2210,6 +2210,17 @@ func closeWallet() {
 		session.LastBalance = 0
 		tx = Transfers{}
 
+		// Clear Villager state
+		session.VillagerHidden = false
+		session.VillagerBackground = true
+		session.VillagerPopupShown = false
+		session.VillagerAddress = ""
+		session.VillagerPixels = ""
+
+		res.villagerMu.Lock()
+		res.villager = nil
+		res.villagerMu.Unlock()
+
 		remoteAccess.RPC.server = nil
 		remoteAccess.WS.server = nil
 		rpc_client.WS = nil
