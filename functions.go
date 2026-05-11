@@ -7515,6 +7515,7 @@ func toggleXSWD(endpoint string) {
 			})
 		}
 		logger.Printf("[Engram] XSWD server closed\n")
+		go refreshXSWDList()
 	} else {
 		// Force port migration if it's the old experimental one
 		if endpoint == ":8081" || endpoint == "8081" {
@@ -7631,6 +7632,7 @@ func toggleXSWD(endpoint string) {
 				remoteAccess.WS.global.enabled = true
 				remoteAccess.WS.advanced = true
 				setPermissions()
+				go refreshXSWDList()
 			} else {
 				logger.Errorf("[Engram] XSWD server failed to start on %s", endpoint)
 				uiDo(func() {

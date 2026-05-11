@@ -22158,15 +22158,20 @@ func layoutTELA() fyne.CanvasObject {
 }
 
 func telaGuardXSWD() {
-	EnsureXSWD()
-	if !hasAskedXSWD() && !remoteAccess.WS.global.enabled {
+	if !remoteAccess.WS.global.enabled {
+		// If XSWD is disabled, we MUST ask the user if they want to enable it
+		// for this TELA app to work. We ignore hasAskedXSWD here because
+		// the user explicitly triggered a TELA action.
 		if showXSWDPrompt() {
 			remoteAccess.WS.global.enabled = true
 			remoteAccess.WS.advanced = true
 			setPermissions()
 			EnsureXSWD()
 		}
-		setAskedXSWD()
+		setAskedXSWD() // Mark as asked since they've interacted with the prompt
+	} else {
+		// If it's enabled but not running, EnsureXSWD will start it
+		EnsureXSWD()
 	}
 }
 
