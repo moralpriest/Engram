@@ -2,11 +2,7 @@ module github.com/DEROFDN/engram
 
 go 1.26
 
-replace go.etcd.io/bbolt => go.etcd.io/bbolt v1.4.3
-
-replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.4
-
-replace github.com/go-text/typesetting => github.com/go-text/typesetting v0.3.3
+replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
 replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409
 
