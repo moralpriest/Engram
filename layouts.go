@@ -18889,6 +18889,13 @@ func layoutTELA() fyne.CanvasObject {
 
 					if err == nil {
 						pushTELANavigation(scid)
+
+						// Auto-index any dependent SCIDs (e.g. song registries) AFTER serving,
+						// so the TELA app files are cloned and can be scanned for hardcoded SCIDs.
+						if gnomon.Index != nil {
+							AutoIndexDependentSCIDs(scid)
+						}
+
 						go openURLAfterDelay(link)
 						if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
 							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
