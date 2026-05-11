@@ -197,6 +197,8 @@ tasks:
     desc: Package for Android
     deps: [patch-android, build-fyne]
     env:
+      ANDROID_HOME: /home/matdero/Android/Sdk
+      ANDROID_NDK_HOME: /home/matdero/Android/Sdk/ndk/26.1.10909125
     cmds:
       - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --app-version {{.VERSION}} --app-id {{.APP_ID}} --icon Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk

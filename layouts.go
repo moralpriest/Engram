@@ -346,38 +346,36 @@ func showVillagerMenu(updateLogo func()) {
 
 	btnEdit := widget.NewButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), func() {
 		overlay.Remove(menu)
-		showLoadingOverlay()
 		go func() {
-			// For Villager Edit, if XSWD is not enabled, always prompt.
-			alreadyEnabled := remoteAccess.WS.global.enabled
-			if !alreadyEnabled {
-				if showXSWDPrompt() {
-					remoteAccess.WS.global.enabled = true
-					if remoteAccess.WS.port == "" {
-						remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-						setRemoteAccessDual(remoteAccess.WS.port, "WS")
-					}
-					setPermissions()
-					if remoteAccess.WS.server == nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
-				} else {
-					remoteAccess.WS.global.enabled = false
-					setPermissions()
-					if remoteAccess.WS.server != nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
+			// Guard for XSWD server BEFORE showing loading overlay
+			// to avoid blocking the prompt dialog on mobile
+			telaGuardXSWD()
+
+			showLoadingOverlay()
+			scid := "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
+			logger.Printf("[Villager] Edit button tapped, using SCID: %s\n", scid)
+
+			var index tela.INDEX
+			var err error
+			// Retry loop for Gnomon sync (up to 5 attempts, 1s apart)
+			for i := 0; i < 5; i++ {
+				index, err = tela.GetINDEXInfo(scid, session.Daemon)
+				if err == nil {
+					break
 				}
-				setAskedXSWD()
+				logger.Printf("[Villager] Index retrieval attempt %d failed: %v\n", i+1, err)
+				time.Sleep(1 * time.Second)
 			}
 
-			scid := "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
-			index, err := tela.GetINDEXInfo(scid, session.Daemon)
 			if err != nil {
-				logger.Errorf("[Villager] Error getting index for %s: %v", scid, err)
-				removeOverlays()
+				logger.Errorf("[Villager] Error getting index for %s after retries: %v", scid, err)
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("could not retrieve Villager index (Gnomon still syncing?)"), session.Window)
+					removeOverlays()
+				})
 				return
 			}
+			logger.Printf("[Villager] Index retrieved: %s, preparing layoutTELAManager\n", index.NameHdr)
 			fyne.Do(func() {
 				session.LastDomain = session.Window.Content()
 				session.Window.SetContent(layoutTELAManager(index, func() {
@@ -1801,75 +1799,30 @@ func layoutDashboard() fyne.CanvasObject {
 
 		logger.Printf("[TELA-BUTTON] All guards passed, proceeding to open TELA...\n")
 
-		asked := hasAskedXSWD()
-		alreadyEnabled := remoteAccess.WS.global.enabled
-		logger.Printf("[TELA-BUTTON] hasAskedXSWD returned: %v, WS enabled: %v\n", asked, alreadyEnabled)
-		if !asked && !alreadyEnabled {
-			logger.Printf("[TELA-BUTTON] First-time XSWD prompt for wallet\n")
-			session.LastDomain = session.Window.Content()
-			session.Window.SetContent(layoutTransition())
-			go func() {
-				logger.Printf("[TELA-BUTTON] showXSWDPrompt() called from goroutine\n")
-				if showXSWDPrompt() {
-					logger.Printf("[TELA-BUTTON] User allowed XSWD\n")
-					remoteAccess.WS.global.enabled = true
-					if remoteAccess.WS.port == "" {
-						remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-						setRemoteAccessDual(remoteAccess.WS.port, "WS")
-					}
-					setPermissions()
-					if remoteAccess.WS.server == nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
-				} else {
-					logger.Printf("[TELA-BUTTON] User denied XSWD\n")
-					remoteAccess.WS.global.enabled = false
-					setPermissions()
-					if remoteAccess.WS.server != nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
+		go func() {
+			telaGuardXSWD()
+
+			fyne.Do(func() {
+				if session.Window == nil || !session.WalletOpen {
+					return
 				}
-				setAskedXSWD()
+				session.LastDomain = session.Window.Content()
+				session.Window.SetContent(layoutTransition())
 
-				fyne.Do(func() {
-					if session.Window == nil || !session.WalletOpen {
-						return
-					}
-					removeOverlays()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutTELA())
-					removeOverlays()
-					session.Navigating = false
-				})
-			}()
-			return
-		}
+				logger.Printf("[TELA-BUTTON] Calling layoutTELA()\n")
+				telaLayout := layoutTELA()
+				if telaLayout == nil {
+					logger.Errorf("[TELA-BUTTON] ERROR: layoutTELA() returned nil\n")
+					session.Window.SetContent(layoutDashboard())
+					return
+				}
 
-		logger.Printf("[TELA-BUTTON] Capturing session.Window.Content()\n")
-		currentContent := session.Window.Content()
-		if currentContent == nil {
-			logger.Printf("[TELA-BUTTON] Warning: current content is nil\n")
-		}
-		session.LastDomain = currentContent
-
-		logger.Printf("[TELA-BUTTON] Setting transition content\n")
-		session.Window.SetContent(layoutTransition())
-
-		logger.Printf("[TELA-BUTTON] Calling layoutTELA()\n")
-		telaLayout := layoutTELA()
-		logger.Printf("[TELA-BUTTON] layoutTELA() returned, setting content\n")
-
-		if telaLayout == nil {
-			logger.Errorf("[TELA-BUTTON] ERROR: layoutTELA() returned nil\n")
-			session.Window.SetContent(layoutDashboard())
-			return
-		}
-
-		session.Window.SetContent(telaLayout)
-		logger.Printf("[TELA-BUTTON] TELA content set, removing overlays\n")
-
-		removeOverlays()
-		logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
+				session.Window.SetContent(telaLayout)
+				removeOverlays()
+				session.Navigating = false
+				logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
+			})
+		}()
 	}, buttonWidth)
 
 	bottom := container.NewStack(
@@ -7415,7 +7368,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	if remoteAccess.WS.portText == nil {
 		remoteAccess.WS.portText = widget.NewEntry()
-		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.PlaceHolder = ":44326"
 		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
@@ -7432,13 +7385,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
 	remoteAccess.WS.toggle.OnTapped = func() {
 		if remoteAccess.WS.portText.Validate() != nil {
-			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.port = ":44326"
 			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 		} else {
 			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
 			if err != nil {
-				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
-				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.port = ":44326"
 				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 			} else {
 				remoteAccess.WS.port = remoteAccess.WS.portText.Text
@@ -9724,7 +9676,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	if remoteAccess.WS.portText == nil {
 		remoteAccess.WS.portText = widget.NewEntry()
-		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.PlaceHolder = ":44326"
 		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
@@ -9753,13 +9705,12 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
 	remoteAccess.WS.toggle.OnTapped = func() {
 		if remoteAccess.WS.portText.Validate() != nil {
-			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+			remoteAccess.WS.port = ":44326"
 			remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 		} else {
 			_, err := net.ResolveTCPAddr("tcp", remoteAccess.WS.port)
 			if err != nil {
-				logger.Errorf("[Remote Access] XSWD port: %s\n", err)
-				remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
+				remoteAccess.WS.port = ":44326"
 				remoteAccess.WS.portText.SetText(remoteAccess.WS.port)
 			} else {
 				remoteAccess.WS.port = remoteAccess.WS.portText.Text
@@ -10940,7 +10891,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	})
 
 	// Initialized in layoutRemoteAccess()
-	remoteAccess.WS.portText.SetText(getRemoteAccess("WS"))
+	remoteAccess.WS.portText.SetText(getRemoteAccessMigrated("WS"))
 
 	center := container.NewVScroll(
 		container.NewStack(
@@ -18869,10 +18820,16 @@ func layoutTELA() fyne.CanvasObject {
 				}()
 
 				go func() {
+					// Guard for XSWD server
+					telaGuardXSWD()
+
 					openURLAfterDelay := func(link string) {
+						link = cleanTELALink(link)
 						if a.Driver().Device().IsMobile() {
+							logger.Printf("[TELA] Mobile delay (2s) before opening: %s\n", link)
 							time.Sleep(2 * time.Second)
 						}
+						logger.Printf("[TELA] Opening URL: %s\n", link)
 						if u, err := url.Parse(link); err == nil {
 							fyne.CurrentApp().OpenURL(u)
 						}
@@ -18881,6 +18838,7 @@ func layoutTELA() fyne.CanvasObject {
 					link, err := serveTELAWithStaleRecovery(scid, session.Daemon, &cancelled)
 					if cancelled.Load() {
 						if err == nil {
+							logger.Printf("[TELA] Launch cancelled for %s (post-serve), shutting down server\n", scid)
 							tela.ShutdownServer(scid)
 						}
 						cleanupLaunch(false, true)
@@ -21804,6 +21762,9 @@ func layoutTELA() fyne.CanvasObject {
 
 				entryServeSCID.SetText("")
 
+				// Guard for XSWD server
+				telaGuardXSWD()
+
 				if link, err := serveTELAWithStaleRecovery(s, session.Daemon); err == nil {
 					url, err := url.Parse(link)
 					if err != nil {
@@ -21821,10 +21782,12 @@ func layoutTELA() fyne.CanvasObject {
 
 						if a.Driver().Device().IsMobile() {
 							go func() {
+								linkStr := cleanTELALink(url.String())
 								time.Sleep(2 * time.Second)
-								err = fyne.CurrentApp().OpenURL(url)
+								parsed, _ := url.Parse(linkStr)
+								err = fyne.CurrentApp().OpenURL(parsed)
 								if err != nil {
-									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
+									logger.Errorf("[Engram] TELA OpenURL error: %s (%s)\n", err, linkStr)
 									errorText.Text = "error could not open browser"
 									errorText.Color = colors.Red
 
@@ -22187,11 +22150,24 @@ func layoutTELA() fyne.CanvasObject {
 
 	layoutWithBg := container.NewStack(
 		// res.telaBg, // Background image - temporarily disabled for color testing
-		bgOverlay, // Background color only
+		bgOverlay, // Background color
 		layout,
 	)
 
 	return NewVScroll(layoutWithBg)
+}
+
+func telaGuardXSWD() {
+	EnsureXSWD()
+	if !hasAskedXSWD() && !remoteAccess.WS.global.enabled {
+		if showXSWDPrompt() {
+			remoteAccess.WS.global.enabled = true
+			remoteAccess.WS.advanced = true
+			setPermissions()
+			EnsureXSWD()
+		}
+		setAskedXSWD()
+	}
 }
 
 // Layout details of a TELA INDEX
@@ -22400,6 +22376,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	linkOpenInBrowser := widget.NewHyperlinkWithStyle("Open in Browser", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkOpenInBrowser.Hide()
 	linkOpenInBrowser.OnTapped = func() {
+		// Guard for XSWD server
+		telaGuardXSWD()
+
 		params := fmt.Sprintf("tela://open/%s", index.SCID)
 		var toggledUpdates bool
 		if !tela.UpdatesAllowed() {
@@ -22431,10 +22410,12 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 			if a.Driver().Device().IsMobile() {
 				go func() {
+					linkStr := cleanTELALink(url.String())
 					time.Sleep(2 * time.Second)
-					openErr := fyne.CurrentApp().OpenURL(url)
+					parsed, _ := url.Parse(linkStr)
+					openErr := fyne.CurrentApp().OpenURL(parsed)
 					if openErr != nil {
-						logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
+						logger.Errorf("[Engram] TELA OpenURL error: %s (%s)\n", openErr, linkStr)
 						fyne.Do(func() {
 							errorText.Text = "error could not open browser"
 							errorText.Color = colors.Red
@@ -22770,10 +22751,16 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			}
 
 			go func() {
+				// Guard for XSWD server
+				telaGuardXSWD()
+
 				openURLAfterDelay := func(link string) {
+					link = cleanTELALink(link)
 					if a.Driver().Device().IsMobile() {
+						logger.Printf("[TELA] Mobile delay (2s) before opening: %s\n", link)
 						time.Sleep(2 * time.Second)
 					}
+					logger.Printf("[TELA] Opening URL: %s\n", link)
 					if u, perr := url.Parse(link); perr == nil {
 						fyne.CurrentApp().OpenURL(u)
 					}
@@ -22782,6 +22769,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				link, err := serveTELAWithStaleRecovery(index.SCID, session.Daemon, &cancelled)
 				if cancelled.Load() {
 					if err == nil {
+						logger.Printf("[TELA] Launch cancelled for %s (post-serve), shutting down server\n", index.SCID)
 						tela.ShutdownServer(index.SCID)
 					}
 					cleanupLaunch(false, true)
@@ -22862,10 +22850,12 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 								if a.Driver().Device().IsMobile() {
 									go func() {
-										time.Sleep(2 * time.Second)
-										openErr := fyne.CurrentApp().OpenURL(parsedURL)
+										cleanLink := cleanTELALink(servedLink)
+										time.Sleep(500 * time.Millisecond) // Reduced: verifyTELAServerIsUp already waited
+										parsed, _ := url.Parse(cleanLink)
+										openErr := fyne.CurrentApp().OpenURL(parsed)
 										if openErr != nil {
-											logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
+											logger.Errorf("[Engram] TELA OpenURL error: %s (%s)\n", openErr, cleanLink)
 											fyne.Do(func() {
 												errorText.Text = "error could not open browser"
 												errorText.Color = colors.Red
@@ -23247,10 +23237,22 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	vScroll := NewVScroll(layout)
 	cachedTelaManagerContent = vScroll
 
-	if shouldLaunch && btnServer.Text == "Start Application" {
+	if shouldLaunch {
 		go func() {
-			time.Sleep(100 * time.Millisecond)
-			fyne.Do(btnServer.OnTapped)
+			// Small delay to let the UI finish layout before opening browser
+			time.Sleep(200 * time.Millisecond)
+
+			// Check if already running via DURL
+			if tela.HasServer(index.DURL) {
+				// If running, we don't need to wait for UI buttons to update
+				// Just trigger the open in browser logic directly
+				if linkOpenInBrowser != nil {
+					fyne.Do(linkOpenInBrowser.OnTapped)
+				}
+			} else {
+				// Not running, wait for UI to initialize and tap Start
+				fyne.Do(btnServer.OnTapped)
+			}
 		}()
 	}
 
