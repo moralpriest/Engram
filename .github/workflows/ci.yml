@@ -104,7 +104,7 @@ jobs:
         shell: bash
 
       - name: 🔨 Build
-        run: go build -v -trimpath -mod=vendor -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
+        run: go build -v -trimpath -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
 
       - name: ✅ Verify binary
         run: |
@@ -153,7 +153,7 @@ jobs:
       - name: 🧪 Run tests
         if: steps.check-tests.outputs.has_tests == 'true'
         run: |
-          go test -v -mod=vendor -race -coverprofile=coverage.out -tags migrated_fynedo ./...
+          go test -v -race -coverprofile=coverage.out -tags migrated_fynedo ./...
 
       - name: 📊 Check coverage threshold
         if: steps.check-tests.outputs.has_tests == 'true'

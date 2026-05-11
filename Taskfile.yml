@@ -27,7 +27,7 @@ tasks:
   build:
     desc: Build the application
     cmds:
-      - go build -v -mod=vendor -tags {{.BUILD_TAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
+      - go build -v -tags {{.BUILD_TAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
     sources:
       - "*.go"
       - go.mod
@@ -44,7 +44,7 @@ tasks:
   test:
     desc: Run tests with race detector
     cmds:
-      - go test -v -mod=vendor -race -tags {{.BUILD_TAGS}} -coverprofile=coverage.out ./...
+      - go test -v -race -tags {{.BUILD_TAGS}} -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
     generates:
       - coverage.out
