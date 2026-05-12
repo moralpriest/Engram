@@ -361,9 +361,13 @@ func newSmallIconButton(label string, icon fyne.Resource, onTap func(), width ..
 }
 
 func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
+	return newIconLabelButtonWithColor(label, icon, colors.Green, onTap, width...)
+}
+
+func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImg := widget.NewIcon(icon)
 	iconSizer := container.NewGridWrap(scalePoint(28, 28), iconImg)
-	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
+	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
 
 	labelText := canvas.NewText(label, color.White)
 	labelText.TextSize = scaleFont(11)

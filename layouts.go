@@ -385,7 +385,6 @@ func showVillagerMenu(updateLogo func()) {
 			})
 		}()
 	})
-	btnEdit.Importance = widget.LowImportance
 
 	hideText := "Hide"
 	hideIcon := theme.VisibilityOffIcon()
@@ -502,7 +501,7 @@ func layoutMain() fyne.CanvasObject {
 
 	// Define objects
 
-	btnLogin := widget.NewButtonWithIcon("Connect", resourceConnectPng, nil)
+	btnLogin := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), nil)
 
 	if session.Error != "" {
 		btnLogin.Text = session.Error
@@ -913,7 +912,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	wPassword.SetPlaceHolder("Password")
 
 	// Login button
-	btnLogin := widget.NewButtonWithIcon("Connect", resourceConnectPng, nil)
+	btnLogin := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), nil)
 	btnLogin.Disable()
 
 	if session.Error != "" {
@@ -1429,7 +1428,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 	buttonWidth := ui.Width * 0.9 / 3
 
-	btnExit := newIconLabelButton("Exit", theme.LogoutIcon(), func() {
+	btnExit := newIconLabelButtonWithColor("Exit", theme.LogoutIcon(), colors.SoftRed, func() {
 		if session.Navigating {
 			return
 		}
