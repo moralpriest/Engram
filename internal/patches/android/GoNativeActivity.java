@@ -613,4 +613,19 @@ public class GoNativeActivity extends NativeActivity {
         boolean dark = (config.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         setDarkMode(dark);
     }
+
+	// Custom WebViewClient for TELA dApps to ignore SSL errors for local loopback
+	public static class EngramWebViewClient extends android.webkit.WebViewClient {
+		@Override
+		public void onReceivedSslError(android.webkit.WebView view, android.webkit.SslErrorHandler handler, android.net.http.SslError error) {
+			Log.d("Fyne", "EngramWebViewClient: Ignoring SSL error for " + error.getUrl());
+			handler.proceed();
+		}
+
+		@Override
+		public void onPageFinished(android.webkit.WebView view, String url) {
+			super.onPageFinished(view, url);
+			Log.d("Fyne", "EngramWebViewClient: Page loaded: " + url);
+		}
+	}
 }

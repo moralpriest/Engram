@@ -7,6 +7,7 @@ replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409
 
 require (
+	apptrix.org/components v0.0.0-20260408185842-10f2df6c300c
 	fyne.io/fyne/v2 v2.7.3
 	fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34
 	github.com/blang/semver v3.5.1+incompatible

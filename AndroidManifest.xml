@@ -1,17 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     package="com.derofdn.engram"
     android:versionCode="1"
     android:versionName="0.6.8">
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
-    <application android:label="Engram" android:debuggable="true" tools:targetApi="31">
+    <application android:label="Engram">
         <activity android:name="org.golang.app.GoNativeActivity"
                 android:label="Engram"
                 android:configChanges="orientation|keyboardHidden"

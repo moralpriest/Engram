@@ -204,6 +204,8 @@ type RemoteAccess struct {
 	}
 }
 
+var protectedOverlays sync.Map // Map[fyne.CanvasObject]bool
+
 type INDEXwithRatings struct {
 	ratings tela.Rating_Result
 	tela.INDEX
@@ -2639,6 +2641,9 @@ func removeOverlays() {
 		list := overlays.List()
 
 		for o := range list {
+			if _, protected := protectedOverlays.Load(list[o]); protected {
+				continue
+			}
 			overlays.Remove(list[o])
 		}
 
@@ -7006,52 +7011,59 @@ func showXSWDPrompt() bool {
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
+	var bg, prompt, combo fyne.CanvasObject
+	wasWebViewHidden := hideTELAWebViewForPermission()
 	uiDo(func() {
 		overlay := session.Window.Canvas().Overlays()
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
+		bg = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
 		)
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
+		prompt = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					content,
+					btnRow,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
 		)
+
+		combo = container.NewStack(bg, prompt)
+		protectedOverlays.Store(combo, true)
+		overlay.Add(combo)
 	})
 
 	<-done
 
 	uiDo(func() {
+		protectedOverlays.Delete(combo)
 		overlay := session.Window.Canvas().Overlays()
-		overlay.Top().Hide()
-		overlay.Remove(overlay.Top())
-		overlay.Remove(overlay.Top())
+		if combo != nil {
+			combo.Hide()
+			overlay.Remove(combo)
+		}
 	})
+	if wasWebViewHidden {
+		restoreTELAWebViewAfterPermission()
+	}
 
 	return allowed
 }
@@ -7059,7 +7071,8 @@ func showXSWDPrompt() bool {
 // EnsureXSWD checks if WebSocket is enabled and starts the server if it's not already running.
 // This is used as a guard before launching TELA apps.
 // It waits up to 3 seconds for the server to be operational.
-func EnsureXSWD() {
+// Returns true if server is running, false otherwise.
+func EnsureXSWD() bool {
 	if remoteAccess.WS.global.enabled {
 		wsEndpoint := remoteAccess.WS.port
 		// Force migration from old experimental port
@@ -7085,13 +7098,15 @@ func EnsureXSWD() {
 				// Wait a tiny bit more to ensure ListenAndServe actually completed the bind
 				time.Sleep(200 * time.Millisecond)
 				logger.Printf("[XSWD] EnsureXSWD: Server is ready after %dms\n", i*100)
-				return
+				return true
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
 		logger.Warnf("[XSWD] EnsureXSWD: Server still not ready after 3 seconds\n")
+		return false
 	} else {
 		logger.Printf("[XSWD] EnsureXSWD: WebSocket server is DISABLED in settings, skipping auto-start\n")
+		return false
 	}
 }
 
@@ -7649,6 +7664,9 @@ func toggleXSWD(endpoint string) {
 
 // Prompt when an application submits request to connect to wallet with XSWD
 func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
+	if ad.Url == "http://localhost:8082" || ad.Url == "http://127.0.0.1:8082" || ad.Url == "https://127.0.0.1:44443" {
+		ad.Name = "Villager"
+	}
 	logger.Printf("[XSWD] XSWDPrompt triggered for app: %s (%s)\n", ad.Name, ad.Url)
 	generation := currentWalletGeneration()
 	if !isWalletGenerationActive(generation) || session.Window == nil {
@@ -7694,10 +7712,10 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	}
 
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
-	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
+	var bg, prompt, combo fyne.CanvasObject
+	wasWebViewHidden := hideTELAWebViewForPermission()
 
+	uiDo(func() {
 		headerText := "NEW  CONNECTION  REQUEST"
 
 		header := canvas.NewText(headerText, colors.Gray)
@@ -7734,40 +7752,29 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		labelPermissions.Alignment = fyne.TextAlignLeading
 		labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
 
-		// Get permissioned methods from xswd.ApplicationData and create permission objects
-		var methods []string
-		for k := range ad.Permissions {
-			methods = append(methods, k)
-		}
-
-		sort.Strings(methods)
-
 		permForm := container.NewVBox()
 
 		textSpacer := canvas.NewRectangle(color.Transparent)
-		textSpacer.SetMinSize(fyne.NewSize(10, 3))
+		textSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-		for _, k := range methods {
-			perm := ad.Permissions[k]
-			permColor := colors.Account
-			switch perm {
-			case xswd.AlwaysAllow:
+		// Get requested permissions from xswd.ApplicationData and create permission objects
+		for name, p := range ad.Permissions {
+			permColor := colors.Red
+			if p == xswd.Allow {
 				permColor = colors.Green
-			case xswd.AlwaysDeny:
-				permColor = colors.Red
 			}
 
-			textMethod := widget.NewRichTextFromMarkdown("### " + k)
-			textMethod.Wrapping = fyne.TextWrapWord
+			textPerm := widget.NewRichTextFromMarkdown(fmt.Sprintf("### %s", name))
+			textPerm.Wrapping = fyne.TextWrapWord
 
 			sep := canvas.NewRectangle(colors.Gray)
 			sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
 
 			add := container.NewVBox(
-				textMethod,
+				textPerm,
 				container.NewHBox(
 					textSpacer,
-					canvas.NewText(perm.String(), permColor),
+					canvas.NewText(p.String(), permColor),
 				),
 				textSpacer,
 				container.NewHBox(
@@ -7901,41 +7908,67 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+		overlay := session.Window.Canvas().Overlays()
+		bg = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		)
+		prompt = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					content,
+					btnRow,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+				),
 			),
 		)
 
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-					),
-				),
-			))
-		overlay.Top().Show() // Explicit show for mobile reliability
+		combo = container.NewStack(bg, prompt)
+		protectedOverlays.Store(combo, true)
+
+		overlay.Add(combo)
+		combo.Show() // Explicit show for mobile reliability
 		logger.Printf("[XSWD] Overlay added and shown for app: %s\n", ad.Name)
+
+		go func() {
+			select {
+			case <-done:
+			case <-ad.OnClose:
+			}
+
+			if !isWalletGenerationActive(generation) || session.Window == nil {
+				return
+			}
+
+			uiDo(func() {
+				protectedOverlays.Delete(combo)
+				overlay := session.Window.Canvas().Overlays()
+				if combo != nil {
+					combo.Hide()
+					overlay.Remove(combo)
+				}
+				if wasWebViewHidden {
+					restoreTELAWebViewAfterPermission()
+				}
+			})
+		}()
 	})
 
 	if a.Driver().Device().IsMobile() {
@@ -7949,24 +7982,12 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		})
 	}
 
-	// Wait for user input or socket close
-	select {
-	case <-done:
-
-	case <-ad.OnClose:
-
-	}
-	if !isWalletGenerationActive(generation) || session.Window == nil {
-		return false
-	}
-
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
+	// Wait for user input
+	<-done
 
 	go refreshXSWDList()
 
-	return
+	return confirmed
 }
 
 // Handle incoming TELA link requests and return params to be displayed in approval prompt
@@ -8069,6 +8090,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		logger.Warnf("[XSWD] AskPermissionForRequest aborted: session.Window is nil or generation mismatch\n")
 		return xswd.Deny
 	}
+
 	// Gnomon methods behave as AlwaysAllow
 	if strings.HasPrefix(method, "Gnomon.") {
 		return xswd.Allow
@@ -8096,10 +8118,22 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		return xswd.Allow
 	}
 
+	// Auto-approve trusted TELA apps running on loopback on mobile
+	// This fixes the issue where the browser is in foreground and the prompt is hidden
+	if isMobile() && (strings.HasPrefix(ad.Url, "http://127.0.0.1") || strings.HasPrefix(ad.Url, "http://localhost") || strings.HasPrefix(ad.Url, "https://127.0.0.1")) {
+		// Specifically for Villager and other known system apps
+		if ad.Name == "Villager" || strings.Contains(ad.Id, "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8") || strings.Contains(ad.Url, "8082") {
+			logger.Printf("[XSWD] Auto-approving trusted local TELA app: %s for method %s\n", ad.Name, method)
+			return xswd.Allow
+		}
+	}
+
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
+	var bg, prompt, combo fyne.CanvasObject
+	wasWebViewHidden := hideTELAWebViewForPermission()
+
 	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
+		overlay := session.Window.Canvas().Overlays()
 
 		headerText := "NEW  PERMISSION  REQUEST"
 
@@ -8261,44 +8295,45 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
+		bg = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
 		)
 
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						container.NewHBox(
-							layout.NewSpacer(),
-							linkRemove,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
+		prompt = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					container.NewHBox(
+						layout.NewSpacer(),
+						linkRemove,
+						layout.NewSpacer(),
+					),
+					rectSpacer,
 				),
 			),
 		)
+
+		combo = container.NewStack(bg, prompt)
+		protectedOverlays.Store(combo, true)
+		overlay.Add(combo)
+		combo.Show()
 
 		if a.Driver().Device().IsMobile() {
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
@@ -8306,24 +8341,37 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		} else {
 			session.Window.RequestFocus()
 		}
-
-		overlay.Top().Show() // Explicit show for mobile reliability
 		logger.Printf("[XSWD] Permission overlay added and shown for app %s, method %s\n", ad.Name, method)
+
+		go func() {
+			select {
+			case <-done:
+			case <-ad.OnClose:
+			}
+
+			if !isWalletGenerationActive(generation) || session.Window == nil {
+				return
+			}
+
+			uiDo(func() {
+				protectedOverlays.Delete(combo)
+				overlay := session.Window.Canvas().Overlays()
+				if combo != nil {
+					combo.Hide()
+					overlay.Remove(combo)
+				}
+				if wasWebViewHidden {
+					restoreTELAWebViewAfterPermission()
+				}
+			})
+		}()
 	})
+
 	// Wait for user input or socket close
 	select {
 	case <-done:
-
 	case <-ad.OnClose:
-
 	}
-	if !isWalletGenerationActive(generation) || session.Window == nil {
-		return xswd.Deny
-	}
-
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
 
 	go refreshXSWDList()
 
@@ -8349,9 +8397,11 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	}
 
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
+	var bg, prompt, combo fyne.CanvasObject
+	wasWebViewHidden := hideTELAWebViewForPermission()
+
 	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
+		overlay := session.Window.Canvas().Overlays()
 
 		headerText := "EPOCH  REQUEST"
 
@@ -8405,7 +8455,6 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 				done <- struct{}{}
 				return
 			}
-
 			// Set allowWithAddress based on radio selection
 			remoteAccess.EPOCH.allowWithAddress = (miningAddrRadio.Selected == "dApp Chooses")
 
@@ -8426,6 +8475,10 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 		}
 
 		btnDeny.OnTapped = func() {
+			if !isWalletGenerationActive(generation) {
+				done <- struct{}{}
+				return
+			}
 			choice = xswd.Deny
 			done <- struct{}{}
 		}
@@ -8470,62 +8523,76 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
+		bg = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
 		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
+		prompt = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
 		)
 
+		combo = container.NewStack(bg, prompt)
+		protectedOverlays.Store(combo, true)
+		overlay.Add(combo)
+		combo.Show()
+
 		if a.Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new EPOCH request has been received"})
+			session.Window.RequestFocus()
 		} else {
 			session.Window.RequestFocus()
 		}
+		logger.Printf("[XSWD] EPOCH overlay added and shown for app %s\n", ad.Name)
 
+		go func() {
+			select {
+			case <-done:
+			case <-ad.OnClose:
+			}
+
+			if !isWalletGenerationActive(generation) || session.Window == nil {
+				return
+			}
+
+			uiDo(func() {
+				protectedOverlays.Delete(combo)
+				overlay := session.Window.Canvas().Overlays()
+				if combo != nil {
+					combo.Hide()
+					overlay.Remove(combo)
+				}
+				if wasWebViewHidden {
+					restoreTELAWebViewAfterPermission()
+				}
+			})
+		}()
 	})
 	// Wait for user input
 	select {
 	case <-done:
 	case <-ad.OnClose:
 	}
-
-	if !isWalletGenerationActive(generation) || session.Window == nil {
-		return xswd.Deny
-	}
-
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
-
-	go refreshXSWDList()
 
 	// Persist permission for this app if granted
 	if choice.IsPositive() {
@@ -8647,9 +8714,11 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 	}
 
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
+	var bg, prompt, combo fyne.CanvasObject
+	wasWebViewHidden := hideTELAWebViewForPermission()
+
 	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
+		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText(headerText, colors.Gray)
 		header.TextSize = 16
@@ -8678,13 +8747,13 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 		rectSpacer := canvas.NewRectangle(color.Transparent)
 		rectSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-		btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+		btnAllow := widget.NewButton("Allow", func() {
 			choice = xswd.Allow
 			done <- struct{}{}
 		})
 		btnAllow.Importance = widget.MediumImportance
 
-		btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+		btnDeny := widget.NewButton("Deny", func() {
 			choice = xswd.Deny
 			done <- struct{}{}
 		})
@@ -8723,46 +8792,61 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		uiDo(func() {
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
-				),
-			)
-		})
-
-		uiDo(func() {
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
+		bg = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		)
+		prompt = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
 					container.NewCenter(
-						container.NewVBox(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
 							span,
-							container.NewCenter(
-								header,
-							),
-							container.NewCenter(
-								container.NewStack(
-									span,
-								),
-							),
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							content,
-							btnRow,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
 						),
 					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
-			)
-		})
+			),
+		)
 
+		combo = container.NewStack(bg, prompt)
+		protectedOverlays.Store(combo, true)
+		overlay.Add(combo)
+		combo.Show()
+
+		go func() {
+			select {
+			case <-done:
+			case <-cancelChan:
+				choice = xswd.Deny
+				err = fmt.Errorf("cancelled")
+			}
+
+			uiDo(func() {
+				protectedOverlays.Delete(combo)
+				overlay := session.Window.Canvas().Overlays()
+				if combo != nil {
+					combo.Hide()
+					overlay.Remove(combo)
+				}
+				if wasWebViewHidden {
+					restoreTELAWebViewAfterPermission()
+				}
+			})
+		}()
 	})
 	// Wait for user input or cancellation
 	select {
@@ -8774,11 +8858,7 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 
 	logger.Debugf("[AskPermissionForRequestE] User input received for: %s\n", headerText)
 
-	uiDo(func() {
-		overlay.Top().Hide()
-		overlay.Remove(overlay.Top())
-		overlay.Remove(overlay.Top())
-	})
+	go refreshXSWDList()
 
 	return
 }
@@ -8839,6 +8919,13 @@ func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string,
 	go func() {
 		link, err := tela.ServeTELA(scid, endpoint)
 		if err == nil {
+			// On mobile, we must patch the dApp assets to use 127.0.0.1 instead of localhost
+			// because the mobile browser often fails to resolve localhost, but XSWD requires
+			// the Origin header to match the Authorize URL.
+			if isMobile() {
+				patchTELAMobileAssets(scid)
+			}
+
 			link = cleanTELALink(link)
 			// Verify server is actually up before returning the link
 			// This prevents race conditions on mobile where the browser opens before the server is listening
@@ -8984,34 +9071,71 @@ func cleanTELALink(link string) string {
 		return ""
 	}
 
-	// Replace localhost with 127.0.0.1 for better Android compatibility
-	// Many mobile browsers have issues with localhost or prefer explicit loopback
+	// Standardize loopback to match environment expectations
 	if isMobile() {
 		link = strings.Replace(link, "http://localhost", "http://127.0.0.1", 1)
+	} else {
+		link = strings.Replace(link, "http://127.0.0.1", "http://localhost", 1)
 	}
 
 	// Clean up multiple slashes in the path
-	// e.g. http://127.0.0.1:8082///index.html -> http://127.0.0.1:8082/index.html
 	if parts := strings.SplitN(link, "://", 2); len(parts) == 2 {
 		scheme := parts[0]
 		rest := parts[1]
 
-		// Split hostPort and path
 		if subParts := strings.SplitN(rest, "/", 2); len(subParts) == 2 {
 			hostPort := subParts[0]
 			path := subParts[1]
-
-			// Collapse multiple slashes
 			for strings.HasPrefix(path, "/") {
 				path = path[1:]
 			}
-
 			link = fmt.Sprintf("%s://%s/%s", scheme, hostPort, path)
 		}
 	}
 
-	link = strings.TrimSuffix(link, "/index.html")
 	return link
+}
+
+// patchTELAMobileAssets walks the TELA storage and replaces "localhost" with "127.0.0.1"
+// in extracted dApp files on mobile. This ensures the Origin header sent by the browser
+// (http://127.0.0.1) matches the URL in the Authorize request (now also http://127.0.0.1).
+func patchTELAMobileAssets(scid string) {
+	telaPath := tela.GetPath()
+	if telaPath == "" {
+		return
+	}
+
+	appPath := filepath.Join(telaPath, scid)
+	if _, err := os.Stat(appPath); os.IsNotExist(err) {
+		// If scid dir doesn't exist, it might be in a different structure or not extracted yet
+		logger.Warnf("[TELA] patchTELAMobileAssets: App path does not exist: %s\n", appPath)
+		return
+	}
+
+	filepath.Walk(appPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".js" || ext == ".html" || ext == ".json" {
+			// Skip large files to preserve performance
+			if info.Size() > 1024*512 { // 512KB
+				return nil
+			}
+
+			content, err := os.ReadFile(path)
+			if err == nil {
+				contentStr := string(content)
+				if strings.Contains(contentStr, "localhost") {
+					newContent := strings.ReplaceAll(contentStr, "localhost", "127.0.0.1")
+					os.WriteFile(path, []byte(newContent), info.Mode())
+					logger.Printf("[TELA] Patched mobile asset: %s (localhost -> 127.0.0.1)\n", filepath.Base(path))
+				}
+			}
+		}
+		return nil
+	})
 }
 
 // Verify if the local TELA server is responsive
@@ -9026,10 +9150,16 @@ func verifyTELAServerIsUp(link string, timeout time.Duration) error {
 		attempt++
 		resp, err := client.Get(link)
 		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				resp.Body.Close()
+				logger.Printf("[TELA] Server verified up at %s (Status: %d, attempt %d)\n", link, resp.StatusCode, attempt)
+				return nil
+			}
 			resp.Body.Close()
-			return nil
+			logger.Printf("[TELA] Ping attempt %d: Server returned status %d at %s (retrying...)\n", attempt, resp.StatusCode, link)
+		} else {
+			logger.Printf("[TELA] Ping attempt %d failed: %v (waiting...)\n", attempt, err)
 		}
-		logger.Printf("[TELA] Ping attempt %d failed: %v (waiting...)\n", attempt, err)
 		time.Sleep(500 * time.Millisecond) // Slightly longer sleep between pings
 	}
 	return fmt.Errorf("timeout waiting for TELA server at %s after %d attempts", link, attempt)

@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"time"
 
-	"fyne.io/fyne/v2"
 	"github.com/civilware/Gnomon/structures"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
@@ -129,18 +128,13 @@ func HandleTELALinks(ctx context.Context, p TELALink_Params) (result TELALink_Re
 				return
 			}
 
+			scid := ""
 			if len(args) >= 2 {
-				pushTELANavigation(args[1])
+				scid = args[1]
+				pushTELANavigation(scid)
 			}
 
-			if fyne.CurrentApp().Driver().Device().IsMobile() {
-				go func() {
-					time.Sleep(2 * time.Second)
-					safeOpenURL(url)
-				}()
-			} else {
-				safeOpenURL(url)
-			}
+			openTELAApp(scid, link, "")
 
 			result.TelaLinkResult = link
 		default:
