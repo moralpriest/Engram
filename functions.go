@@ -30,7 +30,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -5430,177 +5429,6 @@ func preIndexFavorites(favs map[string]*TELAFavoriteData) {
 	}
 }
 
-// ScanDependentSCIDs scans a SCID's variables for values that look like valid SCIDs
-// (64-character hex strings). Returns deduplicated list of dependent SCIDs.
-func ScanDependentSCIDs(scid string) []string {
-	if gnomon.Index == nil {
-		return nil
-	}
-
-	var vars []*structures.SCIDVariable
-	switch gnomon.Index.DBType {
-	case "gravdb":
-		vars = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(scid)
-	case "boltdb":
-		vars = gnomon.Index.BBSBackend.GetAllSCIDVariableDetails(scid)
-	}
-
-	deps := make(map[string]bool)
-	for _, v := range vars {
-		if val, ok := v.Value.(string); ok && len(val) == 64 {
-			if _, err := hex.DecodeString(val); err == nil && val != scid {
-				deps[val] = true
-			}
-		}
-	}
-
-	result := make([]string, 0, len(deps))
-	for dep := range deps {
-		result = append(result, dep)
-	}
-	return result
-}
-
-// ScanTELAAppSourceFiles scans cloned TELA app files (.js, .html) for hardcoded SCIDs.
-// It looks for 64-character hex strings that match valid SCID format.
-// dURL is looked up first from Gnomon's local DB, then falls back to the active TELA server list.
-func ScanTELAAppSourceFiles(scid string) []string {
-	if gnomon.Index == nil {
-		return nil
-	}
-
-	var dURL string
-
-	// Try Gnomon local DB for dURL
-	vars := gnomon.GetAllSCIDVariableDetails(scid)
-	if vars != nil {
-		for _, v := range vars {
-			if key, ok := v.Key.(string); ok && key == "dURL" {
-				if val, ok := v.Value.(string); ok {
-					dURL = decodeHex(val)
-					logger.Debugf("[Engram] AutoIndex: found dURL '%s' from Gnomon for %s", dURL, scid[:16])
-					break
-				}
-			}
-		}
-	}
-
-	// Fallback: active TELA server list (server.Name is the dURL)
-	if dURL == "" {
-		for _, s := range tela.GetServerInfo() {
-			if s.SCID == scid {
-				dURL = s.Name
-				logger.Debugf("[Engram] AutoIndex: found dURL '%s' from active server for %s", dURL, scid[:16])
-				break
-			}
-		}
-	}
-
-	if dURL == "" {
-		logger.Debugf("[Engram] AutoIndex: could not resolve dURL for %s, skipping source scan", scid[:16])
-		return nil
-	}
-
-	clonePath := filepath.Join(AppPath(), "datashards", "tela", dURL)
-	if _, err := os.Stat(clonePath); os.IsNotExist(err) {
-		logger.Debugf("[Engram] AutoIndex: clone path does not exist: %s", clonePath)
-		return nil
-	}
-
-	scidRe := regexp.MustCompile(`[0-9a-fA-F]{64}`)
-	deps := make(map[string]bool)
-	filesScanned := 0
-
-	err := filepath.Walk(clonePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != ".js" && ext != ".html" {
-			return nil
-		}
-		filesScanned++
-		data, err := os.ReadFile(path)
-		if err != nil {
-			logger.Debugf("[Engram] AutoIndex: could not read %s: %v", path, err)
-			return nil
-		}
-		for _, match := range scidRe.FindAll(data, -1) {
-			s := string(match)
-			if s != scid {
-				deps[s] = true
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		logger.Errorf("[Engram] AutoIndex: error scanning TELA source files for %s: %v", scid[:16], err)
-		return nil
-	}
-
-	result := make([]string, 0, len(deps))
-	for dep := range deps {
-		result = append(result, dep)
-	}
-	logger.Debugf("[Engram] AutoIndex: scanned %d files in %s, found %d SCID(s)", filesScanned, dURL, len(result))
-	return result
-}
-
-// AutoIndexDependentSCIDs finds any SCIDs stored as variable values or hardcoded in
-// TELA app source files inside parentSCID and automatically adds them to Gnomon's index.
-// This enables TELA apps like DeroBeats to fetch their dependent contracts without manual user action.
-func AutoIndexDependentSCIDs(parentSCID string) {
-	if gnomon.Index == nil {
-		return
-	}
-
-	// Scan contract variables
-	varDeps := ScanDependentSCIDs(parentSCID)
-
-	// Scan app source files (JS/HTML)
-	sourceDeps := ScanTELAAppSourceFiles(parentSCID)
-
-	// Merge and deduplicate
-	allDeps := make(map[string]bool)
-	for _, dep := range varDeps {
-		allDeps[dep] = true
-	}
-	for _, dep := range sourceDeps {
-		allDeps[dep] = true
-	}
-
-	if len(allDeps) == 0 {
-		logger.Printf("[Engram] AutoIndex: no dependent SCIDs found in %s", parentSCID[:16])
-		return
-	}
-
-	logger.Printf("[Engram] AutoIndex: found %d dependent SCID(s) in %s (%d from vars, %d from source)",
-		len(allDeps), parentSCID[:16], len(varDeps), len(sourceDeps))
-
-	indexed := 0
-	already := 0
-	for dep := range allDeps {
-		// Skip if already indexed
-		if gnomon.GetAllSCIDVariableDetails(dep) != nil {
-			already++
-			continue
-		}
-
-		add := map[string]*structures.FastSyncImport{
-			dep: {},
-		}
-		if err := gnomon.Index.AddSCIDToIndex(add, false, true); err != nil {
-			logger.Errorf("[Engram] AutoIndex: failed to index %s...: %v", dep[:16], err)
-		} else {
-			logger.Printf("[Engram] AutoIndex: indexed dependent SCID %s...", dep[:16])
-			indexed++
-		}
-	}
-	logger.Printf("[Engram] AutoIndex: done for %s (new=%d, already=%d, total=%d)",
-		parentSCID[:16], indexed, already, len(allDeps))
-}
-
 // Get the current code of a smart contract
 func getContractCode(scid string) (code string, err error) {
 	var params = rpc.GetSC_Params{SCID: scid, Variables: false, Code: true}
@@ -8874,6 +8702,7 @@ func serveTELAWithStaleRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 
 // Wrapper for serving TELA content toggling tela.updates if disabled, updated content should be checked for and presented to the user before calling serveTELAUpdates
 func serveTELAUpdates(scid string, cancelled ...*atomic.Bool) (link string, err error) {
+
 	var toggledUpdates bool
 	if !areTelaUpdatesAllowed() {
 		tela.AllowUpdates(true)
