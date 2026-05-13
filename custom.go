@@ -22,6 +22,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -392,12 +393,89 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 
 	outline := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
 	outline.StrokeWidth = 0
-	outline.CornerRadius = scaleSize(6)
+	outline.CornerRadius = scaleFont(10)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
 	sizeEnforcer.SetMinSize(scalePoint(w, h))
 
 	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
+}
+
+func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
+	iconImg := widget.NewIcon(icon)
+	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
+	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+
+	labelText := canvas.NewText(label, color.White)
+	labelText.TextSize = scaleFont(15)
+	labelText.TextStyle = fyne.TextStyle{Bold: true}
+
+	content := container.NewHBox(
+		layout.NewSpacer(),
+		themedIcon,
+		labelText,
+		layout.NewSpacer(),
+	)
+
+	btn := widget.NewButton("", onTap)
+	btn.Importance = widget.LowImportance
+
+	w := float32(160)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+
+	bg := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	bg.StrokeWidth = 0
+	bg.CornerRadius = scaleFont(10)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
+
+	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
+}
+
+func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
+	iconImg := widget.NewIcon(icon)
+	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
+	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+
+	labelText := canvas.NewText(label, color.White)
+	labelText.TextSize = scaleFont(15)
+	labelText.TextStyle = fyne.TextStyle{Bold: true}
+
+	content := container.NewHBox(
+		layout.NewSpacer(),
+		themedIcon,
+		labelText,
+		layout.NewSpacer(),
+	)
+
+	btn := widget.NewButton("", onTap)
+	btn.Importance = widget.LowImportance
+
+	w := float32(160)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+
+	bg := canvas.NewRectangle(color.Transparent)
+	bg.StrokeColor = color.NRGBA{40, 42, 50, 255}
+	bg.StrokeWidth = scaleSize(3)
+	bg.CornerRadius = scaleFont(10)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(scalePoint(w, h))
+
+	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
 }
 
 func newLargeIconButton(label string, icon fyne.Resource, onTap func(), width float32) *fyne.Container {

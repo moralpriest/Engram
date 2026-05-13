@@ -571,31 +571,31 @@ func layoutMain() fyne.CanvasObject {
 	})
 
 	// New Account button with icon
-	btnNewAccount := widget.NewButtonWithIcon("New Account", theme.ContentAddIcon(), func() {
+	btnNewAccount := newBorderedButtonWithIcon("New Account", theme.ContentAddIcon(), color.White, func() {
 		session.Domain = "app.create"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutNewAccount())
 		removeOverlays()
-	})
+	}, ui.Width*0.9)
 
 	// Recover Account button with icon
-	btnRecoverAccount := widget.NewButtonWithIcon("Recover Account", theme.DocumentIcon(), func() {
+	btnRecoverAccount := newBorderedButtonWithIcon("Recover Account", theme.DocumentIcon(), color.White, func() {
 		session.Domain = "app.restore"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutRestore())
 		removeOverlays()
-	})
+	}, ui.Width*0.9)
 
 	// Connection Settings button with icon
-	btnConnectionSettings := widget.NewButtonWithIcon("Connection Settings", theme.SettingsIcon(), func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon("Connection Settings", theme.SettingsIcon(), colors.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutSettings())
 		removeOverlays()
-	})
+	}, ui.Width*0.9)
 
 	modeData := binding.BindBool(&session.Offline)
 	mode := widget.NewCheckWithData(" Offline Mode", modeData)
@@ -758,13 +758,6 @@ func layoutMain() fyne.CanvasObject {
 	status.EPOCH.FillColor = colors.Gray
 	status.Sync.FillColor = colors.Gray
 
-	// Separator line between Connect and more options
-	separatorLine := canvas.NewRectangle(color.White)
-	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, 1))
-	separator := container.NewCenter(separatorLine)
-	separatorSpacer := canvas.NewRectangle(color.Transparent)
-	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
-
 	// Create uniform button container - each button same size
 	buttonGrid := container.NewVBox(
 		container.New(layout.NewGridLayout(1),
@@ -811,8 +804,6 @@ func layoutMain() fyne.CanvasObject {
 			rectSpacer,
 			btnLogin,
 			rectSpacer,
-			separator,
-			rectSpacer,
 			buttonGrid,
 			footer,
 		),
@@ -835,8 +826,6 @@ func layoutMain() fyne.CanvasObject {
 				mode,
 				rectSpacer,
 				wrapMobileButton(btnLogin),
-				rectSpacer,
-				separator,
 				rectSpacer,
 				container.NewVBox(
 					container.New(layout.NewGridLayout(1),
@@ -991,22 +980,22 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}
 
 	// Switch Account button
-	btnSwitchAccount := widget.NewButtonWithIcon("Switch Account", theme.AccountIcon(), func() {
+	btnSwitchAccount := newGunmetalButtonWithIcon("Switch Account", theme.AccountIcon(), colors.Green, func() {
 		session.Domain = "app.main"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMain())
 		removeOverlays()
-	})
+	}, ui.Width*0.9)
 
 	// Connection Settings button
-	btnConnectionSettings := widget.NewButtonWithIcon("Connection Settings", theme.SettingsIcon(), func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon("Connection Settings", theme.SettingsIcon(), colors.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutSettings())
 		removeOverlays()
-	})
+	}, ui.Width*0.9)
 
 	// Handle return key
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
@@ -1042,12 +1031,6 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	headerBlock := canvas.NewRectangle(color.Transparent)
 	headerBlock.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
 
-	separatorLine := canvas.NewRectangle(color.White)
-	separatorLine.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(1)))
-	separator := container.NewCenter(separatorLine)
-	separatorSpacer := canvas.NewRectangle(color.Transparent)
-	separatorSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
-
 	isMobile := a.Driver().Device().IsMobile()
 
 	frame := &iframe{}
@@ -1076,9 +1059,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			mode,
 			rectSpacer,
 			wrapMobileButton(btnLogin),
-			separatorSpacer,
-			separator,
-			separatorSpacer,
+			rectSpacer,
 			buttonGroup,
 		)
 	} else {
@@ -1099,9 +1080,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			mode,
 			rectSpacer,
 			btnLogin,
-			separatorSpacer,
-			separator,
-			separatorSpacer,
+			rectSpacer,
 			buttonGroup,
 		)
 	}
@@ -1128,7 +1107,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 
 	messages := []string{
 		"0.6.9",
-		"DERO PRIVACY TOGHETER",
+		"DERO PRIVACY TOGETHER",
 	}
 
 	text := canvas.NewText(messages[0], colors.LightBlue)
@@ -1467,14 +1446,14 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, buttonWidth)
 
-	linkHistory := newSmallIconButton("History", theme.HistoryIcon(), func() {
+	linkHistory := newBorderedButtonWithIcon("History", theme.HistoryIcon(), color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutHistory())
 		removeOverlays()
 	}, 140)
 
-	linkMyAccount := newSmallIconButton("My Account", theme.AccountIcon(), func() {
+	linkMyAccount := newBorderedButtonWithIcon("My Account", theme.AccountIcon(), color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAccount())
