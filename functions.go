@@ -27,7 +27,6 @@ import (
 	"image/color"
 	"math/big"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -1447,16 +1446,34 @@ func initWebSocketState() {
 	if remoteAccess.WS.global.enabled && !session.Offline {
 		logger.Printf("[Engram] Attempting to restart WebSocket (was previously enabled)")
 
-		// Use standard port if none configured
+		// Validate port without requiring UI (for auto-start after login)
 		wsEndpoint := remoteAccess.WS.port
 		if wsEndpoint == "" {
-			wsEndpoint = ":44326"
-			remoteAccess.WS.port = wsEndpoint
-			logger.Printf("[Engram] Using default XSWD port: %s", wsEndpoint)
-		}
+			logger.Printf("[Engram] No WebSocket port configured, cannot auto-start")
+		} else {
+			logger.Printf("[Engram] Calling toggleXSWD with: %s", wsEndpoint)
+			toggleXSWD(wsEndpoint)
 
-		logger.Printf("[Engram] Calling toggleXSWD with: %s", wsEndpoint)
-		toggleXSWD(wsEndpoint)
+			// Update UI to reflect server started (if UI is available)
+			if remoteAccess.WS.server != nil {
+				logger.Printf("[Engram] WebSocket server started successfully")
+				uiDo(func() {
+					if remoteAccess.WS.status != nil {
+						remoteAccess.WS.status.Text = "Allowed"
+						remoteAccess.WS.status.Color = colors.Green
+					}
+					if remoteAccess.WS.toggle != nil {
+						remoteAccess.WS.toggle.Text = "Turn Off"
+						logger.Printf("[Engram] Set toggle text to 'Turn Off' - server started")
+					}
+					if remoteAccess.WS.portText != nil {
+						remoteAccess.WS.portText.Disable()
+					}
+				})
+			} else {
+				logger.Printf("[Engram] toggleXSWD failed to start server")
+			}
+		}
 	} else {
 		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", remoteAccess.WS.global.enabled, session.Offline)
 	}
@@ -1912,16 +1929,6 @@ func getRemoteAccessDual(key string) (r string) {
 
 	logger.Printf("[Engram] getRemoteAccessDual: No stored value found for %s", key)
 	return ""
-}
-
-// getRemoteAccessMigrated returns the port with 8081 -> 44326 migration
-func getRemoteAccessMigrated(key string) string {
-	p := getRemoteAccessDual(key)
-	if p == ":8081" || p == "8081" {
-		logger.Printf("[Engram] Migrating stored port %s to :44326", p)
-		return ":44326"
-	}
-	return p
 }
 
 // Set Remote Access endpoint setting to the local Graviton tree
@@ -7057,45 +7064,6 @@ func showXSWDPrompt() bool {
 	return allowed
 }
 
-// EnsureXSWD checks if WebSocket is enabled and starts the server if it's not already running.
-// This is used as a guard before launching TELA apps.
-// It waits up to 3 seconds for the server to be operational.
-func EnsureXSWD() {
-	if remoteAccess.WS.global.enabled {
-		wsEndpoint := remoteAccess.WS.port
-		// Force migration from old experimental port
-		if wsEndpoint == ":8081" || wsEndpoint == "8081" || wsEndpoint == "" {
-			// If already running on wrong port, shut it down so we can restart on correct port
-			if remoteAccess.WS.server != nil && remoteAccess.WS.server.IsRunning() {
-				logger.Printf("[XSWD] EnsureXSWD: Stopping server on deprecated port %s for migration\n", wsEndpoint)
-				toggleXSWD(wsEndpoint)
-			}
-			logger.Printf("[XSWD] EnsureXSWD: Migrating port %s to :44326\n", wsEndpoint)
-			wsEndpoint = ":44326"
-			remoteAccess.WS.port = wsEndpoint
-		}
-
-		if remoteAccess.WS.server == nil || !remoteAccess.WS.server.IsRunning() {
-			logger.Printf("[XSWD] EnsureXSWD: Auto-starting enabled server on %s\n", wsEndpoint)
-			toggleXSWD(wsEndpoint)
-		}
-
-		// Wait for readiness (up to 3 seconds)
-		for i := 0; i < 30; i++ {
-			if remoteAccess.WS.server != nil && remoteAccess.WS.server.IsRunning() {
-				// Wait a tiny bit more to ensure ListenAndServe actually completed the bind
-				time.Sleep(200 * time.Millisecond)
-				logger.Printf("[XSWD] EnsureXSWD: Server is ready after %dms\n", i*100)
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		logger.Warnf("[XSWD] EnsureXSWD: Server still not ready after 3 seconds\n")
-	} else {
-		logger.Printf("[XSWD] EnsureXSWD: WebSocket server is DISABLED in settings, skipping auto-start\n")
-	}
-}
-
 // GetPermissionGroup returns the group a method belongs to
 func GetPermissionGroup(method string) *PermissionGroup {
 	for i := range permissionGroups {
@@ -7517,27 +7485,11 @@ func toggleXSWD(endpoint string) {
 		}
 		logger.Printf("[Engram] XSWD server closed\n")
 	} else {
-		// Force port migration if it's the old experimental one
-		if endpoint == ":8081" || endpoint == "8081" {
-			logger.Printf("[Engram] Migrating XSWD port from %s to :44326", endpoint)
-			endpoint = ":44326"
-		}
-
-		// Ensure endpoint has a colon
-		if !strings.Contains(endpoint, ":") {
-			endpoint = ":" + endpoint
-		}
-
-		host, portNum, err := net.SplitHostPort(endpoint)
+		_, portNum, err := net.SplitHostPort(endpoint)
 		if err != nil {
 			logger.Errorf("[Engram] Invalid XSWD server endpoint: %s\n", err)
 			return
 		}
-		if host == "" && isMobile() {
-			host = "127.0.0.1" // Explicitly bind to IPv4 on mobile for reliability
-		}
-		bindAddr := net.JoinHostPort(host, portNum)
-		logger.Printf("[Engram] XSWD toggleXSWD: binding to %s (host='%s' port='%s')\n", bindAddr, host, portNum)
 
 		portInt, err := strconv.Atoi(portNum)
 		if err != nil {
@@ -7557,13 +7509,19 @@ func toggleXSWD(endpoint string) {
 
 		go func() {
 			// Check if port is already in use and wait up to 5 seconds for release
-			// Check if port is available
-			if addr, err := net.ResolveTCPAddr("tcp", bindAddr); err == nil {
-				if listener, err := net.ListenTCP("tcp", addr); err == nil {
-					listener.Close()
-					logger.Printf("[Engram] Port %s is available\n", bindAddr)
-				} else {
-					logger.Errorf("[Engram] Port %s in use: %v\n", bindAddr, err)
+			if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
+				for i := 0; i < 5; i++ {
+					if listener, err := net.ListenTCP("tcp", addr); err == nil {
+						listener.Close()
+						logger.Printf("[Engram] Port %s is available\n", endpoint)
+						break
+					}
+					if i < 4 {
+						logger.Printf("[Engram] Port %s in use, retrying in 1s... (%d/5)\n", endpoint, i+1)
+						time.Sleep(time.Second)
+					} else {
+						logger.Errorf("[Engram] Port %s still in use after 5 seconds\n", endpoint)
+					}
 				}
 			}
 
@@ -7648,10 +7606,8 @@ func toggleXSWD(endpoint string) {
 
 // Prompt when an application submits request to connect to wallet with XSWD
 func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
-	logger.Printf("[XSWD] XSWDPrompt triggered for app: %s (%s)\n", ad.Name, ad.Url)
 	generation := currentWalletGeneration()
 	if !isWalletGenerationActive(generation) || session.Window == nil {
-		logger.Warnf("[XSWD] XSWDPrompt aborted: session.Window is nil or generation mismatch\n")
 		return false
 	}
 
@@ -7692,250 +7648,247 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		ad.Permissions["query_key"] = xswd.AlwaysDeny
 	}
 
+	overlay := session.Window.Canvas().Overlays()
+
+	headerText := "NEW  CONNECTION  REQUEST"
+
+	header := canvas.NewText(headerText, colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelApp := canvas.NewText("APP  NAME", colors.Gray)
+	labelApp.TextSize = 14
+	labelApp.Alignment = fyne.TextAlignLeading
+	labelApp.TextStyle = fyne.TextStyle{Bold: true}
+
+	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
+	textApp.Wrapping = fyne.TextWrapWord
+
+	labelID := canvas.NewText("APP  ID", colors.Gray)
+	labelID.TextSize = 14
+	labelID.Alignment = fyne.TextAlignLeading
+	labelID.TextStyle = fyne.TextStyle{Bold: true}
+
+	textID := widget.NewRichTextFromMarkdown(ad.Id)
+	textID.Wrapping = fyne.TextWrapWord
+
+	labelURL := canvas.NewText("URL", colors.Gray)
+	labelURL.TextSize = 14
+	labelURL.Alignment = fyne.TextAlignLeading
+	labelURL.TextStyle = fyne.TextStyle{Bold: true}
+
+	textURL := widget.NewRichTextFromMarkdown(ad.Url)
+	textURL.Wrapping = fyne.TextWrapWord
+
+	labelPermissions := canvas.NewText("PERMISSIONS", colors.Gray)
+	labelPermissions.TextSize = 14
+	labelPermissions.Alignment = fyne.TextAlignLeading
+	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Get permissioned methods from xswd.ApplicationData and create permission objects
+	var methods []string
+	for k := range ad.Permissions {
+		methods = append(methods, k)
+	}
+
+	sort.Strings(methods)
+
+	permForm := container.NewVBox()
+
+	textSpacer := canvas.NewRectangle(color.Transparent)
+	textSpacer.SetMinSize(fyne.NewSize(10, 3))
+
+	for _, k := range methods {
+		perm := ad.Permissions[k]
+		permColor := colors.Account
+		switch perm {
+		case xswd.AlwaysAllow:
+			permColor = colors.Green
+		case xswd.AlwaysDeny:
+			permColor = colors.Red
+		}
+
+		textMethod := widget.NewRichTextFromMarkdown("### " + k)
+		textMethod.Wrapping = fyne.TextWrapWord
+
+		sep := canvas.NewRectangle(colors.Gray)
+		sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
+
+		add := container.NewVBox(
+			textMethod,
+			container.NewHBox(
+				textSpacer,
+				canvas.NewText(perm.String(), permColor),
+			),
+			textSpacer,
+			container.NewHBox(
+				sep,
+			),
+		)
+
+		permForm.Add(add)
+	}
+
+	if len(permForm.Objects) == 0 {
+		permForm.Add(
+			container.NewVBox(
+				widget.NewRichTextFromMarkdown("No permissions"),
+			),
+		)
+	} else {
+		permForm.Add(textSpacer)
+	}
+
+	labelEvents := canvas.NewText("EVENTS", colors.Gray)
+	labelEvents.TextSize = 14
+	labelEvents.Alignment = fyne.TextAlignLeading
+	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
+
+	eventsForm := container.NewVBox()
+
+	// Get registered events from xswd.ApplicationData and create event objects
+	for name, b := range ad.RegisteredEvents {
+		eventColor := colors.Red
+		if b {
+			eventColor = colors.Green
+		}
+
+		textEvent := widget.NewRichTextFromMarkdown(fmt.Sprintf("### %s", name))
+		textEvent.Wrapping = fyne.TextWrapWord
+
+		sep := canvas.NewRectangle(colors.Gray)
+		sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
+
+		add := container.NewVBox(
+			textEvent,
+			container.NewHBox(
+				textSpacer,
+				canvas.NewText(strconv.FormatBool(b), eventColor),
+			),
+			textSpacer,
+			container.NewHBox(
+				sep,
+			),
+		)
+
+		eventsForm.Add(add)
+	}
+
+	if len(eventsForm.Objects) == 0 {
+		eventsForm.Add(
+			container.NewVBox(
+				widget.NewRichTextFromMarkdown("No events"),
+			),
+		)
+	}
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
-	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
 
-		headerText := "NEW  CONNECTION  REQUEST"
-
-		header := canvas.NewText(headerText, colors.Gray)
-		header.TextSize = 16
-		header.Alignment = fyne.TextAlignCenter
-		header.TextStyle = fyne.TextStyle{Bold: true}
-
-		labelApp := canvas.NewText("APP  NAME", colors.Gray)
-		labelApp.TextSize = 14
-		labelApp.Alignment = fyne.TextAlignLeading
-		labelApp.TextStyle = fyne.TextStyle{Bold: true}
-
-		textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
-		textApp.Wrapping = fyne.TextWrapWord
-
-		labelID := canvas.NewText("APP  ID", colors.Gray)
-		labelID.TextSize = 14
-		labelID.Alignment = fyne.TextAlignLeading
-		labelID.TextStyle = fyne.TextStyle{Bold: true}
-
-		textID := widget.NewRichTextFromMarkdown(ad.Id)
-		textID.Wrapping = fyne.TextWrapWord
-
-		labelURL := canvas.NewText("URL", colors.Gray)
-		labelURL.TextSize = 14
-		labelURL.Alignment = fyne.TextAlignLeading
-		labelURL.TextStyle = fyne.TextStyle{Bold: true}
-
-		textURL := widget.NewRichTextFromMarkdown(ad.Url)
-		textURL.Wrapping = fyne.TextWrapWord
-
-		labelPermissions := canvas.NewText("PERMISSIONS", colors.Gray)
-		labelPermissions.TextSize = 14
-		labelPermissions.Alignment = fyne.TextAlignLeading
-		labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
-
-		// Get permissioned methods from xswd.ApplicationData and create permission objects
-		var methods []string
-		for k := range ad.Permissions {
-			methods = append(methods, k)
-		}
-
-		sort.Strings(methods)
-
-		permForm := container.NewVBox()
-
-		textSpacer := canvas.NewRectangle(color.Transparent)
-		textSpacer.SetMinSize(fyne.NewSize(10, 3))
-
-		for _, k := range methods {
-			perm := ad.Permissions[k]
-			permColor := colors.Account
-			switch perm {
-			case xswd.AlwaysAllow:
-				permColor = colors.Green
-			case xswd.AlwaysDeny:
-				permColor = colors.Red
-			}
-
-			textMethod := widget.NewRichTextFromMarkdown("### " + k)
-			textMethod.Wrapping = fyne.TextWrapWord
-
-			sep := canvas.NewRectangle(colors.Gray)
-			sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
-
-			add := container.NewVBox(
-				textMethod,
-				container.NewHBox(
-					textSpacer,
-					canvas.NewText(perm.String(), permColor),
-				),
-				textSpacer,
-				container.NewHBox(
-					sep,
-				),
-			)
-
-			permForm.Add(add)
-		}
-
-		if len(permForm.Objects) == 0 {
-			permForm.Add(
-				container.NewVBox(
-					widget.NewRichTextFromMarkdown("No permissions"),
-				),
-			)
-		} else {
-			permForm.Add(textSpacer)
-		}
-
-		labelEvents := canvas.NewText("EVENTS", colors.Gray)
-		labelEvents.TextSize = 14
-		labelEvents.Alignment = fyne.TextAlignLeading
-		labelEvents.TextStyle = fyne.TextStyle{Bold: true}
-
-		eventsForm := container.NewVBox()
-
-		// Get registered events from xswd.ApplicationData and create event objects
-		for name, b := range ad.RegisteredEvents {
-			eventColor := colors.Red
-			if b {
-				eventColor = colors.Green
-			}
-
-			textEvent := widget.NewRichTextFromMarkdown(fmt.Sprintf("### %s", name))
-			textEvent.Wrapping = fyne.TextWrapWord
-
-			sep := canvas.NewRectangle(colors.Gray)
-			sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
-
-			add := container.NewVBox(
-				textEvent,
-				container.NewHBox(
-					textSpacer,
-					canvas.NewText(strconv.FormatBool(b), eventColor),
-				),
-				textSpacer,
-				container.NewHBox(
-					sep,
-				),
-			)
-
-			eventsForm.Add(add)
-		}
-
-		if len(eventsForm.Objects) == 0 {
-			eventsForm.Add(
-				container.NewVBox(
-					widget.NewRichTextFromMarkdown("No events"),
-				),
-			)
-		}
-
-		rectBox := canvas.NewRectangle(color.Transparent)
-		rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
-
-		rectSpacer := canvas.NewRectangle(color.Transparent)
-		rectSpacer.SetMinSize(fyne.NewSize(0, 10))
-
-		btnAllow := widget.NewButton(xswd.Allow.String(), func() {
-			if !isWalletGenerationActive(generation) {
-				done <- struct{}{}
-				return
-			}
-			confirmed = true
+	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
-		})
-		btnAllow.Importance = widget.MediumImportance
+			return
+		}
+		confirmed = true
+		done <- struct{}{}
+	})
+	btnAllow.Importance = widget.MediumImportance
 
-		btnDeny := widget.NewButton(xswd.Deny.String(), func() {
-			if !isWalletGenerationActive(generation) {
-				done <- struct{}{}
-				return
-			}
-			confirmed = false
+	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
-		})
-		btnDeny.Importance = widget.MediumImportance
+			return
+		}
+		confirmed = false
+		done <- struct{}{}
+	})
+	btnDeny.Importance = widget.MediumImportance
 
-		btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
+	btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
 
-		content := container.NewStack(
-			container.NewBorder(
-				nil,
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				btnRow,
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						rectSpacer,
+						rectSpacer,
+						labelApp,
+						textApp,
+						rectSpacer,
+						labelID,
+						textID,
+						rectSpacer,
+						labelURL,
+						textURL,
+						rectSpacer,
+						labelPermissions,
+						permForm,
+						rectSpacer,
+						labelEvents,
+						eventsForm,
+						rectSpacer,
+					),
+				),
+			),
+		),
+	)
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		),
+	)
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			container.NewCenter(
 				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
 					rectSpacer,
 					rectSpacer,
+					content,
 					btnRow,
 					rectSpacer,
 					rectSpacer,
-				),
-				nil,
-				nil,
-				container.NewStack(
-					rectBox,
-					container.NewVScroll(
-						container.NewVBox(
-							rectSpacer,
-							rectSpacer,
-							labelApp,
-							textApp,
-							rectSpacer,
-							labelID,
-							textID,
-							rectSpacer,
-							labelURL,
-							textURL,
-							rectSpacer,
-							labelPermissions,
-							permForm,
-							rectSpacer,
-							labelEvents,
-							eventsForm,
-							rectSpacer,
-						),
-					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
-		)
-
-		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
-		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-					),
-				),
-			))
-		overlay.Top().Show() // Explicit show for mobile reliability
-		logger.Printf("[XSWD] Overlay added and shown for app: %s\n", ad.Name)
-	})
+		),
+	)
 
 	if a.Driver().Device().IsMobile() {
 		fyne.Do(func() {
@@ -8061,13 +8014,12 @@ func handleTELALinkRequest(linkParams TELALink_Params) (params string, err error
 // Ask permission to complete a specific request from a connected application,
 // can choose to Allow, Always Allow, Deny, Always Deny the request
 func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (choice xswd.Permission) {
-	method := request.Method()
-	logger.Printf("[XSWD] AskPermissionForRequest triggered for app %s, method: %s\n", ad.Name, method)
 	generation := currentWalletGeneration()
 	if !isWalletGenerationActive(generation) || session.Window == nil {
-		logger.Warnf("[XSWD] AskPermissionForRequest aborted: session.Window is nil or generation mismatch\n")
 		return xswd.Deny
 	}
+
+	method := request.Method()
 	// Gnomon methods behave as AlwaysAllow
 	if strings.HasPrefix(method, "Gnomon.") {
 		return xswd.Allow
@@ -8095,220 +8047,215 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		return xswd.Allow
 	}
 
+	overlay := session.Window.Canvas().Overlays()
+
+	headerText := "NEW  PERMISSION  REQUEST"
+
+	header := canvas.NewText(headerText, colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp.TextSize = 14
+	labelApp.Alignment = fyne.TextAlignLeading
+	labelApp.TextStyle = fyne.TextStyle{Bold: true}
+
+	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
+	textApp.Wrapping = fyne.TextWrapWord
+
+	labelRequest := canvas.NewText("REQUESTING", colors.Gray)
+	labelRequest.TextSize = 14
+	labelRequest.Alignment = fyne.TextAlignLeading
+	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
+
+	textRequest := widget.NewRichTextFromMarkdown("### " + method)
+	textRequest.Wrapping = fyne.TextWrapWord
+
+	labelParams := canvas.NewText("PARAMETERS", colors.Gray)
+	labelParams.TextSize = 14
+	labelParams.Alignment = fyne.TextAlignLeading
+	labelParams.TextStyle = fyne.TextStyle{Bold: true}
+
+	params := "None"
+	if method == "HandleTELALinks" {
+		var linkParams TELALink_Params
+		err := request.UnmarshalParams(&linkParams)
+		if err != nil {
+			logger.Errorf("[Engram] Denied TELA link request %s from %s: %s\n", request.ParamString(), ad.Name, err)
+			return
+		}
+
+		params, err = handleTELALinkRequest(linkParams)
+		if err != nil {
+			logger.Errorf("[Engram] Denied TELA link request %q from %s: %s\n", linkParams.TelaLink, ad.Name, err)
+			return
+		}
+	} else if request.ParamString() != "" {
+		params = strings.ReplaceAll(strings.Join(strings.Fields(request.ParamString()), " "), "\n", " ")
+
+		// Unmarshall and indent params if able
+		var buffer interface{}
+		if request.UnmarshalParams(&buffer) == nil {
+			if indentParams, err := json.MarshalIndent(buffer, "", " "); err == nil {
+				params = string(indentParams)
+			}
+		}
+	}
+
+	textParams := widget.NewLabel(params)
+	textParams.Wrapping = fyne.TextWrapWord
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
+	canStorePermission := remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method)
+	alwaysRemember := false
+	rememberCheck := widget.NewCheck("Always remember this choice", func(checked bool) {
+		alwaysRemember = checked
+	})
+	if !canStorePermission {
+		rememberCheck.Hide()
+	}
+
+	btnAllow := widget.NewButtonWithIcon("Allow", theme.ConfirmIcon(), nil)
+	btnAllow.Importance = widget.MediumImportance
+	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				container.NewHBox(
+					layout.NewSpacer(),
+					btnAllow,
+					btnDeny,
+					layout.NewSpacer(),
+				),
+				rememberCheck,
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						labelApp,
+						textApp,
+						rectSpacer,
+						labelRequest,
+						textRequest,
+						rectSpacer,
+						labelParams,
+						textParams,
+					),
+				),
+			),
+		),
+	)
+
+	// Create and show request prompt
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
-	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
+	btnAllow.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
+		if alwaysRemember && canStorePermission {
+			choice = xswd.AlwaysAllow
+		} else {
+			choice = xswd.Allow
+		}
+		done <- struct{}{}
+	}
 
-		headerText := "NEW  PERMISSION  REQUEST"
+	btnDeny.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			done <- struct{}{}
+			return
+		}
+		if alwaysRemember && canStorePermission {
+			choice = xswd.AlwaysDeny
+		} else {
+			choice = xswd.Deny
+		}
+		done <- struct{}{}
+	}
 
-		header := canvas.NewText(headerText, colors.Gray)
-		header.TextSize = 16
-		header.Alignment = fyne.TextAlignCenter
-		header.TextStyle = fyne.TextStyle{Bold: true}
-
-		labelApp := canvas.NewText("FROM", colors.Gray)
-		labelApp.TextSize = 14
-		labelApp.Alignment = fyne.TextAlignLeading
-		labelApp.TextStyle = fyne.TextStyle{Bold: true}
-
-		textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
-		textApp.Wrapping = fyne.TextWrapWord
-
-		labelRequest := canvas.NewText("REQUESTING", colors.Gray)
-		labelRequest.TextSize = 14
-		labelRequest.Alignment = fyne.TextAlignLeading
-		labelRequest.TextStyle = fyne.TextStyle{Bold: true}
-
-		textRequest := widget.NewRichTextFromMarkdown("### " + method)
-		textRequest.Wrapping = fyne.TextWrapWord
-
-		labelParams := canvas.NewText("PARAMETERS", colors.Gray)
-		labelParams.TextSize = 14
-		labelParams.Alignment = fyne.TextAlignLeading
-		labelParams.TextStyle = fyne.TextStyle{Bold: true}
-
-		params := "None"
-		if method == "HandleTELALinks" {
-			var linkParams TELALink_Params
-			err := request.UnmarshalParams(&linkParams)
-			if err != nil {
-				logger.Errorf("[Engram] Denied TELA link request %s from %s: %s\n", request.ParamString(), ad.Name, err)
-				return
-			}
-
-			params, err = handleTELALinkRequest(linkParams)
-			if err != nil {
-				logger.Errorf("[Engram] Denied TELA link request %q from %s: %s\n", linkParams.TelaLink, ad.Name, err)
-				return
-			}
-		} else if request.ParamString() != "" {
-			params = strings.ReplaceAll(strings.Join(strings.Fields(request.ParamString()), " "), "\n", " ")
-
-			// Unmarshall and indent params if able
-			var buffer interface{}
-			if request.UnmarshalParams(&buffer) == nil {
-				if indentParams, err := json.MarshalIndent(buffer, "", " "); err == nil {
-					params = string(indentParams)
+	linkRemove := widget.NewHyperlinkWithStyle("Remove Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRemove.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
+			return
+		}
+		verificationOverlay(
+			false,
+			ad.Name,
+			"Remove this application?",
+			"Remove",
+			func(b bool) {
+				if b {
+					remoteAccess.WS.server.RemoveApplication(ad)
 				}
-			}
-		}
+			},
+		)
+	}
 
-		textParams := widget.NewLabel(params)
-		textParams.Wrapping = fyne.TextWrapWord
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-		rectBox := canvas.NewRectangle(color.Transparent)
-		rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		),
+	)
 
-		rectSpacer := canvas.NewRectangle(color.Transparent)
-		rectSpacer.SetMinSize(fyne.NewSize(0, 10))
-
-		canStorePermission := remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method)
-		alwaysRemember := false
-		rememberCheck := widget.NewCheck("Always remember this choice", func(checked bool) {
-			alwaysRemember = checked
-		})
-		if !canStorePermission {
-			rememberCheck.Hide()
-		}
-
-		btnAllow := widget.NewButtonWithIcon("Allow", theme.ConfirmIcon(), nil)
-		btnAllow.Importance = widget.MediumImportance
-		btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
-
-		content := container.NewStack(
-			container.NewBorder(
-				nil,
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			container.NewCenter(
 				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
 					rectSpacer,
 					rectSpacer,
 					container.NewHBox(
 						layout.NewSpacer(),
-						btnAllow,
-						btnDeny,
+						linkRemove,
 						layout.NewSpacer(),
 					),
-					rememberCheck,
-					rectSpacer,
 					rectSpacer,
 				),
-				nil,
-				nil,
-				container.NewStack(
-					rectBox,
-					container.NewVScroll(
-						container.NewVBox(
-							labelApp,
-							textApp,
-							rectSpacer,
-							labelRequest,
-							textRequest,
-							rectSpacer,
-							labelParams,
-							textParams,
-						),
-					),
-				),
 			),
-		)
+		),
+	)
 
-		// Create and show request prompt
-		btnAllow.OnTapped = func() {
-			if !isWalletGenerationActive(generation) {
-				done <- struct{}{}
-				return
-			}
-			if alwaysRemember && canStorePermission {
-				choice = xswd.AlwaysAllow
-			} else {
-				choice = xswd.Allow
-			}
-			done <- struct{}{}
-		}
+	if a.Driver().Device().IsMobile() {
+		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
+		session.Window.RequestFocus()
+	} else {
+		session.Window.RequestFocus()
+	}
 
-		btnDeny.OnTapped = func() {
-			if !isWalletGenerationActive(generation) {
-				done <- struct{}{}
-				return
-			}
-			if alwaysRemember && canStorePermission {
-				choice = xswd.AlwaysDeny
-			} else {
-				choice = xswd.Deny
-			}
-			done <- struct{}{}
-		}
-
-		linkRemove := widget.NewHyperlinkWithStyle("Remove Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-		linkRemove.OnTapped = func() {
-			if !isWalletGenerationActive(generation) {
-				return
-			}
-			verificationOverlay(
-				false,
-				ad.Name,
-				"Remove this application?",
-				"Remove",
-				func(b bool) {
-					if b {
-						remoteAccess.WS.server.RemoveApplication(ad)
-					}
-				},
-			)
-		}
-
-		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
-		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						container.NewHBox(
-							layout.NewSpacer(),
-							linkRemove,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
-					),
-				),
-			),
-		)
-
-		if a.Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
-			session.Window.RequestFocus()
-		} else {
-			session.Window.RequestFocus()
-		}
-
-		overlay.Top().Show() // Explicit show for mobile reliability
-		logger.Printf("[XSWD] Permission overlay added and shown for app %s, method %s\n", ad.Name, method)
-	})
 	// Wait for user input or socket close
 	select {
 	case <-done:
@@ -8347,169 +8294,167 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 		return xswd.Deny
 	}
 
+	overlay := session.Window.Canvas().Overlays()
+
+	headerText := "EPOCH  REQUEST"
+
+	header := canvas.NewText(headerText, colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp.TextSize = 14
+	labelApp.Alignment = fyne.TextAlignLeading
+	labelApp.TextStyle = fyne.TextStyle{Bold: true}
+
+	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
+	textApp.Wrapping = fyne.TextWrapWord
+
+	labelRequest := canvas.NewText("REQUESTING", colors.Gray)
+	labelRequest.TextSize = 14
+	labelRequest.Alignment = fyne.TextAlignLeading
+	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
+
+	textRequest := widget.NewRichTextFromMarkdown("### Enable EPOCH")
+	textRequest.Wrapping = fyne.TextWrapWord
+
+	infoText := widget.NewLabel("This app needs EPOCH (Proof-of-Work) to interact with your wallet.\nEPOCH allows the app to perform mining operations.")
+	infoText.Wrapping = fyne.TextWrapWord
+
+	labelMiningAddr := canvas.NewText("Mining address:", colors.Gray)
+	labelMiningAddr.TextSize = 12
+	labelMiningAddr.Alignment = fyne.TextAlignLeading
+
+	// Radio group for mining address selection - default to dApp Chooses
+	miningAddrOptions := []string{"My Address", "dApp Chooses"}
+	miningAddrRadio := widget.NewRadioGroup(miningAddrOptions, nil)
+	miningAddrRadio.SetSelected("dApp Chooses")
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
+	choice = xswd.Deny
+
+	btnEnable := widget.NewButtonWithIcon("Enable", theme.ConfirmIcon(), nil)
+	btnEnable.Importance = widget.HighImportance
+	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
+
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
-	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
 
-		headerText := "EPOCH  REQUEST"
-
-		header := canvas.NewText(headerText, colors.Gray)
-		header.TextSize = 16
-		header.Alignment = fyne.TextAlignCenter
-		header.TextStyle = fyne.TextStyle{Bold: true}
-
-		labelApp := canvas.NewText("FROM", colors.Gray)
-		labelApp.TextSize = 14
-		labelApp.Alignment = fyne.TextAlignLeading
-		labelApp.TextStyle = fyne.TextStyle{Bold: true}
-
-		textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
-		textApp.Wrapping = fyne.TextWrapWord
-
-		labelRequest := canvas.NewText("REQUESTING", colors.Gray)
-		labelRequest.TextSize = 14
-		labelRequest.Alignment = fyne.TextAlignLeading
-		labelRequest.TextStyle = fyne.TextStyle{Bold: true}
-
-		textRequest := widget.NewRichTextFromMarkdown("### Enable EPOCH")
-		textRequest.Wrapping = fyne.TextWrapWord
-
-		infoText := widget.NewLabel("This app needs EPOCH (Proof-of-Work) to interact with your wallet.\nEPOCH allows the app to perform mining operations.")
-		infoText.Wrapping = fyne.TextWrapWord
-
-		labelMiningAddr := canvas.NewText("Mining address:", colors.Gray)
-		labelMiningAddr.TextSize = 12
-		labelMiningAddr.Alignment = fyne.TextAlignLeading
-
-		// Radio group for mining address selection - default to dApp Chooses
-		miningAddrOptions := []string{"My Address", "dApp Chooses"}
-		miningAddrRadio := widget.NewRadioGroup(miningAddrOptions, nil)
-		miningAddrRadio.SetSelected("dApp Chooses")
-
-		rectBox := canvas.NewRectangle(color.Transparent)
-		rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
-
-		rectSpacer := canvas.NewRectangle(color.Transparent)
-		rectSpacer.SetMinSize(fyne.NewSize(0, 10))
-
-		choice = xswd.Deny
-
-		btnEnable := widget.NewButtonWithIcon("Enable", theme.ConfirmIcon(), nil)
-		btnEnable.Importance = widget.HighImportance
-		btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
-
-		btnEnable.OnTapped = func() {
-			if !isWalletGenerationActive(generation) {
-				done <- struct{}{}
-				return
-			}
-
-			// Set allowWithAddress based on radio selection
-			remoteAccess.EPOCH.allowWithAddress = (miningAddrRadio.Selected == "dApp Chooses")
-
-			// Start EPOCH
-			err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
-			if err != nil {
-				logger.Errorf("[EPOCH] Failed to start: %s\n", err)
-				remoteAccess.EPOCH.err = err
-				choice = xswd.Deny
-			} else {
-				remoteAccess.EPOCH.enabled = true
-				remoteAccess.EPOCH.err = nil
-				setRemoteAccess(epoch.GetPort(), "EPOCH")
-				choice = xswd.Allow
-				logger.Printf("[EPOCH] Started successfully via permission prompt (allowWithAddress: %v)\n", remoteAccess.EPOCH.allowWithAddress)
-			}
+	btnEnable.OnTapped = func() {
+		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
+			return
 		}
 
-		btnDeny.OnTapped = func() {
+		// Set allowWithAddress based on radio selection
+		remoteAccess.EPOCH.allowWithAddress = (miningAddrRadio.Selected == "dApp Chooses")
+
+		// Start EPOCH
+		err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
+		if err != nil {
+			logger.Errorf("[EPOCH] Failed to start: %s\n", err)
+			remoteAccess.EPOCH.err = err
 			choice = xswd.Deny
-			done <- struct{}{}
-		}
-
-		content := container.NewStack(
-			container.NewBorder(
-				nil,
-				container.NewVBox(
-					rectSpacer,
-					rectSpacer,
-					container.NewHBox(
-						layout.NewSpacer(),
-						btnEnable,
-						btnDeny,
-						layout.NewSpacer(),
-					),
-					rectSpacer,
-					rectSpacer,
-				),
-				nil,
-				nil,
-				container.NewStack(
-					rectBox,
-					container.NewVScroll(
-						container.NewVBox(
-							labelApp,
-							textApp,
-							rectSpacer,
-							labelRequest,
-							textRequest,
-							rectSpacer,
-							infoText,
-							rectSpacer,
-							labelMiningAddr,
-							miningAddrRadio,
-						),
-					),
-				),
-			),
-		)
-
-		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
-			),
-		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-					),
-				),
-			),
-		)
-
-		if a.Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
 		} else {
-			session.Window.RequestFocus()
+			remoteAccess.EPOCH.enabled = true
+			remoteAccess.EPOCH.err = nil
+			setRemoteAccess(epoch.GetPort(), "EPOCH")
+			choice = xswd.Allow
+			logger.Printf("[EPOCH] Started successfully via permission prompt (allowWithAddress: %v)\n", remoteAccess.EPOCH.allowWithAddress)
 		}
+		done <- struct{}{}
+	}
 
-	})
+	btnDeny.OnTapped = func() {
+		choice = xswd.Deny
+		done <- struct{}{}
+	}
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				container.NewHBox(
+					layout.NewSpacer(),
+					btnEnable,
+					btnDeny,
+					layout.NewSpacer(),
+				),
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						labelApp,
+						textApp,
+						rectSpacer,
+						labelRequest,
+						textRequest,
+						rectSpacer,
+						infoText,
+						rectSpacer,
+						labelMiningAddr,
+						miningAddrRadio,
+					),
+				),
+			),
+		),
+	)
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(colors.DarkMatter),
+		),
+	)
+
+	overlay.Add(
+		container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
+					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+				),
+			),
+		),
+	)
+
+	if a.Driver().Device().IsMobile() {
+		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
+	} else {
+		session.Window.RequestFocus()
+	}
+
 	// Wait for user input
 	select {
 	case <-done:
@@ -8645,124 +8590,122 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 		return
 	}
 
+	overlay := session.Window.Canvas().Overlays()
+
+	header := canvas.NewText(headerText, colors.Gray)
+	header.TextSize = 16
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp.TextSize = 14
+	labelApp.Alignment = fyne.TextAlignLeading
+	labelApp.TextStyle = fyne.TextStyle{Bold: true}
+
+	textApp := widget.NewRichTextFromMarkdown("### Engram")
+	textApp.Wrapping = fyne.TextWrapWord
+
+	labelParams := canvas.NewText("PARAMETERS", colors.Gray)
+	labelParams.TextSize = 14
+	labelParams.Alignment = fyne.TextAlignLeading
+	labelParams.TextStyle = fyne.TextStyle{Bold: true}
+
+	textParams := widget.NewLabel(paramString)
+	textParams.Wrapping = fyne.TextWrapWord
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
+
 	done := make(chan struct{})
-	var overlay fyne.OverlayStack
-	uiDo(func() {
-		overlay = session.Window.Canvas().Overlays()
 
-		header := canvas.NewText(headerText, colors.Gray)
-		header.TextSize = 16
-		header.Alignment = fyne.TextAlignCenter
-		header.TextStyle = fyne.TextStyle{Bold: true}
+	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+		choice = xswd.Allow
+		done <- struct{}{}
+	})
+	btnAllow.Importance = widget.MediumImportance
 
-		labelApp := canvas.NewText("FROM", colors.Gray)
-		labelApp.TextSize = 14
-		labelApp.Alignment = fyne.TextAlignLeading
-		labelApp.TextStyle = fyne.TextStyle{Bold: true}
+	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+		choice = xswd.Deny
+		done <- struct{}{}
+	})
+	btnDeny.Importance = widget.MediumImportance
 
-		textApp := widget.NewRichTextFromMarkdown("### Engram")
-		textApp.Wrapping = fyne.TextWrapWord
+	btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
 
-		labelParams := canvas.NewText("PARAMETERS", colors.Gray)
-		labelParams.TextSize = 14
-		labelParams.Alignment = fyne.TextAlignLeading
-		labelParams.TextStyle = fyne.TextStyle{Bold: true}
-
-		textParams := widget.NewLabel(paramString)
-		textParams.Wrapping = fyne.TextWrapWord
-
-		rectBox := canvas.NewRectangle(color.Transparent)
-		rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
-
-		rectSpacer := canvas.NewRectangle(color.Transparent)
-		rectSpacer.SetMinSize(fyne.NewSize(0, 10))
-
-		btnAllow := widget.NewButton(xswd.Allow.String(), func() {
-			choice = xswd.Allow
-			done <- struct{}{}
-		})
-		btnAllow.Importance = widget.MediumImportance
-
-		btnDeny := widget.NewButton(xswd.Deny.String(), func() {
-			choice = xswd.Deny
-			done <- struct{}{}
-		})
-		btnDeny.Importance = widget.MediumImportance
-
-		btnRow := container.NewHBox(layout.NewSpacer(), btnAllow, rectSpacer, btnDeny, layout.NewSpacer())
-
-		content := container.NewStack(
-			container.NewBorder(
-				nil,
-				container.NewVBox(
-					rectSpacer,
-					rectSpacer,
-					btnRow,
-					rectSpacer,
-					rectSpacer,
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer,
+				rectSpacer,
+				btnRow,
+				rectSpacer,
+				rectSpacer,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						labelApp,
+						textApp,
+						rectSpacer,
+						labelParams,
+						textParams,
+						rectSpacer,
+					),
 				),
-				nil,
-				nil,
-				container.NewStack(
-					rectBox,
-					container.NewVScroll(
-						container.NewVBox(
-							labelApp,
-							textApp,
-							rectSpacer,
-							labelParams,
-							textParams,
-							rectSpacer,
+			),
+		),
+	)
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	uiDo(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
+	})
+
+	uiDo(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
 						),
+						container.NewCenter(
+							container.NewStack(
+								span,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						content,
+						btnRow,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
 					),
 				),
 			),
 		)
-
-		span := canvas.NewRectangle(color.Transparent)
-		span.SetMinSize(fyne.NewSize(ui.Width, 10))
-
-		uiDo(func() {
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
-				),
-			)
-		})
-
-		uiDo(func() {
-			overlay.Add(
-				container.NewStack(
-					&iframe{},
-					container.NewCenter(
-						container.NewVBox(
-							span,
-							container.NewCenter(
-								header,
-							),
-							container.NewCenter(
-								container.NewStack(
-									span,
-								),
-							),
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							content,
-							btnRow,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-							rectSpacer,
-						),
-					),
-				),
-			)
-		})
-
 	})
+
 	// Wait for user input or cancellation
 	select {
 	case <-done:
@@ -8837,17 +8780,6 @@ func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string,
 
 	go func() {
 		link, err := tela.ServeTELA(scid, endpoint)
-		if err == nil {
-			link = cleanTELALink(link)
-			// Verify server is actually up before returning the link
-			// This prevents race conditions on mobile where the browser opens before the server is listening
-			if vErr := verifyTELAServerIsUp(link, 10*time.Second); vErr != nil {
-				logger.Errorf("[TELA] Readiness check failed for %s: %v\n", scid, vErr)
-				err = vErr
-			} else {
-				logger.Printf("[TELA] Server verified up at %s\n", link)
-			}
-		}
 		done <- result{link, err}
 	}()
 
@@ -8885,7 +8817,7 @@ func serveTELACollisionRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 		}
 	}
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
-		return cleanTELALink(link), err
+		return link, err
 	}
 	if cloneDir, ok := telaStaleCloneDirFromServeErr(err); ok {
 		if rmErr := os.RemoveAll(cloneDir); rmErr != nil {
@@ -8933,12 +8865,7 @@ func serveTELAWithStaleRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 
 	for _, s := range getTelaActiveServers() {
 		if s.SCID == scid {
-			host := "localhost"
-			if isMobile() {
-				host = "127.0.0.1"
-			}
-			link := fmt.Sprintf("http://%s%s", host, s.Address)
-			return cleanTELALink(link), nil
+			return fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint), nil
 		}
 	}
 	return serveTELACollisionRecovery(scid, endpoint, cancelled...)
@@ -8975,63 +8902,6 @@ func telaErrorToString(err error) string {
 	}
 
 	return fmt.Sprintf("%s %s", "error", str)
-}
-
-// Clean up TELA link for better mobile compatibility
-func cleanTELALink(link string) string {
-	if link == "" {
-		return ""
-	}
-
-	// Replace localhost with 127.0.0.1 for better Android compatibility
-	// Many mobile browsers have issues with localhost or prefer explicit loopback
-	if isMobile() {
-		link = strings.Replace(link, "http://localhost", "http://127.0.0.1", 1)
-	}
-
-	// Clean up multiple slashes in the path
-	// e.g. http://127.0.0.1:8082///index.html -> http://127.0.0.1:8082/index.html
-	if parts := strings.SplitN(link, "://", 2); len(parts) == 2 {
-		scheme := parts[0]
-		rest := parts[1]
-
-		// Split hostPort and path
-		if subParts := strings.SplitN(rest, "/", 2); len(subParts) == 2 {
-			hostPort := subParts[0]
-			path := subParts[1]
-
-			// Collapse multiple slashes
-			for strings.HasPrefix(path, "/") {
-				path = path[1:]
-			}
-
-			link = fmt.Sprintf("%s://%s/%s", scheme, hostPort, path)
-		}
-	}
-
-	link = strings.TrimSuffix(link, "/index.html")
-	return link
-}
-
-// Verify if the local TELA server is responsive
-func verifyTELAServerIsUp(link string, timeout time.Duration) error {
-	client := http.Client{
-		Timeout: 3 * time.Second, // Increased for mobile
-	}
-
-	start := time.Now()
-	attempt := 0
-	for time.Since(start) < timeout {
-		attempt++
-		resp, err := client.Get(link)
-		if err == nil {
-			resp.Body.Close()
-			return nil
-		}
-		logger.Printf("[TELA] Ping attempt %d failed: %v (waiting...)\n", attempt, err)
-		time.Sleep(500 * time.Millisecond) // Slightly longer sleep between pings
-	}
-	return fmt.Errorf("timeout waiting for TELA server at %s after %d attempts", link, attempt)
 }
 
 // Get the ratio of likes for a TELA SCID, if ratio < minLines an error will be returned

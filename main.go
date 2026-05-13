@@ -216,7 +216,6 @@ func main() {
 	globals.Arguments["--remote"] = false
 
 	initSettings()
-	globals.Arguments["--data-dir"] = AppPath()
 	globals.Initialize()
 
 	session.Domain = "app.main"
