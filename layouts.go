@@ -282,6 +282,33 @@ func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {
 	return obj
 }
 
+func pulseButton(rect *canvas.Rectangle, done chan struct{}) {
+	if rect == nil {
+		if done != nil {
+			close(done)
+		}
+		return
+	}
+
+	originalColor := rect.StrokeColor
+	green := colors.Green
+
+	// Create color animation to Green and back
+	anim := canvas.NewColorRGBAAnimation(originalColor, green, 500*time.Millisecond, func(c color.Color) {
+		rect.StrokeColor = c
+		rect.Refresh()
+	})
+	anim.AutoReverse = true
+	anim.Start()
+
+	// Signal done after animation finishes (500ms forward + 500ms reverse)
+	time.AfterFunc(time.Second, func() {
+		if done != nil {
+			close(done)
+		}
+	})
+}
+
 func pushTELANavigation(scid string) {
 	telaNavigationStack.Lock()
 	defer telaNavigationStack.Unlock()
@@ -645,6 +672,27 @@ func layoutMain() fyne.CanvasObject {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAlert(2))
+	}
+
+	// Pulse animation for fresh install
+	if !appFirstOpenDone && len(list) == 0 {
+		appFirstOpenDone = true
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if len(btnNewAccount.Objects) > 1 {
+				if bg, ok := btnNewAccount.Objects[1].(*canvas.Rectangle); ok {
+					done := make(chan struct{})
+					pulseButton(bg, done)
+					<-done
+				}
+			}
+
+			if len(btnRecoverAccount.Objects) > 1 {
+				if bg, ok := btnRecoverAccount.Objects[1].(*canvas.Rectangle); ok {
+					pulseButton(bg, nil)
+				}
+			}
+		}()
 	}
 
 	// Wallet selection buttons (up to 3) with dropdown for remaining
