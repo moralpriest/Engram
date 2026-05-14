@@ -5,7 +5,7 @@
 
 set -e
 
-MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.7.3/internal/driver/mobile/app"
+MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.7.4/internal/driver/mobile/app"
 VENDOR_PATH="$(dirname "$0")/internal/patches/android"
 
 if [ ! -d "$VENDOR_PATH" ]; then
