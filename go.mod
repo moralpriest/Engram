@@ -7,7 +7,7 @@ replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409
 
 require (
-	fyne.io/fyne/v2 v2.7.3
+	fyne.io/fyne/v2 v2.7.4
 	fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/civilware/Gnomon v0.0.0-20240403103529-8b2fdb2b3106
@@ -25,7 +25,7 @@ require (
 )
 
 require (
-	fyne.io/systray v1.12.0 // indirect
+	fyne.io/systray v1.12.1 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/VictoriaMetrics/metrics v1.41.2 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
@@ -48,7 +48,7 @@ require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20250301202403-da16c1255728 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
-	github.com/go-text/render v0.2.0 // indirect
+	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
@@ -62,6 +62,7 @@ require (
 	github.com/lesismal/nbio v1.6.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.17 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
