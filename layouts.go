@@ -375,28 +375,8 @@ func showVillagerMenu(updateLogo func()) {
 		overlay.Remove(menu)
 		showLoadingOverlay()
 		go func() {
-			// For Villager Edit, if XSWD is not enabled, always prompt.
-			alreadyEnabled := remoteAccess.WS.global.enabled
-			if !alreadyEnabled {
-				if showXSWDPrompt() {
-					remoteAccess.WS.global.enabled = true
-					if remoteAccess.WS.port == "" {
-						remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
-						setRemoteAccessDual(remoteAccess.WS.port, "WS")
-					}
-					setPermissions()
-					if remoteAccess.WS.server == nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
-				} else {
-					remoteAccess.WS.global.enabled = false
-					setPermissions()
-					if remoteAccess.WS.server != nil {
-						toggleXSWD(remoteAccess.WS.port)
-					}
-				}
-				setAskedXSWD()
-			}
+			// Guarantee XSWD is running on the correct dual-stack port before opening browser
+			EnsureXSWD()
 
 			scid := "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
 			index, err := tela.GetINDEXInfo(scid, session.Daemon)

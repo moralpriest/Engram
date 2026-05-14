@@ -1445,35 +1445,7 @@ func initWebSocketState() {
 	// If WebSocket was previously enabled, restart it
 	if remoteAccess.WS.global.enabled && !session.Offline {
 		logger.Printf("[Engram] Attempting to restart WebSocket (was previously enabled)")
-
-		// Validate port without requiring UI (for auto-start after login)
-		wsEndpoint := remoteAccess.WS.port
-		if wsEndpoint == "" {
-			logger.Printf("[Engram] No WebSocket port configured, cannot auto-start")
-		} else {
-			logger.Printf("[Engram] Calling toggleXSWD with: %s", wsEndpoint)
-			toggleXSWD(wsEndpoint)
-
-			// Update UI to reflect server started (if UI is available)
-			if remoteAccess.WS.server != nil {
-				logger.Printf("[Engram] WebSocket server started successfully")
-				uiDo(func() {
-					if remoteAccess.WS.status != nil {
-						remoteAccess.WS.status.Text = "Allowed"
-						remoteAccess.WS.status.Color = colors.Green
-					}
-					if remoteAccess.WS.toggle != nil {
-						remoteAccess.WS.toggle.Text = "Turn Off"
-						logger.Printf("[Engram] Set toggle text to 'Turn Off' - server started")
-					}
-					if remoteAccess.WS.portText != nil {
-						remoteAccess.WS.portText.Disable()
-					}
-				})
-			} else {
-				logger.Printf("[Engram] toggleXSWD failed to start server")
-			}
-		}
+		EnsureXSWD()
 	} else {
 		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", remoteAccess.WS.global.enabled, session.Offline)
 	}
@@ -7440,6 +7412,53 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 	logger.Printf("[Engram] Total methods for UI: %d", len(methods))
 
 	return remoteAccess.WS.global.permissions, methods
+}
+
+// EnsureXSWD handles XSWD server lifecycle, ensuring it is bound to dual-stack :44326
+// and is ready for dApp connections.
+func EnsureXSWD() {
+	if engram.Disk == nil || session.Offline {
+		return
+	}
+
+	// Always use port 44326 for modern XSWD/Villager compatibility
+	const targetPort = ":44326"
+	if remoteAccess.WS.port != targetPort {
+		logger.Printf("[Engram] EnsureXSWD: Migrating port from %s to %s for dual-stack support\n", remoteAccess.WS.port, targetPort)
+		remoteAccess.WS.port = targetPort
+		setRemoteAccessDual(targetPort, "WS")
+	}
+
+	// If not enabled, we may need to prompt (if calling from a goroutine)
+	if !remoteAccess.WS.global.enabled {
+		if showXSWDPrompt() {
+			remoteAccess.WS.global.enabled = true
+			setPermissions()
+		} else {
+			return // User declined
+		}
+	}
+
+	// Start server if not running
+	if remoteAccess.WS.server == nil {
+		logger.Printf("[Engram] EnsureXSWD: Starting server on %s\n", targetPort)
+		toggleXSWD(targetPort)
+
+		// Wait up to 2 seconds for server to be ready
+		for i := 0; i < 20; i++ {
+			if remoteAccess.WS.server != nil {
+				logger.Printf("[Engram] EnsureXSWD: Server is ready after %dms\n", i*100)
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	} else {
+		// Even if server is running, ensure global state matches for UI consistency
+		if !remoteAccess.WS.global.enabled {
+			remoteAccess.WS.global.enabled = true
+			setPermissions()
+		}
+	}
 }
 
 // Start a permissioned web socket server to allow decentralized application communication
