@@ -7459,7 +7459,10 @@ func EnsureXSWD() {
 
 		// Wait up to 2 seconds for server to be ready
 		for i := 0; i < 20; i++ {
-			if remoteAccess.WS.server != nil {
+			xswdStateMu.RLock()
+			server := remoteAccess.WS.server
+			xswdStateMu.RUnlock()
+			if server != nil && server.IsRunning() {
 				logger.Printf("[Engram] EnsureXSWD: Server is ready after %dms\n", i*100)
 				break
 			}

@@ -22376,6 +22376,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				pushTELANavigation(index.SCID)
 				// Guarantee XSWD is running on the correct dual-stack port before opening browser
 				EnsureXSWD()
+				q := url.Query()
+				q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+				url.RawQuery = q.Encode()
 				fyne.CurrentApp().OpenURL(url)
 			}
 		} else {
@@ -22695,6 +22698,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 						EnsureXSWD()
 
 						if u, perr := url.Parse(link); perr == nil {
+							q := u.Query()
+							q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+							u.RawQuery = q.Encode()
 							fyne.CurrentApp().OpenURL(u)
 						}
 					} else {
@@ -22785,6 +22791,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 									pushTELANavigation(index.SCID)
 									// Guarantee XSWD is running on the correct dual-stack port before opening browser
 									EnsureXSWD()
+									q := parsedURL.Query()
+									q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+									parsedURL.RawQuery = q.Encode()
 									fyne.CurrentApp().OpenURL(parsedURL)
 								}
 							} else {
