@@ -27,6 +27,7 @@ import (
 	"image/color"
 	"math/big"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -3454,6 +3455,12 @@ func safeOpenURL(u *url.URL) {
 	if u == nil {
 		return
 	}
+
+	// If it's a TELA-like URL (localhost/127.0.0.1), ensure XSWD is ready
+	if strings.HasPrefix(u.Host, "localhost") || strings.HasPrefix(u.Host, "127.0.0.1") {
+		EnsureXSWD()
+	}
+
 	logger.Printf("[OpenURL] Requesting to open: %s\n", u.String())
 	go func() {
 		err := fyne.CurrentApp().OpenURL(u)
@@ -7033,6 +7040,7 @@ func showXSWDPrompt() bool {
 		overlay.Remove(overlay.Top())
 	})
 
+	setAskedXSWD()
 	return allowed
 }
 
@@ -7431,11 +7439,16 @@ func EnsureXSWD() {
 
 	// If not enabled, we may need to prompt (if calling from a goroutine)
 	if !remoteAccess.WS.global.enabled {
-		if showXSWDPrompt() {
-			remoteAccess.WS.global.enabled = true
-			setPermissions()
+		if !hasAskedXSWD() {
+			if showXSWDPrompt() {
+				remoteAccess.WS.global.enabled = true
+				setPermissions()
+			} else {
+				return // User declined
+			}
 		} else {
-			return // User declined
+			// Already asked before. If it's disabled, we respect that.
+			return
 		}
 	}
 
@@ -7536,10 +7549,10 @@ func toggleXSWD(endpoint string) {
 						break
 					}
 					if i < 4 {
-						logger.Printf("[Engram] Port %s in use, retrying in 1s... (%d/5)\n", endpoint, i+1)
+						logger.Printf("[Engram] Port %s in use (Socket Refused likely if client tries now), retrying in 1s... (%d/5)\n", endpoint, i+1)
 						time.Sleep(time.Second)
 					} else {
-						logger.Errorf("[Engram] Port %s still in use after 5 seconds\n", endpoint)
+						logger.Errorf("[Engram] Port %s still in use after 5 seconds - check for other running instances\n", endpoint)
 					}
 				}
 			}
@@ -7874,70 +7887,71 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
-		),
-	)
+	fyne.Do(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			container.NewCenter(
-				container.NewVBox(
-					span,
-					container.NewCenter(
-						header,
-					),
-					container.NewCenter(
-						container.NewStack(
-							span,
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
 						),
+						container.NewCenter(
+							container.NewStack(
+								span,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						content,
+						btnRow,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
 					),
-					rectSpacer,
-					rectSpacer,
-					content,
-					btnRow,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
 				),
 			),
-		),
-	)
+		)
 
-	if a.Driver().Device().IsMobile() {
-		fyne.Do(func() {
+		if a.Driver().Device().IsMobile() {
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been received"})
 			session.Window.RequestFocus()
-		})
-	} else {
-		fyne.Do(func() {
+		} else {
 			session.Window.RequestFocus()
-		})
-	}
+		}
+	})
 
 	// Wait for user input or socket close
 	select {
 	case <-done:
-
 	case <-ad.OnClose:
-
 	}
+
 	if !isWalletGenerationActive(generation) || session.Window == nil {
 		return false
 	}
 
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
+	fyne.Do(func() {
+		if len(overlay.List()) >= 2 {
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		}
+	})
 
 	go refreshXSWDList()
 
-	return
+	return confirmed
 }
 
 // Handle incoming TELA link requests and return params to be displayed in approval prompt
@@ -8039,6 +8053,15 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	method := request.Method()
+
+	// Check if we already have a stored permission for this app and method
+	if ad.Permissions != nil {
+		if p, ok := ad.Permissions[method]; ok && p != xswd.Ask {
+			logger.Printf("[Engram] Using stored permission for %s -> %s: %s\n", ad.Name, method, p)
+			return p
+		}
+	}
+
 	// Gnomon methods behave as AlwaysAllow
 	if strings.HasPrefix(method, "Gnomon.") {
 		return xswd.Allow
@@ -8229,66 +8252,71 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
-		),
-	)
+	fyne.Do(func() {
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(colors.DarkMatter),
+			),
+		)
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			container.NewCenter(
-				container.NewVBox(
-					span,
-					container.NewCenter(
-						header,
-					),
-					container.NewCenter(
-						container.NewStack(
-							span,
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(
+							header,
 						),
+						container.NewCenter(
+							container.NewStack(
+								span,
+							),
+						),
+						rectSpacer,
+						rectSpacer,
+						content,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						rectSpacer,
+						container.NewHBox(
+							layout.NewSpacer(),
+							linkRemove,
+							layout.NewSpacer(),
+						),
+						rectSpacer,
 					),
-					rectSpacer,
-					rectSpacer,
-					content,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					container.NewHBox(
-						layout.NewSpacer(),
-						linkRemove,
-						layout.NewSpacer(),
-					),
-					rectSpacer,
 				),
 			),
-		),
-	)
+		)
 
-	if a.Driver().Device().IsMobile() {
-		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
-		session.Window.RequestFocus()
-	} else {
-		session.Window.RequestFocus()
-	}
+		if fyne.CurrentApp().Driver().Device().IsMobile() {
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
+			session.Window.RequestFocus()
+		} else {
+			session.Window.RequestFocus()
+		}
+	})
 
 	// Wait for user input or socket close
 	select {
 	case <-done:
-
 	case <-ad.OnClose:
-
 	}
+
 	if !isWalletGenerationActive(generation) || session.Window == nil {
 		return xswd.Deny
 	}
 
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
+	fyne.Do(func() {
+		if len(overlay.List()) >= 2 {
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		}
+	})
 
 	go refreshXSWDList()
 
@@ -8788,6 +8816,35 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 	return dir, true
 }
 
+
+// cleanTELALink ensures the TELA link is safe for the current platform.
+// On Android, localhost is replaced with 127.0.0.1 to avoid emulator/loopback ambiguity.
+func cleanTELALink(link string) string {
+	return strings.TrimSpace(link)
+}
+
+// verifyTELAServerIsUp polls the TELA server for up to 5 seconds to ensure it is ready.
+func verifyTELAServerIsUp(link string) bool {
+	if link == "" {
+		return false
+	}
+
+	client := http.Client{
+		Timeout: 1 * time.Second,
+	}
+
+	for i := 0; i < 50; i++ {
+		resp, err := client.Get(link)
+		if err == nil {
+			resp.Body.Close()
+			return true
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return false
+}
+
 // serveTELAWithCancel runs tela.ServeTELA in a background goroutine and returns
 // early if the cancelled flag is set, preserving the cancel-during-launch UX.
 func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string, error) {
@@ -8799,6 +8856,9 @@ func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string,
 
 	go func() {
 		link, err := tela.ServeTELA(scid, endpoint)
+		if err == nil {
+			PatchTELAAppSourceFiles(scid)
+		}
 		done <- result{link, err}
 	}()
 
@@ -8808,7 +8868,7 @@ func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string,
 	for {
 		select {
 		case r := <-done:
-			return r.link, r.err
+			return cleanTELALink(r.link), r.err
 		case <-ticker.C:
 			if cancelled != nil && cancelled.Load() {
 				return "", fmt.Errorf("cancelled")
@@ -8884,7 +8944,8 @@ func serveTELAWithStaleRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 
 	for _, s := range getTelaActiveServers() {
 		if s.SCID == scid {
-			return fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint), nil
+			PatchTELAAppSourceFiles(scid)
+			return cleanTELALink(fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint)), nil
 		}
 	}
 	return serveTELACollisionRecovery(scid, endpoint, cancelled...)
@@ -8921,6 +8982,73 @@ func telaErrorToString(err error) string {
 	}
 
 	return fmt.Sprintf("%s %s", "error", str)
+}
+
+// PatchTELAAppSourceFiles scans the cloned TELA app directory and replaces localhost with 127.0.0.1 on mobile
+func PatchTELAAppSourceFiles(scid string) {
+	if !fyne.CurrentApp().Driver().Device().IsMobile() {
+		return
+	}
+
+	telaPath := getTelaPath()
+	var appDir string
+	// Use tela.GetServerInfo() directly to avoid race conditions with the global cached info
+	for _, s := range tela.GetServerInfo() {
+		if s.SCID == scid {
+			appDir = filepath.Join(telaPath, s.Name)
+			break
+		}
+	}
+
+	if appDir == "" {
+		logger.Printf("[TELA] PatchTELAAppSourceFiles: SCID %s not found in active servers\n", scid)
+		return
+	}
+
+	logger.Printf("[TELA] PatchTELAAppSourceFiles: Scanning %s for mobile compatibility patches\n", appDir)
+
+	count := 0
+	err := filepath.Walk(appDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".js" || ext == ".html" || ext == ".json" {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			// We specifically target localhost:44326 (XSWD) to avoid breaking the origin check
+			// while still enabling the explicit loopback IP for mobile WebSocket connectivity.
+			if bytes.Contains(content, []byte("localhost:44326")) {
+				newContent := bytes.ReplaceAll(content, []byte("localhost:44326"), []byte("127.0.0.1:44326"))
+				tmpPath := path + ".tmp"
+				err = os.WriteFile(tmpPath, newContent, info.Mode())
+				if err != nil {
+					return err
+				}
+				err = os.Rename(tmpPath, path)
+				if err != nil {
+					os.Remove(tmpPath) // Cleanup on failure
+					return err
+				}
+				count++
+				logger.Printf("[TELA] PatchTELAAppSourceFiles: Patched %s (localhost:44326 -> 127.0.0.1:44326)\n", path)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		logger.Errorf("[TELA] PatchTELAAppSourceFiles error: %v\n", err)
+	} else {
+		logger.Printf("[TELA] PatchTELAAppSourceFiles: Completed. Patched %d files for SCID %s\n", count, scid)
+	}
 }
 
 // Get the ratio of likes for a TELA SCID, if ratio < minLines an error will be returned

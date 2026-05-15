@@ -18876,11 +18876,15 @@ func layoutTELA() fyne.CanvasObject {
 
 				go func() {
 					openURLAfterDelay := func(link string) {
-						if a.Driver().Device().IsMobile() {
-							time.Sleep(2 * time.Second)
-						}
-						if u, err := url.Parse(link); err == nil {
-							fyne.CurrentApp().OpenURL(u)
+						if verifyTELAServerIsUp(link) {
+							// Guarantee XSWD is running on the correct dual-stack port before opening browser
+							EnsureXSWD()
+
+							if u, err := url.Parse(link); err == nil {
+								fyne.CurrentApp().OpenURL(u)
+							}
+						} else {
+							logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
 						}
 					}
 
@@ -21811,54 +21815,26 @@ func layoutTELA() fyne.CanvasObject {
 				entryServeSCID.SetText("")
 
 				if link, err := serveTELAWithStaleRecovery(s, session.Daemon); err == nil {
-					url, err := url.Parse(link)
-					if err != nil {
-						logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-						errorText.Text = "error could parse URL"
-						errorText.Color = colors.Red
+					if verifyTELAServerIsUp(link) {
+						url, err := url.Parse(link)
+						if err != nil {
+							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+							errorText.Text = "error could parse URL"
+							errorText.Color = colors.Red
 
-						fyne.Do(func() {
-							errorText.Refresh()
-						})
+							fyne.Do(func() {
+								errorText.Refresh()
+							})
 
-						return // If url is not valid, scid won't be saved in history
-					} else {
-						pushTELANavigation(s)
-
-						if a.Driver().Device().IsMobile() {
-							go func() {
-								time.Sleep(2 * time.Second)
-								err = fyne.CurrentApp().OpenURL(url)
-								if err != nil {
-									logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-									errorText.Text = "error could not open browser"
-									errorText.Color = colors.Red
-
-									if isMobileDevice() {
-										fyne.Do(func() {
-											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-										})
-									}
-								} else if isMobileDevice() {
-									logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
-								}
-							}()
+							return // If url is not valid, scid won't be saved in history
 						} else {
-							err = fyne.CurrentApp().OpenURL(url)
-							if err != nil {
-								logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-								errorText.Text = "error could not open browser"
-								errorText.Color = colors.Red
-
-								if isMobileDevice() {
-									fyne.Do(func() {
-										dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-									})
-								}
-							} else if isMobileDevice() {
-								logger.Printf("[Engram] TELA: Opened in mobile browser %s\n", s)
-							}
+							pushTELANavigation(s)
+							// Guarantee XSWD is running on the correct dual-stack port before opening browser
+							EnsureXSWD()
+							fyne.CurrentApp().OpenURL(url)
 						}
+					} else {
+						logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
 					}
 
 					if gnomon.Index != nil {
@@ -21898,60 +21874,27 @@ func layoutTELA() fyne.CanvasObject {
 							return
 						}
 
-						link, err := serveTELAUpdates(s)
-						if err != nil {
-							logger.Errorf("[Engram] Error serving TELA: %s\n", err)
-							errorText.Text = telaErrorToString(err)
-							errorText.Color = colors.Red
-
-							fyne.Do(func() {
-								errorText.Refresh()
-							})
-
-							return
-						}
-
-						url, err := url.Parse(link)
-						if err != nil {
-							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-							errorText.Text = "error could parse URL"
-							errorText.Color = colors.Red
-
-							fyne.Do(func() {
-								errorText.Refresh()
-							})
-
-							return
-						} else {
-							pushTELANavigation(s)
-
-							if a.Driver().Device().IsMobile() {
-								go func() {
-									time.Sleep(2 * time.Second)
-									err = fyne.CurrentApp().OpenURL(url)
-									if err != nil {
-										errorText.Text = "error could not open browser"
-										errorText.Color = colors.Red
-
-										if isMobileDevice() {
-											fyne.Do(func() {
-												dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-											})
-										}
-									}
-								}()
-							} else {
-								err = fyne.CurrentApp().OpenURL(url)
+						if link, err := serveTELAUpdates(s); err == nil {
+							if verifyTELAServerIsUp(link) {
+								url, err := url.Parse(link)
 								if err != nil {
-									errorText.Text = "error could not open browser"
+									logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+									errorText.Text = "error could parse URL"
 									errorText.Color = colors.Red
 
-									if isMobileDevice() {
-										fyne.Do(func() {
-											dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-										})
-									}
+									fyne.Do(func() {
+										errorText.Refresh()
+									})
+
+									return
+								} else {
+									pushTELANavigation(s)
+									// Guarantee XSWD is running on the correct dual-stack port before opening browser
+									EnsureXSWD()
+									fyne.CurrentApp().OpenURL(url)
 								}
+							} else {
+								logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
 							}
 						}
 
@@ -22418,6 +22361,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		if toggledUpdates {
 			tela.AllowUpdates(false)
 		}
+
+		link = cleanTELALink(link)
+
 		if err != nil {
 			logger.Errorf("[Engram] handling TELA link: %s\n", err)
 			errorText.Text = "error handling TELA link"
@@ -22426,47 +22372,21 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			return
 		}
 
-		url, err := url.Parse(link)
-		if err != nil {
-			logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-			errorText.Text = "error could parse URL"
-			errorText.Color = colors.Red
-			errorText.Refresh()
-		} else {
-			pushTELANavigation(index.SCID)
-
-			if a.Driver().Device().IsMobile() {
-				go func() {
-					time.Sleep(2 * time.Second)
-					openErr := fyne.CurrentApp().OpenURL(url)
-					if openErr != nil {
-						logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
-						fyne.Do(func() {
-							errorText.Text = "error could not open browser"
-							errorText.Color = colors.Red
-							errorText.Refresh()
-						})
-					} else if isMobileDevice() {
-						logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
-					}
-				}()
+		if verifyTELAServerIsUp(link) {
+			url, err := url.Parse(link)
+			if err != nil {
+				logger.Errorf("[Engram] TELA URL parse: %s\n", err)
+				errorText.Text = "error could parse URL"
+				errorText.Color = colors.Red
+				errorText.Refresh()
 			} else {
-				err = fyne.CurrentApp().OpenURL(url)
-				if err != nil {
-					logger.Errorf("[Engram] TELA OpenURL error: %s\n", err)
-					errorText.Text = "error could not open browser"
-					errorText.Color = colors.Red
-
-					if isMobileDevice() {
-						fyne.Do(func() {
-							dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-						})
-					}
-					errorText.Refresh()
-				} else if isMobileDevice() {
-					logger.Printf("[Engram] TELA Manager: Opened in mobile browser %s\n", index.SCID)
-				}
+				pushTELANavigation(index.SCID)
+				// Guarantee XSWD is running on the correct dual-stack port before opening browser
+				EnsureXSWD()
+				fyne.CurrentApp().OpenURL(url)
 			}
+		} else {
+			logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
 		}
 	}
 
@@ -22777,11 +22697,15 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 			go func() {
 				openURLAfterDelay := func(link string) {
-					if a.Driver().Device().IsMobile() {
-						time.Sleep(2 * time.Second)
-					}
-					if u, perr := url.Parse(link); perr == nil {
-						fyne.CurrentApp().OpenURL(u)
+					if verifyTELAServerIsUp(link) {
+						// Guarantee XSWD is running on the correct dual-stack port before opening browser
+						EnsureXSWD()
+
+						if u, perr := url.Parse(link); perr == nil {
+							fyne.CurrentApp().OpenURL(u)
+						}
+					} else {
+						logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
 					}
 				}
 
@@ -22857,46 +22781,21 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 								return
 							}
 
-							parsedURL, parseErr := url.Parse(servedLink)
-							if parseErr != nil {
-								logger.Errorf("[Engram] TELA URL parse: %s\n", parseErr)
-								errorText.Text = "error could parse URL"
-								errorText.Color = colors.Red
-								errorText.Refresh()
-							} else {
-								pushTELANavigation(index.SCID)
-
-								if a.Driver().Device().IsMobile() {
-									go func() {
-										time.Sleep(2 * time.Second)
-										openErr := fyne.CurrentApp().OpenURL(parsedURL)
-										if openErr != nil {
-											logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
-											fyne.Do(func() {
-												errorText.Text = "error could not open browser"
-												errorText.Color = colors.Red
-												errorText.Refresh()
-											})
-										} else {
-											logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
-										}
-									}()
+							if verifyTELAServerIsUp(servedLink) {
+								parsedURL, parseErr := url.Parse(servedLink)
+								if parseErr != nil {
+									logger.Errorf("[Engram] TELA URL parse: %s\n", parseErr)
+									errorText.Text = "error could parse URL"
+									errorText.Color = colors.Red
+									errorText.Refresh()
 								} else {
-									openErr := fyne.CurrentApp().OpenURL(parsedURL)
-									if openErr != nil {
-										logger.Errorf("[Engram] TELA OpenURL error: %s\n", openErr)
-										errorText.Text = "error could not open browser"
-										errorText.Color = colors.Red
-
-										if isMobileDevice() {
-											fyne.Do(func() {
-												dialog.ShowInformation("Browser Error", "Could not open browser. Please ensure you have a browser installed.", session.Window)
-											})
-										}
-									} else {
-										logger.Printf("[Engram] TELA Server: Opened in mobile browser %s\n", index.SCID)
-									}
+									pushTELANavigation(index.SCID)
+									// Guarantee XSWD is running on the correct dual-stack port before opening browser
+									EnsureXSWD()
+									fyne.CurrentApp().OpenURL(parsedURL)
 								}
+							} else {
+								logger.Errorf("[TELA] Server did not come up in time for %s\n", servedLink)
 							}
 
 							uiDo(func() {
