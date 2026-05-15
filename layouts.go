@@ -777,8 +777,11 @@ func layoutMain() fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
+	newSpacer := func() *canvas.Rectangle {
+		s := canvas.NewRectangle(color.Transparent)
+		s.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
+		return s
+	}
 
 	status.Connection.FillColor = colors.Gray
 	status.RemoteAccess.FillColor = colors.Gray
@@ -791,11 +794,11 @@ func layoutMain() fyne.CanvasObject {
 		container.New(layout.NewGridLayout(1),
 			btnNewAccount,
 		),
-		rectSpacer,
+		newSpacer(),
 		container.New(layout.NewGridLayout(1),
 			btnRecoverAccount,
 		),
-		rectSpacer,
+		newSpacer(),
 		container.New(layout.NewGridLayout(1),
 			btnConnectionSettings,
 		),
@@ -815,76 +818,64 @@ func layoutMain() fyne.CanvasObject {
 		versionLabel,
 	)
 
-	form := container.NewStack(
-		res.mainBg,
-		container.NewVBox(
+	form := container.NewVBox(
+		wSpacer,
+		container.NewStack(
+			headerBlock,
+		),
+		newSpacer(),
+		newSpacer(),
+		walletButtons,
+		newSpacer(),
+		wPassword,
+		newSpacer(),
+		mode,
+		newSpacer(),
+		btnLogin,
+		newSpacer(),
+		container.NewCenter(buttonGrid),
+		footer,
+	)
+
+	if isMobile() {
+		form = container.NewVBox(
 			wSpacer,
 			container.NewStack(
 				headerBlock,
 			),
-			rectSpacer,
-			rectSpacer,
+			newSpacer(),
+			newSpacer(),
 			walletButtons,
-			rectSpacer,
+			newSpacer(),
 			wPassword,
-			rectSpacer,
+			newSpacer(),
 			mode,
-			rectSpacer,
-			btnLogin,
-			rectSpacer,
-			buttonGrid,
-			footer,
-		),
-	)
-
-	if isMobile() {
-		form = container.NewStack(
-			res.mainBg,
-			container.NewVBox(
-				wSpacer,
-				container.NewStack(
-					headerBlock,
-				),
-				rectSpacer,
-				rectSpacer,
-				walletButtons,
-				rectSpacer,
-				wPassword,
-				rectSpacer,
-				mode,
-				rectSpacer,
-				wrapMobileButton(btnLogin),
-				rectSpacer,
+			newSpacer(),
+			wrapMobileButton(btnLogin),
+			newSpacer(),
+			container.NewCenter(
 				container.NewVBox(
 					container.New(layout.NewGridLayout(1),
 						wrapMobileButton(btnNewAccount),
 					),
-					rectSpacer,
+					newSpacer(),
 					container.New(layout.NewGridLayout(1),
 						wrapMobileButton(btnRecoverAccount),
 					),
-					rectSpacer,
+					newSpacer(),
 					container.New(layout.NewGridLayout(1),
 						wrapMobileButton(btnConnectionSettings),
 					),
 				),
-				footer,
 			),
+			footer,
 		)
 	}
 
 	layout := container.NewStack(
 		frame,
-		container.NewBorder(
-			container.NewVBox(
-				container.NewCenter(
-					form,
-				),
-			),
-			nil,
-			nil,
-			nil,
-		),
+		res.mainBg,
+		container.NewCenter(form),
 	)
 
 	// Register with navigation stack (main screen does not allow back)
@@ -1299,12 +1290,14 @@ func layoutDashboard() fyne.CanvasObject {
 	accountName.TextStyle = fyne.TextStyle{Bold: true}
 	accountName.TextSize = scaleFont(18)
 
+	topButtonWidth := (ui.Width*0.9 - scaleSize(10)) / 2
+
 	gramSend := newLargeIconButton(" Send ", theme.UploadIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutSend())
 		removeOverlays()
-	}, 140)
+	}, topButtonWidth)
 
 	heading := canvas.NewText("B A L A N C E", colors.Gray)
 	heading.TextSize = scaleFont(16)
@@ -1479,21 +1472,21 @@ func layoutDashboard() fyne.CanvasObject {
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutHistory())
 		removeOverlays()
-	}, 140)
+	}, topButtonWidth)
 
 	linkMyAccount := newBorderedButtonWithIcon("My Account", theme.AccountIcon(), color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAccount())
 		removeOverlays()
-	}, 140)
+	}, topButtonWidth)
 
 	btnReceive := newLargeIconButton("Receive", theme.DownloadIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutReceive())
 		removeOverlays()
-	}, 140)
+	}, topButtonWidth)
 
 	separator := canvas.NewText(" | ", colors.Gray)
 	separator.TextSize = scaleFont(14)

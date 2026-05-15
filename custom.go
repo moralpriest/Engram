@@ -331,7 +331,7 @@ func newSizedTextButton(label string, onTap func(), width ...float32) *fyne.Cont
 	if len(width) > 0 && width[0] > 0 {
 		w = width[0]
 	}
-	sizeEnforcer.SetMinSize(scalePoint(w, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
 	return container.NewStack(sizeEnforcer, btn)
 }
 
@@ -396,7 +396,7 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 	outline.CornerRadius = scaleFont(10)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(w, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
 
 	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
 }
@@ -434,7 +434,7 @@ func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	bg.CornerRadius = scaleFont(10)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(w, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
 
 	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
 }
@@ -473,7 +473,7 @@ func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	bg.CornerRadius = scaleFont(10)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(w, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
 
 	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
 }
@@ -486,7 +486,7 @@ func newLargeIconButton(label string, icon fyne.Resource, onTap func(), width fl
 	if isMobile() {
 		h = 56
 	}
-	sizeEnforcer.SetMinSize(scalePoint(width, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(width, scaleSize(h)))
 	return container.NewStack(sizeEnforcer, btn)
 }
 
@@ -527,7 +527,7 @@ func newTELAButton(onTap func(), width float32) *fyne.Container {
 	outline.CornerRadius = scaleSize(6)
 
 	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(scalePoint(width, h))
+	sizeEnforcer.SetMinSize(fyne.NewSize(width, scaleSize(h)))
 
 	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
 }

@@ -8816,7 +8816,6 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 	return dir, true
 }
 
-
 // cleanTELALink ensures the TELA link is safe for the current platform.
 // On Android, localhost is replaced with 127.0.0.1 to avoid emulator/loopback ambiguity.
 func cleanTELALink(link string) string {
