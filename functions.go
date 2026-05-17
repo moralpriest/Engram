@@ -7422,6 +7422,31 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 	return remoteAccess.WS.global.permissions, methods
 }
 
+// CleanStaleXSWDConnections removes all existing XSWD application connections.
+// This is called before reopening a TELA app to prevent "App ID is already used" errors
+// that occur on mobile when browsers cache/suspend tabs with stale WebSocket state.
+// Safe to call even if XSWD is not running or has no connections.
+func CleanStaleXSWDConnections() {
+	xswdStateMu.RLock()
+	server := remoteAccess.WS.server
+	xswdStateMu.RUnlock()
+
+	if server == nil || !server.IsRunning() {
+		return
+	}
+
+	// Get all connected applications and remove them
+	apps := server.GetApplications()
+	if len(apps) == 0 {
+		return
+	}
+
+	logger.Printf("[Engram] Cleaning %d stale XSWD connection(s) before TELA reopen\n", len(apps))
+	for _, app := range apps {
+		server.RemoveApplication(&app)
+	}
+}
+
 // EnsureXSWD handles XSWD server lifecycle, ensuring it is bound to dual-stack :44326
 // and is ready for dApp connections.
 func EnsureXSWD() {
@@ -8820,7 +8845,8 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 }
 
 // cleanTELALink ensures the TELA link is safe for the current platform.
-// On Android, localhost is replaced with 127.0.0.1 to avoid emulator/loopback ambiguity.
+// We must preserve localhost on Android because the WebView Network Security
+// Policy specifically allows cleartext HTTP for localhost, but blocks 127.0.0.1.
 func cleanTELALink(link string) string {
 	return strings.TrimSpace(link)
 }

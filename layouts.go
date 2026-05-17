@@ -22374,11 +22374,20 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				errorText.Refresh()
 			} else {
 				pushTELANavigation(index.SCID)
+				CleanStaleXSWDConnections()
 				// Guarantee XSWD is running on the correct dual-stack port before opening browser
 				EnsureXSWD()
 				q := url.Query()
 				q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+				q.Set("_v", fmt.Sprintf("%d", time.Now().UnixNano()))
 				url.RawQuery = q.Encode()
+
+				// On mobile, add a small buffer to prevent chrome-error://chromewebdata/
+				// This gives the browser time to fully register the server is ready
+				if fyne.CurrentApp().Driver().Device().IsMobile() {
+					time.Sleep(500 * time.Millisecond)
+				}
+
 				fyne.CurrentApp().OpenURL(url)
 			}
 		} else {
@@ -22694,13 +22703,22 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			go func() {
 				openURLAfterDelay := func(link string) {
 					if verifyTELAServerIsUp(link) {
+						CleanStaleXSWDConnections()
 						// Guarantee XSWD is running on the correct dual-stack port before opening browser
 						EnsureXSWD()
 
 						if u, perr := url.Parse(link); perr == nil {
 							q := u.Query()
 							q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+							q.Set("_v", fmt.Sprintf("%d", time.Now().UnixNano()))
 							u.RawQuery = q.Encode()
+
+							// On mobile, add a small buffer to prevent chrome-error://chromewebdata/
+							// This gives the browser time to fully register the server is ready
+							if fyne.CurrentApp().Driver().Device().IsMobile() {
+								time.Sleep(500 * time.Millisecond)
+							}
+
 							fyne.CurrentApp().OpenURL(u)
 						}
 					} else {
@@ -22789,11 +22807,20 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 									errorText.Refresh()
 								} else {
 									pushTELANavigation(index.SCID)
+									CleanStaleXSWDConnections()
 									// Guarantee XSWD is running on the correct dual-stack port before opening browser
 									EnsureXSWD()
 									q := parsedURL.Query()
 									q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
+									q.Set("_v", fmt.Sprintf("%d", time.Now().UnixNano()))
 									parsedURL.RawQuery = q.Encode()
+
+									// On mobile, add a small buffer to prevent chrome-error://chromewebdata/
+									// This gives the browser time to fully register the server is ready
+									if fyne.CurrentApp().Driver().Device().IsMobile() {
+										time.Sleep(500 * time.Millisecond)
+									}
+
 									fyne.CurrentApp().OpenURL(parsedURL)
 								}
 							} else {
