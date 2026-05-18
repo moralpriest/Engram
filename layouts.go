@@ -1456,8 +1456,8 @@ func layoutDashboard() fyne.CanvasObject {
 	btnMessages := newIconLabelButton("Messages", theme.MailComposeIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutMessages())
 		removeOverlays()
+		session.Window.SetContent(layoutMessages())
 	}, buttonWidth)
 
 	btnContracts := newIconLabelButton("Contracts", theme.FolderIcon(), func() {
@@ -8618,6 +8618,107 @@ func layoutAppSettings() fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
+func showMessageWarningPopup() {
+	if session.Window == nil {
+		return
+	}
+
+	header := canvas.NewText("⚠️ Note", colors.Yellow)
+	header.TextSize = 18
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	messageText := "Running from your own daemon yields a more reliable experience\n\nAll messages are permanently written to the blockchain\n\nProceed only if you accept these risks"
+	message := widget.NewLabel(messageText)
+	message.Alignment = fyne.TextAlignCenter
+	message.Wrapping = fyne.TextWrapWord
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer1 := canvas.NewRectangle(color.Transparent)
+	rectSpacer1.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer2 := canvas.NewRectangle(color.Transparent)
+	rectSpacer2.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer3 := canvas.NewRectangle(color.Transparent)
+	rectSpacer3.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer4 := canvas.NewRectangle(color.Transparent)
+	rectSpacer4.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer5 := canvas.NewRectangle(color.Transparent)
+	rectSpacer5.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer6 := canvas.NewRectangle(color.Transparent)
+	rectSpacer6.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer7 := canvas.NewRectangle(color.Transparent)
+	rectSpacer7.SetMinSize(fyne.NewSize(0, 10))
+
+	var overlay *fyne.Container
+	var blocker *fyne.Container
+
+	btnOk := widget.NewButton("Ok", func() {
+		uiDo(func() {
+			overlays := session.Window.Canvas().Overlays()
+			overlays.Remove(overlay)
+			overlays.Remove(blocker)
+		})
+	})
+	btnOk.Importance = widget.MediumImportance
+
+	btnRow := container.NewHBox(layout.NewSpacer(), btnOk, layout.NewSpacer())
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer1,
+				rectSpacer2,
+				btnRow,
+				rectSpacer3,
+				rectSpacer4,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						message,
+						rectSpacer5,
+					),
+				),
+			),
+		),
+	)
+
+	span1 := canvas.NewRectangle(color.Transparent)
+	span1.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	blocker = container.NewStack(
+		&iframe{},
+		canvas.NewRectangle(colors.DarkMatter),
+	)
+
+	overlay = container.NewStack(
+		&iframe{},
+		container.NewCenter(
+			container.NewVBox(
+				span1,
+				container.NewCenter(
+					header,
+				),
+				rectSpacer6,
+				rectSpacer7,
+				content,
+			),
+		),
+	)
+
+	uiDo(func() {
+		overlays := session.Window.Canvas().Overlays()
+		overlays.Add(blocker)
+		overlays.Add(overlay)
+	})
+}
+
 func layoutMessages() fyne.CanvasObject {
 	session.Domain = "app.messages"
 
@@ -8627,6 +8728,11 @@ func layoutMessages() fyne.CanvasObject {
 
 	if !walletapi.Connected {
 		session.Window.SetContent(layoutSettings())
+	}
+
+	if !session.MessageWarningShown {
+		session.MessageWarningShown = true
+		showMessageWarningPopup()
 	}
 
 	title := canvas.NewText("M Y    C O N T A C T S", colors.Gray)
