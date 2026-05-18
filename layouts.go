@@ -294,15 +294,15 @@ func pulseButton(rect *canvas.Rectangle, done chan struct{}) {
 	green := colors.Green
 
 	// Create color animation to Green and back
-	anim := canvas.NewColorRGBAAnimation(originalColor, green, 500*time.Millisecond, func(c color.Color) {
+	anim := canvas.NewColorRGBAAnimation(originalColor, green, 1000*time.Millisecond, func(c color.Color) {
 		rect.StrokeColor = c
 		rect.Refresh()
 	})
 	anim.AutoReverse = true
 	anim.Start()
 
-	// Signal done after animation finishes (500ms forward + 500ms reverse)
-	time.AfterFunc(time.Second, func() {
+	// Signal done after animation finishes (1000ms forward + 1000ms reverse)
+	time.AfterFunc(2*time.Second, func() {
 		if done != nil {
 			close(done)
 		}
@@ -371,8 +371,19 @@ func showVillagerMenu(updateLogo func()) {
 
 	var menu *fyne.Container
 
-	btnEdit := widget.NewButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), func() {
+	stopPulse := make(chan struct{})
+	var closeOnce sync.Once
+	closeMenu := func() {
+		closeOnce.Do(func() {
+			close(stopPulse)
+		})
 		overlay.Remove(menu)
+	}
+
+	var btnEdit fyne.CanvasObject
+
+	onTapEdit := func() {
+		closeMenu()
 		showLoadingOverlay()
 		go func() {
 			// Guarantee XSWD is running on the correct dual-stack port before opening browser
@@ -393,7 +404,35 @@ func showVillagerMenu(updateLogo func()) {
 				removeOverlays()
 			})
 		}()
-	})
+	}
+
+	if hasVillager {
+		btnEdit = widget.NewButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), onTapEdit)
+	} else {
+		borderedBtn := newBorderedButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), color.White, onTapEdit, 240)
+		btnEdit = borderedBtn
+
+		go func() {
+			if len(borderedBtn.Objects) > 1 {
+				if bg, ok := borderedBtn.Objects[1].(*canvas.Rectangle); ok {
+					for {
+						select {
+						case <-stopPulse:
+							return
+						default:
+							done := make(chan struct{})
+							pulseButton(bg, done)
+							select {
+							case <-done:
+							case <-stopPulse:
+								return
+							}
+						}
+					}
+				}
+			}
+		}()
+	}
 
 	hideText := "Hide"
 	hideIcon := theme.VisibilityOffIcon()
@@ -409,7 +448,7 @@ func showVillagerMenu(updateLogo func()) {
 			val = "true"
 		}
 		go setTELADual("VillagerHidden", []byte(val))
-		overlay.Remove(menu)
+		closeMenu()
 	})
 	if !hasVillager {
 		btnHide.Disable()
@@ -452,14 +491,14 @@ func showVillagerMenu(updateLogo func()) {
 				})
 			}
 		}()
-		overlay.Remove(menu)
+		closeMenu()
 	})
 	if !hasVillager {
 		btnBgToggle.Disable()
 	}
 
 	btnClose := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() {
-		overlay.Remove(menu)
+		closeMenu()
 	})
 
 	btnSize := fyne.NewSize(scaleSize(240), scaleSize(40))
