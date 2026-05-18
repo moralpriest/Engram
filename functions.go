@@ -4507,10 +4507,23 @@ func refreshMessageHistoryAsync(force bool) {
 			messageCacheMu.Unlock()
 		}
 
+		messageCacheMu.RLock()
+		initialCount := len(messageCache.Records)
+		messageCacheMu.RUnlock()
+
 		scanMessageTransfers(0)
 		if !isWalletGenerationActive(generation) {
 			return
 		}
+
+		messageCacheMu.RLock()
+		finalCount := len(messageCache.Records)
+		messageCacheMu.RUnlock()
+
+		if !force && initialCount == finalCount && messageCache.Primed {
+			return
+		}
+
 		savePersistedMessageCache()
 
 		uiDo(func() {

@@ -8641,8 +8641,6 @@ func layoutMessages() fyne.CanvasObject {
 
 	// Move definitions up
 	contactInput := widget.NewEntry()
-	contactInput.MultiLine = false
-	contactInput.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	contactInput.PlaceHolder = "Search username or address"
 	contactInput.SetIcon(theme.SearchIcon())
 
@@ -8830,26 +8828,11 @@ func layoutMessages() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	validateContactInput := func(value string) bool {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return false
-		}
-
-		if _, err := globals.ParseValidateAddress(value); err == nil {
-			return true
-		}
-
-		_, err := checkUsername(value, -1)
-		return err == nil
-	}
-
 	filterContacts := func(query string) {
 		query = strings.ToLower(strings.TrimSpace(query))
 		searchList := []string{}
 		if query == "" {
-			data = temp
-			list.Reload()
+			_ = list.Set(temp)
 			return
 		}
 
@@ -8865,24 +8848,43 @@ func layoutMessages() fyne.CanvasObject {
 			}
 		}
 
-		data = searchList
-		list.Reload()
+		_ = list.Set(searchList)
 	}
 
 	contactInput.OnChanged = func(s string) {
 		filterContacts(s)
-		messages.Contact = strings.TrimSpace(s)
-		if validateContactInput(s) {
-			btnSend.Enable()
-		} else {
+		val := strings.TrimSpace(s)
+		messages.Contact = val
+
+		if val == "" {
 			btnSend.Disable()
+			return
 		}
+
+		if _, err := globals.ParseValidateAddress(val); err == nil {
+			btnSend.Enable()
+			return
+		}
+
+		btnSend.Disable()
+
+		go func(check string) {
+			if _, err := checkUsername(check, -1); err == nil {
+				uiDo(func() {
+					// Only enable if the user hasn't changed the input in the meantime
+					if strings.TrimSpace(contactInput.Text) == check {
+						btnSend.Enable()
+					}
+				})
+			}
+		}(val)
 	}
 
 	features := container.NewHBox(
 		layout.NewSpacer(),
 		container.NewStack(
 			rectWidth90,
+			rectListBox,
 			msgbox.List,
 		),
 		layout.NewSpacer(),
@@ -11157,10 +11159,7 @@ func layoutIdentity() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	//entryReg := NewMobileEntry()
 	entryReg := widget.NewEntry()
-	entryReg.MultiLine = false
-	entryReg.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	userData, err := queryUsernames(engram.Disk.GetAddress().String())
 	if err != nil {
