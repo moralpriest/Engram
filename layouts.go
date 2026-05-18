@@ -415,7 +415,11 @@ func showVillagerMenu(updateLogo func()) {
 		btnHide.Disable()
 	}
 
-	btnBgToggle := widget.NewButtonWithIcon("Background Toggle", theme.ViewRefreshIcon(), func() {
+	bgIcon := theme.ColorChromaticIcon()
+	if session.VillagerBackground {
+		bgIcon = theme.ColorAchromaticIcon()
+	}
+	btnBgToggle := widget.NewButtonWithIcon("Background Toggle", bgIcon, func() {
 		session.VillagerBackground = !session.VillagerBackground
 		val := "false"
 		if session.VillagerBackground {
