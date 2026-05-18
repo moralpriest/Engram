@@ -8565,7 +8565,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// Select default tab based on how we navigated here
-	if previousDomain == "app.tela.settings" {
+	if previousDomain == "app.tela.settings" || previousDomain == "app.tela.manager.settings" {
 		tabs.SelectIndex(1) // TELA tab
 	} else {
 		tabs.SelectIndex(0) // Default to Remote Access
