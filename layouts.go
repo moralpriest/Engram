@@ -3208,18 +3208,20 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	formSuccess.Hide()
 
+	keyboardSpacer := func() fyne.CanvasObject {
+		if isMobile() {
+			return NewSpacer(0, ui.Height*0.4)
+		}
+		return layout.NewSpacer()
+	}()
+
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
 			container.NewVBox(
 				form,
 				formSuccess,
-				func() fyne.CanvasObject {
-					if isMobile() {
-						return NewSpacer(0, ui.Height*0.4)
-					}
-					return layout.NewSpacer()
-				}(),
+				keyboardSpacer,
 			),
 			layout.NewSpacer(),
 		),
@@ -3299,6 +3301,7 @@ func layoutNewAccount() fyne.CanvasObject {
 				addressCopyBtn.Refresh()
 
 				form.Hide()
+				keyboardSpacer.Hide()
 				form.Refresh()
 				formSuccess.Show()
 				formSuccess.Refresh()
