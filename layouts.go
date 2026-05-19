@@ -2924,8 +2924,43 @@ func layoutNewAccount() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnCopySeed := widget.NewButton("Copy Recovery Words", nil)
-	btnCopyAddress := widget.NewButton("Copy Address", nil)
+	btnCopySeed := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), nil)
+	btnCopySeed.Importance = widget.LowImportance
+
+	var addressStr string
+	lblAddress := canvas.NewText("", colors.Green)
+	lblAddress.TextSize = scaleFont(22)
+	lblAddress.Alignment = fyne.TextAlignCenter
+	lblAddress.TextStyle = fyne.TextStyle{Bold: true}
+
+	var addressToggleBtn *widget.Button
+	var addressCopyBtn *widget.Button
+
+	addressHidden := true
+
+	addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), func() {
+		addressHidden = !addressHidden
+		if addressHidden {
+			lblAddress.Text = "dE...••••••••"
+			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			if addressStr != "" {
+				lblAddress.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+			} else {
+				lblAddress.Text = ""
+			}
+			addressToggleBtn.SetIcon(theme.VisibilityIcon())
+		}
+		lblAddress.Refresh()
+	})
+	addressToggleBtn.Importance = widget.LowImportance
+
+	addressCopyBtn = widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
+		if addressStr != "" {
+			a.Clipboard().SetContent(addressStr)
+		}
+	})
+	addressCopyBtn.Importance = widget.LowImportance
 
 	if !a.Driver().Device().IsMobile() {
 		session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
@@ -3125,16 +3160,18 @@ func layoutNewAccount() fyne.CanvasObject {
 		wSpacer,
 		container.NewCenter(grid),
 		rectSpacer,
+		container.NewCenter(btnCopySeed),
+		rectSpacer,
 		errorText,
 		rectSpacer,
 		wrapMobileButton(btnEnter),
 		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			wrapMobileButton(btnCopyAddress),
-			layout.NewSpacer(),
-			wrapMobileButton(btnCopySeed),
-			layout.NewSpacer(),
+		container.NewCenter(
+			container.NewHBox(
+				lblAddress,
+				addressToggleBtn,
+				addressCopyBtn,
+			),
 		),
 		rectSpacer,
 	)
@@ -3206,9 +3243,17 @@ func layoutNewAccount() fyne.CanvasObject {
 			a.Clipboard().SetContent(seed)
 		}
 
-		btnCopyAddress.OnTapped = func() {
-			a.Clipboard().SetContent(address)
+		addressStr = address
+		if addressHidden {
+			lblAddress.Text = "dE...••••••••"
+			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			lblAddress.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+			addressToggleBtn.SetIcon(theme.VisibilityIcon())
 		}
+		lblAddress.Refresh()
+		addressToggleBtn.Refresh()
+		addressCopyBtn.Refresh()
 
 		form.Hide()
 		form.Refresh()
