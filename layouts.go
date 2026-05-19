@@ -3116,7 +3116,7 @@ func layoutNewAccount() fyne.CanvasObject {
 			btnCreate.Refresh()
 		}
 	}
-	wLanguage.PlaceHolder = "(Select Language)"
+	wLanguage.PlaceHolder = "(Select Seed Language)"
 
 	wSpacer := widget.NewLabel(" ")
 	heading := canvas.NewText("New Account", colors.Green)
@@ -3654,7 +3654,7 @@ func layoutRestore() fyne.CanvasObject {
 		safeCanvasFocus(wAccount)
 		clearFormText(errorText)
 	}
-	wLanguage.PlaceHolder = "(Select Language)"
+	wLanguage.PlaceHolder = "(Select Seed Language)"
 	wLanguage.Hide()
 
 	wAccount.SetPlaceHolder("Account Name")
