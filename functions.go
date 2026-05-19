@@ -2328,8 +2328,6 @@ func create() (address string, seed string, err error) {
 			session.Error = "Account successfully created."
 			session.Language = -1
 			session.Name = ""
-			session.Path = ""
-			session.Password = ""
 			session.PasswordConfirm = ""
 			session.Domain = "app.main"
 		}
@@ -2422,20 +2420,29 @@ func login() {
 	setRingSize(engram.Disk, 16)
 	session.Verified = false
 
-	if a.Driver().Device().IsMobile() {
-		session.Domain = "app.wallet"
-		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-	}
-
-	session.Window.SetContent(layoutDashboard())
-	removeOverlays()
-
-	if !session.Offline {
+	if session.Offline {
+		if a.Driver().Device().IsMobile() {
+			session.Domain = "app.wallet"
+			resizeWindow(ui.MaxWidth, ui.MaxHeight)
+		}
+		session.Window.SetContent(layoutDashboard())
+		removeOverlays()
+		fyne.Do(func() {
+			updateDashboardAfterLogin()
+		})
+	} else {
 		status.Connection.FillColor = colors.Yellow
 		status.Connection.Refresh()
 		status.Sync.FillColor = colors.Yellow
 		status.Sync.Refresh()
 		session.Balance = 0
+
+		// CRITICAL: Remove the previous overlay (created by showLoadingOverlay() at the start of login)
+		// This resets res.loading to nil, forcing showLoadingOverlayWithText to create a fresh AnimatedGif instance.
+		// Without this, the same res.loading pointer exists in two scene graphs simultaneously,
+		// causing Fyne to misalign the hexagon animation relative to the text on mobile devices.
+		removeOverlays()
+		showLoadingOverlayWithText("Synchronizing wallet...", "Checking account registration status...")
 
 		go func() {
 			logger.Printf("[DEBUG] login goroutine starting\n")
@@ -2456,10 +2463,14 @@ func login() {
 					if !isWalletGenerationActive(generation) {
 						return
 					}
+					removeOverlays()
 					status.Connection.FillColor = colors.Red
 					status.Connection.Refresh()
 					status.Sync.FillColor = colors.Red
 					status.Sync.Refresh()
+					session.Domain = "app.main"
+					session.Error = "Could not connect to daemon."
+					session.Window.SetContent(layoutMain())
 				})
 				return
 			}
@@ -2487,6 +2498,7 @@ func login() {
 					if !isWalletGenerationActive(generation) {
 						return
 					}
+					removeOverlays()
 					registerAccount()
 					session.Verified = true
 				})
@@ -2507,13 +2519,15 @@ func login() {
 			refreshMessageHistoryAsync(false)
 
 			fyne.Do(func() {
+				if a.Driver().Device().IsMobile() {
+					session.Domain = "app.wallet"
+					resizeWindow(ui.MaxWidth, ui.MaxHeight)
+				}
+				session.Window.SetContent(layoutDashboard())
+				removeOverlays()
 				updateDashboardAfterLogin()
 			})
 		}()
-	} else {
-		fyne.Do(func() {
-			updateDashboardAfterLogin()
-		})
 	}
 
 	address := engram.Disk.GetAddress().String()
@@ -2654,6 +2668,69 @@ func showLoadingOverlay() {
 			rect,
 			container.NewCenter(
 				res.loading,
+			),
+		)
+
+		res.loading.Start()
+
+		layout := container.NewStack(
+			frame,
+			background,
+		)
+
+		overlays := session.Window.Canvas().Overlays()
+		overlays.Add(layout)
+	})
+}
+
+// Add an overlay with the loading animation, description, and ETA
+func showLoadingOverlayWithText(title, eta string) {
+	uiDo(func() {
+		if session.Window == nil {
+			return
+		}
+
+		frame := &iframe{}
+
+		// Force destroy any old instances to completely prevent Fyne double-parenting layout glitches
+		if res.loading != nil {
+			res.loading.Stop()
+			res.loading = nil
+		}
+
+		res.loading, _ = x.NewAnimatedGifFromResource(resourceLoadingGif)
+		gifSize := fyne.NewSize(ui.Width*0.45, ui.Width*0.45)
+		if gifSize.Width > 150 {
+			gifSize = fyne.NewSize(150, 150) // Cap size for tablets/landscape so it looks great
+		}
+		res.loading.SetMinSize(gifSize)
+		res.loading.Resize(gifSize)
+
+		rect := canvas.NewRectangle(colors.DarkMatter)
+		rect.SetMinSize(frame.Size())
+
+		lblTitle := canvas.NewText(title, colors.Green)
+		lblTitle.TextSize = scaleFont(16)
+		lblTitle.Alignment = fyne.TextAlignCenter
+		lblTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+		lblETA := canvas.NewText(eta, colors.Gray)
+		lblETA.TextSize = scaleFont(12)
+		lblETA.Alignment = fyne.TextAlignCenter
+
+		rectPassSpacer := canvas.NewRectangle(color.Transparent)
+		rectPassSpacer.SetMinSize(fyne.NewSize(10, 5))
+
+		background := container.NewStack(
+			rect,
+			container.NewCenter(
+				container.NewVBox(
+					container.NewStack(res.loading),
+					widget.NewLabel(""),
+					lblTitle,
+					rectPassSpacer,
+					lblETA,
+				),
 			),
 		)
 

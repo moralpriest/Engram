@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"image/color"
 	"log"
 	"math"
@@ -3240,66 +3241,75 @@ func layoutNewAccount() fyne.CanvasObject {
 			errorText.Refresh()
 		}
 
-		address, seed, err := create()
-		if err != nil {
-			errorText.Text = session.Error
-			errorText.Refresh()
-			return
-		}
+		showLoadingOverlayWithText("Creating secure wallet...", "Average ETA: ~5 seconds (depends on hardware)")
 
-		formatted = strings.Split(seed, " ")
-		wordsHidden = true
-		wordsToggleBtn.SetIcon(theme.VisibilityIcon())
-		wordsToggleBtn.Refresh()
+		go func() {
+			address, seed, err := create()
 
-		rect := canvas.NewRectangle(color.RGBA{21, 27, 36, 255})
-		rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
+			fyne.Do(func() {
+				removeOverlays()
 
-		grid.Objects = nil
-		wordLabels = make([]*widget.Label, len(formatted))
+				if err != nil {
+					errorText.Text = session.Error
+					errorText.Refresh()
+					return
+				}
 
-		for i := 0; i < len(formatted); i++ {
-			pos := fmt.Sprintf("%d", i+1)
-			wordLabels[i] = widget.NewLabelWithStyle("••••••••", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			grid.Add(container.NewStack(
-				rect,
-				container.NewHBox(
-					widget.NewLabel(" "),
-					widget.NewLabelWithStyle(pos, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-					layout.NewSpacer(),
-					wordLabels[i],
-					widget.NewLabel(" "),
-				),
-			),
-			)
-		}
+				formatted = strings.Split(seed, " ")
+				wordsHidden = true
+				wordsToggleBtn.SetIcon(theme.VisibilityIcon())
+				wordsToggleBtn.Refresh()
 
-		btnCopySeed.OnTapped = func() {
-			a.Clipboard().SetContent(seed)
-		}
+				rect := canvas.NewRectangle(color.RGBA{21, 27, 36, 255})
+				rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
-		addressStr = address
-		if addressHidden {
-			lblAddress.Text = "dE...••••••••"
-			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
-		} else {
-			lblAddress.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
-			addressToggleBtn.SetIcon(theme.VisibilityIcon())
-		}
-		lblAddress.Refresh()
-		addressToggleBtn.Refresh()
-		addressCopyBtn.Refresh()
+				grid.Objects = nil
+				wordLabels = make([]*widget.Label, len(formatted))
 
-		form.Hide()
-		form.Refresh()
-		formSuccess.Show()
-		formSuccess.Refresh()
-		btnEnter.Refresh()
-		grid.Refresh()
-		scrollBox.Refresh()
-		scrollBox.Offset = fyne.NewPos(0, 0)
-		session.Window.Canvas().Content().Refresh()
-		session.Window.Canvas().Refresh(session.Window.Content())
+				for i := 0; i < len(formatted); i++ {
+					pos := fmt.Sprintf("%d", i+1)
+					wordLabels[i] = widget.NewLabelWithStyle("••••••••", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+					grid.Add(container.NewStack(
+						rect,
+						container.NewHBox(
+							widget.NewLabel(" "),
+							widget.NewLabelWithStyle(pos, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+							layout.NewSpacer(),
+							wordLabels[i],
+							widget.NewLabel(" "),
+						),
+					),
+					)
+				}
+
+				btnCopySeed.OnTapped = func() {
+					a.Clipboard().SetContent(seed)
+				}
+
+				addressStr = address
+				if addressHidden {
+					lblAddress.Text = "dE...••••••••"
+					addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+				} else {
+					lblAddress.Text = addressStr[0:5] + "..." + addressStr[len(addressStr)-10:]
+					addressToggleBtn.SetIcon(theme.VisibilityIcon())
+				}
+				lblAddress.Refresh()
+				addressToggleBtn.Refresh()
+				addressCopyBtn.Refresh()
+
+				form.Hide()
+				form.Refresh()
+				formSuccess.Show()
+				formSuccess.Refresh()
+				btnEnter.Refresh()
+				grid.Refresh()
+				scrollBox.Refresh()
+				scrollBox.Offset = fyne.NewPos(0, 0)
+				session.Window.Canvas().Content().Refresh()
+				session.Window.Canvas().Refresh(session.Window.Content())
+			})
+		}()
 	}
 
 	layout := container.NewBorder(
@@ -4362,171 +4372,173 @@ func layoutRestore() fyne.CanvasObject {
 			closeWallet()
 		}
 
-		var err error
-
 		if findAccount() {
 			showFormError(errorText, "account name already exists")
 			return
 		}
 		clearFormText(errorText)
 
-		var language string
-		var temp *walletapi.Wallet_Disk
-
+		// Perform input checks before backgrounding to report errors immediately
 		if selectedRecoveryType == 1 {
 			// Hex key recovery
 			if wAccount.Text == "" {
 				showFormError(errorText, "enter account name")
 				return
 			}
-
 			if wPassword.Text == "" {
 				showFormError(errorText, "enter and confirm a password")
 				return
 			}
-
 			if session.Password != session.PasswordConfirm {
 				showFormError(errorText, "passwords do not match")
 				return
 			}
-
 			if hexEntry.Text == "" {
 				showFormError(errorText, "enter a valid hex key")
 				return
 			}
-
 			if len(hexEntry.Text) != HexKeyLength {
 				showFormError(errorText, fmt.Sprintf("key must be exactly %d characters", HexKeyLength))
 				return
 			}
-
-			hexKey, err := hex.DecodeString(hexEntry.Text)
+			_, err := hex.DecodeString(hexEntry.Text)
 			if err != nil {
 				showFormError(errorText, "invalid hex characters")
 				return
 			}
-
-			temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
-			if err != nil {
-				showFormError(errorText, err.Error())
-				return
-			}
-
-			// Default to English for hex key recovery
-			language = "English"
-
 		} else {
 			// Seed phrase recovery
 			if wAccount.Text == "" {
 				showFormError(errorText, "enter account name")
 				return
 			}
-
 			if wPassword.Text == "" {
 				showFormError(errorText, "enter and confirm a password")
 				return
 			}
-
 			if session.Password != session.PasswordConfirm {
 				showFormError(errorText, "passwords do not match")
 				return
 			}
-
 			words := strings.TrimSpace(seedEntry.Text)
-
-			// Auto-detect language from seed words
-			language, _, err = mnemonics.Words_To_Key(words)
-			if err != nil {
-				showFormError(errorText, err.Error())
-				return
-			}
-
-			temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
+			_, _, err := mnemonics.Words_To_Key(words)
 			if err != nil {
 				showFormError(errorText, err.Error())
 				return
 			}
 		}
 
-		engram.Disk = temp
+		showLoadingOverlayWithText("Recovering secure wallet...", "Average ETA: ~5 seconds (depends on hardware)")
 
-		if cachedNetwork == NETWORK_MAINNET || cachedNetwork == NETWORK_SIMULATOR {
-			engram.Disk.SetNetwork(true)
-		} else {
-			engram.Disk.SetNetwork(false)
-		}
+		go func() {
+			var err error
+			var language string
+			var temp *walletapi.Wallet_Disk
 
-		engram.Disk.SetSeedLanguage(language)
-
-		address := engram.Disk.GetAddress().String()
-
-		// Generate QR code for success screen
-		qr, err := qrcode.New(address, qrcode.Highest)
-		if err == nil {
-			qrSize := ui.Width * 0.45
-			if qrSize > ui.Height*0.3 {
-				qrSize = ui.Height * 0.3
+			if selectedRecoveryType == 1 {
+				hexKey, _ := hex.DecodeString(hexEntry.Text)
+				temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
+				language = "English"
+			} else {
+				words := strings.TrimSpace(seedEntry.Text)
+				language, _, _ = mnemonics.Words_To_Key(words)
+				temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
 			}
-			qr.BackgroundColor = colors.DarkMatter
-			qr.ForegroundColor = colors.Green
-			successQR.Image = qr.Image(int(qrSize))
-			successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
-			successQR.Refresh()
-		}
 
-		// Show address text
-		successAddress.SetText(address)
+			fyne.Do(func() {
+				removeOverlays()
 
-		btnCopyAddress.OnTapped = func() {
-			a.Clipboard().SetContent(address)
-		}
+				if err != nil {
+					showFormError(errorText, err.Error())
+					return
+				}
 
-		engram.Disk.Get_Balance_Rescan()
-		if err := engram.Disk.Save_Wallet(); err != nil {
-			logger.Errorf("[Register] Failed to save wallet after creation: %s\n", err)
-		}
+				engram.Disk = temp
 
-		// Wallet remains open for immediate transition via "Enter" button
-		session.WalletOpen = true
-		beginWalletSession()
+				if cachedNetwork == NETWORK_MAINNET || cachedNetwork == NETWORK_SIMULATOR {
+					engram.Disk.SetNetwork(true)
+				} else {
+					engram.Disk.SetNetwork(false)
+				}
 
-		// Reset exit flag so Gnomon can start in this session
-		globals.Exit_In_Progress = false
+				engram.Disk.SetSeedLanguage(language)
 
-		// Delete Gnomon database to ensure clean sync state after recovery
-		gnomonPath := filepath.Join(AppPath(), "datashards", "gnomon")
-		switch session.Network {
-		case NETWORK_TESTNET:
-			gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_testnet")
-		case NETWORK_SIMULATOR:
-			gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
-		}
-		os.RemoveAll(gnomonPath)
+				address := engram.Disk.GetAddress().String()
 
-		// FIX: Initialize settings after recovery so daemon/gnomon connections work
-		initSettings()
+				// Generate QR code for success screen
+				qr, errQr := qrcode.New(address, qrcode.Highest)
+				var successImage image.Image
+				var qrSize float32
+				if errQr == nil {
+					qrSize = ui.Width * 0.45
+					if qrSize > ui.Height*0.3 {
+						qrSize = ui.Height * 0.3
+					}
+					qr.BackgroundColor = colors.DarkMatter
+					qr.ForegroundColor = colors.Green
+					successImage = qr.Image(int(qrSize))
+				}
 
-		tx = Transfers{}
+				engram.Disk.Get_Balance_Rescan()
+				if err := engram.Disk.Save_Wallet(); err != nil {
+					logger.Errorf("[Register] Failed to save wallet after creation: %s\n", err)
+				}
 
-		// Clear sensitive password data from memory and UI
-		wPassword.SetText("")
-		wPasswordConfirm.SetText("")
-		seedEntry.SetText("")
-		hexEntry.SetText("")
-		// Password kept for login() call via Enter button
-		session.PasswordConfirm = ""
+				// Wallet remains open for immediate transition via "Enter" button
+				session.WalletOpen = true
+				beginWalletSession()
 
-		btnCreate.Hide()
-		form.Hide()
-		form.Refresh()
-		formSuccess.Show()
-		formSuccess.Refresh()
-		btnEnter.Refresh()
-		grid.Refresh()
-		scrollBox.ScrollToTop()
-		scrollBox.Refresh()
-		session.Window.Canvas().Content().Refresh()
-		session.Window.Canvas().Refresh(session.Window.Content())
+				// Reset exit flag so Gnomon can start in this session
+				globals.Exit_In_Progress = false
+
+				// Delete Gnomon database to ensure clean sync state after recovery
+				gnomonPath := filepath.Join(AppPath(), "datashards", "gnomon")
+				switch session.Network {
+				case NETWORK_TESTNET:
+					gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_testnet")
+				case NETWORK_SIMULATOR:
+					gnomonPath = filepath.Join(AppPath(), "datashards", "gnomon_simulator")
+				}
+				os.RemoveAll(gnomonPath)
+
+				// FIX: Initialize settings after recovery so daemon/gnomon connections work
+				initSettings()
+
+				tx = Transfers{}
+
+				// Clear sensitive password data from memory and UI
+				wPassword.SetText("")
+				wPasswordConfirm.SetText("")
+				seedEntry.SetText("")
+				hexEntry.SetText("")
+				// Password kept for login() call via Enter button
+				session.PasswordConfirm = ""
+
+				if errQr == nil {
+					successQR.Image = successImage
+					successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
+					successQR.Refresh()
+				}
+
+				successAddress.SetText(address)
+
+				btnCopyAddress.OnTapped = func() {
+					a.Clipboard().SetContent(address)
+				}
+
+				btnCreate.Hide()
+				form.Hide()
+				form.Refresh()
+				formSuccess.Show()
+				formSuccess.Refresh()
+				btnEnter.Refresh()
+				grid.Refresh()
+				scrollBox.ScrollToTop()
+				scrollBox.Refresh()
+				session.Window.Canvas().Content().Refresh()
+				session.Window.Canvas().Refresh(session.Window.Content())
+			})
+		}()
 	}
 
 	header := container.NewVBox(
@@ -12029,11 +12041,36 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), colors.Account)
 	hashes.TextSize = scaleFont(18)
 
+	startTime := time.Now()
+	timeLabel := canvas.NewText("Countdown: Estimating...", colors.Gray)
+	timeLabel.TextStyle = fyne.TextStyle{Bold: true}
+	timeLabel.TextSize = scaleFont(12)
+
 	go func() {
-		for engram.Disk != nil {
+		for engram.Disk != nil && session.Domain == "app.register" {
+			elapsed := time.Since(startTime).Seconds()
 			fyne.Do(func() {
 				hashes.Text = fmt.Sprintf("%d", session.RegHashes)
 				hashes.Refresh()
+
+				if elapsed >= 2.0 && session.RegHashes > 0 {
+					hashRate := float64(session.RegHashes) / elapsed
+					expectedTotal := 16777216.0 / hashRate
+					remaining := expectedTotal - elapsed
+
+					if remaining <= 0 {
+						timeLabel.Text = "Countdown: Completing soon..."
+					} else if remaining > 3600 {
+						timeLabel.Text = fmt.Sprintf("Countdown: ~%dh %dm remaining", int(remaining)/3600, (int(remaining)%3600)/60)
+					} else if remaining > 60 {
+						timeLabel.Text = fmt.Sprintf("Countdown: ~%dm %ds remaining", int(remaining)/60, int(remaining)%60)
+					} else {
+						timeLabel.Text = fmt.Sprintf("Countdown: ~%ds remaining", int(remaining))
+					}
+				} else {
+					timeLabel.Text = "Countdown: Estimating..."
+				}
+				timeLabel.Refresh()
 			})
 			time.Sleep(500 * time.Millisecond)
 		}
@@ -12076,6 +12113,11 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 				container.NewCenter(
 					rect2,
 					label,
+				),
+				rectSpacer,
+				container.NewCenter(
+					rect2,
+					timeLabel,
 				),
 			),
 			layout.NewSpacer(),
