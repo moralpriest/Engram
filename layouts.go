@@ -12042,7 +12042,7 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	hashes.TextSize = scaleFont(18)
 
 	startTime := time.Now()
-	timeLabel := canvas.NewText("Countdown: Estimating...", colors.Gray)
+	timeLabel := canvas.NewText("Countdown: Estimating...", colors.Green)
 	timeLabel.TextStyle = fyne.TextStyle{Bold: true}
 	timeLabel.TextSize = scaleFont(12)
 
