@@ -2927,6 +2927,34 @@ func layoutNewAccount() fyne.CanvasObject {
 	btnCopySeed := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), nil)
 	btnCopySeed.Importance = widget.LowImportance
 
+	grid := container.NewVBox()
+
+	wordsHidden := true
+	var wordLabels []*widget.Label
+	var formatted []string
+
+	wordsToggleBtn := widget.NewButtonWithIcon("", theme.VisibilityIcon(), nil)
+	wordsToggleBtn.Importance = widget.LowImportance
+	wordsToggleBtn.OnTapped = func() {
+		wordsHidden = !wordsHidden
+		if wordsHidden {
+			wordsToggleBtn.SetIcon(theme.VisibilityIcon())
+			for _, lbl := range wordLabels {
+				if lbl != nil {
+					lbl.SetText("••••••••")
+				}
+			}
+		} else {
+			wordsToggleBtn.SetIcon(theme.VisibilityOffIcon())
+			for i, lbl := range wordLabels {
+				if lbl != nil && i < len(formatted) {
+					lbl.SetText(strings.ReplaceAll(formatted[i], " ", ""))
+				}
+			}
+		}
+		grid.Refresh()
+	}
+
 	var addressStr string
 	lblAddress := canvas.NewText("", colors.Green)
 	lblAddress.TextSize = scaleFont(22)
@@ -3109,7 +3137,6 @@ func layoutNewAccount() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
-	grid := container.NewVBox()
 	grid.Objects = nil
 
 	header := container.NewVBox(
@@ -3158,6 +3185,8 @@ func layoutNewAccount() fyne.CanvasObject {
 	formSuccess := container.NewVBox(
 		body,
 		wSpacer,
+		container.NewCenter(wordsToggleBtn),
+		rectSpacer,
 		container.NewCenter(grid),
 		rectSpacer,
 		container.NewCenter(btnCopySeed),
@@ -3218,21 +3247,27 @@ func layoutNewAccount() fyne.CanvasObject {
 			return
 		}
 
-		formatted := strings.Split(seed, " ")
+		formatted = strings.Split(seed, " ")
+		wordsHidden = true
+		wordsToggleBtn.SetIcon(theme.VisibilityIcon())
+		wordsToggleBtn.Refresh()
 
 		rect := canvas.NewRectangle(color.RGBA{21, 27, 36, 255})
 		rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
+		grid.Objects = nil
+		wordLabels = make([]*widget.Label, len(formatted))
+
 		for i := 0; i < len(formatted); i++ {
 			pos := fmt.Sprintf("%d", i+1)
-			word := strings.ReplaceAll(formatted[i], " ", "")
+			wordLabels[i] = widget.NewLabelWithStyle("••••••••", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			grid.Add(container.NewStack(
 				rect,
 				container.NewHBox(
 					widget.NewLabel(" "),
 					widget.NewLabelWithStyle(pos, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 					layout.NewSpacer(),
-					widget.NewLabelWithStyle(word, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+					wordLabels[i],
 					widget.NewLabel(" "),
 				),
 			),
