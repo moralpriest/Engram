@@ -167,6 +167,8 @@ type Session struct {
 	MessageWarningShown bool
 	VillagerAddress     string
 	VillagerPixels      string
+	IsRecovery          bool
+	IsNewWallet         bool
 }
 
 type RemoteAccess struct {
@@ -2420,29 +2422,52 @@ func login() {
 	setRingSize(engram.Disk, 16)
 	session.Verified = false
 
-	if session.Offline {
+	isRegistered := false
+	if engram.Disk != nil {
+		address := engram.Disk.GetAddress().String()
+		if regVal, err := GetEncryptedValue("settings", []byte("Registration:"+address)); err == nil && string(regVal) == "true" {
+			isRegistered = true
+		} else if engram.Disk.Get_Registration_TopoHeight() >= 1 {
+			isRegistered = true
+			go StoreEncryptedValue("settings", []byte("Registration:"+address), []byte("true"))
+		}
+	}
+
+	if session.Offline || isRegistered {
 		if a.Driver().Device().IsMobile() {
 			session.Domain = "app.wallet"
 			resizeWindow(ui.MaxWidth, ui.MaxHeight)
 		}
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
-		fyne.Do(func() {
-			updateDashboardAfterLogin()
-		})
-	} else {
+		if session.Offline {
+			fyne.Do(func() {
+				updateDashboardAfterLogin()
+			})
+		}
+	}
+
+	if !session.Offline {
 		status.Connection.FillColor = colors.Yellow
 		status.Connection.Refresh()
 		status.Sync.FillColor = colors.Yellow
 		status.Sync.Refresh()
 		session.Balance = 0
 
-		// CRITICAL: Remove the previous overlay (created by showLoadingOverlay() at the start of login)
-		// This resets res.loading to nil, forcing showLoadingOverlayWithText to create a fresh AnimatedGif instance.
-		// Without this, the same res.loading pointer exists in two scene graphs simultaneously,
-		// causing Fyne to misalign the hexagon animation relative to the text on mobile devices.
-		removeOverlays()
-		showLoadingOverlayWithText("Synchronizing wallet...", "Checking account registration status...")
+		if !isRegistered {
+			// CRITICAL: Remove the previous overlay (created by showLoadingOverlay() at the start of login)
+			// This resets res.loading to nil, forcing showLoadingOverlayWithText to create a fresh AnimatedGif instance.
+			// Without this, the same res.loading pointer exists in two scene graphs simultaneously,
+			// causing Fyne to misalign the hexagon animation relative to the text on mobile devices.
+			removeOverlays()
+			if session.IsRecovery {
+				showLoadingOverlayWithText("Initializing recovered wallet...", "Syncing with network and checking status...")
+			} else if session.IsNewWallet {
+				showLoadingOverlayWithText("Initializing new wallet...", "Syncing with network and checking status...")
+			} else {
+				showLoadingOverlayWithText("Synchronizing wallet...", "Checking account registration status...")
+			}
+		}
 
 		go func() {
 			logger.Printf("[DEBUG] login goroutine starting\n")
@@ -2507,6 +2532,11 @@ func login() {
 				return
 			}
 
+			if !needsReg && regDone {
+				address := engram.Disk.GetAddress().String()
+				go StoreEncryptedValue("settings", []byte("Registration:"+address), []byte("true"))
+			}
+
 			if regDone && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
 				logger.Printf("[DEBUG] calling startGnomon()\n")
 				go startGnomon()
@@ -2519,12 +2549,16 @@ func login() {
 			refreshMessageHistoryAsync(false)
 
 			fyne.Do(func() {
-				if a.Driver().Device().IsMobile() {
-					session.Domain = "app.wallet"
-					resizeWindow(ui.MaxWidth, ui.MaxHeight)
+				if !isRegistered {
+					if a.Driver().Device().IsMobile() {
+						session.Domain = "app.wallet"
+						resizeWindow(ui.MaxWidth, ui.MaxHeight)
+					}
+					session.Window.SetContent(layoutDashboard())
+					removeOverlays()
 				}
-				session.Window.SetContent(layoutDashboard())
-				removeOverlays()
+				session.IsRecovery = false
+				session.IsNewWallet = false
 				updateDashboardAfterLogin()
 			})
 		}()

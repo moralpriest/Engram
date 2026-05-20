@@ -3178,6 +3178,7 @@ func layoutNewAccount() fyne.CanvasObject {
 		fyne.Do(func() {
 			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
 			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			session.IsNewWallet = true
 			login()
 			// Password will be cleared by login() after successful initialization
 		})
@@ -4052,6 +4053,7 @@ func layoutRestore() fyne.CanvasObject {
 		fyne.Do(func() {
 			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
 			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			session.IsRecovery = true
 			login()
 			// Password will be cleared by login() after successful initialization
 		})
