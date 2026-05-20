@@ -7990,17 +7990,29 @@ func layoutAppSettings() fyne.CanvasObject {
 		setTELADual("Rescan Recheck", []byte(s))
 	}
 
-	// Sort By dropdown
-	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
-	wSortBy := widget.NewSelect(sortByOptions, nil)
+	// Sort By radio buttons
+	sortByOptions := []string{"Ratings", "A-Z"}
+	wSortBy := widget.NewRadioGroup(sortByOptions, nil)
+	wSortBy.Horizontal = true
 	if storedSortBy, found := getTELADual("Sort By"); found {
-		wSortBy.SetSelected(storedSortBy)
+		if storedSortBy == "Z-A" {
+			wSortBy.SetSelected("A-Z")
+			setTELADual("Sort By", []byte("A-Z"))
+			setTELADual("Sort Order", []byte("Descending"))
+		} else {
+			wSortBy.SetSelected(storedSortBy)
+		}
 	} else {
 		wSortBy.SetSelected(sortByOptions[0])
 	}
 	wSortBy.OnChanged = func(s string) {
 		if s != "" {
 			setTELADual("Sort By", []byte(s))
+			if s == "Ratings" {
+				setTELADual("Sort Order", []byte("Descending"))
+			} else {
+				setTELADual("Sort Order", []byte("Ascending"))
+			}
 		}
 	}
 
@@ -8009,7 +8021,8 @@ func layoutAppSettings() fyne.CanvasObject {
 		wRestrictiveMode.SetChecked(false)
 		wAllowUpdates.SetSelectedIndex(0)
 		wRescanRecheck.SetSelectedIndex(0)
-		wSortBy.SetSelectedIndex(0)
+		wSortBy.SetSelected(sortByOptions[0])
+		setTELADual("Sort Order", []byte("Descending"))
 		entryPortStart.SetText(strconv.Itoa(tela.DEFAULT_PORT_START))
 		entryMinLikes.SetText("30")
 		entryExclusions.SetText("")
@@ -19601,16 +19614,31 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
-	sortByOptions := []string{"Ratings", "A-Z", "Z-A"}
+	sortByOptions := []string{"Ratings", "A-Z"}
 	if storedSortBy, found := getTELADual("Sort By"); found {
-		sortBy = storedSortBy
+		if storedSortBy == "Z-A" {
+			sortBy = "A-Z"
+			sortDescending = true
+			setTELADual("Sort By", []byte("A-Z"))
+			setTELADual("Sort Order", []byte("Descending"))
+		} else {
+			sortBy = storedSortBy
+		}
 	} else {
 		sortBy = sortByOptions[0]
+	}
+
+	if sortBy == "A-Z" {
+		sortDescending = false
+	} else {
+		sortDescending = true
 	}
 
 	if storedSortOrder, found := getTELADual("Sort Order"); found {
 		if storedSortOrder == "Ascending" {
 			sortDescending = false
+		} else if storedSortOrder == "Descending" {
+			sortDescending = true
 		}
 	}
 
