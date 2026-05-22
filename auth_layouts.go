@@ -34,6 +34,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
@@ -51,7 +52,7 @@ func layoutMain() fyne.CanvasObject {
 
 	// Define objects
 
-	btnLogin := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), nil)
+	btnLogin := widget.NewButtonWithIcon(i18n.T("main.connect"), theme.LoginIcon(), nil)
 
 	if session.Error != "" {
 		btnLogin.Text = session.Error
@@ -62,18 +63,18 @@ func layoutMain() fyne.CanvasObject {
 
 	btnLogin.OnTapped = func() {
 		if session.Path == "" {
-			btnLogin.Text = "No account selected..."
+			btnLogin.Text = i18n.T("main.no_account")
 			btnLogin.Disable()
 			btnLogin.Refresh()
 		} else if session.Password == "" {
-			btnLogin.Text = "Invalid password..."
+			btnLogin.Text = i18n.T("main.invalid_password")
 			btnLogin.Disable()
 			btnLogin.Refresh()
 		} else {
 			if !session.Offline {
-				btnLogin.Text = "Connect"
+				btnLogin.Text = i18n.T("main.connect")
 			} else {
-				btnLogin.Text = "Decrypt"
+				btnLogin.Text = i18n.T("main.decrypt")
 			}
 			btnLogin.Enable()
 			btnLogin.Refresh()
@@ -91,23 +92,23 @@ func layoutMain() fyne.CanvasObject {
 		if session.Domain == "app.main" || session.Domain == "app.register" {
 			if k.Name == fyne.KeyReturn {
 				if session.Path == "" {
-					btnLogin.Text = "No account selected..."
+					btnLogin.Text = i18n.T("main.no_account")
 					btnLogin.Disable()
 					btnLogin.Refresh()
 				} else if session.Password == "" {
-					btnLogin.Text = "Invalid password..."
+					btnLogin.Text = i18n.T("main.invalid_password")
 					btnLogin.Disable()
 					btnLogin.Refresh()
 				} else {
 					if !session.Offline {
-						btnLogin.Text = "Connect"
+						btnLogin.Text = i18n.T("main.connect")
 					} else {
-						btnLogin.Text = "Decrypt"
+						btnLogin.Text = i18n.T("main.decrypt")
 					}
 					btnLogin.Enable()
 					btnLogin.Refresh()
 					login()
-					btnLogin.Text = "Invalid password..."
+					btnLogin.Text = i18n.T("main.invalid_password")
 					btnLogin.Disable()
 					btnLogin.Refresh()
 					session.Error = ""
@@ -119,7 +120,7 @@ func layoutMain() fyne.CanvasObject {
 	})
 
 	// New Account button with icon
-	btnNewAccount := newBorderedButtonWithIcon("New Account", theme.ContentAddIcon(), color.White, func() {
+	btnNewAccount := newBorderedButtonWithIcon(i18n.T("main.new_account"), theme.ContentAddIcon(), color.White, func() {
 		session.Domain = "app.create"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -128,7 +129,7 @@ func layoutMain() fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Recover Account button with icon
-	btnRecoverAccount := newBorderedButtonWithIcon("Recover Account", theme.DocumentIcon(), color.White, func() {
+	btnRecoverAccount := newBorderedButtonWithIcon(i18n.T("main.recover_account"), theme.DocumentIcon(), color.White, func() {
 		session.Domain = "app.restore"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -137,7 +138,7 @@ func layoutMain() fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Connection Settings button with icon
-	btnConnectionSettings := newGunmetalButtonWithIcon("Connection Settings", theme.SettingsIcon(), colors.Green, func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), colors.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -146,15 +147,15 @@ func layoutMain() fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	modeData := binding.BindBool(&session.Offline)
-	mode := widget.NewCheckWithData(" Offline Mode", modeData)
+	mode := widget.NewCheckWithData(i18n.T("main.offline_mode"), modeData)
 	mode.OnChanged = func(b bool) {
 		if b {
 			session.Offline = true
-			btnLogin.Text = "Decrypt"
+			btnLogin.Text = i18n.T("main.decrypt")
 			btnLogin.Refresh()
 		} else {
 			session.Offline = false
-			btnLogin.Text = "Connect"
+			btnLogin.Text = i18n.T("main.connect")
 			btnLogin.Refresh()
 		}
 	}
@@ -165,9 +166,9 @@ func layoutMain() fyne.CanvasObject {
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
 		if !session.Offline {
-			btnLogin.Text = "Connect"
+			btnLogin.Text = i18n.T("main.connect")
 		} else {
-			btnLogin.Text = "Decrypt"
+			btnLogin.Text = i18n.T("main.decrypt")
 		}
 		btnLogin.Enable()
 		btnLogin.Refresh()
@@ -185,7 +186,7 @@ func layoutMain() fyne.CanvasObject {
 
 		btnLogin.Refresh()
 	}
-	wPassword.SetPlaceHolder("Password")
+	wPassword.SetPlaceHolder(i18n.T("main.password"))
 
 	// Get account databases in app directory
 	list, err := GetAccounts()
@@ -231,9 +232,9 @@ func layoutMain() fyne.CanvasObject {
 			session.Path = filepath.Join(AppPath(), "mainnet") + string(filepath.Separator) + walletName
 		}
 		if !session.Offline {
-			btnLogin.Text = "Connect"
+			btnLogin.Text = i18n.T("main.connect")
 		} else {
-			btnLogin.Text = "Decrypt"
+			btnLogin.Text = i18n.T("main.decrypt")
 		}
 		btnLogin.Enable()
 		safeCanvasFocus(wPassword)
@@ -346,7 +347,7 @@ func layoutMain() fyne.CanvasObject {
 	)
 
 	// Footer text
-	copyrightLabel := canvas.NewText("Copyright 2023-2026 DERO Foundation. All rights reserved.", colors.Gray)
+	copyrightLabel := canvas.NewText(i18n.T("auth.copyright"), colors.Gray)
 	copyrightLabel.TextSize = scaleFont(10)
 	copyrightLabel.Alignment = fyne.TextAlignCenter
 
@@ -374,11 +375,16 @@ func layoutMain() fyne.CanvasObject {
 		newSpacer(),
 		btnLogin,
 		newSpacer(),
-		container.NewCenter(buttonGrid),
+		buttonGrid,
 		footer,
 	)
 
 	if isMobile() {
+		btnLoginHeight := float32(48)
+		btnLoginSizeEnforcer := canvas.NewRectangle(color.Transparent)
+		btnLoginSizeEnforcer.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(btnLoginHeight)))
+		wrappedBtnLogin := container.NewStack(btnLoginSizeEnforcer, btnLogin)
+
 		form = container.NewVBox(
 			wSpacer,
 			container.NewStack(
@@ -392,22 +398,18 @@ func layoutMain() fyne.CanvasObject {
 			newSpacer(),
 			mode,
 			newSpacer(),
-			wrapMobileButton(btnLogin),
+			wrappedBtnLogin,
 			newSpacer(),
-			container.NewCenter(
-				container.NewVBox(
-					container.New(layout.NewGridLayout(1),
-						wrapMobileButton(btnNewAccount),
-					),
-					newSpacer(),
-					container.New(layout.NewGridLayout(1),
-						wrapMobileButton(btnRecoverAccount),
-					),
-					newSpacer(),
-					container.New(layout.NewGridLayout(1),
-						wrapMobileButton(btnConnectionSettings),
-					),
-				),
+			container.New(layout.NewGridLayout(1),
+				btnNewAccount,
+			),
+			newSpacer(),
+			container.New(layout.NewGridLayout(1),
+				btnRecoverAccount,
+			),
+			newSpacer(),
+			container.New(layout.NewGridLayout(1),
+				btnConnectionSettings,
 			),
 			footer,
 		)
@@ -460,10 +462,10 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	// Password entry
 	wPassword := NewReturnEntry()
 	wPassword.Password = true
-	wPassword.SetPlaceHolder("Password")
+	wPassword.SetPlaceHolder(i18n.T("main.password"))
 
 	// Login button
-	btnLogin := widget.NewButtonWithIcon("Connect", theme.LoginIcon(), nil)
+	btnLogin := widget.NewButtonWithIcon(i18n.T("main.connect"), theme.LoginIcon(), nil)
 	btnLogin.Disable()
 
 	if session.Error != "" {
@@ -475,14 +477,14 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	btnLogin.OnTapped = func() {
 		if session.Password == "" {
-			btnLogin.Text = "Invalid password..."
+			btnLogin.Text = i18n.T("main.invalid_password")
 			btnLogin.Disable()
 			btnLogin.Refresh()
 		} else {
 			if !session.Offline {
-				btnLogin.Text = "Connect"
+				btnLogin.Text = i18n.T("main.connect")
 			} else {
-				btnLogin.Text = "Decrypt"
+				btnLogin.Text = i18n.T("main.decrypt")
 			}
 			btnLogin.Enable()
 			btnLogin.Refresh()
@@ -498,9 +500,9 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
 		if !session.Offline {
-			btnLogin.Text = "Connect"
+			btnLogin.Text = i18n.T("main.connect")
 		} else {
-			btnLogin.Text = "Decrypt"
+			btnLogin.Text = i18n.T("main.decrypt")
 		}
 		btnLogin.Enable()
 		btnLogin.Refresh()
@@ -526,15 +528,15 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	// Offline mode toggle
 	modeData := binding.BindBool(&session.Offline)
-	mode := widget.NewCheckWithData(" Offline Mode", modeData)
+	mode := widget.NewCheckWithData(i18n.T("main.offline_mode"), modeData)
 	mode.OnChanged = func(b bool) {
 		if b {
 			session.Offline = true
-			btnLogin.Text = "Decrypt"
+			btnLogin.Text = i18n.T("main.decrypt")
 			btnLogin.Refresh()
 		} else {
 			session.Offline = false
-			btnLogin.Text = "Connect"
+			btnLogin.Text = i18n.T("main.connect")
 			btnLogin.Refresh()
 		}
 	}
@@ -549,7 +551,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Connection Settings button
-	btnConnectionSettings := newGunmetalButtonWithIcon("Connection Settings", theme.SettingsIcon(), colors.Green, func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), colors.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -562,14 +564,14 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 		if session.Domain == "app.main" {
 			if k.Name == fyne.KeyReturn {
 				if session.Password == "" {
-					btnLogin.Text = "Invalid password..."
+					btnLogin.Text = i18n.T("main.invalid_password")
 					btnLogin.Disable()
 					btnLogin.Refresh()
 				} else {
 					if !session.Offline {
-						btnLogin.Text = "Connect"
+						btnLogin.Text = i18n.T("main.connect")
 					} else {
-						btnLogin.Text = "Decrypt"
+						btnLogin.Text = i18n.T("main.decrypt")
 					}
 					btnLogin.Enable()
 					btnLogin.Refresh()
@@ -673,7 +675,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
-	btnCreate := widget.NewButton("Create", nil)
+	btnCreate := widget.NewButton(i18n.T("create.create"), nil)
 	btnCreate.Disable()
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
@@ -783,7 +785,7 @@ func layoutNewAccount() fyne.CanvasObject {
 			btnCreate.Refresh()
 		}
 	}
-	wPassword.SetPlaceHolder("Password")
+	wPassword.SetPlaceHolder(i18n.T("main.password"))
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	wPasswordConfirm := widget.NewEntry()
@@ -802,11 +804,11 @@ func layoutNewAccount() fyne.CanvasObject {
 			btnCreate.Refresh()
 		}
 	}
-	wPasswordConfirm.SetPlaceHolder("Confirm Password")
+	wPasswordConfirm.SetPlaceHolder(i18n.T("create.confirm_password"))
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	wAccount := widget.NewEntry()
-	wAccount.SetPlaceHolder("Account Name")
+	wAccount.SetPlaceHolder(i18n.T("create.account_name"))
 	wAccount.Validator = func(s string) (err error) {
 		session.Error = ""
 		errorText.Text = ""
@@ -876,15 +878,15 @@ func layoutNewAccount() fyne.CanvasObject {
 			btnCreate.Refresh()
 		}
 	}
-	wLanguage.PlaceHolder = "(Select Seed Language)"
+	wLanguage.PlaceHolder = i18n.T("create.select_language")
 
 	wSpacer := widget.NewLabel(" ")
-	heading := canvas.NewText("New Account", colors.Green)
+	heading := canvas.NewText(i18n.T("main.new_account"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	heading2 := canvas.NewText("Recovery", colors.Green)
+	heading2 := canvas.NewText(i18n.T("restore.recover"), colors.Green)
 	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
@@ -929,12 +931,12 @@ func layoutNewAccount() fyne.CanvasObject {
 		),
 	)
 
-	body := widget.NewLabel("Please save the following 25 recovery words in a safe place. These are the keys to your account, so never share them with anyone.")
+	body := widget.NewLabel(i18n.T("create.save_words"))
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+	btnEnter := widget.NewButtonWithIcon(i18n.T("create.enter"), theme.NavigateNextIcon(), func() {
 		fyne.Do(func() {
 			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
 			// login() checks if engram.Disk is nil and skips wallet opening if already open
@@ -1004,7 +1006,7 @@ func layoutNewAccount() fyne.CanvasObject {
 			errorText.Refresh()
 		}
 
-		showLoadingOverlayWithText("Creating secure wallet...", "Average ETA: ~5 seconds (depends on hardware)")
+		showLoadingOverlayWithText(i18n.T("creating_wallet"), i18n.T("wallet_eta"))
 
 		go func() {
 			address, seed, err := create()
@@ -1120,7 +1122,7 @@ func layoutRestore() fyne.CanvasObject {
 	strengthText.TextSize = scaleFont(11)
 	strengthText.Alignment = fyne.TextAlignCenter
 
-	btnCreate := widget.NewButton("Recover", nil)
+	btnCreate := widget.NewButton(i18n.T("restore.recover"), nil)
 	btnCreate.Disable()
 
 	seedValid := false
@@ -1147,7 +1149,7 @@ func layoutRestore() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnCopyAddress := widget.NewButtonWithIcon("Copy Address", theme.ContentCopyIcon(), nil)
+	btnCopyAddress := widget.NewButtonWithIcon(i18n.T("restore.copy_address"), theme.ContentCopyIcon(), nil)
 
 	wPassword := NewMobileEntry()
 	wPassword.Password = true
@@ -1168,7 +1170,7 @@ func layoutRestore() fyne.CanvasObject {
 
 		updateRecoveryButtonState()
 	}
-	wPassword.SetPlaceHolder("Password")
+	wPassword.SetPlaceHolder(i18n.T("main.password"))
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	wPasswordConfirm := NewMobileEntry()
@@ -1180,7 +1182,7 @@ func layoutRestore() fyne.CanvasObject {
 
 		updateRecoveryButtonState()
 	}
-	wPasswordConfirm.SetPlaceHolder("Confirm Password")
+	wPasswordConfirm.SetPlaceHolder(i18n.T("create.confirm_password"))
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
 	// Card selection for recovery type
@@ -1196,31 +1198,31 @@ func layoutRestore() fyne.CanvasObject {
 	cardBgImport.CornerRadius = scaleSize(12)
 
 	// Card labels
-	lblWords := canvas.NewText("Words", colors.DarkMatter)
+	lblWords := canvas.NewText(i18n.T("restore.words"), colors.DarkMatter)
 	lblWords.TextSize = scaleFont(14)
 	lblWords.Alignment = fyne.TextAlignCenter
 	lblWords.TextStyle = fyne.TextStyle{Bold: true}
 
-	lblHex := canvas.NewText("Hex Key", color.White)
+	lblHex := canvas.NewText(i18n.T("restore.hex_key"), color.White)
 	lblHex.TextSize = scaleFont(14)
 	lblHex.Alignment = fyne.TextAlignCenter
 	lblHex.TextStyle = fyne.TextStyle{Bold: true}
 
-	lblImport := canvas.NewText("Import", color.White)
+	lblImport := canvas.NewText(i18n.T("restore.import"), color.White)
 	lblImport.TextSize = scaleFont(14)
 	lblImport.Alignment = fyne.TextAlignCenter
 	lblImport.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Card descriptions
-	descWords := canvas.NewText("25 words", colors.DarkMatter)
+	descWords := canvas.NewText(i18n.T("restore.25_words"), colors.DarkMatter)
 	descWords.TextSize = scaleFont(11)
 	descWords.Alignment = fyne.TextAlignCenter
 
-	descHex := canvas.NewText("64 chars", color.White)
+	descHex := canvas.NewText(i18n.T("restore.64_chars"), color.White)
 	descHex.TextSize = scaleFont(11)
 	descHex.Alignment = fyne.TextAlignCenter
 
-	descImport := canvas.NewText(".db file", color.White)
+	descImport := canvas.NewText(i18n.T("restore.db_file"), color.White)
 	descImport.TextSize = scaleFont(11)
 	descImport.Alignment = fyne.TextAlignCenter
 
@@ -1418,10 +1420,10 @@ func layoutRestore() fyne.CanvasObject {
 		safeCanvasFocus(wAccount)
 		clearFormText(errorText)
 	}
-	wLanguage.PlaceHolder = "(Select Seed Language)"
+	wLanguage.PlaceHolder = i18n.T("create.select_language")
 	wLanguage.Hide()
 
-	wAccount.SetPlaceHolder("Account Name")
+	wAccount.SetPlaceHolder(i18n.T("create.account_name"))
 	wAccount.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 	wAccount.Validator = func(s string) (err error) {
 		session.Error = ""
@@ -1506,7 +1508,7 @@ func layoutRestore() fyne.CanvasObject {
 		}
 	}
 
-	heading := canvas.NewText("Recover Account", colors.Green)
+	heading := canvas.NewText(i18n.T("main.recover_account"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -1521,7 +1523,7 @@ func layoutRestore() fyne.CanvasObject {
 	networkIndicator.TextSize = scaleFont(12)
 	networkIndicator.Alignment = fyne.TextAlignCenter
 
-	heading2 := canvas.NewText("Success", colors.Green)
+	heading2 := canvas.NewText(i18n.T("restore.success"), colors.Green)
 	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
@@ -1544,7 +1546,7 @@ func layoutRestore() fyne.CanvasObject {
 	grid.Objects = nil
 
 	seedEntry := NewMobileEntry()
-	seedEntry.SetPlaceHolder("Recovery Phrase (25 words)")
+	seedEntry.SetPlaceHolder(i18n.T("restore.seed_placeholder"))
 	seedEntry.MultiLine = true
 	seedEntry.Wrapping = fyne.TextWrapWord
 	seedEntry.SetMinRowsVisible(6)
@@ -1641,7 +1643,7 @@ func layoutRestore() fyne.CanvasObject {
 	}
 
 	hexEntry := NewMobileEntry()
-	hexEntry.SetPlaceHolder("Secret Key (64 character hex)")
+	hexEntry.SetPlaceHolder(i18n.T("restore.hex_placeholder"))
 	hexEntry.MultiLine = true
 	hexEntry.Wrapping = fyne.TextWrapWord
 	hexEntry.SetMinRowsVisible(2)
@@ -1745,7 +1747,7 @@ func layoutRestore() fyne.CanvasObject {
 	importFileText.Alignment = fyne.TextAlignCenter
 
 	// Button to open file picker for import - OnTapped set after formSuccess is defined
-	btnSelectFile := widget.NewButtonWithIcon("Select Wallet File", theme.FolderOpenIcon(), nil)
+	btnSelectFile := widget.NewButtonWithIcon(i18n.T("restore.select_file"), theme.FolderOpenIcon(), nil)
 
 	importFileForm := container.NewVBox(
 		rectSpacer,
@@ -1794,7 +1796,7 @@ func layoutRestore() fyne.CanvasObject {
 		form.Refresh()
 	}
 
-	body := widget.NewLabel("Your account has been successfully recovered.")
+	body := widget.NewLabel(i18n.T("restore.success_body"))
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
@@ -1809,7 +1811,7 @@ func layoutRestore() fyne.CanvasObject {
 	successAddress.Alignment = fyne.TextAlignCenter
 	successAddress.TextStyle = fyne.TextStyle{Monospace: true}
 
-	btnEnter := widget.NewButtonWithIcon("Enter", theme.NavigateNextIcon(), func() {
+	btnEnter := widget.NewButtonWithIcon(i18n.T("create.enter"), theme.NavigateNextIcon(), func() {
 		fyne.Do(func() {
 			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
 			// login() checks if engram.Disk is nil and skips wallet opening if already open
@@ -1918,17 +1920,17 @@ func layoutRestore() fyne.CanvasObject {
 			rectPassSpacer := canvas.NewRectangle(color.Transparent)
 			rectPassSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-			passHeader := canvas.NewText("ENTER WALLET PASSWORD", colors.Gray)
+			passHeader := canvas.NewText(i18n.T("restore.enter_password"), colors.Gray)
 			passHeader.TextSize = scaleFont(14)
 			passHeader.Alignment = fyne.TextAlignCenter
 			passHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			passSubHeader := canvas.NewText("Unlock Imported Wallet", colors.Account)
+			passSubHeader := canvas.NewText(i18n.T("restore.unlock_wallet"), colors.Account)
 			passSubHeader.TextSize = scaleFont(22)
 			passSubHeader.Alignment = fyne.TextAlignCenter
 			passSubHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			btnUnlock := widget.NewButton("Unlock", nil)
+			btnUnlock := widget.NewButton(i18n.T("restore.unlock"), nil)
 			btnUnlock.Disable()
 
 			entryWalletPass := NewReturnEntry()
@@ -1939,11 +1941,11 @@ func layoutRestore() fyne.CanvasObject {
 			}
 			entryWalletPass.OnChanged = func(s string) {
 				if s == "" {
-					btnUnlock.Text = "Unlock"
+					btnUnlock.Text = i18n.T("restore.unlock")
 					btnUnlock.Disable()
 					btnUnlock.Refresh()
 				} else {
-					btnUnlock.Text = "Unlock"
+					btnUnlock.Text = i18n.T("restore.unlock")
 					btnUnlock.Enable()
 					btnUnlock.Refresh()
 				}
@@ -1961,7 +1963,7 @@ func layoutRestore() fyne.CanvasObject {
 
 			btnUnlock.OnTapped = func() {
 				btnUnlock.Disable()
-				btnUnlock.Text = "Unlocking..."
+				btnUnlock.Text = i18n.T("wallet.unlocking")
 				btnUnlock.Refresh()
 
 				enteredPassword := entryWalletPass.Text
@@ -1969,7 +1971,7 @@ func layoutRestore() fyne.CanvasObject {
 				temp, err := walletapi.Open_Encrypted_Wallet(filePath, enteredPassword)
 				if err != nil {
 					logger.Errorf("[Engram] Cannot open imported wallet: %s\n", err)
-					btnUnlock.Text = "Invalid Password..."
+					btnUnlock.Text = i18n.T("main.invalid_password")
 					btnUnlock.Refresh()
 					entryWalletPass.SetText("")
 					return
@@ -2193,7 +2195,7 @@ func layoutRestore() fyne.CanvasObject {
 			}
 		}
 
-		showLoadingOverlayWithText("Recovering secure wallet...", "Average ETA: ~5 seconds (depends on hardware)")
+		showLoadingOverlayWithText(i18n.T("wallet.recovering"), i18n.T("wallet_eta"))
 
 		go func() {
 			var err error
@@ -2249,7 +2251,7 @@ func layoutRestore() fyne.CanvasObject {
 					logger.Errorf("[Register] Failed to save wallet after creation: %s\n", err)
 				}
 
-				// Wallet remains open for immediate transition via "Enter" button
+				// Wallet remains open for immediate transition via i18n.T("create.enter") button
 				session.WalletOpen = true
 				beginWalletSession()
 

@@ -42,6 +42,8 @@ import (
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
 	"github.com/deroproject/graviton"
+
+	"github.com/DEROFDN/engram/i18n"
 )
 
 func layoutAssetExplorer() fyne.CanvasObject {
@@ -49,7 +51,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText("A S S E T    E X P L O R E R", colors.Gray)
+	heading := canvas.NewText(i18n.T("assets.heading"), colors.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -127,7 +129,7 @@ func layoutMyAssets() fyne.CanvasObject {
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
 
-	heading := canvas.NewText("M Y    A S S E T S", colors.Gray)
+	heading := canvas.NewText(i18n.T("assets.my_heading"), colors.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -172,7 +174,7 @@ func layoutMyAssets() fyne.CanvasObject {
 		})
 
 	entrySCID := widget.NewEntry()
-	entrySCID.PlaceHolder = "Search by SCID"
+	entrySCID.PlaceHolder = i18n.T("assets.search_scid")
 	entrySCID.SetIcon(theme.SearchIcon())
 
 	sep := canvas.NewRectangle(colors.Gray)
@@ -202,7 +204,7 @@ func layoutMyAssets() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	btnRescan := widget.NewButton("Rescan Blockchain", nil)
+	btnRescan := widget.NewButton(i18n.T("assets.rescan"), nil)
 	btnRescan.Disable()
 
 	layoutAssets := container.NewStack(
@@ -633,7 +635,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-	heading := canvas.NewText("Asset Manager", colors.Green)
+	heading := canvas.NewText(i18n.T("assets.manager"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -641,32 +643,32 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	labelSigner := canvas.NewText("SMART  CONTRACT  AUTHOR", colors.Gray)
+	labelSigner := canvas.NewText(i18n.T("assets.author"), colors.Gray)
 	labelSigner.TextSize = scaleFont(14)
 	labelSigner.Alignment = fyne.TextAlignCenter
 	labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelOwner := canvas.NewText("SMART  CONTRACT  OWNER", colors.Gray)
+	labelOwner := canvas.NewText(i18n.T("assets.owner"), colors.Gray)
 	labelOwner.TextSize = scaleFont(14)
 	labelOwner.Alignment = fyne.TextAlignCenter
 	labelOwner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSCID := canvas.NewText("SMART  CONTRACT  ID", colors.Gray)
+	labelSCID := canvas.NewText(i18n.T("assets.scid"), colors.Gray)
 	labelSCID.TextSize = scaleFont(14)
 	labelSCID.Alignment = fyne.TextAlignCenter
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelBalance := canvas.NewText("ASSET  BALANCE", colors.Gray)
+	labelBalance := canvas.NewText(i18n.T("assets.balance"), colors.Gray)
 	labelBalance.TextSize = scaleFont(14)
 	labelBalance.Alignment = fyne.TextAlignCenter
 	labelBalance.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelTransfer := canvas.NewText("TRANSFER  ASSET", colors.Gray)
+	labelTransfer := canvas.NewText(i18n.T("assets.transfer"), colors.Gray)
 	labelTransfer.TextSize = scaleFont(14)
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelExecute := canvas.NewText("EXECUTE  ACTION", colors.Gray)
+	labelExecute := canvas.NewText(i18n.T("assets.execute"), colors.Gray)
 	labelExecute.TextSize = scaleFont(14)
 	labelExecute.Alignment = fyne.TextAlignCenter
 	labelExecute.TextStyle = fyne.TextStyle{Bold: true}
@@ -674,7 +676,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	var ringsize uint64
 	var err error
 
-	options := []string{"Anonymity Set:   2  (None)", "Anonymity Set:   4  (Low)", "Anonymity Set:   8  (Low)", "Anonymity Set:   16  (Recommended)", "Anonymity Set:   32  (Medium)", "Anonymity Set:   64  (High)", "Anonymity Set:   128  (High)"}
+	options := []string{i18n.T("asset_ring.2"), i18n.T("asset_ring.4"), i18n.T("asset_ring.8"), i18n.T("asset_ring.16"), i18n.T("asset_ring.32"), i18n.T("asset_ring.64"), i18n.T("asset_ring.128")}
 
 	selectRingSize := widget.NewSelect(options, nil)
 	selectRingSize.OnChanged = func(s string) {
@@ -785,10 +787,10 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	textOwner.Wrapping = fyne.TextWrapWord
 	textOwner.ParseMarkdown(owner)
 
-	btnSend := widget.NewButton("Send Asset", nil)
+	btnSend := widget.NewButton(i18n.T("assets.send_asset"), nil)
 
 	entryAddress.Validator = func(s string) error {
-		btnSend.Text = "Send Asset"
+		btnSend.Text = i18n.T("assets.send_asset")
 		btnSend.Refresh()
 		_, err := globals.ParseValidateAddress(s)
 		if err != nil {
@@ -814,7 +816,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	}
 
 	entryAmount := widget.NewEntry()
-	entryAmount.PlaceHolder = "Asset Amount (Numbers Only)"
+	entryAmount.PlaceHolder = i18n.T("assets.amount")
 	entryAmount.Validator = func(s string) error {
 		if s != "" {
 			amount, err := globals.ParseAmount(s)
@@ -840,7 +842,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			}
 		}
 
-		btnSend.Text = "Send Asset"
+		btnSend.Text = i18n.T("assets.send_asset")
 		btnSend.Enable()
 		entryAmount.SetValidationError(nil)
 
@@ -936,7 +938,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 				if bal != zerobal {
 					uiDo(func() {
-						btnSend.Text = "Send Asset"
+						btnSend.Text = i18n.T("assets.send_asset")
 						btnSend.Enable()
 						btnSend.Refresh()
 						entryAddress.Text = ""
@@ -1023,7 +1025,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	}
 
 	if bal != zerobal {
-		btnSend.Text = "Send Asset"
+		btnSend.Text = i18n.T("assets.send_asset")
 		btnSend.Enable()
 	} else {
 		btnSend.Text = "You do not own this asset"
@@ -1031,17 +1033,17 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	}
 	btnSend.Refresh()
 
-	linkCopySigner := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkCopySigner := widget.NewHyperlinkWithStyle(i18n.T("assets.copy_address"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkCopySigner.OnTapped = func() {
 		a.Clipboard().SetContent(signer)
 	}
 
-	linkCopyOwner := widget.NewHyperlinkWithStyle("Copy Address", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkCopyOwner := widget.NewHyperlinkWithStyle(i18n.T("assets.copy_address"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkCopyOwner.OnTapped = func() {
 		a.Clipboard().SetContent(owner)
 	}
 
-	linkMessageAuthor := widget.NewHyperlinkWithStyle("Message the Author", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkMessageAuthor := widget.NewHyperlinkWithStyle(i18n.T("assets.message_author"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkMessageAuthor.OnTapped = func() {
 		if signer != "" && signer != "--" {
 			messages.Contact = signer
@@ -1053,7 +1055,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		}
 	}
 
-	linkMessageOwner := widget.NewHyperlinkWithStyle("Message the Owner", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkMessageOwner := widget.NewHyperlinkWithStyle(i18n.T("assets.message_owner"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkMessageOwner.OnTapped = func() {
 		if owner != "" && owner != "--" {
 			messages.Contact = owner
@@ -1065,12 +1067,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		}
 	}
 
-	linkCopySCID := widget.NewHyperlinkWithStyle("Copy SCID", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkCopySCID := widget.NewHyperlinkWithStyle(i18n.T("assets.copy_scid"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkCopySCID.OnTapped = func() {
 		a.Clipboard().SetContent(scid)
 	}
 
-	linkView := widget.NewHyperlinkWithStyle("View in Explorer", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkView := widget.NewHyperlinkWithStyle(i18n.T("assets.view_explorer"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkView.OnTapped = func() {
 		if engram.Disk.GetNetwork() {
 			link, _ := url.Parse("https://explorer.derofoundation.org/tx/" + scid)
@@ -1141,20 +1143,20 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 		overlay := session.Window.Canvas().Overlays()
 
-		options := []string{"Anonymity Set:   2  (None)", "Anonymity Set:   4  (Low)", "Anonymity Set:   8  (Low)", "Anonymity Set:   16  (Recommended)", "Anonymity Set:   32  (Medium)", "Anonymity Set:   64  (High)", "Anonymity Set:   128  (High)"}
+		options := []string{i18n.T("asset_ring.2"), i18n.T("asset_ring.4"), i18n.T("asset_ring.8"), i18n.T("asset_ring.16"), i18n.T("asset_ring.32"), i18n.T("asset_ring.64"), i18n.T("asset_ring.128")}
 
 		var ringsize uint64
 
 		signerRequired := false
 
 		selectRingMembers := widget.NewSelect(options, nil)
-		selectRingMembers.PlaceHolder = "(Select Anonymity Set)"
+		selectRingMembers.PlaceHolder = i18n.T("send.select_ring")
 
 		for f := range contract.Functions {
 			if contract.Functions[f].Name == s {
 				params = contract.Functions[f].Params
 
-				header := canvas.NewText("EXECUTE  CONTRACT  FUNCTION", colors.Gray)
+				header := canvas.NewText(i18n.T("assets.execute_func"), colors.Gray)
 				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
@@ -1164,7 +1166,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				funcName.Alignment = fyne.TextAlignCenter
 				funcName.TextStyle = fyne.TextStyle{Bold: true}
 
-				linkClose := widget.NewHyperlinkWithStyle("Close", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+				linkClose := widget.NewHyperlinkWithStyle(i18n.T("assets.close"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 				linkClose.OnTapped = func() {
 					dero_amount = 0
 					asset_amount = 0
@@ -1184,7 +1186,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				)
 
 				entryDEROValue := widget.NewEntry()
-				entryDEROValue.PlaceHolder = "DERO Amount (Numbers Only)"
+				entryDEROValue.PlaceHolder = i18n.T("assets.dero_amount")
 				entryDEROValue.Validator = func(s string) error {
 					dero_amount, err = globals.ParseAmount(s)
 					if err != nil {
@@ -1196,7 +1198,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				}
 
 				entryAssetValue := widget.NewEntry()
-				entryAssetValue.PlaceHolder = "Asset Amount (Numbers Only)"
+				entryAssetValue.PlaceHolder = i18n.T("assets.amount")
 				entryAssetValue.Validator = func(s string) error {
 					asset_amount, err = globals.ParseAmount(s)
 					if err != nil {
@@ -1299,7 +1301,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 					selectRingMembers.SetSelectedIndex(3)
 				}
 
-				btnExecuteBase := widget.NewButton("Execute", nil)
+				btnExecuteBase := widget.NewButton(i18n.T("assets.execute"), nil)
 				var btnExecuteObj fyne.CanvasObject = btnExecuteBase
 				if isMobile() {
 					btnExecuteBase.Importance = widget.MediumImportance
@@ -1662,11 +1664,11 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 		})
 
 	entrySCID := widget.NewEntry()
-	entrySCID.PlaceHolder = "Search by SCID"
+	entrySCID.PlaceHolder = i18n.T("assets.search_scid")
 	entrySCID.SetIcon(theme.SearchIcon())
 	entrySCID.Disable()
 
-	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
+	linkClearHistory := widget.NewHyperlinkWithStyle(i18n.T("assets.clear_all"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	linkClearHistory.OnTapped = func() {
 		shard, err := GetShard()
 		if err != nil {
@@ -1699,7 +1701,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 		session.Window.SetContent(layoutAssetExplorer())
 	}
 
-	btnMyAssets := widget.NewButton("My Assets", func() {
+	btnMyAssets := widget.NewButton(i18n.T("assets.my_assets_btn"), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutMyAssets())
@@ -1908,7 +1910,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 		}
 
 		fyne.Do(func() {
-			results.Text = fmt.Sprintf("  Search History:  %d", found)
+			results.Text = fmt.Sprintf("  %s  %d", i18n.T("files.search_history"), found)
 			results.Color = colors.Green
 			results.Refresh()
 			listBox.Refresh()

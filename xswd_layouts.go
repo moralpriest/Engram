@@ -34,6 +34,8 @@ import (
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/rpc"
 	"github.com/deroproject/derohe/walletapi/xswd"
+
+	"github.com/DEROFDN/engram/i18n"
 )
 
 func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
@@ -69,7 +71,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		}})
 	labelDesc.Wrapping = fyne.TextWrapWord
 
-	labelID := canvas.NewText("   APP  ID", colors.Gray)
+	labelID := canvas.NewText(i18n.T("xswd.app_id"), colors.Gray)
 	labelID.TextSize = scaleFont(14)
 	labelID.Alignment = fyne.TextAlignLeading
 	labelID.TextStyle = fyne.TextStyle{Bold: true}
@@ -77,7 +79,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textID := widget.NewRichTextFromMarkdown(ad.Id)
 	textID.Wrapping = fyne.TextWrapWord
 
-	labelSignature := canvas.NewText("   SIGNATURE", colors.Gray)
+	labelSignature := canvas.NewText(i18n.T("xswd.signature"), colors.Gray)
 	labelSignature.TextSize = scaleFont(14)
 	labelSignature.Alignment = fyne.TextAlignLeading
 	labelSignature.TextStyle = fyne.TextStyle{Bold: true}
@@ -85,7 +87,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textSignature := widget.NewRichTextFromMarkdown("")
 	textSignature.Wrapping = fyne.TextWrapWord
 
-	labelURL := canvas.NewText("   URL", colors.Gray)
+	labelURL := canvas.NewText(i18n.T("xswd.url"), colors.Gray)
 	labelURL.TextSize = scaleFont(14)
 	labelURL.Alignment = fyne.TextAlignLeading
 	labelURL.TextStyle = fyne.TextStyle{Bold: true}
@@ -93,12 +95,12 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textURL := widget.NewRichTextFromMarkdown(ad.Url)
 	textURL.Wrapping = fyne.TextWrapWord
 
-	labelPermissions := canvas.NewText("   PERMISSIONS", colors.Gray)
+	labelPermissions := canvas.NewText(i18n.T("xswd.permissions"), colors.Gray)
 	labelPermissions.TextSize = scaleFont(14)
 	labelPermissions.Alignment = fyne.TextAlignLeading
 	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelEvents := canvas.NewText("   EVENTS", colors.Gray)
+	labelEvents := canvas.NewText(i18n.T("xswd.events"), colors.Gray)
 	labelEvents.TextSize = scaleFont(14)
 	labelEvents.Alignment = fyne.TextAlignLeading
 	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
@@ -169,7 +171,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 			permissionItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### "+name), permission))
 		}
 	} else {
-		permissionItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("No Permissions"), nil))
+		permissionItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown(i18n.T("xswd.no_permissions")), nil))
 	}
 
 	// Find RegisteredEvents for connected app and build UI object
@@ -189,7 +191,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 			eventItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown(fmt.Sprintf("### %s", name)), event))
 		}
 	} else {
-		eventItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("No Events"), nil))
+		eventItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown(i18n.T("xswd.no_events")), nil))
 	}
 
 	sep := canvas.NewRectangle(colors.Gray)
@@ -242,7 +244,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		}
 	}
 
-	linkURL := widget.NewHyperlinkWithStyle("Open in browser", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkURL := widget.NewHyperlinkWithStyle(i18n.T("xswd.open_browser"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkURL.OnTapped = func() {
 		link, err := url.Parse(ad.Url)
 		if err != nil {
@@ -252,7 +254,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		_ = fyne.CurrentApp().OpenURL(link)
 	}
 
-	btnRemove := widget.NewButton("Remove", nil)
+	btnRemove := widget.NewButton(i18n.T("xswd.remove"), nil)
 	btnRemove.OnTapped = func() {
 		if remoteAccess.WS.server != nil && len(remoteAccess.WS.apps) > 0 {
 			remoteAccess.WS.server.RemoveApplication(ad)
@@ -379,6 +381,32 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
+func translatePermissionString(s string) string {
+	switch s {
+	case xswd.AlwaysAllow.String():
+		return i18n.T("settings.permissions.always_allow")
+	case xswd.AlwaysDeny.String():
+		return i18n.T("settings.permissions.always_deny")
+	case xswd.Ask.String():
+		return i18n.T("settings.permissions.ask")
+	default:
+		return i18n.T("settings.permissions.ask")
+	}
+}
+
+func getPermissionFromTranslated(s string) xswd.Permission {
+	switch s {
+	case i18n.T("settings.permissions.always_allow"):
+		return xswd.AlwaysAllow
+	case i18n.T("settings.permissions.always_deny"):
+		return xswd.AlwaysDeny
+	case i18n.T("settings.permissions.ask"):
+		return xswd.Ask
+	default:
+		return xswd.Ask
+	}
+}
+
 // Layout XSWD permissions settings
 func layoutXSWDPermissions() fyne.CanvasObject {
 	session.Domain = "app.remoteaccess.permissions"
@@ -396,50 +424,50 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	title := canvas.NewText("G L O B A L   P E R M I S S I O N S", colors.Gray)
+	title := canvas.NewText(i18n.T("settings.global_permissions_heading"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
-	xswdLabel := canvas.NewText("W E B   S O C K E T S", colors.Gray)
+	xswdLabel := canvas.NewText(i18n.T("settings.web_sockets_heading"), colors.Gray)
 	xswdLabel.TextSize = scaleFont(11)
 	xswdLabel.Alignment = fyne.TextAlignCenter
 	xswdLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelMethods := canvas.NewText("  METHODS", colors.Gray)
+	labelMethods := canvas.NewText(i18n.T("settings.methods_label"), colors.Gray)
 	labelMethods.TextSize = scaleFont(14)
 	labelMethods.Alignment = fyne.TextAlignLeading
 	labelMethods.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnection := canvas.NewText("  CONNECTIONS", colors.Gray)
+	labelConnection := canvas.NewText(i18n.T("settings.connections_label"), colors.Gray)
 	labelConnection.TextSize = scaleFont(14)
 	labelConnection.Alignment = fyne.TextAlignLeading
 	labelConnection.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelEpoch := canvas.NewText("  EPOCH", colors.Gray)
+	labelEpoch := canvas.NewText(i18n.T("settings.epoch_label"), colors.Gray)
 	labelEpoch.TextSize = scaleFont(14)
 	labelEpoch.Alignment = fyne.TextAlignLeading
 	labelEpoch.TextStyle = fyne.TextStyle{Bold: true}
 
-	permissionInfo := canvas.NewText("APPLY ON CONNECTION", colors.Gray)
+	permissionInfo := canvas.NewText(i18n.T("settings.apply_on_connection"), colors.Gray)
 	permissionInfo.TextSize = scaleFont(12)
 	permissionInfo.Alignment = fyne.TextAlignCenter
 	permissionInfo.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnDefaults := widget.NewButton("Restore Defaults", nil)
+	btnDefaults := widget.NewButton(i18n.T("settings.restore_defaults"), nil)
 
-	wMode := widget.NewCheck("Restrictive Mode", nil)
+	wMode := widget.NewCheck(i18n.T("settings.restrictive_mode"), nil)
 
 	// Simple/Advanced Mode Toggle
-	wSimpleMode := widget.NewCheck("Simple Mode (Recommended)", nil)
+	wSimpleMode := widget.NewCheck(i18n.T("settings.simple_mode"), nil)
 	wSimpleMode.Checked = IsSimpleMode()
 
-	wConnection := widget.NewSelect([]string{xswd.Ask.String(), xswd.Allow.String()}, nil)
+	wConnection := widget.NewSelect([]string{i18n.T("settings.permissions.ask"), i18n.T("settings.permissions.allow")}, nil)
 
-	wGlobalPermissions := widget.NewSelect([]string{"Off", "Apply"}, nil)
+	wGlobalPermissions := widget.NewSelect([]string{i18n.T("settings.global_permissions.off"), i18n.T("settings.global_permissions.apply")}, nil)
 
-	wEpoch := widget.NewSelect([]string{xswd.Deny.String(), xswd.Allow.String()}, nil)
+	wEpoch := widget.NewSelect([]string{i18n.T("settings.permissions.deny"), i18n.T("settings.permissions.allow")}, nil)
 
-	wEpochAddress := widget.NewSelect([]string{"My Address", "dApp Chooses"}, nil)
+	wEpochAddress := widget.NewSelect([]string{i18n.T("settings.epoch.my_address"), i18n.T("settings.epoch.dapp_chooses")}, nil)
 
 	/*
 		if remoteAccess.EPOCH.enabled {
@@ -486,32 +514,32 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	entryEpochWork.Validator = func(s string) (err error) {
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			return fmt.Errorf("invalid port")
+			return fmt.Errorf("%s", i18n.T("settings.epoch.invalid_port"))
 		}
 
 		return epoch.SetPort(i)
 	}
 
 	entryEpochHash := widget.NewEntry()
-	entryEpochHash.SetPlaceHolder("Max hashes")
+	entryEpochHash.SetPlaceHolder(i18n.T("settings.epoch.max_hashes"))
 	entryEpochHash.SetText(strconv.Itoa(epoch.GetMaxHashes()))
 	entryEpochHash.Validator = func(s string) (err error) {
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			return fmt.Errorf("invalid hash value")
+			return fmt.Errorf("%s", i18n.T("settings.epoch.invalid_hash"))
 		}
 
 		return epoch.SetMaxHashes(i)
 	}
 
-	wEpochPower := widget.NewSelect([]string{"Less", "More"}, nil)
+	wEpochPower := widget.NewSelect([]string{i18n.T("settings.epoch_power.less"), i18n.T("settings.epoch_power.more")}, nil)
 	wEpochPower.SetSelectedIndex(0)
 	if epoch.GetMaxThreads() > 2 {
 		wEpochPower.SetSelectedIndex(1)
 	}
 
 	wEpochPower.OnChanged = func(s string) {
-		if s == "More" {
+		if s == i18n.T("settings.epoch_power.more") {
 			half := runtime.NumCPU() / 2
 			if half > epoch.DEFAULT_MAX_THREADS {
 				epoch.SetMaxThreads(half)
@@ -573,7 +601,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	wConnection.OnChanged = func(s string) {
-		if s == xswd.Allow.String() {
+		if s == i18n.T("settings.permissions.allow") {
 			remoteAccess.WS.global.connect = true
 		} else {
 			remoteAccess.WS.global.connect = false
@@ -584,14 +612,14 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	// Permission options for select widgets
 	permissions := []string{
-		xswd.Ask.String(),
-		xswd.AlwaysAllow.String(),
-		xswd.AlwaysDeny.String(),
+		i18n.T("settings.permissions.ask"),
+		i18n.T("settings.permissions.always_allow"),
+		i18n.T("settings.permissions.always_deny"),
 	}
 
 	noStorePermissions := []string{
-		xswd.Ask.String(),
-		xswd.AlwaysDeny.String(),
+		i18n.T("settings.permissions.ask"),
+		i18n.T("settings.permissions.always_deny"),
 	}
 
 	// onChanged handler for Advanced Mode individual permissions
@@ -600,16 +628,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			remoteAccess.WS.Lock()
 			defer remoteAccess.WS.Unlock()
 
-			switch s {
-			case xswd.Ask.String():
-				remoteAccess.WS.global.permissions[n] = xswd.Ask
-			case xswd.AlwaysAllow.String():
-				remoteAccess.WS.global.permissions[n] = xswd.AlwaysAllow
-			case xswd.AlwaysDeny.String():
-				remoteAccess.WS.global.permissions[n] = xswd.AlwaysDeny
-			default:
-				remoteAccess.WS.global.permissions[n] = xswd.Ask
-			}
+			remoteAccess.WS.global.permissions[n] = getPermissionFromTranslated(s)
 
 			// Save updated permissions to storage
 			setPermissions()
@@ -626,16 +645,19 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			}
 
 			// Group header with description
-			header := widget.NewRichTextFromMarkdown("### " + group.Name)
-			desc := canvas.NewText(group.Description, colors.Gray)
-			desc.TextSize = scaleFont(11)
+			keyName := "settings.group." + strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(group.Name, " & ", "_and_"), " ", "_"))
+			keyDesc := "settings.group_desc." + strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(group.Name, " & ", "_and_"), " ", "_"))
+			header := widget.NewRichTextFromMarkdown("### " + i18n.T(keyName))
+			desc := widget.NewLabel(i18n.T(keyDesc))
+			desc.Wrapping = fyne.TextWrapWord
+			desc.TextStyle = fyne.TextStyle{Italic: true}
 
 			// Permission selector
 			permSelect := widget.NewSelect(permissions, nil)
 
 			// Set current value from storage
 			currentPerm := GetGroupPermission(group.Name)
-			permSelect.SetSelected(currentPerm.String())
+			permSelect.SetSelected(translatePermissionString(currentPerm.String()))
 
 			// Disable if WebSocket is not enabled
 			if !remoteAccess.WS.global.enabled {
@@ -646,15 +668,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			// OnChanged handler
 			permSelect.OnChanged = func(g string) func(s string) {
 				return func(s string) {
-					var perm xswd.Permission
-					switch s {
-					case xswd.AlwaysAllow.String():
-						perm = xswd.AlwaysAllow
-					case xswd.AlwaysDeny.String():
-						perm = xswd.AlwaysDeny
-					default:
-						perm = xswd.Ask
-					}
+					perm := getPermissionFromTranslated(s)
 					SetGroupPermission(g, perm)
 					logger.Printf("[Engram] Set group '%s' permission to %s", g, s)
 				}
@@ -686,7 +700,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			}
 
 			if remoteAccess.WS.global.enabled {
-				permission.SetSelected(stored[n].String())
+				permission.SetSelected(translatePermissionString(stored[n].String()))
 				permission.OnChanged = onChanged(n)
 			} else {
 				permission.SetSelectedIndex(0)
@@ -715,10 +729,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		buildAdvancedUI()
 	}
 
-	statusText := "Disabled"
+	statusText := i18n.T("settings.global_permissions.status_disabled")
 	statusColor := colors.Gray
 	if remoteAccess.WS.global.enabled {
-		statusText = "Enabled"
+		statusText = i18n.T("settings.global_permissions.status_enabled")
 		statusColor = colors.Green
 	}
 
@@ -731,22 +745,22 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			return
 		}
 
-		header := canvas.NewText("RESTORE  DEFAULT  PERMISSIONS", colors.Gray)
+		header := canvas.NewText(i18n.T("settings.restore_defaults_dialog_title"), colors.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Are you sure?", colors.Account)
+		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), colors.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		linkCancel := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkCancel := widget.NewHyperlinkWithStyle(i18n.T("restore.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 		linkCancel.OnTapped = func() {
 			removeOverlays()
 		}
 
-		btnSubmit := widget.NewButton("Restore Defaults", nil)
+		btnSubmit := widget.NewButton(i18n.T("settings.restore_defaults"), nil)
 		btnSubmit.OnTapped = func() {
 			wConnection.SetSelectedIndex(0)
 
@@ -818,10 +832,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	wGlobalPermissions.OnChanged = func(s string) {
-		if s != "Apply" {
+		if s != i18n.T("settings.global_permissions.apply") {
 			setPermissions()
 			btnDefaults.Disable()
-			remoteAccess.WS.global.status.Text = "Disabled"
+			remoteAccess.WS.global.status.Text = i18n.T("settings.global_permissions.status_disabled")
 			remoteAccess.WS.global.status.Color = colors.Gray
 			remoteAccess.WS.global.status.Refresh()
 			remoteAccess.WS.global.enabled = false
@@ -841,7 +855,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 				}
 			}
 		} else {
-			remoteAccess.WS.global.status.Text = "Enabled"
+			remoteAccess.WS.global.status.Text = i18n.T("settings.global_permissions.status_enabled")
 			remoteAccess.WS.global.status.Color = colors.Green
 			remoteAccess.WS.global.status.Refresh()
 			remoteAccess.WS.global.enabled = true
@@ -951,13 +965,13 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							container.NewBorder(
 								nil,
 								nil,
-								widget.NewRichTextFromMarkdown("### Type"),
+								widget.NewRichTextFromMarkdown("### "+i18n.T("settings.global_permissions.type")),
 								wConnection,
 							),
 							container.NewBorder(
 								nil,
 								nil,
-								widget.NewRichTextFromMarkdown("### Global Permissions"),
+								widget.NewRichTextFromMarkdown("### "+i18n.T("settings.global_permissions.global_permissions")),
 								wGlobalPermissions,
 							),
 							wSpacer,
@@ -980,7 +994,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							container.NewBorder(
 								nil,
 								nil,
-								widget.NewRichTextFromMarkdown("### Get Work"),
+								widget.NewRichTextFromMarkdown("### "+i18n.T("settings.epoch.get_work")),
 								container.NewHBox(
 									layout.NewSpacer(),
 									container.NewStack(
@@ -992,7 +1006,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							container.NewBorder(
 								nil,
 								nil,
-								widget.NewRichTextFromMarkdown("### Max Hashes"),
+								widget.NewRichTextFromMarkdown("### "+i18n.T("settings.epoch.max_hashes")),
 								container.NewHBox(
 									layout.NewSpacer(),
 									container.NewStack(
@@ -1004,7 +1018,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 							container.NewBorder(
 								nil,
 								nil,
-								widget.NewRichTextFromMarkdown("### Power"),
+								widget.NewRichTextFromMarkdown("### "+i18n.T("settings.epoch.power")),
 								wEpochPower,
 							),
 							wSpacer,

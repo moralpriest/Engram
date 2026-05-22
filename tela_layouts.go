@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/DEROFDN/engram/i18n"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -116,7 +118,7 @@ func layoutTELA() fyne.CanvasObject {
 		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 	}
 
-	heading := canvas.NewText("T E L A    B R O W S E R", colors.Gray)
+	heading := canvas.NewText(i18n.T("tela.browser_header"), colors.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -402,7 +404,7 @@ func layoutTELA() fyne.CanvasObject {
 		nameLabel.Truncation = fyne.TextTruncateEllipsis
 		nameLabel.Wrapping = fyne.TextWrapOff
 
-		startCloseBtn := widget.NewButtonWithIcon("Start", theme.MediaPlayIcon(), nil)
+		startCloseBtn := widget.NewButtonWithIcon("", theme.MediaPlayIcon(), nil)
 		startCloseBtn.Importance = widget.LowImportance
 
 		launchProgress := NewSlimProgressBar()
@@ -437,7 +439,7 @@ func layoutTELA() fyne.CanvasObject {
 		topRow := container.NewBorder(
 			nil, bottomSpacer,
 			container.NewHBox(appIcon, heartBtn, ratingContainer),
-			container.NewPadded(startCloseBtn),
+			container.NewCenter(container.NewGridWrap(fyne.NewSize(scaleSize(38), scaleSize(38)), startCloseBtn)),
 			container.NewPadded(nameLabel),
 		)
 
@@ -474,7 +476,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	toggleTelaFavorite := func(scid string) {
 		if engram.Disk == nil {
-			errorText.Text = "No wallet connected"
+			errorText.Text = i18n.T("tela.no_wallet")
 			errorText.Color = colors.Gray
 			errorText.Refresh()
 			return
@@ -483,31 +485,31 @@ func layoutTELA() fyne.CanvasObject {
 		walletAddress := engram.Disk.GetAddress().String()
 		if IsTELAFavorite(walletAddress, scid) {
 			if err := RemoveTELAFavorite(walletAddress, scid); err != nil {
-				errorText.Text = "Error removing favorite"
+				errorText.Text = i18n.T("tela.error_rm_favorite")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
 			}
 
-			errorText.Text = "Removed from favorites"
+			errorText.Text = i18n.T("tela.removed_favorites")
 			errorText.Color = colors.Green
 		} else {
 			entry, ok := findTelaSearchEntry(scid)
 			if !ok {
-				errorText.Text = "Could not load TELA metadata"
+				errorText.Text = i18n.T("tela.error_no_metadata")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
 			}
 
 			if err := AddTELAFavorite(walletAddress, scid, entry.NameHdr, entry.DescrHdr, entry.IconHdr, entry.ratings.Average); err != nil {
-				errorText.Text = "Error adding favorite"
+				errorText.Text = i18n.T("tela.error_add_favorite")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
 			}
 
-			errorText.Text = "Added to favorites"
+			errorText.Text = i18n.T("tela.added_favorites")
 			errorText.Color = colors.Green
 		}
 
@@ -650,13 +652,13 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			if launchStatus != nil {
 				if isStopping {
-					launchStatus.Text = "Stopping..."
+					launchStatus.Text = i18n.T("tela.status_stopping")
 				} else {
-					launchStatus.Text = "Starting..."
+					launchStatus.Text = i18n.T("tela.status_starting")
 				}
 				launchStatus.Show()
 			}
-			startCloseBtn.SetText("Cancel")
+			startCloseBtn.SetText("")
 			startCloseBtn.SetIcon(theme.CancelIcon())
 			startCloseBtn.Enable()
 
@@ -702,16 +704,16 @@ func layoutTELA() fyne.CanvasObject {
 								isStopping := telaStoppingSCIDsGlobal.m[rowSCID]
 								telaStoppingSCIDsGlobal.Unlock()
 								if isStopping {
-									launchStatus.Text = "Stopping..."
+									launchStatus.Text = i18n.T("tela.status_stopping")
 								} else {
 									if val < 0.30 {
-										launchStatus.Text = "Connecting to node..."
+										launchStatus.Text = i18n.T("tela.status_connecting_node")
 									} else if val < 0.60 {
-										launchStatus.Text = "Fetching content..."
+										launchStatus.Text = i18n.T("tela.status_fetching")
 									} else if val < 0.85 {
-										launchStatus.Text = "Preparing app..."
+										launchStatus.Text = i18n.T("tela.status_preparing")
 									} else {
-										launchStatus.Text = "Almost ready..."
+										launchStatus.Text = i18n.T("tela.status_almost_ready")
 									}
 								}
 							}
@@ -728,7 +730,7 @@ func layoutTELA() fyne.CanvasObject {
 				launchStatus.Hide()
 			}
 			activeBg.FillColor = color.NRGBA{R: 20, G: 120, B: 70, A: 48}
-			startCloseBtn.SetText("Close")
+			startCloseBtn.SetText("")
 			startCloseBtn.SetIcon(theme.MediaStopIcon())
 			startCloseBtn.Enable()
 		} else {
@@ -739,7 +741,7 @@ func layoutTELA() fyne.CanvasObject {
 				launchStatus.Hide()
 			}
 			activeBg.FillColor = color.Transparent
-			startCloseBtn.SetText("Start")
+			startCloseBtn.SetText("")
 			startCloseBtn.SetIcon(theme.MediaPlayIcon())
 			startCloseBtn.Enable()
 		}
@@ -765,7 +767,7 @@ func layoutTELA() fyne.CanvasObject {
 				}
 				telaLaunchCancelChansGlobal.Unlock()
 				if launchStatus != nil {
-					launchStatus.Text = "Stopping..."
+					launchStatus.Text = i18n.T("tela.status_stopping")
 					launchStatus.Refresh()
 				}
 				startCloseBtn.SetIcon(theme.ContentCutIcon())
@@ -786,7 +788,7 @@ func layoutTELA() fyne.CanvasObject {
 				}
 			} else {
 				if engram.Disk == nil {
-					errorText.Text = "No wallet connected"
+					errorText.Text = i18n.T("tela.no_wallet")
 					errorText.Color = colors.Gray
 					errorText.Refresh()
 					return
@@ -810,11 +812,11 @@ func layoutTELA() fyne.CanvasObject {
 				telaLaunchStartTimesGlobal.Unlock()
 
 				if launchStatus != nil {
-					launchStatus.Text = "Starting..."
+					launchStatus.Text = i18n.T("tela.status_starting")
 					launchStatus.Show()
 				}
 				activeBg.Refresh()
-				startCloseBtn.SetText("Cancel")
+				startCloseBtn.SetText("")
 				startCloseBtn.SetIcon(theme.CancelIcon())
 				searchList.Refresh()
 				favoritesList.Refresh()
@@ -933,11 +935,11 @@ func layoutTELA() fyne.CanvasObject {
 					} else {
 						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", scid)}
-							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							linkPermission, permErr := AskPermissionForRequestE(i18n.T("tela.allow_updated_content"), telaLink)
 							if permErr != nil {
 								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
 								fyne.Do(func() {
-									errorText.Text = "error could not open TELA"
+									errorText.Text = i18n.T("tela.error_cannot_open")
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
@@ -968,7 +970,7 @@ func layoutTELA() fyne.CanvasObject {
 						} else {
 							logger.Printf("[TELA] ServeTELA failed for SCID %s: %v", scid, err)
 							fyne.Do(func() {
-								errorText.Text = "error starting TELA app"
+								errorText.Text = i18n.T("tela.error_starting")
 								errorText.Color = colors.Red
 								errorText.Refresh()
 							})
@@ -1104,7 +1106,7 @@ func layoutTELA() fyne.CanvasObject {
 
 	entrySearchCompletions := []string{"author:", "durl:", "name:", "my:"}
 	entrySearch := x.NewCompletionEntry(entrySearchCompletions)
-	entrySearch.PlaceHolder = "Search TELA"
+	entrySearch.PlaceHolder = i18n.T("tela.search_placeholder")
 	entrySearch.SetIcon(theme.SearchIcon())
 	entrySearch.Disable()
 
@@ -1146,13 +1148,13 @@ func layoutTELA() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	linkClearHistory := widget.NewHyperlinkWithStyle("Clear All", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
+	linkClearHistory := widget.NewHyperlinkWithStyle(i18n.T("settings.clear_history"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: false})
 	linkClearHistory.OnTapped = func() {
 		verificationOverlay(
 			false,
-			"TELA BROWSER",
-			"Clear history?",
-			"Confirm",
+			i18n.T("tela.browser_header"),
+			i18n.T("settings.clear_history_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					if gnomon.Index == nil || session.Offline {
@@ -1196,12 +1198,12 @@ func layoutTELA() fyne.CanvasObject {
 	wSelect.SetSelectedIndex(0)
 
 	btnRescanTela := newSizedIconButton(theme.ViewRefreshIcon(), func() {
-		rescanLabel := widget.NewLabel("Force Full Rescan?\n\nThis will clear all cached results, reset the Gnomon index, and perform a complete fresh scan. This usually takes less than a minute.")
+		rescanLabel := widget.NewLabel(i18n.T("tela.rescan_prompt"))
 		rescanLabel.Wrapping = fyne.TextWrapWord
 
-		dlg := dialog.NewCustomWithoutButtons("TELA BROWSER", rescanLabel, session.Window)
+		dlg := dialog.NewCustomWithoutButtons(i18n.T("tela.browser_header"), rescanLabel, session.Window)
 
-		btnConfirm := widget.NewButtonWithIcon("Rescan", theme.ViewRefreshIcon(), func() {
+		btnConfirm := widget.NewButtonWithIcon(i18n.T("tela.rescan"), theme.ViewRefreshIcon(), func() {
 			dlg.Hide()
 			clearAllTELACache()
 			forceFreshScan = true
@@ -1213,7 +1215,7 @@ func layoutTELA() fyne.CanvasObject {
 
 			generation := currentWalletGeneration()
 
-			results.Text = "  Resetting Gnomon index..."
+			results.Text = i18n.T("tela.resetting_gnomon")
 			results.Color = colors.Yellow
 			uiDo(func() {
 				if !isWalletGenerationActive(generation) {
@@ -1247,7 +1249,7 @@ func layoutTELA() fyne.CanvasObject {
 			}()
 		})
 
-		btnCancel := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
+		btnCancel := widget.NewButtonWithIcon(i18n.T("common.cancel"), theme.CancelIcon(), func() {
 			dlg.Hide()
 		})
 
@@ -1281,7 +1283,7 @@ func layoutTELA() fyne.CanvasObject {
 		}
 	}
 
-	btnTela := widget.NewButtonWithIcon("Apps", resourceBrowserGlobeSvg, func() {
+	btnTela := widget.NewButtonWithIcon(i18n.T("tela.tab_apps"), resourceBrowserGlobeSvg, func() {
 		if wSelect.Selected == "Search" {
 			activateTelaSearch()
 			return
@@ -1290,14 +1292,14 @@ func layoutTELA() fyne.CanvasObject {
 	})
 	btnTela.Importance = widget.LowImportance
 
-	favoritesLabel := "Favorites"
+	favoritesLabel := i18n.T("tela.tab_favorites")
 
 	btnFavorites := widget.NewButtonWithIcon(favoritesLabel, resourceFavsPng, func() {
 		wSelect.SetSelected("Favorites")
 	})
 	btnFavorites.Importance = widget.LowImportance
 
-	btnHistory := widget.NewButtonWithIcon("History", theme.HistoryIcon(), func() {
+	btnHistory := widget.NewButtonWithIcon(i18n.T("tela.tab_history"), theme.HistoryIcon(), func() {
 		wSelect.SetSelected("History")
 	})
 	btnHistory.Importance = widget.LowImportance
@@ -1630,7 +1632,7 @@ func layoutTELA() fyne.CanvasObject {
 				searchData.Set(searching)
 				searchList.Refresh()
 				searchMu.RLock()
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 				searchMu.RUnlock()
 				results.Color = colors.Green
 				entrySearch.Enable()
@@ -2150,7 +2152,7 @@ func layoutTELA() fyne.CanvasObject {
 					searchData.Set(searching)
 					searchList.Refresh()
 					searchMu.RLock()
-					results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+					results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 					searchMu.RUnlock()
 					results.Color = colors.Green
 					entrySearch.Enable()
@@ -2399,7 +2401,7 @@ func layoutTELA() fyne.CanvasObject {
 							searchData.Set(searching)
 							searchList.Refresh()
 							searchMu.RLock()
-							results.Text = fmt.Sprintf("  TELA Apps:  %d (prefilter error)", len(telaSearch))
+							results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d (prefilter error)", len(telaSearch))
 							searchMu.RUnlock()
 							results.Color = colors.Yellow
 							results.Refresh()
@@ -2815,12 +2817,12 @@ func layoutTELA() fyne.CanvasObject {
 			results.Show()
 			if networkErrorDuringFetch {
 				searchMu.RLock()
-				results.Text = fmt.Sprintf("  TELA Apps:  %d (some apps may be missing - network error during fetch)", len(telaSearch))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d (some apps may be missing - network error during fetch)", len(telaSearch))
 				searchMu.RUnlock()
 				results.Color = colors.Yellow
 			} else {
 				searchMu.RLock()
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 				searchMu.RUnlock()
 				results.Color = colors.Green
 			}
@@ -3031,7 +3033,7 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 		resetTelaProgress()
-		showActiveTelaProgress("Connecting to Gnomon...", 0.02, true)
+		showActiveTelaProgress(i18n.T("tela.status_connecting_gnomon"), 0.02, true)
 		if refreshAppsList != nil {
 			refreshAppsList()
 		}
@@ -3164,7 +3166,7 @@ func layoutTELA() fyne.CanvasObject {
 			searchData.Set(searching)
 			searchList.Refresh()
 
-			results.Text = fmt.Sprintf("  TELA Apps:  %d", len(queryResult))
+			results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
 			results.Color = colors.Green
 			results.Refresh()
 			entrySearch.Enable()
@@ -3244,7 +3246,7 @@ func layoutTELA() fyne.CanvasObject {
 		searchData.Set(searching)
 		searchList.Refresh()
 
-		results.Text = fmt.Sprintf("  TELA Apps:  %d", len(queryResult))
+		results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
 		results.Color = colors.Green
 		results.Refresh()
 		entrySearch.Enable()
@@ -3322,7 +3324,7 @@ func layoutTELA() fyne.CanvasObject {
 				refreshAppsList()
 			}
 			if !isSearching && wSelect.Selected == "Search" && len(serversRunning) > 0 {
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
 				results.Color = colors.Green
 				results.Refresh()
 			}
@@ -3365,7 +3367,7 @@ func layoutTELA() fyne.CanvasObject {
 			searchData.Set(searching)
 			searchList.Refresh()
 			if !isSearching && wSelect.Selected == "Search" {
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
 				results.Color = colors.Green
 				results.Refresh()
 			}
@@ -3383,7 +3385,7 @@ func layoutTELA() fyne.CanvasObject {
 		case "Rescan Blockchain":
 			verificationOverlay(
 				false,
-				"TELA BROWSER",
+				i18n.T("tela.browser_header"),
 				"Rescan blockchain? This will clear cached results and rescan all TELA apps.",
 				"Confirm",
 				func(b bool) {
@@ -3410,7 +3412,7 @@ func layoutTELA() fyne.CanvasObject {
 		default:
 			verificationOverlay(
 				false,
-				"TELA BROWSER",
+				i18n.T("tela.browser_header"),
 				"Shutdown all active TELA servers?",
 				"Confirm",
 				func(b bool) {
@@ -3627,7 +3629,7 @@ func layoutTELA() fyne.CanvasObject {
 		history = queryResult
 		historyData.Set(history)
 
-		results.Text = fmt.Sprintf("  Search History:  %d", len(queryResult))
+		results.Text = fmt.Sprintf("  %s  %d", i18n.T("files.search_history"), len(queryResult))
 		results.Color = colors.Green
 		entryHistory.Enable()
 
@@ -3662,7 +3664,7 @@ func layoutTELA() fyne.CanvasObject {
 			if refreshAppsList != nil {
 				refreshAppsList()
 			} else {
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(searching))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
 				results.Color = colors.Green
 				results.Refresh()
 			}
@@ -3685,7 +3687,7 @@ func layoutTELA() fyne.CanvasObject {
 				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
 				_ = searchData.Set(searching)
 				searchList.Refresh()
-				results.Text = fmt.Sprintf("  TELA Apps:  %d", len(telaSearch))
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 				results.Color = colors.Green
 				results.Refresh()
 				maybeStartTelaWork(true)
@@ -3795,7 +3797,7 @@ func layoutTELA() fyne.CanvasObject {
 				linkPermission, err := AskPermissionForRequestE("Open TELA Link", telaLink)
 				if err != nil {
 					logger.Errorf("[Engram] Open TELA link: %s\n", err)
-					errorText.Text = "error could not open TELA"
+					errorText.Text = i18n.T("tela.error_cannot_open")
 					errorText.Color = colors.Red
 
 					fyne.Do(func() {
@@ -3853,7 +3855,7 @@ func layoutTELA() fyne.CanvasObject {
 						url, err := url.Parse(link)
 						if err != nil {
 							logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-							errorText.Text = "error could parse URL"
+							errorText.Text = i18n.T("tela.error_parse_url")
 							errorText.Color = colors.Red
 
 							fyne.Do(func() {
@@ -3890,10 +3892,10 @@ func layoutTELA() fyne.CanvasObject {
 
 						// Create a TELALink to parse and get its ratings for user to verifiy before serving updated content
 						telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", s)}
-						linkPermission, err := AskPermissionForRequestE("Allow Updated Content", telaLink)
+						linkPermission, err := AskPermissionForRequestE(i18n.T("tela.allow_updated_content"), telaLink)
 						if err != nil {
 							logger.Errorf("[Engram] Open TELA link: %s\n", err)
-							errorText.Text = "error could not open TELA"
+							errorText.Text = i18n.T("tela.error_cannot_open")
 							errorText.Color = colors.Red
 
 							fyne.Do(func() {
@@ -3913,7 +3915,7 @@ func layoutTELA() fyne.CanvasObject {
 								url, err := url.Parse(link)
 								if err != nil {
 									logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-									errorText.Text = "error could parse URL"
+									errorText.Text = i18n.T("tela.error_parse_url")
 									errorText.Color = colors.Red
 
 									fyne.Do(func() {
@@ -4223,7 +4225,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		}})
 	labelDesc.Wrapping = fyne.TextWrapWord
 
-	labelDURL := canvas.NewText("DURL", colors.Gray)
+	labelDURL := canvas.NewText(i18n.T("tela.durl"), colors.Gray)
 	labelDURL.TextSize = scaleFont(14)
 	labelDURL.Alignment = fyne.TextAlignCenter
 	labelDURL.TextStyle = fyne.TextStyle{Bold: true}
@@ -4231,7 +4233,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	textDURL := widget.NewRichTextFromMarkdown(index.DURL)
 	textDURL.Wrapping = fyne.TextWrapWord
 
-	labelSCID := canvas.NewText("SMART  CONTRACT  ID", colors.Gray)
+	labelSCID := canvas.NewText(i18n.T("assets.scid"), colors.Gray)
 	labelSCID.TextSize = scaleFont(14)
 	labelSCID.Alignment = fyne.TextAlignCenter
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
@@ -4253,7 +4255,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		a.Clipboard().SetContent(index.SCID)
 	})
 
-	labelAuthor := canvas.NewText("SMART  CONTRACT  AUTHOR", colors.Gray)
+	labelAuthor := canvas.NewText(i18n.T("assets.author"), colors.Gray)
 	labelAuthor.TextSize = scaleFont(14)
 	labelAuthor.Alignment = fyne.TextAlignCenter
 	labelAuthor.TextStyle = fyne.TextStyle{Bold: true}
@@ -4280,12 +4282,12 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		a.Clipboard().SetContent(index.Author)
 	})
 
-	labelStatus := canvas.NewText("APPLICATION  STATUS", colors.Gray)
+	labelStatus := canvas.NewText(i18n.T("tela.app_status"), colors.Gray)
 	labelStatus.TextSize = scaleFont(14)
 	labelStatus.Alignment = fyne.TextAlignCenter
 	labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 
-	textStatus := canvas.NewText("Offline", colors.Gray)
+	textStatus := canvas.NewText(i18n.T("tela.status_offline"), colors.Gray)
 	textStatus.TextSize = scaleFont(22)
 	textStatus.Alignment = fyne.TextAlignCenter
 	textStatus.TextStyle = fyne.TextStyle{Bold: true}
@@ -4380,7 +4382,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	spacerStatus := canvas.NewRectangle(color.Transparent)
 	spacerStatus.SetMinSize(fyne.NewSize(0, 34))
 
-	linkOpenInBrowser := widget.NewHyperlinkWithStyle("Open in Browser", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkOpenInBrowser := widget.NewHyperlinkWithStyle(i18n.T("tela.open_browser"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkOpenInBrowser.Hide()
 	linkOpenInBrowser.OnTapped = func() {
 		params := fmt.Sprintf("tela://open/%s", index.SCID)
@@ -4400,7 +4402,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 		if err != nil {
 			logger.Errorf("[Engram] handling TELA link: %s\n", err)
-			errorText.Text = "error handling TELA link"
+			errorText.Text = i18n.T("tela.error_tela_link")
 			errorText.Color = colors.Red
 			errorText.Refresh()
 			return
@@ -4410,7 +4412,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			url, err := url.Parse(link)
 			if err != nil {
 				logger.Errorf("[Engram] TELA URL parse: %s\n", err)
-				errorText.Text = "error could parse URL"
+				errorText.Text = i18n.T("tela.error_parse_url")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 			} else {
@@ -4436,7 +4438,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		}
 	}
 
-	btnServer := widget.NewButton("Start Application", nil)
+	btnServer := widget.NewButtonWithIcon(i18n.T("tela.start_app"), theme.MediaPlayIcon(), nil)
 
 	// Check if app is actually running via both SCID and DURL
 	appActuallyRunning := false
@@ -4479,9 +4481,9 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	if isLaunchingGlobal {
 		launchProgress.Show()
 		if isStoppingGlobal {
-			launchStatus.Text = "Stopping..."
+			launchStatus.Text = i18n.T("tela.status_stopping")
 		} else {
-			launchStatus.Text = "Starting TELA app..."
+			launchStatus.Text = i18n.T("tela.status_starting_app")
 		}
 		launchStatus.Show()
 		btnServer.Text = "Cancel"
@@ -4521,16 +4523,16 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 						isStopping := telaStoppingSCIDsGlobal.m[index.SCID]
 						telaStoppingSCIDsGlobal.Unlock()
 						if isStopping {
-							launchStatus.Text = "Stopping..."
+							launchStatus.Text = i18n.T("tela.status_stopping")
 						} else {
 							if val < 0.30 {
-								launchStatus.Text = "Connecting to node..."
+								launchStatus.Text = i18n.T("tela.status_connecting_node")
 							} else if val < 0.60 {
-								launchStatus.Text = "Fetching content..."
+								launchStatus.Text = i18n.T("tela.status_fetching")
 							} else if val < 0.85 {
-								launchStatus.Text = "Preparing app..."
+								launchStatus.Text = i18n.T("tela.status_preparing")
 							} else {
-								launchStatus.Text = "Almost ready..."
+								launchStatus.Text = i18n.T("tela.status_almost_ready")
 							}
 						}
 					}
@@ -4540,10 +4542,10 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 			uiDo(func() {
 				if tela.HasServer(index.DURL) {
-					textStatus.Text = "Running"
+					textStatus.Text = i18n.T("tela.status_running")
 					textStatus.Color = colors.Green
 					textStatus.Refresh()
-					btnServer.Text = "Shutdown Application"
+					btnServer.Text = i18n.T("tela.shutdown_app")
 					btnServer.SetIcon(theme.MediaStopIcon())
 					btnServer.Refresh()
 					launchProgress.Hide()
@@ -4560,7 +4562,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 						launchStatus.Refresh()
 					}
 					if btnServer != nil {
-						btnServer.Text = "Start Application"
+						btnServer.Text = i18n.T("tela.start_app")
 						btnServer.SetIcon(theme.MediaPlayIcon())
 						btnServer.Refresh()
 					}
@@ -4568,10 +4570,10 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			})
 		}()
 	} else if tela.HasServer(index.DURL) {
-		textStatus.Text = "Running"
+		textStatus.Text = i18n.T("tela.status_running")
 		textStatus.Color = colors.Green
 		textStatus.Refresh()
-		btnServer.Text = "Shutdown Application"
+		btnServer.Text = i18n.T("tela.shutdown_app")
 		btnServer.Refresh()
 		linkOpenInBrowser.Show()
 	}
@@ -4593,19 +4595,19 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			}
 			telaLaunchCancelChansGlobal.Unlock()
 			if launchStatus != nil {
-				launchStatus.Text = "Stopping..."
+				launchStatus.Text = i18n.T("tela.status_stopping")
 				launchStatus.Refresh()
 			}
 			btnServer.SetIcon(theme.ContentCutIcon())
 			btnServer.Refresh()
-		} else if btnServer.Text == "Shutdown Application" {
+		} else if btnServer.Text == i18n.T("tela.shutdown_app") {
 			tela.ShutdownServer(index.DURL)
 			errorText.Text = ""
 			errorText.Refresh()
-			textStatus.Text = "Offline"
+			textStatus.Text = i18n.T("tela.status_offline")
 			textStatus.Color = colors.Gray
 			textStatus.Refresh()
-			btnServer.Text = "Start Application"
+			btnServer.Text = i18n.T("tela.start_app")
 			btnServer.Refresh()
 			linkOpenInBrowser.Hide()
 			if callback != nil {
@@ -4631,7 +4633,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 			launchProgress.Show()
 			launchProgress.SetValue(0)
-			launchStatus.Text = "Starting TELA app..."
+			launchStatus.Text = i18n.T("tela.status_starting_app")
 			launchStatus.Show()
 			btnServer.SetText("Cancel")
 			btnServer.SetIcon(theme.CancelIcon())
@@ -4667,16 +4669,16 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 								isStopping := telaStoppingSCIDsGlobal.m[index.SCID]
 								telaStoppingSCIDsGlobal.Unlock()
 								if isStopping {
-									launchStatus.Text = "Stopping..."
+									launchStatus.Text = i18n.T("tela.status_stopping")
 								} else {
 									if val < 0.30 {
-										launchStatus.Text = "Connecting to node..."
+										launchStatus.Text = i18n.T("tela.status_connecting_node")
 									} else if val < 0.60 {
-										launchStatus.Text = "Fetching content..."
+										launchStatus.Text = i18n.T("tela.status_fetching")
 									} else if val < 0.85 {
-										launchStatus.Text = "Preparing app..."
+										launchStatus.Text = i18n.T("tela.status_preparing")
 									} else {
-										launchStatus.Text = "Almost ready..."
+										launchStatus.Text = i18n.T("tela.status_almost_ready")
 									}
 								}
 							}
@@ -4732,7 +4734,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 							}
 
 							if failed || cancelledLaunch {
-								btnServer.Text = "Start Application"
+								btnServer.Text = i18n.T("tela.start_app")
 								btnServer.SetIcon(theme.MediaPlayIcon())
 								btnServer.Refresh()
 							}
@@ -4786,10 +4788,10 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 					go openURLAfterDelay(link)
 
 					uiDo(func() {
-						textStatus.Text = "   Running"
+						textStatus.Text = "   " + i18n.T("tela.status_running")
 						textStatus.Color = colors.Green
 						textStatus.Refresh()
-						btnServer.Text = "Shutdown Application"
+						btnServer.Text = i18n.T("tela.shutdown_app")
 						btnServer.SetIcon(theme.MediaStopIcon())
 						btnServer.Refresh()
 						linkOpenInBrowser.Show()
@@ -4810,11 +4812,11 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 							}
 
 							telaLink := TELALink_Params{TelaLink: fmt.Sprintf("tela://open/%s", index.SCID)}
-							linkPermission, permErr := AskPermissionForRequestE("Allow Updated Content", telaLink)
+							linkPermission, permErr := AskPermissionForRequestE(i18n.T("tela.allow_updated_content"), telaLink)
 							if permErr != nil {
 								logger.Errorf("[Engram] Open TELA link: %s\n", permErr)
 								uiDo(func() {
-									errorText.Text = "error could not open TELA"
+									errorText.Text = i18n.T("tela.error_cannot_open")
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								})
@@ -4843,7 +4845,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 								parsedURL, parseErr := url.Parse(servedLink)
 								if parseErr != nil {
 									logger.Errorf("[Engram] TELA URL parse: %s\n", parseErr)
-									errorText.Text = "error could parse URL"
+									errorText.Text = i18n.T("tela.error_parse_url")
 									errorText.Color = colors.Red
 									errorText.Refresh()
 								} else {
@@ -4869,10 +4871,10 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 							}
 
 							uiDo(func() {
-								textStatus.Text = "   Running"
+								textStatus.Text = "   " + i18n.T("tela.status_running")
 								textStatus.Color = colors.Green
 								textStatus.Refresh()
-								btnServer.Text = "Shutdown Application"
+								btnServer.Text = i18n.T("tela.shutdown_app")
 								btnServer.SetIcon(theme.MediaStopIcon())
 								btnServer.Refresh()
 								linkOpenInBrowser.Show()
@@ -4936,7 +4938,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		}
 	}()
 
-	linkTelaRatings := widget.NewHyperlinkWithStyle("View All Ratings", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkTelaRatings := widget.NewHyperlinkWithStyle(i18n.T("tela.view_ratings"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	linkTelaRatings.OnTapped = func() {
 		showLoadingOverlay()
 		go func() {
@@ -4966,7 +4968,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 	btnFavorite = widget.NewButtonWithIcon("", btnFavoriteIcon, func() {
 		if engram.Disk == nil {
-			errorText.Text = "No wallet connected"
+			errorText.Text = i18n.T("tela.no_wallet")
 			errorText.Color = colors.Red
 			errorText.Refresh()
 			return
@@ -4977,24 +4979,24 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		if IsTELAFavorite(walletAddress, index.SCID) {
 			err := RemoveTELAFavorite(walletAddress, index.SCID)
 			if err != nil {
-				errorText.Text = "Error removing favorite"
+				errorText.Text = i18n.T("tela.error_rm_favorite")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
 			}
 			btnFavorite.SetIcon(resourceHeartOutlineSvg)
-			errorText.Text = "Removed from favorites"
+			errorText.Text = i18n.T("tela.removed_favorites")
 			errorText.Color = colors.Green
 		} else {
 			err := AddTELAFavorite(walletAddress, index.SCID, index.NameHdr, index.DescrHdr, index.IconHdr, ratings.Average)
 			if err != nil {
-				errorText.Text = "Error adding favorite"
+				errorText.Text = i18n.T("tela.error_add_favorite")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
 			}
 			btnFavorite.SetIcon(resourceFavsPng)
-			errorText.Text = "Added to favorites"
+			errorText.Text = i18n.T("tela.added_favorites")
 			errorText.Color = colors.Green
 		}
 		errorText.Refresh()
@@ -5088,7 +5090,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 						container.NewCenter(
 							container.NewStack(
 								rectWidth90,
-								wrapMobileButton(widget.NewButton("Rate", func() {
+								wrapMobileButton(widget.NewButton(i18n.T("tela.rate"), func() {
 									rateTELAOverlay(index.NameHdr, index.SCID)
 								})),
 							),
@@ -5194,24 +5196,24 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 
 		currentButtonText := btnServer.Text
 
-		if appRunningNow && currentButtonText != "Shutdown Application" {
+		if appRunningNow && currentButtonText != i18n.T("tela.shutdown_app") {
 			uiDo(func() {
 				launchProgress.Hide()
 				launchStatus.Hide()
-				textStatus.Text = "Running"
+				textStatus.Text = i18n.T("tela.status_running")
 				textStatus.Color = colors.Green
 				textStatus.Refresh()
-				btnServer.Text = "Shutdown Application"
+				btnServer.Text = i18n.T("tela.shutdown_app")
 				btnServer.SetIcon(theme.MediaStopIcon())
 				btnServer.Refresh()
 				linkOpenInBrowser.Show()
 			})
-		} else if !appRunningNow && currentButtonText == "Shutdown Application" {
+		} else if !appRunningNow && currentButtonText == i18n.T("tela.shutdown_app") {
 			uiDo(func() {
-				textStatus.Text = "Offline"
+				textStatus.Text = i18n.T("tela.status_offline")
 				textStatus.Color = colors.Gray
 				textStatus.Refresh()
-				btnServer.Text = "Start Application"
+				btnServer.Text = i18n.T("tela.start_app")
 				btnServer.SetIcon(theme.MediaPlayIcon())
 				btnServer.Refresh()
 				linkOpenInBrowser.Hide()
@@ -5222,7 +5224,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	vScroll := NewVScroll(layout)
 	cachedTelaManagerContent = vScroll
 
-	if shouldLaunch && btnServer.Text == "Start Application" {
+	if shouldLaunch && btnServer.Text == i18n.T("tela.start_app") {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			fyne.Do(btnServer.OnTapped)

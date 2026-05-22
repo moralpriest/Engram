@@ -28,6 +28,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
@@ -35,11 +36,11 @@ import (
 
 func layoutIdentity() fyne.CanvasObject {
 	session.Domain = "app.Identity"
-	title := canvas.NewText("I D E N T I T Y", colors.Gray)
+	title := canvas.NewText(i18n.T("identity.page_title"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
-	heading := canvas.NewText("My Contacts", colors.Green)
+	heading := canvas.NewText(i18n.T("identity.my_contacts"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -73,7 +74,7 @@ func layoutIdentity() fyne.CanvasObject {
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.44))
 
-	shortShard := canvas.NewText("PRIMARY  USERNAME", colors.Gray)
+	shortShard := canvas.NewText(i18n.T("identity.primary_username"), colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
@@ -100,22 +101,22 @@ func layoutIdentity() fyne.CanvasObject {
 
 	userList := binding.BindStringList(&userData)
 
-	btnReg := widget.NewButton(" Register ", nil)
+	btnReg := widget.NewButton(i18n.T("identity.register_btn"), nil)
 	btnReg.Disable()
 	btnReg.OnTapped = func() {
 		if len(session.NewUser) > 5 {
 			valid, _ := checkUsername(session.NewUser, -1)
 			if valid == "" {
-				btnReg.Text = "Confirming..."
+				btnReg.Text = i18n.T("identity.confirming")
 				btnReg.Disable()
 				btnReg.Refresh()
 				entryReg.Disable()
 				storage, err := registerUsername(session.NewUser)
 				if err != nil {
 					if strings.Contains(err.Error(), "somehow the tx could not be built") {
-						btnReg.Text = fmt.Sprintf("Insufficient Balance: Need %v", globals.FormatMoney(storage))
+						btnReg.Text = fmt.Sprintf(i18n.T("identity.insufficient_balance_fmt"), globals.FormatMoney(storage))
 					} else {
-						btnReg.Text = "Unable to register..."
+						btnReg.Text = i18n.T("identity.err_unable_register")
 					}
 					btnReg.Refresh()
 					logger.Errorf("[Username] %s\n", err)
@@ -148,7 +149,7 @@ func layoutIdentity() fyne.CanvasObject {
 										if !isWalletGenerationActive(generation) {
 											return
 										}
-										btnReg.Text = "Error querying usernames"
+										btnReg.Text = i18n.T("identity.err_querying_usernames")
 										btnReg.Refresh()
 									})
 
@@ -164,7 +165,7 @@ func layoutIdentity() fyne.CanvasObject {
 											if !isWalletGenerationActive(generation) {
 												return
 											}
-											btnReg.Text = "Registration successful!"
+											btnReg.Text = i18n.T("identity.reg_successful")
 											btnReg.Refresh()
 											session.NewUser = ""
 											session.Window.SetContent(layoutIdentity())
@@ -180,7 +181,7 @@ func layoutIdentity() fyne.CanvasObject {
 										if !isWalletGenerationActive(generation) {
 											return
 										}
-										btnReg.Text = "Unable to register..."
+										btnReg.Text = i18n.T("identity.err_unable_register")
 										btnReg.Refresh()
 									})
 
@@ -193,7 +194,7 @@ func layoutIdentity() fyne.CanvasObject {
 										if !isWalletGenerationActive(generation) {
 											return
 										}
-										btnReg.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+										btnReg.Text = fmt.Sprintf(i18n.T("identity.confirming_progress_fmt"), walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 										btnReg.Refresh()
 									})
 								}
@@ -209,9 +210,9 @@ func layoutIdentity() fyne.CanvasObject {
 		}
 	}
 
-	entryReg.PlaceHolder = "New Username"
+	entryReg.PlaceHolder = i18n.T("identity.new_username_ph")
 	entryReg.Validator = func(s string) error {
-		btnReg.Text = " Register "
+		btnReg.Text = i18n.T("identity.register_btn")
 		btnReg.Enable()
 		btnReg.Refresh()
 		session.NewUser = s
@@ -225,14 +226,14 @@ func layoutIdentity() fyne.CanvasObject {
 				btnReg.Refresh()
 			} else {
 				btnReg.Disable()
-				err := errors.New("username already exists")
+				err := errors.New(i18n.T("identity.err_username_exists"))
 				entryReg.SetValidationError(err)
 				btnReg.Refresh()
 				return err
 			}
 		} else {
 			btnReg.Disable()
-			err := errors.New("username too short need a minimum of six characters")
+			err := errors.New(i18n.T("identity.err_username_too_short"))
 			entryReg.SetValidationError(err)
 			btnReg.Refresh()
 			return err
@@ -397,7 +398,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText("C O N T A C T    I N F O", colors.Gray)
+	heading := canvas.NewText(i18n.T("identity.contact_info"), colors.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -423,12 +424,12 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	rectSpacerCompact := canvas.NewRectangle(color.Transparent)
 	rectSpacerCompact.SetMinSize(compactSpacerSize())
 
-	labelUsername := canvas.NewText("REGISTERED  USERNAME", colors.Gray)
+	labelUsername := canvas.NewText(i18n.T("identity.registered_username"), colors.Gray)
 	labelUsername.TextSize = scaleFont(11)
 	labelUsername.Alignment = fyne.TextAlignCenter
 	labelUsername.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelTransfer := canvas.NewText("  T R A N S F E R  ", colors.Gray)
+	labelTransfer := canvas.NewText(i18n.T("identity.transfer"), colors.Gray)
 	labelTransfer.TextSize = scaleFont(11)
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
@@ -462,7 +463,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	valueUsername.TextStyle = fyne.TextStyle{Bold: true}
 	valueUsername.Alignment = fyne.TextAlignCenter
 
-	btnSetPrimary := widget.NewButton("Set Primary Username", nil)
+	btnSetPrimary := widget.NewButton(i18n.T("identity.set_primary_btn"), nil)
 	btnSetPrimary.OnTapped = func() {
 		setPrimaryUsername(username)
 		session.Username = username
@@ -470,12 +471,12 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	btnSend := widget.NewButton("Transfer Username", nil)
+	btnSend := widget.NewButton(i18n.T("identity.transfer_btn"), nil)
 
 	inputAddress := widget.NewEntry()
-	inputAddress.PlaceHolder = "Receiver Username or Address"
+	inputAddress.PlaceHolder = i18n.T("identity.receiver_ph")
 	inputAddress.Validator = func(s string) error {
-		btnSend.Text = "Transfer Username"
+		btnSend.Text = i18n.T("identity.transfer_btn")
 		btnSend.Enable()
 		btnSend.Refresh()
 		address, _ = checkUsername(s, -1)
@@ -484,7 +485,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 			if err != nil {
 				btnSend.Disable()
 				btnSend.Refresh()
-				err := errors.New("address does not exist")
+				err := errors.New(i18n.T("identity.err_address_not_exist"))
 				inputAddress.SetValidationError(err)
 				inputAddress.Refresh()
 				return err
@@ -503,7 +504,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 	btnSend.OnTapped = func() {
 		if address != "" && address != engram.Disk.GetAddress().String() {
-			btnSend.Text = "Setting up transfer..."
+			btnSend.Text = i18n.T("identity.setting_up_transfer")
 			btnSend.Disable()
 			btnSend.Refresh()
 			inputAddress.Disable()
@@ -513,9 +514,9 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 			if err != nil {
 				address = ""
 				if strings.Contains(err.Error(), "somehow the tx could not be built") {
-					btnSend.Text = fmt.Sprintf("Insufficient Balance: Need %v", globals.FormatMoney(storage))
+					btnSend.Text = fmt.Sprintf(i18n.T("identity.insufficient_balance_fmt"), globals.FormatMoney(storage))
 				} else {
-					btnSend.Text = "Transfer failed..."
+					btnSend.Text = i18n.T("identity.err_transfer_failed")
 				}
 				btnSend.Disable()
 				btnSend.Refresh()
@@ -523,7 +524,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 				inputAddress.Refresh()
 				btnSetPrimary.Enable()
 			} else {
-				btnSend.Text = "Confirming..."
+				btnSend.Text = i18n.T("identity.confirming")
 				btnSend.Refresh()
 				go func() {
 					generation := currentWalletGeneration()
@@ -579,7 +580,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 									if !isWalletGenerationActive(generation) {
 										return
 									}
-									btnSend.Text = "Unable to transfer..."
+									btnSend.Text = i18n.T("identity.err_unable_transfer")
 									btnSend.Refresh()
 									btnSetPrimary.Enable()
 								})
@@ -593,7 +594,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 									if !isWalletGenerationActive(generation) {
 										return
 									}
-									btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+									btnSend.Text = fmt.Sprintf(i18n.T("identity.confirming_progress_fmt"), walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 									btnSend.Refresh()
 								})
 							}

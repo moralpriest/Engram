@@ -29,6 +29,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela/logger"
 	qrcode "github.com/skip2/go-qrcode"
 )
@@ -43,7 +44,7 @@ func layoutAccount() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
-	title := canvas.NewText("M Y   A C C O U N T", colors.Gray)
+	title := canvas.NewText(i18n.T("account.heading"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -95,7 +96,7 @@ func layoutAccount() fyne.CanvasObject {
 		addressToggleBtn.SetIcon(theme.VisibilityIcon())
 	}
 
-	labelPassword := canvas.NewText("N E W    P A S S W O R D", colors.Gray)
+	labelPassword := canvas.NewText(i18n.T("account.new_password"), colors.Gray)
 	labelPassword.TextStyle = fyne.TextStyle{Bold: true}
 	labelPassword.TextSize = scaleFont(11)
 	labelPassword.Alignment = fyne.TextAlignCenter
@@ -107,7 +108,7 @@ func layoutAccount() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	linkIdentity := widget.NewHyperlinkWithStyle("Identity Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkIdentity := widget.NewHyperlinkWithStyle(i18n.T("account.identity"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkIdentity.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -115,7 +116,7 @@ func layoutAccount() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	linkServiceAddress := widget.NewHyperlinkWithStyle("Payment Request", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkServiceAddress := widget.NewHyperlinkWithStyle(i18n.T("account.payment_request"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkServiceAddress.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -123,14 +124,14 @@ func layoutAccount() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	btnIdentity := newSmallIconButton("Identity", theme.AccountIcon(), func() {
+	btnIdentity := newSmallIconButton(i18n.T("account.identity_btn"), theme.AccountIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutIdentity())
 		removeOverlays()
 	})
 
-	btnPayment := newSmallIconButton("Payment", theme.ComputerIcon(), func() {
+	btnPayment := newSmallIconButton(i18n.T("account.payment_btn"), theme.ComputerIcon(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutServiceAddress())
@@ -150,18 +151,18 @@ func layoutAccount() fyne.CanvasObject {
 	errorText.Alignment = fyne.TextAlignCenter
 
 	// Recovery Words Link
-	linkRecoveryWords := widget.NewHyperlinkWithStyle("Recovery Words", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRecoveryWords := widget.NewHyperlinkWithStyle(i18n.T("account.recovery_words"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkRecoveryWords.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
+		header := canvas.NewText(i18n.T("account.verification"), colors.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Confirm Password", colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.confirm_password"), colors.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -173,19 +174,19 @@ func layoutAccount() fyne.CanvasObject {
 			overlay.Remove(overlay.Top())
 		})
 
-		btnConfirm := widget.NewButton("Submit", nil)
+		btnConfirm := widget.NewButton(i18n.T("account.submit"), nil)
 		btnConfirm.Disable()
 
 		entryPassword := NewReturnEntry()
 		entryPassword.Password = true
-		entryPassword.PlaceHolder = "Password"
+		entryPassword.PlaceHolder = i18n.T("account.password")
 		entryPassword.OnChanged = func(s string) {
 			if s == "" {
-				btnConfirm.Text = "Submit"
+				btnConfirm.Text = i18n.T("account.submit")
 				btnConfirm.Disable()
 				btnConfirm.Refresh()
 			} else {
-				btnConfirm.Text = "Submit"
+				btnConfirm.Text = i18n.T("account.submit")
 				btnConfirm.Enable()
 				btnConfirm.Refresh()
 			}
@@ -201,7 +202,7 @@ func layoutAccount() fyne.CanvasObject {
 				)
 				overlay.Add(layoutRecovery())
 			} else {
-				btnConfirm.Text = "Invalid Password..."
+				btnConfirm.Text = i18n.T("account.invalid_password")
 				btnConfirm.Disable()
 				btnConfirm.Refresh()
 			}
@@ -270,18 +271,18 @@ func layoutAccount() fyne.CanvasObject {
 	}
 
 	// Recovery Hex Keys Link
-	linkRecoveryHex := widget.NewHyperlinkWithStyle("Recovery Hex Keys", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRecoveryHex := widget.NewHyperlinkWithStyle(i18n.T("account.recovery_hex"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkRecoveryHex.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText("ACCOUNT  VERIFICATION  REQUIRED", colors.Gray)
+		header := canvas.NewText(i18n.T("account.verification"), colors.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Confirm Password", colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.confirm_password"), colors.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -293,19 +294,19 @@ func layoutAccount() fyne.CanvasObject {
 			overlay.Remove(overlay.Top())
 		})
 
-		btnConfirm := widget.NewButton("Submit", nil)
+		btnConfirm := widget.NewButton(i18n.T("account.submit"), nil)
 		btnConfirm.Disable()
 
 		entryPassword := NewReturnEntry()
 		entryPassword.Password = true
-		entryPassword.PlaceHolder = "Password"
+		entryPassword.PlaceHolder = i18n.T("account.password")
 		entryPassword.OnChanged = func(s string) {
 			if s == "" {
-				btnConfirm.Text = "Submit"
+				btnConfirm.Text = i18n.T("account.submit")
 				btnConfirm.Disable()
 				btnConfirm.Refresh()
 			} else {
-				btnConfirm.Text = "Submit"
+				btnConfirm.Text = i18n.T("account.submit")
 				btnConfirm.Enable()
 				btnConfirm.Refresh()
 			}
@@ -321,7 +322,7 @@ func layoutAccount() fyne.CanvasObject {
 				)
 				overlay.Add(layoutRecoveryHex())
 			} else {
-				btnConfirm.Text = "Invalid Password..."
+				btnConfirm.Text = i18n.T("account.invalid_password")
 				btnConfirm.Disable()
 				btnConfirm.Refresh()
 			}
@@ -390,18 +391,18 @@ func layoutAccount() fyne.CanvasObject {
 	}
 
 	// Change Password Link
-	linkChangePassword := widget.NewHyperlinkWithStyle("Change Password", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkChangePassword := widget.NewHyperlinkWithStyle(i18n.T("account.change_password"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkChangePassword.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText("ACCOUNT  AUTHORIZATION  REQUEST", colors.Gray)
+		header := canvas.NewText(i18n.T("account.authorization"), colors.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Change Password", colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.change_password"), colors.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -413,32 +414,32 @@ func layoutAccount() fyne.CanvasObject {
 			overlay.Remove(overlay.Top())
 		})
 
-		btnChange := widget.NewButton("Submit", nil)
+		btnChange := widget.NewButton(i18n.T("account.submit"), nil)
 		btnChange.Disable()
 
 		curPass := widget.NewEntry()
 		curPass.Password = true
-		curPass.PlaceHolder = "Current Password"
+		curPass.PlaceHolder = i18n.T("account.current_password")
 		curPass.OnChanged = func(s string) {
-			btnChange.Text = "Submit"
+			btnChange.Text = i18n.T("account.submit")
 			btnChange.Enable()
 			btnChange.Refresh()
 		}
 
 		newPass := widget.NewEntry()
 		newPass.Password = true
-		newPass.PlaceHolder = "New Password"
+		newPass.PlaceHolder = i18n.T("account.new_password_ph")
 		newPass.OnChanged = func(s string) {
-			btnChange.Text = "Submit"
+			btnChange.Text = i18n.T("account.submit")
 			btnChange.Enable()
 			btnChange.Refresh()
 		}
 
 		confirm := widget.NewEntry()
 		confirm.Password = true
-		confirm.PlaceHolder = "Confirm Password"
+		confirm.PlaceHolder = i18n.T("account.confirm_ph")
 		confirm.OnChanged = func(s string) {
-			btnChange.Text = "Submit"
+			btnChange.Text = i18n.T("account.submit")
 			btnChange.Enable()
 			btnChange.Refresh()
 		}
@@ -448,7 +449,7 @@ func layoutAccount() fyne.CanvasObject {
 				if newPass.Text == confirm.Text && newPass.Text != "" {
 					err := engram.Disk.Set_Encrypted_Wallet_Password(newPass.Text)
 					if err != nil {
-						btnChange.Text = "Error changing password"
+						btnChange.Text = i18n.T("account.error_change")
 						btnChange.Disable()
 						btnChange.Refresh()
 					} else {
@@ -458,7 +459,7 @@ func layoutAccount() fyne.CanvasObject {
 						newPass.Refresh()
 						confirm.Text = ""
 						confirm.Refresh()
-						btnChange.Text = "Password Updated"
+						btnChange.Text = i18n.T("account.password_updated")
 						btnChange.Disable()
 						btnChange.Refresh()
 						if err := engram.Disk.Save_Wallet(); err != nil {
@@ -466,12 +467,12 @@ func layoutAccount() fyne.CanvasObject {
 						}
 					}
 				} else {
-					btnChange.Text = "Passwords do not match"
+					btnChange.Text = i18n.T("account.passwords_no_match")
 					btnChange.Disable()
 					btnChange.Refresh()
 				}
 			} else {
-				btnChange.Text = "Incorrect password entered"
+				btnChange.Text = i18n.T("account.incorrect_password")
 				btnChange.Disable()
 				btnChange.Refresh()
 			}
@@ -542,7 +543,7 @@ func layoutAccount() fyne.CanvasObject {
 	}
 
 	// Export Wallet Link
-	linkExportWallet := widget.NewHyperlinkWithStyle("Export Wallet", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkExportWallet := widget.NewHyperlinkWithStyle(i18n.T("account.export_wallet"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkExportWallet.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
@@ -736,12 +737,12 @@ func layoutRecovery() fyne.CanvasObject {
 		wSpacer,
 	)
 
-	body := widget.NewLabel("Please save the following 25 recovery words in a safe place. Never share them with anyone.")
+	body := widget.NewLabel(i18n.T("account.save_words"))
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnCopySeed := widget.NewButton("Copy Recovery Words", nil)
+	btnCopySeed := widget.NewButton(i18n.T("account.copy_words"), nil)
 
 	form := container.NewVBox(
 		container.NewHBox(
@@ -856,7 +857,7 @@ func layoutRecoveryHex() fyne.CanvasObject {
 		wSpacer,
 	)
 
-	body := widget.NewLabel("Please save the following hex secret key in a safe place. Never share your secret key with anyone.")
+	body := widget.NewLabel(i18n.T("account.save_hex"))
 	body.Wrapping = fyne.TextWrapWord
 	body.Alignment = fyne.TextAlignCenter
 	body.TextStyle = fyne.TextStyle{Bold: true}
@@ -903,19 +904,19 @@ func layoutRecoveryHex() fyne.CanvasObject {
 	textSecret := widget.NewRichTextFromMarkdown(secret)
 	textSecret.Wrapping = fyne.TextWrapWord
 
-	linkCopySecret := widget.NewHyperlinkWithStyle("Copy Secret Key", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkCopySecret := widget.NewHyperlinkWithStyle(i18n.T("account.copy_secret"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	textPublic := widget.NewRichTextFromMarkdown(public)
 	textPublic.Wrapping = fyne.TextWrapWord
 
-	linkCopyPublic := widget.NewHyperlinkWithStyle("Copy Public Key", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	linkCopyPublic := widget.NewHyperlinkWithStyle(i18n.T("account.copy_public"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
-	labelSecret := canvas.NewText("   SECRET  KEY", colors.Gray)
+	labelSecret := canvas.NewText(i18n.T("account.secret_key"), colors.Gray)
 	labelSecret.TextSize = scaleFont(14)
 	labelSecret.Alignment = fyne.TextAlignLeading
 	labelSecret.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelPublic := canvas.NewText("   PUBLIC  KEY", colors.Gray)
+	labelPublic := canvas.NewText(i18n.T("account.public_key"), colors.Gray)
 	labelPublic.TextSize = scaleFont(14)
 	labelPublic.Alignment = fyne.TextAlignLeading
 	labelPublic.TextStyle = fyne.TextStyle{Bold: true}

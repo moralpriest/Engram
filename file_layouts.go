@@ -24,6 +24,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/DEROFDN/engram/i18n"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -54,12 +56,12 @@ func layoutFileManager() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	heading := canvas.NewText("F I L E    M A N A G E R", colors.Gray)
+	heading := canvas.NewText(i18n.T("files.heading"), colors.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelResults := canvas.NewText("   RESULTS", colors.Gray)
+	labelResults := canvas.NewText("   "+i18n.T("files.results"), colors.Gray)
 	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
@@ -200,7 +202,7 @@ func layoutFileManager() fyne.CanvasObject {
 						signedList.Refresh()
 
 						signedLen := len(signedResults)
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+						labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), signedLen, signedLen)
 						labelResults.Refresh()
 					})
 
@@ -268,7 +270,7 @@ func layoutFileManager() fyne.CanvasObject {
 			verifiedList.Refresh()
 
 			verifiedLen := len(verifiedResults)
-			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 			labelResults.Refresh()
 		}
 	}, session.Window)
@@ -304,29 +306,29 @@ func layoutFileManager() fyne.CanvasObject {
 			rectSpan := canvas.NewRectangle(color.Transparent)
 			rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
-			header := canvas.NewText("S I G N A T U R E    D E T A I L", colors.Gray)
+			header := canvas.NewText(i18n.T("files.signature_detail"), colors.Gray)
 			header.TextSize = scaleFont(16)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			labelStatus := canvas.NewText("   VERIFICATION   STATUS", colors.Gray)
+			labelStatus := canvas.NewText(i18n.T("files.verification_status"), colors.Gray)
 			labelStatus.TextSize = scaleFont(12)
 			labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 			labelStatus.Alignment = fyne.TextAlignCenter
 
-			valueStatus := canvas.NewText("   Verified", colors.Green)
+			valueStatus := canvas.NewText(i18n.T("files.verified"), colors.Green)
 			valueStatus.TextSize = scaleFont(22)
 			valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 			valueStatus.Alignment = fyne.TextAlignCenter
 
-			labelFilename := canvas.NewText("   FILENAME", colors.Gray)
+			labelFilename := canvas.NewText(i18n.T("files.filename"), colors.Gray)
 			labelFilename.TextSize = scaleFont(14)
 			labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 			valueFilename := widget.NewRichTextFromMarkdown(filename)
 			valueFilename.Wrapping = fyne.TextWrapBreak
 
-			labelSigner := canvas.NewText("   SIGNER   ADDRESS", colors.Gray)
+			labelSigner := canvas.NewText(i18n.T("files.signer_address"), colors.Gray)
 			labelSigner.TextSize = scaleFont(14)
 			labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -345,7 +347,7 @@ func layoutFileManager() fyne.CanvasObject {
 			labelSeparator3.Wrapping = fyne.TextWrapOff
 			labelSeparator3.ParseMarkdown("---")
 
-			linkBack := widget.NewHyperlinkWithStyle("Hide Details", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+			linkBack := widget.NewHyperlinkWithStyle(i18n.T("files.hide_details"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 			linkBack.OnTapped = func() {
 				removeOverlays()
 			}
@@ -414,22 +416,22 @@ func layoutFileManager() fyne.CanvasObject {
 		}
 	}
 
-	btnBrowse := widget.NewButton("Browse Files", nil)
+	btnBrowse := widget.NewButton(i18n.T("files.browse_files"), nil)
 	btnBrowse.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
 		if session.Domain == "app.sign" {
 			dialogBrowse.SetFilter(nil)
-			dialogBrowse.SetConfirmText("Open")
+			dialogBrowse.SetConfirmText(i18n.T("files.open"))
 		} else {
 			dialogBrowse.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
-			dialogBrowse.SetConfirmText("Verify")
+			dialogBrowse.SetConfirmText(i18n.T("files.verify"))
 		}
 
 		dialogBrowse.Show()
 	}
 
-	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
@@ -564,7 +566,7 @@ func layoutFileManager() fyne.CanvasObject {
 						signedList.Refresh()
 
 						signedLen := len(signedResults)
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+						labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), signedLen, signedLen)
 						labelResults.Refresh()
 					})
 
@@ -610,7 +612,7 @@ func layoutFileManager() fyne.CanvasObject {
 						errorText.Refresh()
 					} else {
 						logger.Printf("[Engram] Successfully signed file: %s\n", outputfile)
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", count, len(files)+singedLen)
+						labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), count, len(files)+singedLen)
 						labelResults.Refresh()
 						signedResults = append(signedResults, outputfile)
 						count += 1
@@ -665,7 +667,7 @@ func layoutFileManager() fyne.CanvasObject {
 						verifiedList.Refresh()
 
 						verifiedLen := len(verifiedResults)
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+						labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 						labelResults.Refresh()
 					}
 				}, session.Window)
@@ -719,7 +721,7 @@ func layoutFileManager() fyne.CanvasObject {
 
 						logger.Printf("[Engram] Successfully wrote message to file: %s\n", outputfile)
 
-						labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", count, len(files)+verifiedLen)
+						labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), count, len(files)+verifiedLen)
 						labelResults.Refresh()
 						verifiedResults = append(verifiedResults, inputFileName+";;;"+signer.String())
 						count += 1
@@ -786,7 +788,7 @@ func layoutFileManager() fyne.CanvasObject {
 			signedData.Set(signedResults)
 			signedList.Refresh()
 			signedLen := len(signedResults)
-			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), signedLen, signedLen)
 			labelResults.Refresh()
 		} else {
 			session.Domain = "app.verify"
@@ -794,7 +796,7 @@ func layoutFileManager() fyne.CanvasObject {
 			verifiedData.Set(verifiedResults)
 			verifiedList.Refresh()
 			verifiedLen := len(verifiedResults)
-			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 			labelResults.Refresh()
 		}
 
@@ -857,7 +859,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	heading := canvas.NewText("C O N T R A C T    B U I L D E R", colors.Gray)
+	heading := canvas.NewText(i18n.T("files.contract_builder"), colors.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -925,12 +927,12 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	dialogBrowse.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 	dialogBrowse.SetView(dialog.ListView)
 
-	btnBrowse := widget.NewButton("Browse Files", nil)
+	btnBrowse := widget.NewButton(i18n.T("files.browse_files"), nil)
 	btnBrowse.OnTapped = func() {
 		dialogBrowse.Show()
 	}
 
-	btnEditor := widget.NewButton("Open Editor", nil)
+	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
 	btnEditor.OnTapped = func() {
 		removeOverlays()
 		capture := session.Window.Content()
@@ -939,7 +941,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		session.LastDomain = capture
 	}
 
-	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
@@ -1166,7 +1168,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	header := canvas.NewText("F I L E S  &  C O N T R A C T S", colors.Gray)
+	header := canvas.NewText(i18n.T("files.heading"), colors.Gray)
 	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -1187,7 +1189,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	})
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
-	labelResults := canvas.NewText("   RESULTS", colors.Gray)
+	labelResults := canvas.NewText("   "+i18n.T("files.results"), colors.Gray)
 	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
@@ -1326,7 +1328,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 					signedList.Refresh()
 
 					signedLen := len(signedResults)
-					labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", signedLen, signedLen)
+					labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), signedLen, signedLen)
 					labelResults.Refresh()
 				})
 
@@ -1381,29 +1383,29 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		rectSpan := canvas.NewRectangle(color.Transparent)
 		rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
-		detailHeader := canvas.NewText("S I G N A T U R E    D E T A I L", colors.Gray)
+		detailHeader := canvas.NewText(i18n.T("files.signature_detail"), colors.Gray)
 		detailHeader.TextSize = scaleFont(16)
 		detailHeader.Alignment = fyne.TextAlignCenter
 		detailHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		labelStatus := canvas.NewText("   VERIFICATION   STATUS", colors.Gray)
+		labelStatus := canvas.NewText(i18n.T("files.verification_status"), colors.Gray)
 		labelStatus.TextSize = scaleFont(12)
 		labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 		labelStatus.Alignment = fyne.TextAlignCenter
 
-		valueStatus := canvas.NewText("   Verified", colors.Green)
+		valueStatus := canvas.NewText(i18n.T("files.verified"), colors.Green)
 		valueStatus.TextSize = scaleFont(22)
 		valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 		valueStatus.Alignment = fyne.TextAlignCenter
 
-		labelFilename := canvas.NewText("   FILENAME", colors.Gray)
+		labelFilename := canvas.NewText(i18n.T("files.filename"), colors.Gray)
 		labelFilename.TextSize = scaleFont(14)
 		labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 		valueFilename := widget.NewRichTextFromMarkdown(filename)
 		valueFilename.Wrapping = fyne.TextWrapBreak
 
-		labelSigner := canvas.NewText("   SIGNER   ADDRESS", colors.Gray)
+		labelSigner := canvas.NewText(i18n.T("files.signer_address"), colors.Gray)
 		labelSigner.TextSize = scaleFont(14)
 		labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1422,7 +1424,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		labelSeparator3.Wrapping = fyne.TextWrapOff
 		labelSeparator3.ParseMarkdown("---")
 
-		linkHide := widget.NewHyperlinkWithStyle("Hide Details", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkHide := widget.NewHyperlinkWithStyle(i18n.T("files.hide_details"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 		linkHide.OnTapped = func() {
 			removeOverlays()
 		}
@@ -1489,12 +1491,12 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		)
 	}
 
-	btnSignFile := widget.NewButton("Sign File", nil)
+	btnSignFile := widget.NewButton(i18n.T("files.sign_file"), nil)
 	btnSignFile.OnTapped = func() {
 		dialogBrowseFiles.Show()
 	}
 
-	btnVerifyFile := widget.NewButton("Verify Signature", nil)
+	btnVerifyFile := widget.NewButton(i18n.T("files.verify_signature"), nil)
 	btnVerifyFile.OnTapped = func() {
 		dialogVerify := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
 			if err != nil {
@@ -1550,7 +1552,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			verifiedList.Refresh()
 
 			verifiedLen := len(verifiedResults)
-			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 			labelResults.Refresh()
 		}, session.Window)
 
@@ -1582,9 +1584,9 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		container.NewStack(
 			rectBox,
 			container.NewVBox(
-				widget.NewLabel("   Signed Files:"),
+				widget.NewLabel("   "+i18n.T("files.signed_files")),
 				signedList,
-				widget.NewLabel("   Verified Files:"),
+				widget.NewLabel("   "+i18n.T("files.verified_files")),
 				verifiedList,
 			),
 		),
@@ -1651,12 +1653,12 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	dialogBrowseSC.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 	dialogBrowseSC.SetView(dialog.ListView)
 
-	btnBrowseSC := widget.NewButton("Browse .bas Files", nil)
+	btnBrowseSC := widget.NewButton(i18n.T("files.browse_bas"), nil)
 	btnBrowseSC.OnTapped = func() {
 		dialogBrowseSC.Show()
 	}
 
-	btnEditor := widget.NewButton("Open Editor", nil)
+	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
 	btnEditor.OnTapped = func() {
 		removeOverlays()
 		capture := session.Window.Content()
@@ -1665,13 +1667,13 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		session.LastDomain = capture
 	}
 
-	labelAction := canvas.NewText("( DRAG-AND-DROP ENABLED )", colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
 	entryClone := widget.NewEntry()
-	entryClone.SetPlaceHolder("Clone SCID (64 characters)")
+	entryClone.SetPlaceHolder(i18n.T("files.clone_scid"))
 	if session.Offline {
 		entryClone.Disable()
 		entryClone.SetText("Cloning disabled in offline mode")
@@ -1737,11 +1739,11 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	// ==================== TAB 3: ASSETS (Asset Explorer) ====================
 	assetTabContent := createAssetExplorerTabContent()
 
-	assetTab := container.NewTabItem("Assets", assetTabContent)
+	assetTab := container.NewTabItem(i18n.T("files.tab_assets"), assetTabContent)
 	tabs := container.NewAppTabs(
 		assetTab,
-		container.NewTabItem("Browse", browseTabContent),
-		container.NewTabItem("SCIDs", contractsTabContent),
+		container.NewTabItem(i18n.T("files.tab_browse"), browseTabContent),
+		container.NewTabItem(i18n.T("files.tab_scids"), contractsTabContent),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
@@ -1804,7 +1806,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			verifiedList.Refresh()
 
 			verifiedLen := len(verifiedResults)
-			labelResults.Text = fmt.Sprintf("   RESULTS  (%d / %d)", verifiedLen, verifiedLen)
+			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 			labelResults.Refresh()
 
 			// Switch to Browse Files tab
@@ -1900,17 +1902,17 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 	rectCode := canvas.NewRectangle(color.Transparent)
 	rectCode.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.35))
 
-	heading := canvas.NewText("C O N T R A C T    E D I T O R", colors.Green)
+	heading := canvas.NewText(i18n.T("files.contract_editor"), colors.Green)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelHeaders := canvas.NewText("   HEADERS", colors.Gray)
+	labelHeaders := canvas.NewText(i18n.T("files.headers"), colors.Gray)
 	labelHeaders.TextSize = scaleFont(14)
 	labelHeaders.Alignment = fyne.TextAlignLeading
 	labelHeaders.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelCode := canvas.NewText("   CODE (DVM-BASIC)", colors.Gray)
+	labelCode := canvas.NewText(i18n.T("files.code"), colors.Gray)
 	labelCode.TextSize = scaleFont(14)
 	labelCode.Alignment = fyne.TextAlignLeading
 	labelCode.TextStyle = fyne.TextStyle{Bold: true}
@@ -2219,17 +2221,17 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 			overlay := session.Window.Canvas().Overlays()
 
-			header := canvas.NewText("CONTRACT  EDITOR", colors.Gray)
+			header := canvas.NewText(i18n.T("files.contract_editor"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText("Import an existing function", colors.Account)
+			subHeader := canvas.NewText(i18n.T("files.import_function"), colors.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			linkCancel := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+			linkCancel := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 			linkCancel.OnTapped = func() {
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
@@ -2248,7 +2250,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 			paramsContainer := container.NewVBox(entrySCID, entryEntrypoint)
 
-			btnImport := widget.NewButton("Import", nil)
+			btnImport := widget.NewButton(i18n.T("common.import"), nil)
 			btnImport.OnTapped = func() {
 				if entrySCID.Validate() != nil {
 					entrySCID.FocusGained()
@@ -2825,17 +2827,17 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 				overlay := session.Window.Canvas().Overlays()
 
-				header := canvas.NewText("INSTALL  SMART  CONTRACT", colors.Gray)
+				header := canvas.NewText(i18n.T("files.install_contract"), colors.Gray)
 				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
-				subHeader := canvas.NewText(fmt.Sprintf("%s params", entrypoint), colors.Account)
+				subHeader := canvas.NewText(fmt.Sprintf(i18n.T("files.params_fmt"), entrypoint), colors.Account)
 				subHeader.TextSize = scaleFont(22)
 				subHeader.Alignment = fyne.TextAlignCenter
 				subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-				linkClose := widget.NewHyperlinkWithStyle("Close", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+				linkClose := widget.NewHyperlinkWithStyle(i18n.T("common.close"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 				linkClose.OnTapped = func() {
 					overlay.Top().Hide()
 					overlay.Remove(overlay.Top())
@@ -2854,7 +2856,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 				paramsContainer := container.NewVBox()
 
-				btnInstall := widget.NewButton("Install", nil)
+				btnInstall := widget.NewButton(i18n.T("files.install"), nil)
 
 				overlay.Add(
 					container.NewStack(

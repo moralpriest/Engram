@@ -34,6 +34,8 @@ import (
 	"github.com/blang/semver"
 	"github.com/civilware/tela/logger"
 
+	"github.com/DEROFDN/engram/i18n"
+
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
 )
@@ -344,7 +346,13 @@ func main() {
 		ui.Padding = ui.MaxWidth * 0.05
 
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
-		session.Window.SetContent(layoutMain())
+
+		if langData, err := GetValue("settings", []byte("language")); err == nil && len(langData) > 0 {
+			i18n.SetLanguage(string(langData))
+			session.Window.SetContent(layoutMain())
+		} else {
+			session.Window.SetContent(layoutLanguageSelector())
+		}
 		session.Window.SetFixedSize(true)
 
 		// Window resize check disabled - see comment above for details

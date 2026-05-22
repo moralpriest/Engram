@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DEROFDN/engram/i18n"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -43,7 +45,7 @@ func showVillagerPopup(parent *fyne.Container) {
 	rect.CornerRadius = scaleSize(10)
 	rect.SetMinSize(fyne.NewSize(scaleSize(220), scaleSize(40)))
 
-	text := canvas.NewText("Click here to edit villager", colors.Green)
+	text := canvas.NewText(i18n.T("villager.click_edit"), colors.Green)
 	text.Alignment = fyne.TextAlignCenter
 	text.TextSize = scaleFont(14)
 
@@ -105,9 +107,9 @@ func showVillagerMenu(updateLogo func()) {
 	}
 
 	if hasVillager {
-		btnEdit = widget.NewButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), onTapEdit)
+		btnEdit = widget.NewButtonWithIcon(i18n.T("villager.edit"), theme.DocumentCreateIcon(), onTapEdit)
 	} else {
-		borderedBtn := newBorderedButtonWithIcon("Edit Villager", theme.DocumentCreateIcon(), color.White, onTapEdit, 240)
+		borderedBtn := newBorderedButtonWithIcon(i18n.T("villager.edit"), theme.DocumentCreateIcon(), color.White, onTapEdit, 240)
 		btnEdit = borderedBtn
 
 		go func() {
@@ -132,10 +134,10 @@ func showVillagerMenu(updateLogo func()) {
 		}()
 	}
 
-	hideText := "Hide"
+	hideText := i18n.T("villager.hide")
 	hideIcon := theme.VisibilityOffIcon()
 	if session.VillagerHidden {
-		hideText = "Show"
+		hideText = i18n.T("villager.show")
 		hideIcon = theme.VisibilityIcon()
 	}
 	btnHide := widget.NewButtonWithIcon(hideText, hideIcon, func() {
@@ -156,7 +158,7 @@ func showVillagerMenu(updateLogo func()) {
 	if session.VillagerBackground {
 		bgIcon = theme.ColorAchromaticIcon()
 	}
-	btnBgToggle := widget.NewButtonWithIcon("Background Toggle", bgIcon, func() {
+	btnBgToggle := widget.NewButtonWithIcon(i18n.T("villager.bg_toggle"), bgIcon, func() {
 		session.VillagerBackground = !session.VillagerBackground
 		val := "false"
 		if session.VillagerBackground {
@@ -193,7 +195,7 @@ func showVillagerMenu(updateLogo func()) {
 		btnBgToggle.Disable()
 	}
 
-	btnClose := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() {
+	btnClose := widget.NewButtonWithIcon(i18n.T("common.close"), theme.CancelIcon(), func() {
 		closeMenu()
 	})
 

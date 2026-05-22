@@ -30,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/graviton"
 )
@@ -37,7 +38,7 @@ import (
 func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
 
-	title := canvas.NewText("S E C U R E   N O T E S", colors.Gray)
+	title := canvas.NewText(i18n.T("datapad.heading"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -51,7 +52,7 @@ func layoutDatapad() fyne.CanvasObject {
 	entryNewPad.MultiLine = false
 	entryNewPad.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
 
-	btnAdd := widget.NewButton(" Create ", nil)
+	btnAdd := widget.NewButton(i18n.T("datapad.create"), nil)
 	btnAdd.Disable()
 
 	top := container.NewVBox(
@@ -78,7 +79,7 @@ func layoutDatapad() fyne.CanvasObject {
 	btnAdd.OnTapped = func() {
 		err := StoreEncryptedValue("Datapads", []byte(entryNewPad.Text), []byte(""))
 		if err != nil {
-			btnAdd.Text = "Error creating new Datapad"
+			btnAdd.Text = i18n.T("datapad.err_create")
 			btnAdd.Disable()
 			btnAdd.Refresh()
 		} else {
@@ -89,29 +90,29 @@ func layoutDatapad() fyne.CanvasObject {
 		}
 	}
 
-	entryNewPad.PlaceHolder = "Note Name"
+	entryNewPad.PlaceHolder = i18n.T("datapad.note_name")
 	entryNewPad.SetIcon(theme.SearchIcon())
 	entryNewPad.Validator = func(s string) error {
 		session.Datapad = s
 		if len(s) > 0 {
 			_, err := GetEncryptedValue("Datapads", []byte(s))
 			if err == nil {
-				btnAdd.Text = "Datapad already exists"
+				btnAdd.Text = i18n.T("datapad.err_exists")
 				btnAdd.Disable()
 				btnAdd.Refresh()
-				err := errors.New("username already exists")
+				err := errors.New("datapad already exists")
 				entryNewPad.SetValidationError(err)
 				return err
 			} else {
-				btnAdd.Text = "Create"
+				btnAdd.Text = i18n.T("datapad.create")
 				btnAdd.Enable()
 				btnAdd.Refresh()
 				return nil
 			}
 		} else {
-			btnAdd.Text = "Create"
+			btnAdd.Text = i18n.T("datapad.create")
 			btnAdd.Disable()
-			err := errors.New("please enter a datapad name")
+			err := errors.New("datapad name required")
 			entryNewPad.SetValidationError(err)
 			btnAdd.Refresh()
 			return err
@@ -297,8 +298,8 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	selectOptions := widget.NewSelect([]string{"Clear", "Export (Plaintext)", "Import From File", "Delete"}, nil)
-	selectOptions.PlaceHolder = "Select an Option ..."
+	selectOptions := widget.NewSelect([]string{i18n.T("datapad.clear"), i18n.T("datapad.export"), i18n.T("datapad.import"), i18n.T("datapad.delete")}, nil)
+	selectOptions.PlaceHolder = i18n.T("datapad.select_option")
 
 	data, err := GetEncryptedValue("Datapads", []byte(session.Datapad))
 	if err != nil {
@@ -307,7 +308,7 @@ func layoutPad() fyne.CanvasObject {
 
 	overlay := session.Window.Canvas().Overlays()
 
-	btnSave := widget.NewButton("Save", nil)
+	btnSave := widget.NewButton(i18n.T("datapad.save"), nil)
 
 	entryPad := widget.NewEntry()
 	entryPad.Wrapping = fyne.TextWrapWord
@@ -321,45 +322,45 @@ func layoutPad() fyne.CanvasObject {
 		errorText.Refresh()
 
 		if s == "Clear" {
-			header := canvas.NewText("SECURE NOTES  RESET  REQUESTED", colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.clear_request"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText("Clear Datapad?", colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.clear_prompt"), colors.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+			linkClose := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 			linkClose.OnTapped = func() {
 				overlay := session.Window.Canvas().Overlays()
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
-				selectOptions.Selected = "Select an Option ..."
+				selectOptions.Selected = i18n.T("datapad.select_option")
 				selectOptions.Refresh()
 			}
 
-			btnSubmit := widget.NewButton("Clear", nil)
+			btnSubmit := widget.NewButton(i18n.T("datapad.clear"), nil)
 
 			btnSubmit.OnTapped = func() {
 				if session.Datapad != "" {
 					err := StoreEncryptedValue("Datapads", []byte(session.Datapad), []byte(""))
 					if err != nil {
 						logger.Errorf("[Datapad] Err: %s\n", err)
-						selectOptions.Selected = "Select an Option ..."
+						selectOptions.Selected = i18n.T("datapad.select_option")
 						selectOptions.Refresh()
 						return
 					}
 
-					selectOptions.Selected = "Select an Option ..."
+					selectOptions.Selected = i18n.T("datapad.select_option")
 					selectOptions.Refresh()
 					entryPad.Text = ""
 					entryPad.Refresh()
 				}
 
-				errorText.Text = "datapad cleared"
+				errorText.Text = i18n.T("datapad.status_cleared")
 				errorText.Color = colors.Green
 				errorText.Refresh()
 
@@ -531,33 +532,33 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileImport.Show()
 		} else if s == "Delete" {
-			header := canvas.NewText("SECURE NOTES  DELETION  REQUESTED", colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.delete_request"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText("Delete Datapad?", colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.delete_prompt"), colors.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+			linkClose := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 			linkClose.OnTapped = func() {
 				overlay := session.Window.Canvas().Overlays()
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
-				selectOptions.Selected = "Select an Option ..."
+				selectOptions.Selected = i18n.T("datapad.select_option")
 				selectOptions.Refresh()
 			}
 
-			btnSubmit := widget.NewButton("Delete", nil)
+			btnSubmit := widget.NewButton(i18n.T("datapad.delete"), nil)
 
 			btnSubmit.OnTapped = func() {
 				if session.Datapad != "" {
 					err := DeleteKey("Datapads", []byte(session.Datapad))
 					if err != nil {
-						selectOptions.Selected = "Select an Option ..."
+						selectOptions.Selected = i18n.T("datapad.select_option")
 						selectOptions.Refresh()
 						logger.Errorf("[Datapad] Error deleting %s: %s\n", session.Datapad, err)
 					} else {
@@ -674,30 +675,30 @@ func layoutPad() fyne.CanvasObject {
 
 	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		if session.DatapadChanged {
-			header := canvas.NewText("SECURE NOTES  CHANGE  DETECTED", colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.change_detected"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText("Save Datapad?", colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.save_prompt"), colors.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			linkClose := widget.NewHyperlinkWithStyle("Discard Changes", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+			linkClose := widget.NewHyperlinkWithStyle(i18n.T("datapad.discard"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 			linkClose.OnTapped = func() {
 				session.Datapad = ""
 				session.DatapadChanged = false
 				removeOverlays()
 			}
 
-			btnSubmit := widget.NewButton("Save", nil)
+			btnSubmit := widget.NewButton(i18n.T("datapad.save"), nil)
 
 			btnSubmit.OnTapped = func() {
 				err = StoreEncryptedValue("Datapads", []byte(session.Datapad), []byte(entryPad.Text))
 				if err != nil {
 					btnSave.Disable()
-					errorText.Text = "error saving datapad"
+					errorText.Text = i18n.T("datapad.err_save")
 					errorText.Color = colors.Red
 					errorText.Refresh()
 					overlay.Remove(overlay.Top())
@@ -765,10 +766,10 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 		container.NewCenter(
 			container.NewHBox(
-				wrapMobileButton(widget.NewButton("Clear", func() { selectOptions.OnChanged("Clear") })),
-				wrapMobileButton(widget.NewButton("Export", func() { selectOptions.OnChanged("Export (Plaintext)") })),
-				wrapMobileButton(widget.NewButton("Import", func() { selectOptions.OnChanged("Import From File") })),
-				wrapMobileButton(widget.NewButton("Delete", func() { selectOptions.OnChanged("Delete") })),
+				wrapMobileButton(widget.NewButton(i18n.T("datapad.clear"), func() { selectOptions.OnChanged(i18n.T("datapad.clear")) })),
+				wrapMobileButton(widget.NewButton(i18n.T("datapad.export"), func() { selectOptions.OnChanged(i18n.T("datapad.export")) })),
+				wrapMobileButton(widget.NewButton(i18n.T("datapad.import"), func() { selectOptions.OnChanged(i18n.T("datapad.import")) })),
+				wrapMobileButton(widget.NewButton(i18n.T("datapad.delete"), func() { selectOptions.OnChanged(i18n.T("datapad.delete")) })),
 			),
 		),
 		rectSpacer,

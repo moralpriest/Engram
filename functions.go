@@ -75,6 +75,8 @@ import (
 	"github.com/deroproject/derohe/walletapi/mnemonics"
 	"github.com/deroproject/derohe/walletapi/rpcserver"
 	"github.com/deroproject/derohe/walletapi/xswd"
+
+	"github.com/DEROFDN/engram/i18n"
 )
 
 type App struct {
@@ -2461,11 +2463,11 @@ func login() {
 			// causing Fyne to misalign the hexagon animation relative to the text on mobile devices.
 			removeOverlays()
 			if session.IsRecovery {
-				showLoadingOverlayWithText("Initializing recovered wallet...", "Syncing with network and checking status...")
+				showLoadingOverlayWithText(i18n.T("wallet.init_recovered"), i18n.T("wallet.sync_status"))
 			} else if session.IsNewWallet {
-				showLoadingOverlayWithText("Initializing new wallet...", "Syncing with network and checking status...")
+				showLoadingOverlayWithText(i18n.T("wallet.init_new"), i18n.T("wallet.sync_status"))
 			} else {
-				showLoadingOverlayWithText("Synchronizing wallet...", "Checking account registration status...")
+				showLoadingOverlayWithText(i18n.T("wallet.syncing"), i18n.T("wallet.registration_status"))
 			}
 		}
 
@@ -3007,16 +3009,16 @@ func registerAccount() {
 		closeWallet()
 	}
 
-	title := canvas.NewText("R E G I S T R A T I O N", colors.Green)
+	title := canvas.NewText(i18n.T("registration.title"), colors.Green)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
-	heading := canvas.NewText("Please wait...", colors.Gray)
+	heading := canvas.NewText(i18n.T("registration.wait"), colors.Gray)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	sub := canvas.NewText("This one-time process can take a while.", colors.Gray)
+	sub := canvas.NewText(i18n.T("registration.take_time"), colors.Gray)
 	sub.TextSize = 14
 	sub.Alignment = fyne.TextAlignCenter
 	sub.TextStyle = fyne.TextStyle{Bold: true}
@@ -4948,7 +4950,7 @@ func startGnomon() {
 	if walletapi.Connected {
 		if gnomon.Index == nil && gnomon.Active == 1 {
 			gnomon.resetBootstrapState()
-			gnomon.setBootstrapPhase("Connecting to Gnomon...", 0, 0)
+			gnomon.setBootstrapPhase(i18n.T("tela.status_connecting_gnomon"), 0, 0)
 			gnomon.Active = 2
 			path := filepath.Join(AppPath(), "datashards", "gnomon")
 			switch session.Network {
@@ -5957,7 +5959,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 		}
 
-		header := canvas.NewText("TELA  RATINGS", colors.Gray)
+		header := canvas.NewText(i18n.T("tela.ratings_header"), colors.Gray)
 		header.TextSize = scaleFont(16)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
@@ -5970,7 +5972,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		nameHdr.Alignment = fyne.TextAlignCenter
 		nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-		labelSCID := canvas.NewText("   SMART  CONTRACT  ID", colors.Gray)
+		labelSCID := canvas.NewText(i18n.T("assets.scid"), colors.Gray)
 		labelSCID.TextSize = 14
 		labelSCID.Alignment = fyne.TextAlignLeading
 		labelSCID.TextStyle = fyne.TextStyle{Bold: true}
@@ -5978,9 +5980,9 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		textSCID := widget.NewRichTextWithText(scid)
 		textSCID.Wrapping = fyne.TextWrapWord
 
-		textLikes := widget.NewRichTextFromMarkdown("Likes:")
-		textDislikes := widget.NewRichTextFromMarkdown("Dislikes:")
-		textAverage := widget.NewRichTextFromMarkdown("Average:")
+		textLikes := widget.NewRichTextFromMarkdown(i18n.T("tela.likes"))
+		textDislikes := widget.NewRichTextFromMarkdown(i18n.T("tela.dislikes"))
+		textAverage := widget.NewRichTextFromMarkdown(i18n.T("tela.average"))
 
 		ratingsBox := container.NewVBox(labelSCID, textSCID)
 
@@ -6000,7 +6002,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		ratingsBox.Add(container.NewHBox(textDislikes, canvas.NewText(fmt.Sprintf("%d", ratings.Dislikes), colors.Red)))
 		ratingsBox.Add(container.NewHBox(textAverage, canvas.NewText(fmt.Sprintf("%0.1f/10", ratings.Average), colors.Account)))
 
-		linkRate := widget.NewHyperlinkWithStyle("Rate SCID", nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		linkRate := widget.NewHyperlinkWithStyle(i18n.T("tela.rate_scid"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 		linkRate.OnTapped = func() {
 			rateTELAOverlay(name, scid)
 		}
@@ -6048,8 +6050,8 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			userRatingsBox.Add(
 				container.NewVBox(
 					labelAddress,
-					container.NewHBox(widget.NewRichTextFromMarkdown("Height:"), canvas.NewText(fmt.Sprintf("%d", r.Height), colors.Account)),
-					container.NewHBox(widget.NewRichTextFromMarkdown("Rating:"), canvas.NewText(fmt.Sprintf("%d", r.Rating), telaRatingColor(r.Rating))),
+					container.NewHBox(widget.NewRichTextFromMarkdown(i18n.T("tela.height_label")), canvas.NewText(fmt.Sprintf("%d", r.Height), colors.Account)),
+					container.NewHBox(widget.NewRichTextFromMarkdown(i18n.T("tela.rating_label")), canvas.NewText(fmt.Sprintf("%d", r.Rating), telaRatingColor(r.Rating))),
 					widget.NewRichTextFromMarkdown(ratingString),
 					labelSeparator,
 				),
@@ -6153,7 +6155,7 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 	}
 
-	header := canvas.NewText("RATE  TELA  APP", colors.Gray)
+	header := canvas.NewText(i18n.T("tela.rate_app_header"), colors.Gray)
 	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -6169,14 +6171,14 @@ func rateTELAOverlay(name, scid string) {
 	nameHdr.Alignment = fyne.TextAlignCenter
 	nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnConfirm := widget.NewButton("Rate", nil)
+	btnConfirm := widget.NewButton(i18n.T("tela.rate"), nil)
 	btnConfirm.Disable()
 
 	ratingSlider := widget.NewSlider(0, 9)
 	ratingSlider.Step = 1
 	ratingSlider.SetValue(5)
 
-	ratingHeader := canvas.NewText("Rating", colors.Account)
+	ratingHeader := canvas.NewText(i18n.T("tela.rating_category"), colors.Account)
 	ratingHeader.TextSize = scaleFont(18)
 	ratingHeader.Alignment = fyne.TextAlignCenter
 	ratingHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -6189,7 +6191,7 @@ func rateTELAOverlay(name, scid string) {
 	detailSlider.Step = 1
 	detailSlider.SetValue(5)
 
-	detailHeader := canvas.NewText("Detail", colors.Account)
+	detailHeader := canvas.NewText(i18n.T("tela.rating_detail"), colors.Account)
 	detailHeader.TextSize = scaleFont(18)
 	detailHeader.Alignment = fyne.TextAlignCenter
 	detailHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -6235,7 +6237,7 @@ func rateTELAOverlay(name, scid string) {
 				ratingStore, _ = gnomon.Index.BBSBackend.GetSCIDValuesByKey(scid, engram.Disk.GetAddress().String(), gnomon.Index.LastIndexedHeight, false)
 			}
 			if ratingStore != nil {
-				errorText.Text = "already rated this contract"
+				errorText.Text = i18n.T("tela.already_rated")
 				errorText.Color = colors.Red
 				errorText.Refresh()
 				return
@@ -6244,7 +6246,7 @@ func rateTELAOverlay(name, scid string) {
 
 		category := int(ratingSlider.Value)
 		if category < 0 {
-			errorText.Text = "select a rating"
+			errorText.Text = i18n.T("tela.select_rating")
 			errorText.Color = colors.Red
 			errorText.Refresh()
 			return
@@ -6253,13 +6255,13 @@ func rateTELAOverlay(name, scid string) {
 		detail := int(detailSlider.Value)
 		rating := (category * 10) + detail
 
-		verificationOverlay(false, "CONFIRM RATING", "Rating costs : 0.001 DERO. Do you wish to continue?", "Yes", func(confirm bool) {
+		verificationOverlay(false, i18n.T("tela.confirm_rating_header"), i18n.T("tela.confirm_rating_body"), i18n.T("common.yes"), func(confirm bool) {
 			if confirm {
 				btnConfirm.Disable()
 				txid, err := tela.Rate(engram.Disk, scid, uint64(rating))
 				if err != nil {
 					logger.Errorf("[Engram] Rate TX: %s\n", err)
-					errorText.Text = "error submitting rating"
+					errorText.Text = i18n.T("tela.error_submitting_rating")
 					errorText.Color = colors.Red
 					errorText.Refresh()
 					btnConfirm.Enable()
@@ -6267,7 +6269,7 @@ func rateTELAOverlay(name, scid string) {
 				}
 
 				logger.Printf("[Engram] Rate TXID: %s\n", txid)
-				errorText.Text = "rating submitted"
+				errorText.Text = i18n.T("tela.rating_submitted")
 				errorText.Color = colors.Green
 				errorText.Refresh()
 			}
@@ -7064,12 +7066,12 @@ func showXSWDPrompt() bool {
 	allowed := false
 	done := make(chan struct{})
 
-	header := canvas.NewText("Application Connections", colors.Gray)
+	header := canvas.NewText(i18n.T("tela.app_connections_prompt"), colors.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	message := widget.NewLabel("Some TELA applications require connections to interact with your wallet. Would you like to allow application connections?")
+	message := widget.NewLabel(i18n.T("tela.app_connections_body"))
 	message.Wrapping = fyne.TextWrapWord
 
 	rectBox := canvas.NewRectangle(color.Transparent)
@@ -7078,13 +7080,13 @@ func showXSWDPrompt() bool {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(0, 10))
 
-	btnAllow := widget.NewButton("Allow", func() {
+	btnAllow := widget.NewButton(i18n.T("settings.permissions.allow"), func() {
 		allowed = true
 		done <- struct{}{}
 	})
 	btnAllow.Importance = widget.MediumImportance
 
-	btnDeny := widget.NewButton("Deny", func() {
+	btnDeny := widget.NewButton(i18n.T("settings.permissions.deny"), func() {
 		allowed = false
 		done <- struct{}{}
 	})

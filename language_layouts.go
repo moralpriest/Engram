@@ -1,0 +1,217 @@
+package main
+
+import (
+	"image/color"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
+
+	"github.com/DEROFDN/engram/i18n"
+)
+
+func layoutLanguageSelector() fyne.CanvasObject {
+	session.Domain = "app.language"
+
+	frame := &iframe{}
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+
+	languages := i18n.LanguageOrder()
+
+	type pulseText struct {
+		title     string
+		subtitle1 string
+		subtitle2 string
+		name      string
+	}
+
+	pulseTexts := make([]pulseText, len(languages))
+	savedLang := i18n.GetLanguage()
+	for i, code := range languages {
+		i18n.SetLanguage(code)
+		pulseTexts[i] = pulseText{
+			title:     i18n.T("language.title"),
+			subtitle1: i18n.T("language.subtitle1"),
+			subtitle2: i18n.T("language.subtitle2"),
+			name:      i18n.AvailableLanguages()[code],
+		}
+	}
+	i18n.SetLanguage(savedLang)
+
+	title := canvas.NewText(pulseTexts[0].title, colors.Green)
+	title.TextSize = scaleFont(24)
+	title.Alignment = fyne.TextAlignCenter
+	title.TextStyle = fyne.TextStyle{Bold: true}
+
+	sub1 := canvas.NewText(pulseTexts[0].subtitle1, colors.Gray)
+	sub1.TextSize = scaleFont(13)
+	sub1.Alignment = fyne.TextAlignCenter
+
+	sub2 := canvas.NewText(pulseTexts[0].subtitle2, colors.Gray)
+	sub2.TextSize = scaleFont(13)
+	sub2.Alignment = fyne.TextAlignCenter
+
+	var wLang *widget.Select
+	selecting := false
+
+	pulseIndex := 0
+	updatePulseText := func(idx int, animate bool) {
+		t := pulseTexts[idx]
+
+		applyText := func() {
+			pulseIndex = idx
+			title.Text = t.title
+			sub1.Text = t.subtitle1
+			sub2.Text = t.subtitle2
+			title.Refresh()
+			sub1.Refresh()
+			sub2.Refresh()
+
+			if !selecting && wLang != nil && wLang.SelectedIndex() < 0 {
+				wLang.PlaceHolder = t.name
+				wLang.Refresh()
+			}
+		}
+
+		if !animate {
+			applyText()
+			title.Color = colors.Green
+			sub1.Color = colors.Gray
+			sub2.Color = colors.Gray
+			title.Refresh()
+			sub1.Refresh()
+			sub2.Refresh()
+			return
+		}
+
+		// Fade out to transparent (background color)
+		fadeOutTitle := canvas.NewColorRGBAAnimation(colors.Green, color.Transparent, time.Millisecond*600, func(c color.Color) {
+			title.Color = c
+			title.Refresh()
+		})
+		fadeOutSub1 := canvas.NewColorRGBAAnimation(colors.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
+			sub1.Color = c
+			sub1.Refresh()
+		})
+		fadeOutSub2 := canvas.NewColorRGBAAnimation(colors.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
+			sub2.Color = c
+			sub2.Refresh()
+		})
+
+		time.AfterFunc(time.Millisecond*600, func() {
+			fyne.Do(func() {
+				applyText()
+
+				// Fade in from transparent
+				fadeInTitle := canvas.NewColorRGBAAnimation(color.Transparent, colors.Green, time.Millisecond*600, func(c color.Color) {
+					title.Color = c
+					title.Refresh()
+				})
+				fadeInSub1 := canvas.NewColorRGBAAnimation(color.Transparent, colors.Gray, time.Millisecond*600, func(c color.Color) {
+					sub1.Color = c
+					sub1.Refresh()
+				})
+				fadeInSub2 := canvas.NewColorRGBAAnimation(color.Transparent, colors.Gray, time.Millisecond*600, func(c color.Color) {
+					sub2.Color = c
+					sub2.Refresh()
+				})
+				fadeInTitle.Start()
+				fadeInSub1.Start()
+				fadeInSub2.Start()
+			})
+		})
+
+		fadeOutTitle.Start()
+		fadeOutSub1.Start()
+		fadeOutSub2.Start()
+	}
+
+	transitionToMain := func() {
+		session.Domain = "app.main"
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutMain())
+		removeOverlays()
+	}
+
+	// Dropdown pulses through languages, user selection stops pulse and transitions
+	langNames := []string{}
+	for _, code := range languages {
+		langNames = append(langNames, i18n.AvailableLanguages()[code])
+	}
+
+	wLang = widget.NewSelect(langNames, nil)
+	wLang.PlaceHolder = "..."
+	wLang.OnChanged = func(s string) {
+		if selecting {
+			return
+		}
+		idx := 0
+		for i, name := range langNames {
+			if name == s {
+				idx = i
+				break
+			}
+		}
+		i18n.SetLanguageFromIndex(idx)
+		StoreValue("settings", []byte("language"), []byte(languages[idx]))
+		time.AfterFunc(150*time.Millisecond, func() {
+			fyne.Do(func() {
+				transitionToMain()
+			})
+		})
+	}
+
+	updatePulseText(0, false)
+
+	dropdownCard := canvas.NewRectangle(color.Transparent)
+	dropdownCard.SetMinSize(fyne.NewSize(ui.Width*0.6, 0))
+
+	form := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(title),
+		rectSpacer,
+		container.NewCenter(sub1),
+		container.NewCenter(sub2),
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(
+			container.NewStack(dropdownCard, wLang),
+		),
+	)
+
+	layout := container.NewStack(
+		frame,
+		res.mainBg,
+		container.NewCenter(form),
+	)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		for !appExiting {
+			time.Sleep(3 * time.Second)
+			if session.Domain != "app.language" {
+				return
+			}
+			fyne.Do(func() {
+				if session.Domain != "app.language" {
+					return
+				}
+				newIdx := pulseIndex + 1
+				if newIdx >= len(languages) {
+					newIdx = 0
+				}
+				selecting = true
+				wLang.SetSelectedIndex(newIdx)
+				selecting = false
+				updatePulseText(newIdx, true)
+			})
+		}
+	}()
+
+	return NewVScroll(layout)
+}

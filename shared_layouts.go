@@ -15,6 +15,8 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	x "fyne.io/x/fyne/widget"
+
+	"github.com/DEROFDN/engram/i18n"
 )
 
 func layoutTransition() fyne.CanvasObject {
@@ -61,14 +63,14 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	frame.SetMinSize(fyne.NewSize(ui.Width, ui.Height))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
-	label := canvas.NewText("PROOF-OF-WORK", colors.Gray)
+	label := canvas.NewText(i18n.T("register.proof_of_work"), colors.Gray)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 	label.TextSize = scaleFont(12)
 	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), colors.Account)
 	hashes.TextSize = scaleFont(18)
 
 	startTime := time.Now()
-	timeLabel := canvas.NewText("Countdown: Estimating...", colors.Green)
+	timeLabel := canvas.NewText(i18n.T("register.countdown_estimating"), colors.Green)
 	timeLabel.TextStyle = fyne.TextStyle{Bold: true}
 	timeLabel.TextSize = scaleFont(12)
 
@@ -85,16 +87,16 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 					remaining := expectedTotal - elapsed
 
 					if remaining <= 0 {
-						timeLabel.Text = "Countdown: Completing soon..."
+						timeLabel.Text = i18n.T("register.countdown_completing")
 					} else if remaining > 3600 {
-						timeLabel.Text = fmt.Sprintf("Countdown: ~%dh %dm remaining", int(remaining)/3600, (int(remaining)%3600)/60)
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_hours"), int(remaining)/3600, (int(remaining)%3600)/60)
 					} else if remaining > 60 {
-						timeLabel.Text = fmt.Sprintf("Countdown: ~%dm %ds remaining", int(remaining)/60, int(remaining)%60)
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_minutes"), int(remaining)/60, int(remaining)%60)
 					} else {
-						timeLabel.Text = fmt.Sprintf("Countdown: ~%ds remaining", int(remaining))
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_seconds"), int(remaining))
 					}
 				} else {
-					timeLabel.Text = "Countdown: Estimating..."
+					timeLabel.Text = i18n.T("register.countdown_estimating")
 				}
 				timeLabel.Refresh()
 			})
@@ -206,26 +208,26 @@ func layoutAlert(t int) fyne.CanvasObject {
 	labelSettings := widget.NewHyperlinkWithStyle("Review Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
 	if t == 1 {
-		title.Text = "E  R  R  O  R"
-		heading.Text = "Connection Failure"
-		sub.ParseMarkdown("Connection to " + session.Daemon + " has failed. Please review your settings and try again.")
-		labelSettings.Text = "Review Settings"
+		title.Text = i18n.T("common.error")
+		heading.Text = i18n.T("error.connection_failure")
+		sub.ParseMarkdown(fmt.Sprintf(i18n.T("error.connection_desc"), session.Daemon))
+		labelSettings.Text = i18n.T("error.review_settings")
 		labelSettings.OnTapped = func() {
 			session.Window.SetContent(layoutSettings())
 		}
 	} else if t == 2 {
-		title.Text = "E  R  R  O  R"
-		heading.Text = "Write Failure"
-		sub.ParseMarkdown("Could not write data to disk, please check to make sure Engram has the proper permissions and/or you have unzipped the contents.")
-		labelSettings.Text = "Review Settings"
+		title.Text = i18n.T("common.error")
+		heading.Text = i18n.T("error.write_failure")
+		sub.ParseMarkdown(i18n.T("error.write_desc"))
+		labelSettings.Text = i18n.T("error.review_settings")
 		labelSettings.OnTapped = func() {
 			session.Window.SetContent(layoutMain())
 		}
 	} else {
-		title.Text = "E R R O R"
-		heading.Text = "ID-10T Error Protocol"
-		sub.ParseMarkdown("System malfunction... Please... Find... Help...")
-		labelSettings.Text = "Review Settings"
+		title.Text = i18n.T("common.error")
+		heading.Text = i18n.T("error.id10t")
+		sub.ParseMarkdown(i18n.T("error.system_malfunction"))
+		labelSettings.Text = i18n.T("error.review_settings")
 		labelSettings.OnTapped = func() {
 			session.Window.SetContent(layoutSettings())
 		}
@@ -315,7 +317,12 @@ func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 		session.Window.SetContent(layoutTransition())
 
-		session.Window.SetContent(layoutMain())
+		if langData, err := GetValue("settings", []byte("language")); err == nil && len(langData) > 0 {
+			i18n.SetLanguage(string(langData))
+			session.Window.SetContent(layoutMain())
+		} else {
+			session.Window.SetContent(layoutLanguageSelector())
+		}
 
 		frameWidth := ui.MaxWidth
 		frameHeight := ui.MaxHeight

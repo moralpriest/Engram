@@ -27,6 +27,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
@@ -40,12 +41,12 @@ func showMessageWarningPopup() {
 		return
 	}
 
-	header := canvas.NewText("⚠️ Note", colors.Yellow)
+	header := canvas.NewText(i18n.T("messages.note_title"), colors.Yellow)
 	header.TextSize = 18
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	messageText := "Running from your own daemon yields a more reliable experience\n\nAll messages are permanently written to the blockchain\n\nProceed only if you accept these risks"
+	messageText := i18n.T("messages.warning_daemon")
 	message := widget.NewLabel(messageText)
 	message.Alignment = fyne.TextAlignCenter
 	message.Wrapping = fyne.TextWrapWord
@@ -71,7 +72,7 @@ func showMessageWarningPopup() {
 	var overlay *fyne.Container
 	var blocker *fyne.Container
 
-	btnOk := widget.NewButton("Ok", func() {
+	btnOk := widget.NewButton(i18n.T("messages.ok"), func() {
 		uiDo(func() {
 			overlays := session.Window.Canvas().Overlays()
 			overlays.Remove(overlay)
@@ -152,7 +153,7 @@ func layoutMessages() fyne.CanvasObject {
 		showMessageWarningPopup()
 	}
 
-	title := canvas.NewText("M Y    C O N T A C T S", colors.Gray)
+	title := canvas.NewText(i18n.T("messages.contacts"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -164,10 +165,10 @@ func layoutMessages() fyne.CanvasObject {
 
 	// Move definitions up
 	contactInput := widget.NewEntry()
-	contactInput.PlaceHolder = "Search username or address"
+	contactInput.PlaceHolder = i18n.T("messages.search_username")
 	contactInput.SetIcon(theme.SearchIcon())
 
-	btnSend := widget.NewButton("New Message", func() {
+	btnSend := widget.NewButton(i18n.T("messages.new_message"), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutPM())
@@ -175,11 +176,11 @@ func layoutMessages() fyne.CanvasObject {
 	})
 	btnSend.Disable()
 
-	rebuildBtn := widget.NewButton("Rebuild Message History", func() {
+	rebuildBtn := widget.NewButton(i18n.T("messages.rebuild"), func() {
 		rebuildMessageHistory()
 	})
 
-	checkLimit := widget.NewCheck(" Show only recent messages", nil)
+	checkLimit := widget.NewCheck(i18n.T("messages.recent"), nil)
 	checkLimit.OnChanged = func(b bool) {
 		if b {
 			session.LimitMessages = true
@@ -586,7 +587,7 @@ func layoutPM() fyne.CanvasObject {
 		messages.Data = nil
 		chats.Objects = nil
 		if len(filtered) == 0 {
-			empty := widget.NewLabel("No messages found.")
+			empty := widget.NewLabel(i18n.T("messages.no_messages_found"))
 			empty.Alignment = fyne.TextAlignCenter
 			chats.Add(empty)
 			chats.Refresh()
@@ -742,7 +743,7 @@ func layoutPM() fyne.CanvasObject {
 
 	renderThread(messageRecords)
 	threadSearch := widget.NewEntry()
-	threadSearch.PlaceHolder = "Search within this thread"
+	threadSearch.PlaceHolder = i18n.T("messages.search_thread")
 	threadSearch.OnChanged = func(s string) {
 		query := strings.ToLower(strings.TrimSpace(s))
 		if query == "" {
@@ -760,7 +761,7 @@ func layoutPM() fyne.CanvasObject {
 		renderThread(filtered)
 	}
 
-	btnSend := widget.NewButton("Send", nil)
+	btnSend := widget.NewButton(i18n.T("messages.send"), nil)
 	btnSend.Disable()
 	labelLimit := canvas.NewText("", colors.Gray)
 	labelLimit.TextSize = scaleFont(11)
@@ -798,7 +799,7 @@ func layoutPM() fyne.CanvasObject {
 	entry = NewMobileEntry()
 	entry.MultiLine = false
 	entry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
-	entry.SetPlaceHolder("Message")
+	entry.SetPlaceHolder(i18n.T("messages.message"))
 	updateMessageLimit("", session.Username)
 	entry.OnChanged = func(s string) {
 		messages.Message = s
@@ -821,17 +822,17 @@ func layoutPM() fyne.CanvasObject {
 
 		err = checkMessagePack(messages.Message, session.Username, contact)
 		if err != nil {
-			btnSend.Text = "Message too long..."
+			btnSend.Text = i18n.T("messages.too_long")
 			btnSend.Disable()
 			btnSend.Refresh()
 			return
 		} else {
 			if messages.Message == "" {
-				btnSend.Text = "Send"
+				btnSend.Text = i18n.T("messages.send")
 				btnSend.Disable()
 				btnSend.Refresh()
 			} else {
-				btnSend.Text = "Send"
+				btnSend.Text = i18n.T("messages.send")
 				btnSend.Enable()
 				btnSend.Refresh()
 			}
@@ -849,7 +850,7 @@ func layoutPM() fyne.CanvasObject {
 			check, err := checkUsername(messages.Contact, -1)
 			if err != nil {
 				logger.Errorf("[Message] Failed to send: %s\n", err)
-				btnSend.Text = "Failed to verify address..."
+				btnSend.Text = i18n.T("messages.invalid_address")
 				btnSend.Disable()
 				btnSend.Refresh()
 				return
@@ -859,21 +860,21 @@ func layoutPM() fyne.CanvasObject {
 			contact = messages.Contact
 		}
 
-		btnSend.Text = "Setting up transfer..."
+		btnSend.Text = i18n.T("messages.setting_up")
 		btnSend.Disable()
 		btnSend.Refresh()
 
 		txid, err := sendMessage(messages.Message, session.Username, contact)
 		if err != nil {
 			logger.Errorf("[Message] Failed to send: %s\n", err)
-			btnSend.Text = "Failed to send message..."
+			btnSend.Text = i18n.T("messages.failed_send")
 			btnSend.Disable()
 			btnSend.Refresh()
 			return
 		}
 
 		logger.Printf("[Message] Dispatched transaction successfully to: %s\n", messages.Contact)
-		btnSend.Text = "Confirming..."
+		btnSend.Text = i18n.T("messages.confirming")
 		btnSend.Disable()
 		btnSend.Refresh()
 		sentMessage := messages.Message
@@ -903,7 +904,7 @@ func layoutPM() fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					btnSend.Text = "Failed to send message..."
+					btnSend.Text = i18n.T("messages.failed_send")
 					btnSend.Disable()
 					btnSend.Refresh()
 					break
@@ -911,7 +912,7 @@ func layoutPM() fyne.CanvasObject {
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					btnSend.Text = fmt.Sprintf("Confirming... (%d/%d)", walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+					btnSend.Text = fmt.Sprintf(i18n.T("transfers.confirming_progress"), walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
 					btnSend.Refresh()
 				}
 
@@ -934,7 +935,7 @@ func layoutPM() fyne.CanvasObject {
 						})
 						originalMessageRecords = append(originalMessageRecords, messageRecords[len(messageRecords)-1])
 						renderThread(messageRecords)
-						btnSend.Text = "Send"
+						btnSend.Text = i18n.T("messages.send")
 						btnSend.Disable()
 						btnSend.Refresh()
 					})

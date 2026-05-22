@@ -18,9 +18,9 @@
 - [x]  **Desktop QR Code Scanning** (Linux, Windows, MacOS)
 - [x]  **Mobile QR Code Scanning** (Android)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
+- [x]  **Multi-language support** (English, FranÃ§ais, EspaÃ±ol)
 
 ### Upcoming Features
-- [ ]  Multi-language support
 - [ ]  Mobile QR Scanning (iOS)
 
 ### TELA Performance
@@ -121,3 +121,22 @@ See [Security Audit](docs/SECURITY_AUDIT.md) for details.
 ## Contributing
 
 Issues and pull requests are welcome. Please follow [Conventional Commits](https://www.conventioncommits.org/) for pull request titles.
+
+### Adding a New Language
+
+Engram supports community-contributed translations. To add your language:
+
+1. Copy `i18n/template.go` to `i18n/xx.go` (replace `xx` with your language code, e.g., `de.go` for German)
+2. Translate all string values while keeping the keys unchanged
+3. In `i18n/lang.go`:
+   - Add a constant: `const LangXX = "xx"`
+   - Add to `availableLanguages`: `LangXX: "YourLanguage"`
+   - Add to `LanguageOrder()`: append your code to the slice
+   - Add a case in `T()`: `case LangXX: translations = stringsXX`
+4. Build and test: `go build -tags migrated_fynedo`
+
+**Translation guidelines:**
+- Keep technical terms in English: TELA Web, GNOMON, EPOCH, RPC, WS, SCID, dURL, DERO
+- Keep network names in English: Mainnet, Testnet, Simulator
+- If a translated word is too long for a button, abbreviate naturally
+- Preserve format verbs (`%s`, `%d`) and markdown formatting

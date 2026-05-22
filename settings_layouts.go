@@ -35,6 +35,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
@@ -50,28 +51,28 @@ func layoutSettings() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText("Settings", colors.Green)
+	heading := canvas.NewText(i18n.T("settings.title"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelNetwork := canvas.NewText("NETWORK", colors.Gray)
+	labelNetwork := canvas.NewText(i18n.T("settings.network"), colors.Gray)
 	labelNetwork.TextStyle = fyne.TextStyle{Bold: true}
 	labelNetwork.TextSize = scaleFont(14)
 
-	labelNode := canvas.NewText("CONNECTION", colors.Gray)
+	labelNode := canvas.NewText(i18n.T("settings.connection"), colors.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
 	labelNode.TextSize = scaleFont(14)
 
-	labelSecurity := canvas.NewText("SECURITY", colors.Gray)
+	labelSecurity := canvas.NewText(i18n.T("settings.security"), colors.Gray)
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = scaleFont(14)
 
 	textRemoteAccess := widget.NewRichTextWithText("A username and password is required in order to allow application connectivity.")
 	textRemoteAccess.Wrapping = fyne.TextWrapWord
 
-	btnRestore := widget.NewButton("Restore Defaults", nil)
-	btnDelete := widget.NewButton("Clear Local Data", nil)
+	btnRestore := widget.NewButton(i18n.T("settings.restore_defaults"), nil)
+	btnDelete := widget.NewButton(i18n.T("settings.clear_data"), nil)
 
 	type NodeItem struct {
 		Address string
@@ -427,9 +428,9 @@ func layoutSettings() fyne.CanvasObject {
 	btnRestore.OnTapped = func() {
 		verificationOverlay(
 			false,
-			"SETTINGS",
-			"Reset all settings to defaults?",
-			"Confirm",
+			i18n.T("settings.title"),
+			i18n.T("settings.reset_all_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					setNetwork(NETWORK_MAINNET)
@@ -461,15 +462,15 @@ func layoutSettings() fyne.CanvasObject {
 	btnDelete.OnTapped = func() {
 		verificationOverlay(
 			false,
-			"SETTINGS",
-			fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)),
-			"Confirm",
+			i18n.T("settings.title"),
+			fmt.Sprintf(i18n.T("settings.delete_local_data_fmt"), strings.ToLower(session.Network)),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					err := cleanGnomonData()
 					if err != nil {
 						if parseError, ok := err.(*os.PathError); !ok {
-							err = fmt.Errorf("error clearing local %s data", session.Network)
+							err = fmt.Errorf(i18n.T("settings.error_clearing_data_fmt"), session.Network)
 						} else {
 							err = parseError.Err
 						}
@@ -481,7 +482,7 @@ func layoutSettings() fyne.CanvasObject {
 					}
 
 					statusText.Color = colors.Green
-					statusText.Text = fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network))
+					statusText.Text = fmt.Sprintf(i18n.T("settings.gnomon_deleted"), strings.ToLower(session.Network))
 					statusText.Refresh()
 				}
 			},
@@ -583,7 +584,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText("SETTINGS", colors.Green)
+	heading := canvas.NewText(i18n.T("settings.title"), colors.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -596,7 +597,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
+	title := canvas.NewText(i18n.T("settings.remote_access_heading"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -606,17 +607,17 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	rpcLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
 	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	wsLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
 	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnections := canvas.NewText("  C O N N E C T I O N S  ", colors.Gray)
+	labelConnections := canvas.NewText(i18n.T("settings.connections"), colors.Gray)
 	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
@@ -641,14 +642,14 @@ func layoutAppSettings() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
-	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	shortShard := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
 	linkColor := colors.Green
 
 	if remoteAccess.RPC.server == nil {
-		session.Link = "Blocked"
+		session.Link = i18n.T("settings.blocked")
 		linkColor = colors.Gray
 	}
 
@@ -656,7 +657,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
 	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
@@ -666,7 +667,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	remoteAccess.RPC.userText = widget.NewEntry()
-	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.PlaceHolder = i18n.T("settings.username")
 	remoteAccess.RPC.userText.OnChanged = func(s string) {
 		if len(s) > 1 {
 			remoteAccess.RPC.user = s
@@ -675,7 +676,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	remoteAccess.RPC.passText = widget.NewEntry()
 	remoteAccess.RPC.passText.Password = true
-	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.PlaceHolder = i18n.T("settings.password")
 	remoteAccess.RPC.passText.OnChanged = func(s string) {
 		if len(s) > 1 {
 			remoteAccess.RPC.pass = s
@@ -683,7 +684,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	remoteAccess.RPC.portText = widget.NewEntry()
-	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.PlaceHolder = i18n.T("settings.rpc_placeholder")
 	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
 		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 		test := regexp.MustCompile(regex)
@@ -700,7 +701,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	linkColor = colors.Green
 
 	if remoteAccess.WS.server == nil {
-		session.Link = "Blocked"
+		session.Link = i18n.T("settings.blocked")
 		linkColor = colors.Gray
 	}
 
@@ -708,9 +709,9 @@ func layoutAppSettings() fyne.CanvasObject {
 	remoteAccess.WS.status.TextSize = scaleFont(22)
 	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
+	deckChoice := widget.NewSelect([]string{i18n.T("settings.ws_label"), i18n.T("settings.rpc_label")}, nil)
 
-	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle = widget.NewButton(i18n.T("settings.turn_on"), nil)
 	remoteAccess.RPC.toggle.OnTapped = func() {
 		switch session.Network {
 		case NETWORK_TESTNET:
@@ -749,7 +750,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	if remoteAccess.WS.portText == nil {
 		remoteAccess.WS.portText = widget.NewEntry()
-		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.PlaceHolder = i18n.T("settings.ws_placeholder")
 		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
@@ -763,7 +764,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 	}
 
-	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle = widget.NewButton(i18n.T("settings.turn_on"), nil)
 	remoteAccess.WS.toggle.OnTapped = func() {
 		if remoteAccess.WS.portText.Validate() != nil {
 			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
@@ -803,40 +804,40 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	if session.Offline {
-		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Text = i18n.T("settings.disabled_offline")
 		remoteAccess.RPC.toggle.Disable()
 		remoteAccess.RPC.portText.Disable()
-		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Text = i18n.T("settings.disabled_offline")
 		remoteAccess.WS.toggle.Disable()
 		remoteAccess.WS.portText.Disable()
 	} else {
 		if remoteAccess.RPC.server != nil {
-			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Text = i18n.T("settings.allowed")
 			remoteAccess.RPC.status.Color = colors.Green
-			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.RPC.userText.Disable()
 			remoteAccess.RPC.passText.Disable()
 			remoteAccess.RPC.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Text = i18n.T("settings.blocked")
 			remoteAccess.RPC.status.Color = colors.Gray
-			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.RPC.userText.Enable()
 			remoteAccess.RPC.passText.Enable()
 			remoteAccess.RPC.portText.Enable()
 		}
 
 		if remoteAccess.WS.server != nil {
-			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Text = i18n.T("settings.allowed")
 			remoteAccess.WS.status.Color = colors.Green
-			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Text = i18n.T("settings.blocked")
 			remoteAccess.WS.status.Color = colors.Gray
-			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.WS.portText.Enable()
 		}
 	}
@@ -844,12 +845,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
 	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
 
-	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkCopy := widget.NewHyperlinkWithStyle(i18n.T("settings.copy_creds"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopy.OnTapped = func() {
 		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
 	}
 
-	linkPermissions := widget.NewHyperlinkWithStyle("Advanced", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkPermissions := widget.NewHyperlinkWithStyle(i18n.T("settings.advanced_link"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkPermissions.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -995,7 +996,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	deckChoice.OnChanged = func(s string) {
-		if s == "Remote Procedure Calls (RPC)" {
+		if s == i18n.T("settings.rpc_label") {
 			deckFeatures.Objects[0] = rpcForm
 		} else {
 			deckFeatures.Objects[0] = xswdForm
@@ -1027,7 +1028,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// TELA Tab Content
-	telaTitle := canvas.NewText("T E L A", colors.Gray)
+	telaTitle := canvas.NewText(i18n.T("settings.tela_heading"), colors.Gray)
 	telaTitle.TextStyle = fyne.TextStyle{Bold: true}
 	telaTitle.TextSize = scaleFont(16)
 
@@ -1047,7 +1048,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			return fmt.Errorf("invalid port")
+			return fmt.Errorf("%s", i18n.T("settings.invalid_port"))
 		}
 		return tela.SetPortStart(i)
 	}
@@ -1071,10 +1072,10 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 		i, err := strconv.Atoi(s)
 		if err != nil {
-			return fmt.Errorf("invalid percent")
+			return fmt.Errorf("%s", i18n.T("settings.invalid_percent"))
 		}
 		if i < 0 || i > 100 {
-			return fmt.Errorf("must be 0 to 100")
+			return fmt.Errorf("%s", i18n.T("settings.percent_range"))
 		}
 		return nil
 	}
@@ -1086,7 +1087,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Exclusions entry
 	entryExclusions := NewMobileEntry()
-	entryExclusions.SetPlaceHolder("dURL Exclusions (exclude1,exclude2)")
+	entryExclusions.SetPlaceHolder(i18n.T("settings.exclusions_placeholder"))
 	if storedExclusions, found := getTELADual("Exclusions"); found {
 		entryExclusions.SetText(storedExclusions)
 	}
@@ -1099,7 +1100,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// Restrictive Mode checkbox
-	wRestrictiveMode := widget.NewCheck("Restrictive Mode", nil)
+	wRestrictiveMode := widget.NewCheck("", nil)
 	// Load Restrictive Mode setting from dual storage
 	restrictiveModeEnabled := false // Default to OFF (unrestrictive mode)
 	if restrictiveMode, found := getTELADual("Restrictive Mode"); found {
@@ -1140,26 +1141,28 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 	}
 
-	// Allow Content Updates dropdown
-	wAllowUpdates := widget.NewSelect([]string{xswd.Deny.String(), xswd.Allow.String()}, nil)
+	// Allow Content Updates radio buttons
+	allowOptions := []string{i18n.T("settings.permissions.deny"), i18n.T("settings.permissions.allow")}
+	wAllowUpdates := widget.NewRadioGroup(allowOptions, nil)
+	wAllowUpdates.Horizontal = true
 	// Load Allow Updates setting from dual storage
 	if allowUpdates, found := getTELADual("Allow Updates"); found {
 		if allowUpdates == "Allow" {
-			wAllowUpdates.SetSelectedIndex(1)
+			wAllowUpdates.SetSelected(i18n.T("settings.permissions.allow"))
 			logger.Printf("[Engram] TELA Allow Updates loaded from storage: Allow")
 		} else {
-			wAllowUpdates.SetSelectedIndex(0)
+			wAllowUpdates.SetSelected(i18n.T("settings.permissions.deny"))
 			logger.Printf("[Engram] TELA Allow Updates loaded from storage: Deny")
 		}
 	} else {
 		// Default to Allow when no stored value exists
-		wAllowUpdates.SetSelectedIndex(1)
+		wAllowUpdates.SetSelected(i18n.T("settings.permissions.allow"))
 		tela.AllowUpdates(true)
 		setTELADual("Allow Updates", []byte("Allow"))
 		logger.Printf("[Engram] TELA Allow Updates defaulting to: Allow")
 	}
 	wAllowUpdates.OnChanged = func(s string) {
-		if s == xswd.Allow.String() {
+		if s == i18n.T("settings.permissions.allow") {
 			tela.AllowUpdates(true)
 			setTELADual("Allow Updates", []byte("Allow"))
 			logger.Printf("[Engram] TELA Allow Updates set to Allow")
@@ -1170,52 +1173,61 @@ func layoutAppSettings() fyne.CanvasObject {
 		}
 	}
 
-	// Rescan Recheck dropdown
-	wRescanRecheck := widget.NewSelect([]string{"No", "Yes"}, nil)
+	// Rescan Recheck radio buttons
+	rescanOptions := []string{i18n.T("common.no"), i18n.T("common.yes")}
+	wRescanRecheck := widget.NewRadioGroup(rescanOptions, nil)
+	wRescanRecheck.Horizontal = true
 	if storedRescanRecheck, found := getTELADual("Rescan Recheck"); found {
-		if storedRescanRecheck == "Yes" {
-			wRescanRecheck.SetSelectedIndex(1)
+		if storedRescanRecheck == "Yes" || storedRescanRecheck == i18n.T("common.yes") {
+			wRescanRecheck.SetSelected(i18n.T("common.yes"))
 		} else {
-			wRescanRecheck.SetSelectedIndex(0)
+			wRescanRecheck.SetSelected(i18n.T("common.no"))
 		}
 	} else {
-		wRescanRecheck.SetSelectedIndex(0)
+		wRescanRecheck.SetSelected(i18n.T("common.no"))
 	}
 	wRescanRecheck.OnChanged = func(s string) {
-		setTELADual("Rescan Recheck", []byte(s))
+		if s == i18n.T("common.yes") {
+			setTELADual("Rescan Recheck", []byte("Yes"))
+		} else {
+			setTELADual("Rescan Recheck", []byte("No"))
+		}
 	}
 
 	// Sort By radio buttons
-	sortByOptions := []string{"Ratings", "A-Z"}
+	sortByOptions := []string{i18n.T("settings.ratings"), i18n.T("settings.az")}
 	wSortBy := widget.NewRadioGroup(sortByOptions, nil)
 	wSortBy.Horizontal = true
 	if storedSortBy, found := getTELADual("Sort By"); found {
 		if storedSortBy == "Z-A" {
-			wSortBy.SetSelected("A-Z")
+			wSortBy.SetSelected(i18n.T("settings.az"))
 			setTELADual("Sort By", []byte("A-Z"))
 			setTELADual("Sort Order", []byte("Descending"))
+		} else if storedSortBy == "A-Z" {
+			wSortBy.SetSelected(i18n.T("settings.az"))
 		} else {
-			wSortBy.SetSelected(storedSortBy)
+			wSortBy.SetSelected(i18n.T("settings.ratings"))
 		}
 	} else {
 		wSortBy.SetSelected(sortByOptions[0])
 	}
 	wSortBy.OnChanged = func(s string) {
 		if s != "" {
-			setTELADual("Sort By", []byte(s))
-			if s == "Ratings" {
+			if s == i18n.T("settings.ratings") {
+				setTELADual("Sort By", []byte("Ratings"))
 				setTELADual("Sort Order", []byte("Descending"))
 			} else {
+				setTELADual("Sort By", []byte("A-Z"))
 				setTELADual("Sort Order", []byte("Ascending"))
 			}
 		}
 	}
 
 	// Reset Defaults button
-	btnResetDefaults := widget.NewButton("Reset Default Settings", func() {
+	btnResetDefaults := widget.NewButton(i18n.T("settings.reset_defaults"), func() {
 		wRestrictiveMode.SetChecked(false)
-		wAllowUpdates.SetSelectedIndex(0)
-		wRescanRecheck.SetSelectedIndex(0)
+		wAllowUpdates.SetSelected(i18n.T("settings.permissions.deny"))
+		wRescanRecheck.SetSelected(i18n.T("common.no"))
 		wSortBy.SetSelected(sortByOptions[0])
 		setTELADual("Sort Order", []byte("Descending"))
 		entryPortStart.SetText(strconv.Itoa(tela.DEFAULT_PORT_START))
@@ -1224,12 +1236,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 
 	// Delete Search Data button
-	btnDeleteSearchData := widget.NewButton("Delete Search Data", func() {
+	btnDeleteSearchData := widget.NewButton(i18n.T("settings.delete_search"), func() {
 		verificationOverlay(
 			false,
-			"TELA BROWSER",
-			"Delete stored search data?",
-			"Confirm",
+			i18n.T("settings.tela_browser"),
+			i18n.T("settings.delete_search_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					DeleteKey("TELA Search", []byte("SCIDs"))
@@ -1246,12 +1258,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 
 	// Shutdown TELA button
-	btnShutdownTela := widget.NewButton("Shutdown TELA", func() {
+	btnShutdownTela := widget.NewButton(i18n.T("settings.shutdown_tela"), func() {
 		verificationOverlay(
 			false,
-			"TELA BROWSER",
-			"Shutdown all active TELA servers?",
-			"Confirm",
+			i18n.T("settings.tela_browser"),
+			i18n.T("settings.shutdown_tela_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					tela.ShutdownTELA()
@@ -1261,12 +1273,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 
 	// Clear History button
-	btnClearHistory := widget.NewButton("Clear History", func() {
+	btnClearHistory := widget.NewButton(i18n.T("settings.clear_history"), func() {
 		verificationOverlay(
 			false,
-			"TELA BROWSER",
-			"Clear browsing history?",
-			"Confirm",
+			i18n.T("settings.tela_browser"),
+			i18n.T("settings.clear_history_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					shard, err := GetShard()
@@ -1311,21 +1323,25 @@ func layoutAppSettings() fyne.CanvasObject {
 		wrapMobileButton(btnShutdownTela),
 		rectSpacer,
 		rectSpacer,
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Restrictive Mode"), nil, wRestrictiveMode),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.restrictive_mode")),
+		wRestrictiveMode,
 		rectSpacer,
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Allow Content Updates"), wAllowUpdates, nil),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.allow_updates")),
+		wAllowUpdates,
 		rectSpacer,
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Rescan Recheck"), wRescanRecheck, nil),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.rescan_recheck")),
+		wRescanRecheck,
 		rectSpacer,
-		container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown("### Sort By"), wSortBy, nil),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.sort_by")),
+		wSortBy,
 		rectSpacer,
-		widget.NewRichTextFromMarkdown("### Start Port Range"),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.start_port_range")),
 		entryPortStart,
 		rectSpacer,
-		widget.NewRichTextFromMarkdown("### Search Min Likes %"),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.search_min_likes")),
 		entryMinLikes,
 		rectSpacer,
-		widget.NewRichTextFromMarkdown("### Search Exclusions"),
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.search_exclusions")),
 		entryExclusions,
 		rectSpacer,
 		rectSpacer,
@@ -1337,20 +1353,20 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// Advanced Tab Content
-	advancedTitle := canvas.NewText("A D V A N C E D", colors.Gray)
+	advancedTitle := canvas.NewText(i18n.T("settings.advanced_heading"), colors.Gray)
 	advancedTitle.TextStyle = fyne.TextStyle{Bold: true}
 	advancedTitle.TextSize = scaleFont(16)
 
 	// GNOMON Section
-	gnomonTitle := canvas.NewText("GNOMON", colors.Gray)
+	gnomonTitle := canvas.NewText(i18n.T("settings.gnomon_section"), colors.Gray)
 	gnomonTitle.TextSize = scaleFont(11)
 	gnomonTitle.Alignment = fyne.TextAlignCenter
 	gnomonTitle.TextStyle = fyne.TextStyle{Bold: true}
 
-	gnomonDescription := widget.NewRichTextFromMarkdown("Gnomon scans and indexes blockchain data in order to unlock more features, like native asset tracking.")
+	gnomonDescription := widget.NewRichTextFromMarkdown(i18n.T("settings.gnomon_desc"))
 	gnomonDescription.Wrapping = fyne.TextWrapWord
 
-	checkGnomon := widget.NewCheck("Enable Gnomon", func(b bool) {
+	checkGnomon := widget.NewCheck(i18n.T("settings.enable_gnomon"), func(b bool) {
 		if b {
 			StoreValue("settings", []byte("gnomon"), []byte("1"))
 			gnomon.Active = 1
@@ -1373,7 +1389,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// EPOCH STATISTICS Section
-	epochTitle := canvas.NewText("EPOCH STATISTICS", colors.Gray)
+	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), colors.Gray)
 	epochTitle.TextSize = scaleFont(11)
 	epochTitle.Alignment = fyne.TextAlignCenter
 	epochTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1381,19 +1397,19 @@ func layoutAppSettings() fyne.CanvasObject {
 	spacerEpoch := canvas.NewRectangle(color.Transparent)
 	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
 
-	wEpoch := widget.NewSelect([]string{"Session", "Total"}, nil)
-	wEpoch.SetSelected("Session")
+	wEpoch := widget.NewSelect([]string{i18n.T("settings.session"), i18n.T("settings.total")}, nil)
+	wEpoch.SetSelected(i18n.T("settings.session"))
 
 	epochSession, _ := epoch.GetSession(time.Second * 4)
 
-	labelEpochHashes := widget.NewRichTextFromMarkdown("### Hashes")
+	labelEpochHashes := widget.NewRichTextFromMarkdown(i18n.T("settings.hashes"))
 	labelEpochHashes.Wrapping = fyne.TextWrapWord
 
 	epochHashes := fmt.Sprintf("%.1fK", float64(epochSession.Hashes)/1000)
 	textEpochHashes := widget.NewRichTextFromMarkdown(epochHashes)
 	textEpochHashes.Wrapping = fyne.TextWrapWord
 
-	labelEpochBlocks := widget.NewRichTextFromMarkdown("### Miniblocks")
+	labelEpochBlocks := widget.NewRichTextFromMarkdown(i18n.T("settings.miniblocks"))
 	labelEpochBlocks.Wrapping = fyne.TextWrapWord
 
 	epochBlocks := fmt.Sprintf("%d", epochSession.MiniBlocks)
@@ -1402,7 +1418,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	wEpoch.OnChanged = func(s string) {
 		epochSession, _ := epoch.GetSession(time.Second * 4)
-		if s == "Total" {
+		if s == i18n.T("settings.total") {
 			total := epoch.GetSessionEPOCH_Result{
 				Hashes:     remoteAccess.EPOCH.total.Hashes,
 				MiniBlocks: remoteAccess.EPOCH.total.MiniBlocks,
@@ -1424,16 +1440,16 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// SCANNING Section
-	scanningTitle := canvas.NewText("SCANNING", colors.Gray)
+	scanningTitle := canvas.NewText(i18n.T("settings.scanning_section"), colors.Gray)
 	scanningTitle.TextSize = scaleFont(11)
 	scanningTitle.Alignment = fyne.TextAlignCenter
 	scanningTitle.TextStyle = fyne.TextStyle{Bold: true}
 
-	scanningDescription := widget.NewRichTextFromMarkdown("Enter the number of past blocks that the wallet should scan:")
+	scanningDescription := widget.NewRichTextFromMarkdown(i18n.T("settings.scanning_desc"))
 	scanningDescription.Wrapping = fyne.TextWrapWord
 
 	entryTrackBlocks := NewMobileEntry()
-	entryTrackBlocks.SetPlaceHolder("# of Latest Blocks (Optional)")
+	entryTrackBlocks.SetPlaceHolder(i18n.T("settings.blocks_placeholder"))
 	entryTrackBlocks.Validator = func(s string) (err error) {
 		if s == "" {
 			return nil
@@ -1459,23 +1475,23 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// MAINTENANCE Section
-	maintenanceTitle := canvas.NewText("MAINTENANCE", colors.Gray)
+	maintenanceTitle := canvas.NewText(i18n.T("settings.maintenance_section"), colors.Gray)
 	maintenanceTitle.TextSize = scaleFont(11)
 	maintenanceTitle.Alignment = fyne.TextAlignCenter
 	maintenanceTitle.TextStyle = fyne.TextStyle{Bold: true}
 
-	btnClearLocalData := widget.NewButton("Clear Local Data", func() {
+	btnClearLocalData := widget.NewButton(i18n.T("settings.clear_data"), func() {
 		verificationOverlay(
 			false,
-			"ADVANCED",
-			fmt.Sprintf("Delete all local %s data?", strings.ToLower(session.Network)),
-			"Confirm",
+			i18n.T("settings.confirm_dialog"),
+			fmt.Sprintf(i18n.T("settings.delete_local_data_fmt"), strings.ToLower(session.Network)),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					err := cleanGnomonData()
 					if err != nil {
 						if parseError, ok := err.(*os.PathError); !ok {
-							err = fmt.Errorf("error clearing local %s data", session.Network)
+							err = fmt.Errorf(i18n.T("settings.error_clearing_data_fmt"), session.Network)
 						} else {
 							err = parseError.Err
 						}
@@ -1486,7 +1502,7 @@ func layoutAppSettings() fyne.CanvasObject {
 						return
 					}
 
-					successDialog := dialog.NewInformation("Success", fmt.Sprintf("Gnomon %s data successfully deleted.", strings.ToLower(session.Network)), session.Window)
+					successDialog := dialog.NewInformation(i18n.T("common.success"), fmt.Sprintf(i18n.T("settings.gnomon_deleted"), strings.ToLower(session.Network)), session.Window)
 					successDialog.SetOnClosed(func() {})
 					successDialog.Show()
 				}
@@ -1494,12 +1510,12 @@ func layoutAppSettings() fyne.CanvasObject {
 		)
 	})
 
-	btnRestoreDefaults := widget.NewButton("Restore Defaults", func() {
+	btnRestoreDefaults := widget.NewButton(i18n.T("settings.restore_defaults"), func() {
 		verificationOverlay(
 			false,
-			"ADVANCED",
-			"Reset all settings to defaults?",
-			"Confirm",
+			i18n.T("settings.confirm_dialog"),
+			i18n.T("settings.reset_all_prompt"),
+			i18n.T("common.confirm"),
 			func(b bool) {
 				if b {
 					setNetwork(NETWORK_MAINNET)
@@ -1511,7 +1527,7 @@ func layoutAppSettings() fyne.CanvasObject {
 					remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
 					setRemoteAccess(remoteAccess.RPC.port, "RPC")
 
-					successDialog := dialog.NewInformation("Success", "All settings have been restored to defaults.", session.Window)
+					successDialog := dialog.NewInformation(i18n.T("common.success"), i18n.T("settings.all_defaults"), session.Window)
 					successDialog.SetOnClosed(func() {})
 					successDialog.Show()
 				}
@@ -1519,12 +1535,12 @@ func layoutAppSettings() fyne.CanvasObject {
 		)
 	})
 
-	btnExportDebugLog := widget.NewButton("Export Debug Log", func() {
+	btnExportDebugLog := widget.NewButton(i18n.T("settings.export_debug"), func() {
 		debugLogPath := getDebugLogPath()
 		data, err := os.ReadFile(debugLogPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				dialog.ShowInformation("Debug Log", "No debug log file found yet.", session.Window)
+				dialog.ShowInformation(i18n.T("settings.debug_log"), i18n.T("settings.debug_log_not_found"), session.Window)
 				return
 			}
 
@@ -1550,7 +1566,7 @@ func layoutAppSettings() fyne.CanvasObject {
 				return
 			}
 
-			dialog.ShowInformation("Debug Log", "Debug log exported successfully.", session.Window)
+			dialog.ShowInformation(i18n.T("settings.debug_log"), i18n.T("settings.debug_log_exported"), session.Window)
 		}, session.Window)
 
 		if !a.Driver().Device().IsMobile() {
@@ -1567,12 +1583,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 
 	// DATASHARD Section components
-	labelDatashard := canvas.NewText("DATASHARD", colors.Gray)
+	labelDatashard := canvas.NewText(i18n.T("settings.datashard_section"), colors.Gray)
 	labelDatashard.TextSize = scaleFont(11)
 	labelDatashard.Alignment = fyne.TextAlignCenter
 	labelDatashard.TextStyle = fyne.TextStyle{Bold: true}
 
-	headerDatashard := canvas.NewText("DATASHARD  ID", colors.Gray)
+	headerDatashard := canvas.NewText(i18n.T("settings.datashard_id"), colors.Gray)
 	headerDatashard.TextSize = scaleFont(16)
 	headerDatashard.Alignment = fyne.TextAlignCenter
 	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
@@ -1583,25 +1599,25 @@ func layoutAppSettings() fyne.CanvasObject {
 	textDatashard := widget.NewRichTextFromMarkdown("### " + shardID)
 	textDatashard.Wrapping = fyne.TextWrapWord
 
-	textDatashardDesc := widget.NewRichTextFromMarkdown("Datashards hold encrypted data and stores it locally on your device. Each datashard is unique and can only be decrypted by the account it is associated with. Examples of data stored include:")
+	textDatashardDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.datashard_desc"))
 	textDatashardDesc.Wrapping = fyne.TextWrapWord
 
-	textDatashardDesc2 := widget.NewRichTextFromMarkdown("* Datapad entries\n* Saved search history\n* Asset scan results\n* Account settings")
+	textDatashardDesc2 := widget.NewRichTextFromMarkdown(i18n.T("settings.datashard_examples"))
 	textDatashardDesc2.Wrapping = fyne.TextWrapWord
 
-	btnClearDatashard := widget.NewButton("Delete Datashard", nil)
+	btnClearDatashard := widget.NewButton(i18n.T("settings.delete_datashard"), nil)
 	btnClearDatashard.OnTapped = func() {
-		header := canvas.NewText("DATASHARD  DELETION  REQUESTED", colors.Gray)
+		header := canvas.NewText(i18n.T("settings.datashard_delete_request"), colors.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText("Are you sure?", colors.Account)
+		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), colors.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		linkClose := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkClose := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 		linkClose.OnTapped = func() {
 			session.Datapad = ""
 			session.DatapadChanged = false
@@ -1617,7 +1633,7 @@ func layoutAppSettings() fyne.CanvasObject {
 				if err != nil {
 					dialog.ShowError(fmt.Errorf("failed to delete datashard: %v", err), session.Window)
 				} else {
-					dialog.ShowInformation("Success", "Datashard deleted successfully!\n\nAll local data has been cleared.\nTELA scan will perform a fresh scan on next open.", session.Window)
+					dialog.ShowInformation(i18n.T("common.success"), i18n.T("settings.datashard_deleted"), session.Window)
 				}
 			})
 		}
@@ -1742,6 +1758,51 @@ func layoutAppSettings() fyne.CanvasObject {
 		rectSpacer,
 		checkGnomon,
 
+		// LANGUAGE Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			canvas.NewText(i18n.T("settings.language_section"), colors.Gray),
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.language_label")),
+		rectSpacer,
+		func() *fyne.Container {
+			langNames := []string{}
+			langCodes := i18n.LanguageOrder()
+			for _, code := range langCodes {
+				langNames = append(langNames, i18n.AvailableLanguages()[code])
+			}
+			wLang := widget.NewSelect(langNames, func(s string) {
+				idx := 0
+				for i, name := range langNames {
+					if name == s {
+						idx = i
+						break
+					}
+				}
+				i18n.SetLanguageFromIndex(idx)
+				StoreValue("settings", []byte("language"), []byte(langCodes[idx]))
+			})
+			currentLang := i18n.GetLanguage()
+			for i, code := range langCodes {
+				if code == currentLang {
+					wLang.SetSelectedIndex(i)
+					break
+				}
+			}
+			return container.NewStack(
+				rectWidth90,
+				wLang,
+			)
+		}(),
+
 		// EPOCH STATISTICS Section
 		rectSpacer,
 		rectSpacer,
@@ -1864,9 +1925,9 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	// Create the tab container with width constraint
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Remote", remoteAccessContent),
-		container.NewTabItem("TELA", telaContent),
-		container.NewTabItem("Advanced", advancedContent),
+		container.NewTabItem(i18n.T("settings.remote"), remoteAccessContent),
+		container.NewTabItem(i18n.T("settings.tela"), telaContent),
+		container.NewTabItem(i18n.T("settings.advanced"), advancedContent),
 	)
 
 	// Select default tab based on how we navigated here
@@ -1973,7 +2034,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("R E M O T E   A C C E S S", colors.Gray)
+	title := canvas.NewText(i18n.T("settings.remote_access_heading"), colors.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -1988,17 +2049,17 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	rpcLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
 	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	wsLabel := canvas.NewText("      C O N F I G U R A T I O N      ", colors.Gray)
+	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
 	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnections := canvas.NewText("  C O N N E C T I O N S  ", colors.Gray)
+	labelConnections := canvas.NewText(i18n.T("settings.connections"), colors.Gray)
 	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
@@ -2033,14 +2094,14 @@ func layoutRemoteAccess() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	shortShard := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	shortShard := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
 	linkColor := colors.Green
 
 	if remoteAccess.RPC.server == nil {
-		session.Link = "Blocked"
+		session.Link = i18n.T("settings.blocked")
 		linkColor = colors.Gray
 	}
 
@@ -2048,7 +2109,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	serverStatus := canvas.NewText("APPLICATION  CONNECTIONS", colors.Gray)
+	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
 	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
@@ -2058,7 +2119,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	)
 
 	remoteAccess.RPC.userText = widget.NewEntry()
-	remoteAccess.RPC.userText.PlaceHolder = "Username"
+	remoteAccess.RPC.userText.PlaceHolder = i18n.T("settings.username")
 	remoteAccess.RPC.userText.OnChanged = func(s string) {
 		if len(s) > 1 {
 			remoteAccess.RPC.user = s
@@ -2067,7 +2128,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	remoteAccess.RPC.passText = widget.NewEntry()
 	remoteAccess.RPC.passText.Password = true
-	remoteAccess.RPC.passText.PlaceHolder = "Password"
+	remoteAccess.RPC.passText.PlaceHolder = i18n.T("settings.password")
 	remoteAccess.RPC.passText.OnChanged = func(s string) {
 		if len(s) > 1 {
 			remoteAccess.RPC.pass = s
@@ -2076,7 +2137,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 
 	remoteAccess.RPC.portText = widget.NewEntry()
-	remoteAccess.RPC.portText.PlaceHolder = "0.0.0.0:10103"
+	remoteAccess.RPC.portText.PlaceHolder = i18n.T("settings.rpc_placeholder")
 	remoteAccess.RPC.portText.Validator = func(s string) (err error) {
 		regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 		test := regexp.MustCompile(regex)
@@ -2094,7 +2155,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	linkColor = colors.Green
 
 	if remoteAccess.WS.server == nil {
-		session.Link = "Blocked"
+		session.Link = i18n.T("settings.blocked")
 		linkColor = colors.Gray
 	}
 
@@ -2102,9 +2163,9 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	remoteAccess.WS.status.TextSize = scaleFont(22)
 	remoteAccess.WS.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	deckChoice := widget.NewSelect([]string{"Web Sockets (WS)", "Remote Procedure Calls (RPC)"}, nil)
+	deckChoice := widget.NewSelect([]string{i18n.T("settings.ws_label"), i18n.T("settings.rpc_label")}, nil)
 
-	remoteAccess.RPC.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.RPC.toggle = widget.NewButton(i18n.T("settings.turn_on"), nil)
 	remoteAccess.RPC.toggle.OnTapped = func() {
 		switch session.Network {
 		case NETWORK_TESTNET:
@@ -2143,7 +2204,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	if remoteAccess.WS.portText == nil {
 		remoteAccess.WS.portText = widget.NewEntry()
-		remoteAccess.WS.portText.PlaceHolder = "0.0.0.0:44326"
+		remoteAccess.WS.portText.PlaceHolder = i18n.T("settings.ws_placeholder")
 		remoteAccess.WS.portText.Validator = func(s string) (err error) {
 			regex := `^(?:[a-zA-Z0-9]{1,62}(?:[-\.][a-zA-Z0-9]{1,62})+)(:\d+)?$`
 			test := regexp.MustCompile(regex)
@@ -2169,7 +2230,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 		}
 	}
 
-	remoteAccess.WS.toggle = widget.NewButton("Turn On", nil)
+	remoteAccess.WS.toggle = widget.NewButton(i18n.T("settings.turn_on"), nil)
 	remoteAccess.WS.toggle.OnTapped = func() {
 		if remoteAccess.WS.portText.Validate() != nil {
 			remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
@@ -2217,40 +2278,40 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 
 	if session.Offline {
-		remoteAccess.RPC.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.RPC.toggle.Text = i18n.T("settings.disabled_offline")
 		remoteAccess.RPC.toggle.Disable()
 		remoteAccess.RPC.portText.Disable()
-		remoteAccess.WS.toggle.Text = "Disabled in Offline Mode"
+		remoteAccess.WS.toggle.Text = i18n.T("settings.disabled_offline")
 		remoteAccess.WS.toggle.Disable()
 		remoteAccess.WS.portText.Disable()
 	} else {
 		if remoteAccess.RPC.server != nil {
-			remoteAccess.RPC.status.Text = "Allowed"
+			remoteAccess.RPC.status.Text = i18n.T("settings.allowed")
 			remoteAccess.RPC.status.Color = colors.Green
-			remoteAccess.RPC.toggle.Text = "Turn Off"
+			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.RPC.userText.Disable()
 			remoteAccess.RPC.passText.Disable()
 			remoteAccess.RPC.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			remoteAccess.RPC.status.Text = "Blocked"
+			remoteAccess.RPC.status.Text = i18n.T("settings.blocked")
 			remoteAccess.RPC.status.Color = colors.Gray
-			remoteAccess.RPC.toggle.Text = "Turn On"
+			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.RPC.userText.Enable()
 			remoteAccess.RPC.passText.Enable()
 			remoteAccess.RPC.portText.Enable()
 		}
 
 		if remoteAccess.WS.server != nil {
-			remoteAccess.WS.status.Text = "Allowed"
+			remoteAccess.WS.status.Text = i18n.T("settings.allowed")
 			remoteAccess.WS.status.Color = colors.Green
-			remoteAccess.WS.toggle.Text = "Turn Off"
+			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
-			remoteAccess.WS.status.Text = "Blocked"
+			remoteAccess.WS.status.Text = i18n.T("settings.blocked")
 			remoteAccess.WS.status.Color = colors.Gray
-			remoteAccess.WS.toggle.Text = "Turn On"
+			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.WS.portText.Enable()
 		}
 	}
@@ -2258,12 +2319,12 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	remoteAccess.RPC.userText.SetText(remoteAccess.RPC.user)
 	remoteAccess.RPC.passText.SetText(remoteAccess.RPC.pass)
 
-	linkCopy := widget.NewHyperlinkWithStyle("Copy Credentials", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkCopy := widget.NewHyperlinkWithStyle(i18n.T("settings.copy_creds"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkCopy.OnTapped = func() {
 		a.Clipboard().SetContent(remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass)
 	}
 
-	linkPermissions := widget.NewHyperlinkWithStyle("Settings", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkPermissions := widget.NewHyperlinkWithStyle(i18n.T("settings.title"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkPermissions.OnTapped = func() {
 		//if remoteAccess.WS.server != nil {
 		session.LastDomain = session.Window.Content()
@@ -2426,7 +2487,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 
 	deckChoice.OnChanged = func(s string) {
-		if s == "Remote Procedure Calls (RPC)" {
+		if s == i18n.T("settings.rpc_label") {
 			deckFeatures.Objects[0] = rpcForm
 		} else {
 			deckFeatures.Objects[0] = xswdForm
