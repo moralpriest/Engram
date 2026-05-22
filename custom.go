@@ -22,6 +22,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -361,25 +362,71 @@ func newSmallIconButton(label string, icon fyne.Resource, onTap func(), width ..
 	return container.NewGridWrap(scalePoint(w, 40), btn)
 }
 
-func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
-	return newIconLabelButtonWithColor(label, icon, colors.Green, onTap, width...)
+type hoverButton struct {
+	widget.Button
+	onMouseIn  func()
+	onMouseOut func()
 }
 
-func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
-	iconImg := widget.NewIcon(icon)
-	iconSizer := container.NewGridWrap(scalePoint(28, 28), iconImg)
-	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+func newHoverButton(onTap func(), onIn func(), onOut func()) *hoverButton {
+	b := &hoverButton{onMouseIn: onIn, onMouseOut: onOut}
+	b.OnTapped = onTap
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+func (b *hoverButton) MouseIn(e *desktop.MouseEvent) {
+	fmt.Println("MouseIn called!")
+	if b.onMouseIn != nil {
+		b.onMouseIn()
+	}
+	b.Button.MouseIn(e)
+}
+
+func (b *hoverButton) MouseMoved(e *desktop.MouseEvent) {
+	b.Button.MouseMoved(e)
+}
+
+func (b *hoverButton) MouseOut() {
+	fmt.Println("MouseOut called!")
+	if b.onMouseOut != nil {
+		b.onMouseOut()
+	}
+	b.Button.MouseOut()
+}
+
+func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
+	return newIconLabelButtonWithColor(label, icon, colors.Green, color.White, onTap, width...)
+}
+
+func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, hoverIconColor color.Color, onTap func(), width ...float32) *fyne.Container {
+	iconImgNormal := widget.NewIcon(icon)
+	iconSizerNormal := container.NewGridWrap(scalePoint(28, 28), iconImgNormal)
+	themedIconNormal := container.NewThemeOverride(iconSizerNormal, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+
+	iconImgHover := widget.NewIcon(icon)
+	iconSizerHover := container.NewGridWrap(scalePoint(28, 28), iconImgHover)
+	themedIconHover := container.NewThemeOverride(iconSizerHover, &tintTheme{Theme: theme.Current(), iconColor: hoverIconColor})
+	themedIconHover.Hide()
+
+	iconStack := container.NewStack(themedIconNormal, themedIconHover)
 
 	labelText := canvas.NewText(label, color.White)
 	labelText.TextSize = scaleFont(11)
 	labelText.Alignment = fyne.TextAlignCenter
 
 	content := container.NewVBox(
-		container.NewCenter(themedIcon),
+		container.NewCenter(iconStack),
 		labelText,
 	)
 
-	btn := widget.NewButton("", onTap)
+	btn := newHoverButton(onTap, func() {
+		themedIconNormal.Hide()
+		themedIconHover.Show()
+	}, func() {
+		themedIconHover.Hide()
+		themedIconNormal.Show()
+	})
 	btn.Importance = widget.LowImportance
 
 	w := float32(100)

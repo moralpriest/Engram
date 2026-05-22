@@ -364,7 +364,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 	buttonWidth := ui.Width * 0.9 / 3
 
-	btnExit := newIconLabelButtonWithColor(i18n.T("dashboard.exit"), theme.LogoutIcon(), colors.SoftRed, func() {
+	btnExit := newIconLabelButtonWithColor(i18n.T("dashboard.exit"), theme.LogoutIcon(), colors.SoftRed, color.Black, func() {
 		if session.Navigating {
 			return
 		}
