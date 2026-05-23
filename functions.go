@@ -3002,7 +3002,7 @@ func registerAccount() {
 		return
 	}
 
-	link := widget.NewHyperlinkWithStyle("Cancel", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	link := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	link.OnTapped = func() {
 		session.Gif.Stop()
 		session.Gif = nil

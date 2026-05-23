@@ -4486,7 +4486,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			launchStatus.Text = i18n.T("tela.status_starting_app")
 		}
 		launchStatus.Show()
-		btnServer.Text = "Cancel"
+		btnServer.Text = i18n.T("common.cancel")
 		btnServer.SetIcon(theme.CancelIcon())
 
 		// Sync UI with existing launch progress
@@ -4635,7 +4635,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			launchProgress.SetValue(0)
 			launchStatus.Text = i18n.T("tela.status_starting_app")
 			launchStatus.Show()
-			btnServer.SetText("Cancel")
+			btnServer.SetText(i18n.T("common.cancel"))
 			btnServer.SetIcon(theme.CancelIcon())
 			btnServer.Refresh()
 			launchProgress.Refresh()
