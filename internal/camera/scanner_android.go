@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver"
 
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 )
@@ -79,8 +80,7 @@ func (s *AndroidScanner) Start() error {
 	imgWidget.SetMinSize(fyne.NewSize(240, 320))
 
 	content := container.NewMax(imgWidget)
-
-	d := dialog.NewCustom("Scan QR Code", "Close", content, s.window)
+	d := dialog.NewCustom(i18n.T("send.scan_qr"), i18n.T("common.close"), content, s.window)
 	d.SetOnClosed(func() {
 		s.Stop()
 	})

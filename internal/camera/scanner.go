@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 	"github.com/svanichkin/gocam"
@@ -54,7 +55,7 @@ func (s *DesktopScanner) Start() error {
 	imgWidget.SetMinSize(fyne.NewSize(400, 300))
 
 	content := container.NewMax(imgWidget)
-	d := dialog.NewCustom("Scan QR Code", "Close", content, s.window)
+	d := dialog.NewCustom(i18n.T("send.scan_qr"), i18n.T("common.close"), content, s.window)
 
 	d.SetOnClosed(func() {
 		s.Stop()

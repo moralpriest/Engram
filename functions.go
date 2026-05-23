@@ -7825,7 +7825,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		// If wallet is set to connect to all requests, connect to app
 		if remoteAccess.WS.global.connect {
 			logger.Printf("[Engram] Applied automatic XSWD connection to %s\n", ad.Name)
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been approved"})
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.connection_approved")})
 			go refreshXSWDList()
 			return true
 		}
@@ -7838,14 +7838,14 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	overlay := session.Window.Canvas().Overlays()
 
-	headerText := "NEW  CONNECTION  REQUEST"
+	headerText := i18n.T("xswd.new_connection_request")
 
 	header := canvas.NewText(headerText, colors.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText("APP  NAME", colors.Gray)
+	labelApp := canvas.NewText(i18n.T("xswd.connection_app_name"), colors.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -7853,7 +7853,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelID := canvas.NewText("APP  ID", colors.Gray)
+	labelID := canvas.NewText(i18n.T("xswd.connection_app_id"), colors.Gray)
 	labelID.TextSize = 14
 	labelID.Alignment = fyne.TextAlignLeading
 	labelID.TextStyle = fyne.TextStyle{Bold: true}
@@ -7861,7 +7861,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textID := widget.NewRichTextFromMarkdown(ad.Id)
 	textID.Wrapping = fyne.TextWrapWord
 
-	labelURL := canvas.NewText("URL", colors.Gray)
+	labelURL := canvas.NewText(i18n.T("xswd.connection_url"), colors.Gray)
 	labelURL.TextSize = 14
 	labelURL.Alignment = fyne.TextAlignLeading
 	labelURL.TextStyle = fyne.TextStyle{Bold: true}
@@ -7869,7 +7869,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textURL := widget.NewRichTextFromMarkdown(ad.Url)
 	textURL.Wrapping = fyne.TextWrapWord
 
-	labelPermissions := canvas.NewText("PERMISSIONS", colors.Gray)
+	labelPermissions := canvas.NewText(i18n.T("xswd.connection_permissions"), colors.Gray)
 	labelPermissions.TextSize = 14
 	labelPermissions.Alignment = fyne.TextAlignLeading
 	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
@@ -7903,11 +7903,25 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		sep := canvas.NewRectangle(colors.Gray)
 		sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
 
+		permText := perm.String()
+		switch perm {
+		case xswd.AlwaysAllow:
+			permText = i18n.T("settings.permissions.always_allow")
+		case xswd.AlwaysDeny:
+			permText = i18n.T("settings.permissions.always_deny")
+		case xswd.Allow:
+			permText = i18n.T("settings.permissions.allow")
+		case xswd.Deny:
+			permText = i18n.T("settings.permissions.deny")
+		case xswd.Ask:
+			permText = i18n.T("settings.permissions.ask")
+		}
+
 		add := container.NewVBox(
 			textMethod,
 			container.NewHBox(
 				textSpacer,
-				canvas.NewText(perm.String(), permColor),
+				canvas.NewText(permText, permColor),
 			),
 			textSpacer,
 			container.NewHBox(
@@ -7921,14 +7935,14 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	if len(permForm.Objects) == 0 {
 		permForm.Add(
 			container.NewVBox(
-				widget.NewRichTextFromMarkdown("No permissions"),
+				widget.NewRichTextFromMarkdown(i18n.T("xswd.connection_no_permissions")),
 			),
 		)
 	} else {
 		permForm.Add(textSpacer)
 	}
 
-	labelEvents := canvas.NewText("EVENTS", colors.Gray)
+	labelEvents := canvas.NewText(i18n.T("xswd.connection_events"), colors.Gray)
 	labelEvents.TextSize = 14
 	labelEvents.Alignment = fyne.TextAlignLeading
 	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
@@ -7966,7 +7980,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	if len(eventsForm.Objects) == 0 {
 		eventsForm.Add(
 			container.NewVBox(
-				widget.NewRichTextFromMarkdown("No events"),
+				widget.NewRichTextFromMarkdown(i18n.T("xswd.connection_no_events")),
 			),
 		)
 	}
@@ -7979,7 +7993,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	done := make(chan struct{})
 
-	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
+	btnAllow := widget.NewButton(i18n.T("xswd.allow"), func() {
 		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
 			return
@@ -7989,7 +8003,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	})
 	btnAllow.Importance = widget.MediumImportance
 
-	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
+	btnDeny := widget.NewButton(i18n.T("xswd.deny"), func() {
 		if !isWalletGenerationActive(generation) {
 			done <- struct{}{}
 			return
@@ -8080,7 +8094,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		)
 
 		if a.Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new connection request has been received"})
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.connection_received")})
 			session.Window.RequestFocus()
 		} else {
 			session.Window.RequestFocus()
@@ -8247,14 +8261,14 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	overlay := session.Window.Canvas().Overlays()
 
-	headerText := "NEW  PERMISSION  REQUEST"
+	headerText := i18n.T("xswd.new_permission_request")
 
 	header := canvas.NewText(headerText, colors.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp := canvas.NewText(i18n.T("xswd.from"), colors.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -8262,7 +8276,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelRequest := canvas.NewText("REQUESTING", colors.Gray)
+	labelRequest := canvas.NewText(i18n.T("xswd.requesting"), colors.Gray)
 	labelRequest.TextSize = 14
 	labelRequest.Alignment = fyne.TextAlignLeading
 	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
@@ -8270,12 +8284,12 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	textRequest := widget.NewRichTextFromMarkdown("### " + method)
 	textRequest.Wrapping = fyne.TextWrapWord
 
-	labelParams := canvas.NewText("PARAMETERS", colors.Gray)
+	labelParams := canvas.NewText(i18n.T("xswd.parameters"), colors.Gray)
 	labelParams.TextSize = 14
 	labelParams.Alignment = fyne.TextAlignLeading
 	labelParams.TextStyle = fyne.TextStyle{Bold: true}
 
-	params := "None"
+	params := i18n.T("xswd.none")
 	if method == "HandleTELALinks" {
 		var linkParams TELALink_Params
 		err := request.UnmarshalParams(&linkParams)
@@ -8312,16 +8326,16 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	canStorePermission := remoteAccess.WS.server != nil && remoteAccess.WS.server.CanStorePermission(method)
 	alwaysRemember := false
-	rememberCheck := widget.NewCheck("Always remember this choice", func(checked bool) {
+	rememberCheck := widget.NewCheck(i18n.T("xswd.always_remember"), func(checked bool) {
 		alwaysRemember = checked
 	})
 	if !canStorePermission {
 		rememberCheck.Hide()
 	}
 
-	btnAllow := widget.NewButtonWithIcon("Allow", theme.ConfirmIcon(), nil)
+	btnAllow := widget.NewButtonWithIcon(i18n.T("xswd.allow"), theme.ConfirmIcon(), nil)
 	btnAllow.Importance = widget.MediumImportance
-	btnDeny := widget.NewButtonWithIcon("Deny", theme.CancelIcon(), nil)
+	btnDeny := widget.NewButtonWithIcon(i18n.T("xswd.deny"), theme.CancelIcon(), nil)
 
 	content := container.NewStack(
 		container.NewBorder(
@@ -8387,7 +8401,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		done <- struct{}{}
 	}
 
-	linkRemove := widget.NewHyperlinkWithStyle("Remove Application", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRemove := widget.NewHyperlinkWithStyle(i18n.T("xswd.remove_application"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkRemove.OnTapped = func() {
 		if !isWalletGenerationActive(generation) {
 			return
@@ -8395,8 +8409,8 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		verificationOverlay(
 			false,
 			ad.Name,
-			"Remove this application?",
-			"Remove",
+			i18n.T("xswd.remove_this_application"),
+			i18n.T("xswd.remove"),
 			func(b bool) {
 				if b {
 					remoteAccess.WS.server.RemoveApplication(ad)
@@ -8449,7 +8463,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		)
 
 		if fyne.CurrentApp().Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "A new permission request has been received"})
+			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.new_permission_notification")})
 			session.Window.RequestFocus()
 		} else {
 			session.Window.RequestFocus()
