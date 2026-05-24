@@ -16,6 +16,7 @@ const (
 	LangDE = "de"
 	LangRU = "ru"
 	LangPT = "pt"
+	LangZH = "zh"
 )
 
 var availableLanguages = map[string]string{
@@ -25,6 +26,7 @@ var availableLanguages = map[string]string{
 	LangDE: "Deutsch",
 	LangRU: "Русский",
 	LangPT: "Português",
+	LangZH: "简体中文",
 }
 
 func AvailableLanguages() map[string]string {
@@ -32,7 +34,7 @@ func AvailableLanguages() map[string]string {
 }
 
 func LanguageOrder() []string {
-	return []string{LangEN, LangFR, LangES, LangDE, LangRU, LangPT}
+	return []string{LangEN, LangFR, LangES, LangDE, LangRU, LangPT, LangZH}
 }
 
 func T(key string) string {
@@ -63,6 +65,8 @@ func T(key string) string {
 		translations = stringsRU
 	case LangPT:
 		translations = stringsPT
+	case LangZH:
+		translations = stringsZH
 	}
 
 	if translations != nil {
