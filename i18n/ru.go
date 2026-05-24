@@ -14,7 +14,7 @@ var stringsRU = map[string]string{
 
 	"registration.title":     "Р Е Г И С Т Р А Ц И Я",
 	"registration.wait":      "Пожалуйста, подождите...",
-	"registration.take_time": "Этот одноразовый процесс может\nзанять некоторое время.",
+	"registration.take_time": "Процесс может занять время.",
 
 	"create.title":            "Новый аккаунт",
 	"create.create":           "Создать",
