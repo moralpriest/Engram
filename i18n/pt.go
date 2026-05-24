@@ -74,7 +74,7 @@ var stringsPT = map[string]string{
 	"settings.advanced_heading":                      "A V A N Ç A D O",
 	"settings.remote":                                "Remoto",
 	"settings.tela":                                  "TELA",
-	"settings.advanced":                              "Avanç.",
+	"settings.advanced":                              "Avançado",
 	"settings.network":                               "REDE",
 	"settings.connection":                            "CONEXÃO",
 	"settings.security":                              "SEGURANÇA",

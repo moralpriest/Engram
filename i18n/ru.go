@@ -14,7 +14,7 @@ var stringsRU = map[string]string{
 
 	"registration.title":     "Р Е Г И С Т Р А Ц И Я",
 	"registration.wait":      "Пожалуйста, подождите...",
-	"registration.take_time": "Этот одноразовый процесс может занять некоторое время.",
+	"registration.take_time": "Этот одноразовый процесс может\nзанять некоторое время.",
 
 	"create.title":            "Новый аккаунт",
 	"create.create":           "Создать",
@@ -518,7 +518,7 @@ var stringsRU = map[string]string{
 	"wallet.sync_status":         "Синхронизация с сетью и проверка статуса...",
 	"wallet.registration_status": "Проверка статуса регистрации аккаунта...",
 
-	"register.proof_of_work":         "PROOF-OF-WORK",
+	"register.proof_of_work":         "ДОКАЗАТЕЛЬСТВО РАБОТЫ",
 	"register.countdown_estimating":  "Осталось: Вычисление...",
 	"register.countdown_completing":  "Осталось: Скоро завершится...",
 	"register.countdown_fmt_hours":   "Осталось: ~%dч %dм",
