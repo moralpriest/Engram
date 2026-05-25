@@ -456,6 +456,7 @@ var stringsEN = map[string]string{
 	"language.russian":    "Русский",
 	"language.portuguese": "Português",
 	"language.esperanto":  "Esperanto",
+	"language.italian":    "Italiano",
 
 	"common.yes":     "Yes",
 	"common.no":      "No",

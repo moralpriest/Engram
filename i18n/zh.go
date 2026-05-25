@@ -433,6 +433,7 @@ var stringsZH = map[string]string{
 	"language.russian":                               "Русский",
 	"language.portuguese":                            "Português",
 	"language.esperanto":                             "Esperanto",
+	"language.italian":                               "Italiano",
 	"common.yes":                                     "是",
 	"common.no":                                      "否",
 	"common.confirm":                                 "确认",
