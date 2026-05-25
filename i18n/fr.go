@@ -455,6 +455,7 @@ var stringsFR = map[string]string{
 	"language.german":     "Deutsch",
 	"language.russian":    "Русский",
 	"language.portuguese": "Português",
+	"language.esperanto":  "Esperanto",
 
 	"common.yes":     "Oui",
 	"common.no":      "Non",

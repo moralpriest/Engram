@@ -432,6 +432,7 @@ var stringsJA = map[string]string{
 	"language.german":                                "Deutsch",
 	"language.russian":                               "Русский",
 	"language.portuguese":                            "Português",
+	"language.esperanto":                             "Esperanto",
 	"common.yes":                                     "はい",
 	"common.no":                                      "いいえ",
 	"common.confirm":                                 "確認",
