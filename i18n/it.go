@@ -14,7 +14,7 @@ var stringsIT = map[string]string{
 
 	"registration.title":     "R E G I S T R A Z I O N E",
 	"registration.wait":      "Attendere prego...",
-	"registration.take_time": "Questo processo una tantum potrebbe richiedere del tempo.",
+	"registration.take_time": "Questo processo richiede tempo.",
 
 	"create.title":            "Nuovo Account",
 	"create.create":           "Crea",

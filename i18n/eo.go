@@ -14,7 +14,7 @@ var stringsEO = map[string]string{
 
 	"registration.title":     "R E G I S T R I Ĝ O",
 	"registration.wait":      "Bonvolu atendi...",
-	"registration.take_time": "Ĉi tiu unufoja procezo povas daŭri iom da tempo.",
+	"registration.take_time": "Ĉi tio povas daŭri iom da tempo.",
 
 	"create.title":            "Nova Konto",
 	"create.create":           "Krei",
