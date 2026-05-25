@@ -498,7 +498,7 @@ var stringsEO = map[string]string{
 	"identity.err_transfer_failed":      "Transigo malsukcesis...",
 	"identity.err_unable_transfer":      "Ne eblas transigi...",
 
-	"villager.edit":      "Redakti Vilaĝanon",
+	"villager.edit":      "Redakti Villager",
 	"villager.hide":      "Kaŝi",
 	"villager.show":      "Montri",
 	"villager.bg_toggle": "Fona Baskulo",
@@ -595,7 +595,7 @@ var stringsEO = map[string]string{
 	"tela.status_starting_app":      "Lanĉante TELA aplikaĵon...",
 	"tela.status_connecting_gnomon": "Konektante al Gnomon...",
 
-	"villager.click_edit": "Klaku ĉi tie por redakti vilaĝanon",
+	"villager.click_edit": "Klaku ĉi tie por redakti Villager",
 
 	"common.import":  "Importi",
 	"common.install": "Instali",

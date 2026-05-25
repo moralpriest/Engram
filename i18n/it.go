@@ -498,7 +498,7 @@ var stringsIT = map[string]string{
 	"identity.err_transfer_failed":      "Trasferimento fallito...",
 	"identity.err_unable_transfer":      "Impossibile trasferire...",
 
-	"villager.edit":      "Modifica Abitante",
+	"villager.edit":      "Modifica Villager",
 	"villager.hide":      "Nascondi",
 	"villager.show":      "Mostra",
 	"villager.bg_toggle": "Attiva/Disattiva Sfondo",
@@ -595,7 +595,7 @@ var stringsIT = map[string]string{
 	"tela.status_starting_app":      "Avvio applicazione TELA...",
 	"tela.status_connecting_gnomon": "Connessione a Gnomon...",
 
-	"villager.click_edit": "Clicca qui per modificare",
+	"villager.click_edit": "Clicca qui per modificare Villager",
 
 	"common.import":  "Importa",
 	"common.install": "Installa",
