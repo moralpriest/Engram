@@ -44,6 +44,8 @@ import (
 	"github.com/deroproject/graviton"
 )
 
+var settingsActiveTab int
+
 func layoutSettings() fyne.CanvasObject {
 	stopGnomon()
 	rectScroll := canvas.NewRectangle(color.Transparent)
@@ -1787,8 +1789,13 @@ func layoutAppSettings() fyne.CanvasObject {
 						break
 					}
 				}
+				if langCodes[idx] == i18n.GetLanguage() {
+					return
+				}
 				i18n.SetLanguageFromIndex(idx)
 				StoreValue("settings", []byte("language"), []byte(langCodes[idx]))
+				settingsActiveTab = 2
+				session.Window.SetContent(layoutAppSettings())
 			})
 			currentLang := i18n.GetLanguage()
 			for i, code := range langCodes {
@@ -1933,8 +1940,21 @@ func layoutAppSettings() fyne.CanvasObject {
 	// Select default tab based on how we navigated here
 	if previousDomain == "app.tela.settings" || previousDomain == "app.tela.manager.settings" {
 		tabs.SelectIndex(1) // TELA tab
+		settingsActiveTab = 1
+	} else if previousDomain == "app.appsettings" {
+		tabs.SelectIndex(settingsActiveTab)
 	} else {
 		tabs.SelectIndex(0) // Default to Remote Access
+		settingsActiveTab = 0
+	}
+
+	tabs.OnSelected = func(tab *container.TabItem) {
+		for i, t := range tabs.Items {
+			if t == tab {
+				settingsActiveTab = i
+				break
+			}
+		}
 	}
 
 	// Wrap tabs in a container with fixed width
