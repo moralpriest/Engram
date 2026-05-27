@@ -56,6 +56,8 @@ static jmethodID show_file_save_method;
 static jmethodID finish_method;
 static jmethodID start_qr_camera_method;
 static jmethodID stop_qr_camera_method;
+static jmethodID start_xswd_foreground_service_method;
+static jmethodID stop_xswd_foreground_service_method;
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 	JNIEnv* env;
@@ -101,6 +103,8 @@ void ANativeActivity_onCreate(ANativeActivity *activity, void* savedState, size_
 		finish_method = find_method(env, current_class, "finishActivity", "()V");
 		start_qr_camera_method = find_static_method(env, current_class, "startQRCamera", "()V");
 		stop_qr_camera_method = find_static_method(env, current_class, "stopQRCamera", "()V");
+		start_xswd_foreground_service_method = find_static_method(env, current_class, "startXSWDService", "()V");
+		stop_xswd_foreground_service_method = find_static_method(env, current_class, "stopXSWDService", "()V");
 
 		setCurrentContext(activity->vm, (*env)->NewGlobalRef(env, activity->clazz));
 
@@ -300,6 +304,24 @@ void stopCamera(JNIEnv* env) {
 		return;
 	}
 	(*env)->CallStaticVoidMethod(env, current_class, stop_qr_camera_method);
+}
+
+// ---- XSWD Foreground Service C Bridge ----
+
+void startXSWDForegroundService(JNIEnv* env) {
+	if (start_xswd_foreground_service_method == 0) {
+		LOG_FATAL("startXSWDForegroundService: method not available (Java not patched)");
+		return;
+	}
+	(*env)->CallStaticVoidMethod(env, current_class, start_xswd_foreground_service_method);
+}
+
+void stopXSWDForegroundService(JNIEnv* env) {
+	if (stop_xswd_foreground_service_method == 0) {
+		LOG_FATAL("stopXSWDForegroundService: method not available (Java not patched)");
+		return;
+	}
+	(*env)->CallStaticVoidMethod(env, current_class, stop_xswd_foreground_service_method);
 }
 
 // ---- JNI Callbacks (Java -> C -> Go) ----

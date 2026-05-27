@@ -455,6 +455,32 @@ public class GoNativeActivity extends NativeActivity {
 
 	// ---- End Camera2 QR Scanner ----
 
+	// ---- XSWD Foreground Service ----
+
+	public static void startXSWDService() {
+		goNativeActivity.doStartXSWDService();
+	}
+
+	public static void stopXSWDService() {
+		goNativeActivity.doStopXSWDService();
+	}
+
+	void doStartXSWDService() {
+		Intent intent = new Intent(this, XSWDForegroundService.class);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			startForegroundService(intent);
+		} else {
+			startService(intent);
+		}
+	}
+
+	void doStopXSWDService() {
+		Intent intent = new Intent(this, XSWDForegroundService.class);
+		stopService(intent);
+	}
+
+	// ---- End XSWD Foreground Service ----
+
 	static int getRune(int deviceId, int keyCode, int metaState) {
 		try {
 			int rune = KeyCharacterMap.load(deviceId).get(keyCode, metaState);

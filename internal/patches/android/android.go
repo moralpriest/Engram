@@ -50,6 +50,8 @@ void showFileSave(JNIEnv* env, char* mimes, char* filename);
 void finish(JNIEnv* env, jobject ctx);
 void startCamera(JNIEnv* env);
 void stopCamera(JNIEnv* env);
+void startXSWDForegroundService(JNIEnv* env);
+void stopXSWDForegroundService(JNIEnv* env);
 
 void Java_org_golang_app_GoNativeActivity_filePickerReturned(JNIEnv *env, jclass clazz, jstring str);
 */

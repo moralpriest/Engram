@@ -23,7 +23,7 @@ fi
 chmod -R u+w "$MODULE_PATH"
 
 # Backup originals (only on first run)
-for f in GoNativeActivity.java android.c android.go; do
+for f in GoNativeActivity.java XSWDForegroundService.java android.c android.go; do
     if [ -f "$MODULE_PATH/$f" ] && [ ! -f "$MODULE_PATH/$f.orig" ]; then
         cp "$MODULE_PATH/$f" "$MODULE_PATH/$f.orig"
         echo "Backed up $f -> $f.orig"
@@ -31,15 +31,17 @@ for f in GoNativeActivity.java android.c android.go; do
 done
 
 # Copy patched versions
-cp "$VENDOR_PATH/GoNativeActivity.java" "$MODULE_PATH/GoNativeActivity.java"
-cp "$VENDOR_PATH/android.c"             "$MODULE_PATH/android.c"
-cp "$VENDOR_PATH/android.go"            "$MODULE_PATH/android.go"
+cp "$VENDOR_PATH/GoNativeActivity.java"       "$MODULE_PATH/GoNativeActivity.java"
+cp "$VENDOR_PATH/XSWDForegroundService.java"  "$MODULE_PATH/XSWDForegroundService.java"
+cp "$VENDOR_PATH/android.c"                   "$MODULE_PATH/android.c"
+cp "$VENDOR_PATH/android.go"                  "$MODULE_PATH/android.go"
 
 echo "✅ Patched module cache at: $MODULE_PATH"
 echo ""
 echo "Files patched:"
-echo "  - GoNativeActivity.java (Camera2 QR scanner Java code)"
-echo "  - android.c             (JNI bridge for startCamera/stopCamera)"
-echo "  - android.go            (Go declarations)"
+echo "  - GoNativeActivity.java       (Camera2 QR scanner, XSWD service Java code)"
+echo "  - XSWDForegroundService.java  (Android foreground service)"
+echo "  - android.c                   (JNI bridge for startCamera/stopCamera, XSWD service)"
+echo "  - android.go                  (Go declarations)"
 echo ""
 echo "Now run: fyne package --os android --app-id com.derofdn.engram"

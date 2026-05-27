@@ -7671,6 +7671,7 @@ func toggleXSWD(endpoint string) {
 				}
 			})
 		}
+		stopXSWDForegroundAndroid()
 		logger.Printf("[Engram] XSWD server closed\n")
 	} else {
 		_, portNum, err := net.SplitHostPort(endpoint)
@@ -7752,6 +7753,7 @@ func toggleXSWD(endpoint string) {
 			}
 
 			if server.IsRunning() {
+				startXSWDForegroundAndroid()
 				logger.Printf("[Engram] WebSocket server started successfully on %s", endpoint)
 				uiDo(func() {
 					if remoteAccess.WS.status != nil {
