@@ -15,10 +15,9 @@
 - [x]  Websocket support for dApp/web3 connections
 - [x]  Sign files using your wallet to guarantee authenticity
 - [x]  **Instant TELA discovery (~2s)** using three-layer cache (Embedded, DB, JSON)
-- [x]  **Desktop QR Code Scanning** (Linux, Windows, MacOS)
-- [x]  **Mobile QR Code Scanning** (Android)
+- [x]  **QR Code Scanning** (Desktop + Android)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
-- [x]  **Multi-language support** (English, FranÃ§ais, EspaÃ±ol)
+- [x]  **Multi-language support** (English, Français, Español, Deutsch, Italiano, Português, Русский, 日本語, 中文, Esperanto)
 
 ### Upcoming Features
 - [ ]  Mobile QR Scanning (iOS)
