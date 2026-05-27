@@ -103,7 +103,7 @@ void ANativeActivity_onCreate(ANativeActivity *activity, void* savedState, size_
 		finish_method = find_method(env, current_class, "finishActivity", "()V");
 		start_qr_camera_method = find_static_method(env, current_class, "startQRCamera", "()V");
 		stop_qr_camera_method = find_static_method(env, current_class, "stopQRCamera", "()V");
-		start_xswd_foreground_service_method = find_static_method(env, current_class, "startXSWDService", "()V");
+		start_xswd_foreground_service_method = find_static_method(env, current_class, "startXSWDService", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V");
 		stop_xswd_foreground_service_method = find_static_method(env, current_class, "stopXSWDService", "()V");
 
 		setCurrentContext(activity->vm, (*env)->NewGlobalRef(env, activity->clazz));
@@ -308,12 +308,20 @@ void stopCamera(JNIEnv* env) {
 
 // ---- XSWD Foreground Service C Bridge ----
 
-void startXSWDForegroundService(JNIEnv* env) {
+void startXSWDForegroundService(JNIEnv* env, const char* title, const char* text, const char* channelName, const char* channelDesc) {
 	if (start_xswd_foreground_service_method == 0) {
 		LOG_FATAL("startXSWDForegroundService: method not available (Java not patched)");
 		return;
 	}
-	(*env)->CallStaticVoidMethod(env, current_class, start_xswd_foreground_service_method);
+	jstring titleJ = (*env)->NewStringUTF(env, title);
+	jstring textJ = (*env)->NewStringUTF(env, text);
+	jstring channelNameJ = (*env)->NewStringUTF(env, channelName);
+	jstring channelDescJ = (*env)->NewStringUTF(env, channelDesc);
+	(*env)->CallStaticVoidMethod(env, current_class, start_xswd_foreground_service_method, titleJ, textJ, channelNameJ, channelDescJ);
+	(*env)->DeleteLocalRef(env, titleJ);
+	(*env)->DeleteLocalRef(env, textJ);
+	(*env)->DeleteLocalRef(env, channelNameJ);
+	(*env)->DeleteLocalRef(env, channelDescJ);
 }
 
 void stopXSWDForegroundService(JNIEnv* env) {

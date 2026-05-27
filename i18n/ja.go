@@ -598,5 +598,8 @@ var stringsJA = map[string]string{
 	"xswd.connection_no_events":                      "イベントなし",
 	"xswd.connection_approved":                       "新しい接続リクエストが承認されました",
 	"xswd.connection_received":                       "新しい接続リクエストを受信しました",
+	"xswd.foreground_notification_text":              "XSWD サーバー実行中",
+	"xswd.foreground_channel_name":                   "XSWD サービス",
+	"xswd.foreground_channel_description":            "XSWD WebSocket 接続のために Engram を起動状態に保ちます",
 	"messages.warning_daemon":                        "独自のデーモンから実行すると、より信頼性の高い体験が得られます\n\nすべてのメッセージはブロックチェーンに永久に書き込まれます\n\nこれらのリスクを承諾する場合のみ続行してください",
 }

@@ -16,30 +16,36 @@ public class XSWDForegroundService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannel();
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        Notification.Builder builder;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder = new Notification.Builder(this, CHANNEL_ID);
-        } else {
-            builder = new Notification.Builder(this);
-        }
+	@Override
+	public int onStartCommand(Intent intent, int flags, int startId) {
+		String title = intent != null ? intent.getStringExtra("notification_title") : "Engram";
+		String text = intent != null ? intent.getStringExtra("notification_text") : "XSWD server running";
+		String channelName = intent != null ? intent.getStringExtra("channel_name") : "XSWD Service";
+		String channelDesc = intent != null ? intent.getStringExtra("channel_description") : "Keeps Engram alive for XSWD WebSocket connections";
 
-        Notification notification = builder
-                .setContentTitle("Engram")
-                .setContentText("XSWD server running")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setOngoing(true)
-                .build();
+		createNotificationChannel(channelName, channelDesc);
 
-        startForeground(NOTIFICATION_ID, notification);
+		Notification.Builder builder;
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			builder = new Notification.Builder(this, CHANNEL_ID);
+		} else {
+			builder = new Notification.Builder(this);
+		}
 
-        Log.d("Fyne", "XSWD foreground service started");
-        return START_STICKY;
-    }
+		Notification notification = builder
+				.setContentTitle(title)
+				.setContentText(text)
+				.setSmallIcon(android.R.drawable.ic_dialog_info)
+				.setOngoing(true)
+				.build();
+
+		startForeground(NOTIFICATION_ID, notification);
+
+		Log.d("Fyne", "XSWD foreground service started");
+		return START_STICKY;
+	}
 
     @Override
     public void onDestroy() {
@@ -53,16 +59,16 @@ public class XSWDForegroundService extends Service {
         return null;
     }
 
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID,
-                    "XSWD Service",
-                    NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setDescription("Keeps Engram alive for XSWD WebSocket connections");
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(channel);
-        }
-    }
+	private void createNotificationChannel(String channelName, String channelDesc) {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			NotificationChannel channel = new NotificationChannel(
+					CHANNEL_ID,
+					channelName != null ? channelName : "XSWD Service",
+					NotificationManager.IMPORTANCE_LOW
+			);
+			channel.setDescription(channelDesc != null ? channelDesc : "Keeps Engram alive for XSWD WebSocket connections");
+			NotificationManager manager = getSystemService(NotificationManager.class);
+			manager.createNotificationChannel(channel);
+		}
+	}
 }

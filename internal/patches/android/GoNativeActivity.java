@@ -457,16 +457,20 @@ public class GoNativeActivity extends NativeActivity {
 
 	// ---- XSWD Foreground Service ----
 
-	public static void startXSWDService() {
-		goNativeActivity.doStartXSWDService();
+	public static void startXSWDService(String title, String text, String channelName, String channelDesc) {
+		goNativeActivity.doStartXSWDService(title, text, channelName, channelDesc);
 	}
 
 	public static void stopXSWDService() {
 		goNativeActivity.doStopXSWDService();
 	}
 
-	void doStartXSWDService() {
+	void doStartXSWDService(String title, String text, String channelName, String channelDesc) {
 		Intent intent = new Intent(this, XSWDForegroundService.class);
+		intent.putExtra("notification_title", title);
+		intent.putExtra("notification_text", text);
+		intent.putExtra("channel_name", channelName);
+		intent.putExtra("channel_description", channelDesc);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 			startForegroundService(intent);
 		} else {
