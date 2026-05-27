@@ -67,7 +67,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
             artifact: engram-linux
@@ -75,8 +75,6 @@ jobs:
             artifact: engram-windows
           - os: macos-latest
             artifact: engram-macos-arm64
-          - os: macos-13
-            artifact: engram-macos-amd64
     steps:
       - name: 🛡️ Harden Runner
         uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
