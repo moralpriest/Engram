@@ -398,15 +398,24 @@ jobs:
           sdkmanager --install "ndk;26.1.10909125"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
 
-      - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@${{ env.FYNE_VERSION }}
+      - name: 🤖 Install Android build-tools and platform
+        run: |
+          sdkmanager --install "build-tools;35.0.0" "platforms;android-35"
+
+      - name: 🤖 Build custom Fyne CLI (QR scanner + XSWD service)
+        run: |
+          go mod download
+          ./patch_fyne.sh
+          ./build_fyne_custom.sh
 
       - name: 🤖 Build Android
         env:
           GOFLAGS: -trimpath -mod=mod -ldflags=-X=main.versionString=${{ needs.verify.outputs.version }}
         run: |
-          fyne package --target android/arm64 --name Engram --appVersion ${{ needs.verify.outputs.fyne_version }} \
-            --appID com.engram.wallet --icon Icon.png --tags migrated_fynedo
+          ./bin/fyne-custom package --target android/arm64 --name Engram \
+            --appVersion ${{ needs.verify.outputs.fyne_version }} \
+            --appID com.engram.wallet --icon Icon.png --tags migrated_fynedo \
+            --metadata versionString=${{ needs.verify.outputs.version }}
           mv Engram.apk engram-${{ needs.verify.outputs.version }}-android-arm64.apk
 
       - name: 📤 Upload artifact
