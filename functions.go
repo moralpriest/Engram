@@ -144,6 +144,10 @@ type Session struct {
 	IDText              *canvas.Text
 	LinkText            *canvas.Text
 	StatusText          *canvas.Text
+	DaemonBannerColor   color.Color
+	DaemonBannerBg      *canvas.Raster
+	DaemonBannerText    *canvas.Text
+	DaemonLabel         *canvas.Text
 	ReceivingAddress    string
 	Path                string
 	Name                string
@@ -1469,6 +1473,19 @@ func setPulseDisconnectedStatus(refresh bool) {
 			status.Gnomon.Refresh()
 			status.EPOCH.Refresh()
 		}
+		if session.DaemonBannerBg != nil {
+			session.DaemonBannerColor = color.RGBA{R: 180, G: 40, B: 40, A: 220}
+			session.DaemonBannerBg.Refresh()
+		}
+		if session.DaemonBannerText != nil {
+			session.DaemonBannerText.Text = "⚠ Disconnected from " + session.Daemon + " — Reconnecting..."
+			session.DaemonBannerText.Refresh()
+		}
+		if session.DaemonLabel != nil {
+			session.DaemonLabel.Text = "⚠ Disconnected"
+			session.DaemonLabel.Color = colors.Red
+			session.DaemonLabel.Refresh()
+		}
 	})
 }
 
@@ -1486,9 +1503,11 @@ func pulseReconnect(count int) (int, bool) {
 	err := walletapi.Connect(session.Daemon)
 	if err != nil {
 		if count >= DEFAULT_DAEMON_RECONNECT_TIMEOUT {
+			count = 0
 			walletapi.Connected = false
 			setPulseDisconnectedStatus(true)
-			return count, false
+			time.Sleep(5 * time.Second)
+			return count, true
 		}
 
 		count++
@@ -1540,6 +1559,23 @@ func updatePulseStatusIndicators() {
 			} else {
 				status.EPOCH.FillColor = colors.Gray
 			}
+			if session.DaemonBannerBg != nil {
+				session.DaemonBannerColor = color.Transparent
+				session.DaemonBannerBg.Refresh()
+			}
+			if session.DaemonBannerText != nil {
+				session.DaemonBannerText.Text = ""
+				session.DaemonBannerText.Refresh()
+			}
+			if session.DaemonLabel != nil {
+				addr := session.Daemon
+				if len(addr) > 30 {
+					addr = "..." + addr[len(addr)-27:]
+				}
+				session.DaemonLabel.Text = addr
+				session.DaemonLabel.Color = colors.Gray
+				session.DaemonLabel.Refresh()
+			}
 		})
 		return
 	}
@@ -1550,6 +1586,35 @@ func updatePulseStatusIndicators() {
 		status.RemoteAccess.FillColor = colors.Gray
 		status.Gnomon.FillColor = colors.Gray
 		status.EPOCH.FillColor = colors.Gray
+		if session.Offline {
+			if session.DaemonBannerBg != nil {
+				session.DaemonBannerColor = color.Transparent
+				session.DaemonBannerBg.Refresh()
+			}
+			if session.DaemonBannerText != nil {
+				session.DaemonBannerText.Text = ""
+				session.DaemonBannerText.Refresh()
+			}
+		} else {
+			if session.DaemonBannerBg != nil {
+				session.DaemonBannerColor = color.RGBA{R: 180, G: 40, B: 40, A: 220}
+				session.DaemonBannerBg.Refresh()
+			}
+			if session.DaemonBannerText != nil {
+				session.DaemonBannerText.Text = "⚠ Disconnected from " + session.Daemon + " — Reconnecting..."
+				session.DaemonBannerText.Refresh()
+			}
+		}
+		if session.DaemonLabel != nil {
+			if session.Offline {
+				session.DaemonLabel.Text = "OFFLINE"
+				session.DaemonLabel.Color = colors.Gray
+			} else {
+				session.DaemonLabel.Text = "⚠ Disconnected"
+				session.DaemonLabel.Color = colors.Red
+			}
+			session.DaemonLabel.Refresh()
+		}
 	})
 	logger.Printf("[Network] Offline › Last Height: %d / %d\n", session.WalletHeight, session.DaemonHeight)
 }
