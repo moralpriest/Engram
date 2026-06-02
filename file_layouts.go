@@ -247,7 +247,7 @@ func layoutFileManager() fyne.CanvasObject {
 
 			// Trim off .signed from file because engram.Disk.CheckFileSignature() adds it back on anyways - https://github.com/deroproject/derohe/blob/main/walletapi/wallet.go#L709
 			fileName = strings.TrimSuffix(fileName, ".signed")
-			signer, message, err := engram.Disk.CheckSignature(filedata)
+			signer, _, err := engram.Disk.CheckSignature(filedata)
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 				errorText.Text = "signature verification failed"
@@ -255,17 +255,14 @@ func layoutFileManager() fyne.CanvasObject {
 				errorText.Refresh()
 				return
 			}
-
 			logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
-			if isASCII(string(message)) {
-				fmt.Println(string(message))
-			}
 
 			errorText.Text = "verified file successfully"
 			errorText.Color = colors.Green
 			errorText.Refresh()
 
 			verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
+
 			verifiedData.Set(verifiedResults)
 			verifiedList.Refresh()
 
@@ -644,7 +641,7 @@ func layoutFileManager() fyne.CanvasObject {
 							return
 						}
 
-						signer, message, err := engram.Disk.CheckSignature(filedata)
+						signer, _, err := engram.Disk.CheckSignature(filedata)
 						if err != nil {
 							logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 							errorText.Text = "signature verification failed"
@@ -654,9 +651,6 @@ func layoutFileManager() fyne.CanvasObject {
 						}
 
 						logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
-						if isASCII(string(message)) {
-							fmt.Println(string(message))
-						}
 
 						errorText.Text = "verified file successfully"
 						errorText.Color = colors.Green
@@ -1529,7 +1523,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			}
 
 			fileName = strings.TrimSuffix(fileName, ".signed")
-			signer, message, err := engram.Disk.CheckSignature(filedata)
+			signer, _, err := engram.Disk.CheckSignature(filedata)
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 				browseErrorText.Text = "signature verification failed"
@@ -1537,11 +1531,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				browseErrorText.Refresh()
 				return
 			}
-
 			logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
-			if isASCII(string(message)) {
-				fmt.Println(string(message))
-			}
 
 			browseErrorText.Text = "verified file successfully"
 			browseErrorText.Color = colors.Green
@@ -1783,7 +1773,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			}
 
 			filename = strings.TrimSuffix(filename, ".signed")
-			signer, message, err := engram.Disk.CheckSignature(filedata)
+			signer, _, err := engram.Disk.CheckSignature(filedata)
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", filename, err)
 				browseErrorText.Text = "signature verification failed"
@@ -1791,11 +1781,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				browseErrorText.Refresh()
 				return
 			}
-
 			logger.Printf("[Engram] %s signed by: %s\n", filename, signer.String())
-			if isASCII(string(message)) {
-				fmt.Println(string(message))
-			}
 
 			browseErrorText.Text = "verified file successfully"
 			browseErrorText.Color = colors.Green

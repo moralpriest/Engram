@@ -367,19 +367,14 @@ func finishWalletShutdown() {}
 func startPulseForActiveWallet() bool {
 	walletSessionMu.Lock()
 	defer walletSessionMu.Unlock()
-	logger.Printf("[DEBUG] startPulseForActiveWallet - engram.Disk=%v, session.WalletOpen=%v, pulseRunning=%v, pulseSessionGeneration=%d, walletSessionGeneration=%d\n",
-		engram.Disk != nil, session.WalletOpen, pulseRunning, pulseSessionGeneration, walletSessionGeneration)
 	if engram.Disk == nil || !session.WalletOpen {
-		logger.Printf("[DEBUG] startPulseForActiveWallet returning false - Disk or WalletOpen check failed\n")
 		return false
 	}
 	if pulseRunning && pulseSessionGeneration == walletSessionGeneration {
-		logger.Printf("[DEBUG] startPulseForActiveWallet returning false - pulse already running for this session\n")
 		return false
 	}
 	pulseRunning = true
 	pulseSessionGeneration = walletSessionGeneration
-	logger.Printf("[DEBUG] startPulseForActiveWallet returning true - pulse starting\n")
 	return true
 }
 
@@ -1273,7 +1268,6 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 
 // Get the Engram settings from the local Graviton tree
 func initSettings() {
-	logger.Printf("[Engram] initSettings() called - starting initialization")
 	getNetwork()
 	getMode()
 	getDaemon()
@@ -1286,11 +1280,7 @@ func initSettings() {
 	// Default from epoch package is 1000, which causes "hashes exceeds maxHashes" errors
 	if err := epoch.SetMaxHashes(10000); err != nil {
 		logger.Errorf("[Engram] Failed to set EPOCH max hashes: %s\n", err)
-	} else {
-		logger.Printf("[Engram] EPOCH max hashes set to 10000 (was %d)", 1000)
 	}
-
-	logger.Printf("[Engram] initSettings() completed")
 
 	if a.Driver().Device().IsMobile() {
 		err := tela.SetShardPath(AppPath())
@@ -1305,21 +1295,11 @@ func initSettings() {
 func setTELADual(key string, value []byte) {
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err := StoreEncryptedValue("TELA Settings", []byte(key), value)
-		if err != nil {
-			logger.Debugf("[Engram] setTELADual encrypted storage failed for %s: %s\n", key, err)
-		} else {
-			logger.Printf("[Engram] setTELADual: Successfully saved %s to encrypted storage", key)
-		}
+		_ = StoreEncryptedValue("TELA Settings", []byte(key), value)
 	}
 
 	// Always save to unencrypted storage as fallback
-	err := StoreValue("TELASettingsUnencrypted", []byte(key), value)
-	if err != nil {
-		logger.Debugf("[Engram] setTELADual unencrypted storage failed for %s: %s\n", key, err)
-	} else {
-		logger.Printf("[Engram] setTELADual: Successfully saved %s to fallback storage", key)
-	}
+	_ = StoreValue("TELASettingsUnencrypted", []byte(key), value)
 }
 
 // Get TELA setting with dual storage (try encrypted first, then fallback)
@@ -1328,23 +1308,16 @@ func getTELADual(key string) (value string, found bool) {
 	if engram.Disk != nil {
 		stored, err := GetEncryptedValue("TELA Settings", []byte(key))
 		if err == nil && stored != nil {
-			logger.Printf("[Engram] getTELADual: Successfully loaded %s from encrypted storage", key)
 			return string(stored), true
-		} else if err != nil {
-			logger.Debugf("[Engram] getTELADual encrypted storage failed for %s: %s\n", key, err)
 		}
 	}
 
 	// Fallback to unencrypted storage
 	stored, err := GetValue("TELASettingsUnencrypted", []byte(key))
 	if err == nil && stored != nil {
-		logger.Printf("[Engram] getTELADual: Successfully loaded %s from fallback storage", key)
 		return string(stored), true
-	} else if err != nil {
-		logger.Debugf("[Engram] getTELADual fallback storage failed for %s: %s\n", key, err)
 	}
 
-	logger.Printf("[Engram] getTELADual: No stored value found for %s", key)
 	return "", false
 }
 
@@ -1354,42 +1327,28 @@ func deleteTELADual(key string) {
 		DeleteKey("TELA Settings", []byte(key))
 	}
 	DeleteKey("TELASettingsUnencrypted", []byte(key))
-	logger.Printf("[Engram] deleteTELADual: Deleted %s from dual storage", key)
 }
 
 // Initialize TELA preferences from dual storage (works with or without wallet)
 func initTELAPreferences() {
-	logger.Printf("[Engram] initTELAPreferences() called - wallet available: %v", engram.Disk != nil)
-
 	// Load and apply TELA Port Start using dual storage
 	if portStart, found := getTELADual("Port Start"); found {
 		if p, err := strconv.Atoi(portStart); err == nil {
-			if err := tela.SetPortStart(p); err != nil {
-				logger.Errorf("[Engram] Failed to set TELA port start: %s\n", err)
-			} else {
-				logger.Printf("[Engram] TELA Port Start applied: %d", p)
-			}
+			_ = tela.SetPortStart(p)
 		}
-	} else {
-		logger.Printf("[Engram] TELA Port Start not found, using default")
 	}
 
 	// Load and apply Allow Updates setting using dual storage
 	if allowUpdates, found := getTELADual("Allow Updates"); found {
 		tela.AllowUpdates(allowUpdates == "Allow")
-		logger.Printf("[Engram] TELA Allow Updates applied: %s", allowUpdates)
 	} else {
 		// Default to Allow when no stored value exists
 		tela.AllowUpdates(true)
-		logger.Printf("[Engram] TELA Allow Updates not found, defaulting to Allow")
 	}
 
 	// Load and apply Restrictive Mode setting using dual storage
-	if restrictiveMode, found := getTELADual("Restrictive Mode"); found {
-		// TODO: Apply restrictive mode to tela package when function is available
-		logger.Printf("[Engram] TELA Restrictive Mode setting loaded: %s", restrictiveMode)
-	} else {
-		logger.Printf("[Engram] TELA Restrictive Mode not found, using default (Disabled)")
+	if _, found := getTELADual("Restrictive Mode"); !found {
+		// Default to Disabled when no stored value exists
 	}
 
 	// Load Villager preferences
@@ -1408,8 +1367,6 @@ func initTELAPreferences() {
 
 // Initialize WebSocket state from dual storage (works with or without wallet)
 func initWebSocketState() {
-	logger.Printf("[Engram] initWebSocketState() called - wallet available: %v", engram.Disk != nil)
-
 	// Load stored WebSocket port using dual storage (works without wallet)
 	if wsPort := getRemoteAccessDual("WS"); wsPort != "" {
 		remoteAccess.WS.port = wsPort
@@ -1420,9 +1377,6 @@ func initWebSocketState() {
 				}
 			})
 		}
-		logger.Printf("[Engram] WebSocket port loaded from dual storage: %s", wsPort)
-	} else {
-		logger.Printf("[Engram] No WebSocket port found in storage")
 	}
 
 	// Load global permissions (includes WebSocket enabled state)
@@ -1433,31 +1387,23 @@ func initWebSocketState() {
 
 	// Update UI based on loaded enabled state
 	if remoteAccess.WS.toggle != nil && !session.Offline {
-		logger.Printf("[Engram] Updating WebSocket UI based on loaded state: enabled=%v", remoteAccess.WS.global.enabled)
 		uiDo(func() {
 			if remoteAccess.WS.toggle == nil {
 				return
 			}
-			if remoteAccess.WS.global.enabled {
-				remoteAccess.WS.toggle.Text = "Turn On"
-				logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=true")
-			} else {
+			if !remoteAccess.WS.global.enabled {
 				if remoteAccess.WS.status != nil {
 					remoteAccess.WS.status.Text = "Blocked"
 					remoteAccess.WS.status.Color = colors.Gray
 				}
-				remoteAccess.WS.toggle.Text = "Turn On"
-				logger.Printf("[Engram] Set toggle text to 'Turn On' for enabled=false")
 			}
+			remoteAccess.WS.toggle.Text = "Turn On"
 		})
 	}
 
 	// If WebSocket was previously enabled, restart it
 	if remoteAccess.WS.global.enabled && !session.Offline {
-		logger.Printf("[Engram] Attempting to restart WebSocket (was previously enabled)")
 		EnsureXSWD()
-	} else {
-		logger.Printf("[Engram] Not restarting WebSocket - enabled=%v or offline=%v", remoteAccess.WS.global.enabled, session.Offline)
 	}
 }
 
@@ -1680,16 +1626,12 @@ func refreshPulseWalletState(sentNotifications *bool) {
 // Go routine to update the latest information from the connected daemon (Online Mode only)
 
 func StartPulse() {
-	logger.Printf("[DEBUG] StartPulse() called\n")
 	if !startPulseForActiveWallet() {
-		logger.Printf("[DEBUG] StartPulse() - startPulseForActiveWallet returned false\n")
 		return
 	}
 
 	generation := currentWalletGeneration()
 	defer finishPulseForGeneration(generation)
-
-	logger.Printf("[DEBUG] StartPulse() - checking connection, walletapi.Connected=%v, engram.Disk=%v\n", walletapi.Connected, engram.Disk != nil)
 
 	if !walletapi.Connected && engram.Disk != nil {
 		maxRetries := 3
@@ -1739,7 +1681,6 @@ func StartPulse() {
 		logger.Printf("[Network] Connection established successfully, starting pulse loop\n")
 
 		// Start Gnomon indexing as soon as daemon is connected
-		logger.Printf("[DEBUG] Calling startGnomon() from StartPulse()\n")
 		go startGnomon()
 
 		refreshPermissionsAfterConnect()
@@ -1964,13 +1905,9 @@ func getRemoteAccessDual(key string) (r string) {
 	// Fallback to unencrypted storage
 	stored, err := GetValue("RemoteAccessUnencrypted", []byte(key))
 	if err == nil && stored != nil {
-		logger.Printf("[Engram] getRemoteAccessDual: Successfully loaded %s from fallback storage", key)
 		return string(stored)
-	} else if err != nil {
-		logger.Debugf("[Engram] getRemoteAccessDual fallback storage failed: %s\n", err)
 	}
 
-	logger.Printf("[Engram] getRemoteAccessDual: No stored value found for %s", key)
 	return ""
 }
 
@@ -2010,21 +1947,11 @@ func setRemoteAccessDual(port, key string) {
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err := StoreEncryptedValue("RemoteAccess", []byte(key), []byte(port))
-		if err != nil {
-			logger.Debugf("[Engram] setRemoteAccessDual encrypted storage failed: %s\n", err)
-		} else {
-			logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to encrypted storage", key)
-		}
+		_ = StoreEncryptedValue("RemoteAccess", []byte(key), []byte(port))
 	}
 
 	// Always save to unencrypted storage as fallback
-	err := StoreValue("RemoteAccessUnencrypted", []byte(key), []byte(port))
-	if err != nil {
-		logger.Debugf("[Engram] setRemoteAccessDual unencrypted storage failed: %s\n", err)
-	} else {
-		logger.Printf("[Engram] setRemoteAccessDual: Successfully saved %s to fallback storage", key)
-	}
+	_ = StoreValue("RemoteAccessUnencrypted", []byte(key), []byte(port))
 }
 
 // Get mode (online, offline) setting from local Graviton tree
@@ -2228,7 +2155,6 @@ func safeCanvasFocus(obj fyne.Focusable) {
 
 // Close the active wallet
 func closeWallet() {
-	logger.Printf("[Engram] closeWallet() called from domain: %s\n", session.Domain)
 	if !beginWalletShutdown() {
 		return
 	}
@@ -2237,7 +2163,6 @@ func closeWallet() {
 	defer finishWalletShutdown()
 
 	if engram.Disk != nil {
-		logger.Printf("[Engram] Initiating asynchronous wallet shutdown...\n")
 
 		// Capture resources for background cleanup
 		disk := engram.Disk
@@ -2286,22 +2211,18 @@ func closeWallet() {
 			// Stop network services to release ports as early as possible
 			if rpcServer != nil {
 				rpcServer.RPCServer_Stop()
-				logger.Printf("[Engram] Remote Access RPC closed (background).\n")
 			}
 
 			if wsServer != nil {
 				wsServer.Stop()
-				logger.Printf("[Engram] Remote Access XSWD closed (background).\n")
 			}
 
 			if wsClient != nil {
 				wsClient.Close()
-				logger.Printf("[Engram] Websocket client closed (background).\n")
 			}
 
 			if rpcClient != nil {
 				rpcClient.Close()
-				logger.Printf("[Engram] RPC client closed (background).\n")
 			}
 
 			// Save and close wallet disk
@@ -2309,17 +2230,16 @@ func closeWallet() {
 				disk.SetOfflineMode()
 				walletapi.Connected = false
 				globals.Exit_In_Progress = true
-				if shouldSkipWalletSave() {
-					logger.Printf("[Engram] Skipping wallet save on close (background)")
-				} else if err := disk.Save_Wallet(); err != nil {
-					logger.Errorf("[Engram] Failed to save wallet on close (background): %s\n", err)
+				if !shouldSkipWalletSave() {
+					if err := disk.Save_Wallet(); err != nil {
+						logger.Errorf("[Engram] Failed to save wallet on close (background): %s\n", err)
+					}
 				}
 				disk.Close_Encrypted_Wallet()
 			}
 
 			tela.ShutdownTELA()
 			resetMessageCache()
-			logger.Printf("[Engram] Background wallet shutdown completed.\n")
 		}()
 
 		session.Path = ""
@@ -2336,7 +2256,6 @@ func closeWallet() {
 		if gnomon.Active == 0 {
 			gnomon.Active = 1
 		}
-		logger.Printf("[Engram] Wallet sign-out initiated successfully.\n")
 		return
 	}
 }
@@ -2431,7 +2350,6 @@ func login() {
 		// CRITICAL: Set WalletOpen before initSettings so toggleXSWD auto-start succeeds
 		session.WalletOpen = true
 
-		logger.Printf("[Engram] Wallet opened - loading encrypted settings...")
 		initSettings()
 	}
 
@@ -2451,9 +2369,6 @@ func login() {
 	}
 	session.BalanceUSD = ""
 	session.LastBalance = 0
-
-	logger.Printf("[DEBUG] login() - session.Offline=%v, session.Daemon='%s', walletapi.Connected=%v, engram.Disk=%v, session.WalletOpen=%v\n",
-		session.Offline, session.Daemon, walletapi.Connected, engram.Disk != nil, session.WalletOpen)
 
 	if !session.Offline {
 		walletapi.Connected = false
@@ -2537,7 +2452,6 @@ func login() {
 		}
 
 		go func() {
-			logger.Printf("[DEBUG] login goroutine starting\n")
 			generation := currentWalletGeneration()
 
 			// Initialize WebSocket and Gnomon state in background
@@ -2545,12 +2459,9 @@ func login() {
 			_, _ = getGnomon()
 
 			// Wait for StartPulse to actually establish connection
-			logger.Printf("[DEBUG] waiting for walletapi.Connected to become true...\n")
 			connected := waitForConnectionWithTimeout(10 * time.Second)
-			logger.Printf("[DEBUG] waitForConnection returned: %v, walletapi.Connected=%v\n", connected, walletapi.Connected)
 
 			if !connected || !isWalletGenerationActive(generation) {
-				logger.Printf("[DEBUG] connection timeout or wallet closed\n")
 				uiDo(func() {
 					if !isWalletGenerationActive(generation) {
 						return
@@ -2573,14 +2484,11 @@ func login() {
 			})
 
 			waitForWalletSync(3 * time.Second)
-			logger.Printf("[DEBUG] wallet sync complete\n")
 			if !isWalletGenerationActive(generation) {
 				return
 			}
 
-			logger.Printf("[DEBUG] checking wallet registration...\n")
 			needsReg, regDone := checkRegistrationWithTimeout(10 * time.Second)
-			logger.Printf("[DEBUG] registration check complete: needsReg=%v, regDone=%v\n", needsReg, regDone)
 			if !isWalletGenerationActive(generation) {
 				return
 			}
@@ -2605,7 +2513,6 @@ func login() {
 			}
 
 			if regDone && isWalletGenerationActive(generation) && !globals.Exit_In_Progress {
-				logger.Printf("[DEBUG] calling startGnomon()\n")
 				go startGnomon()
 			}
 
@@ -2901,7 +2808,6 @@ func addTransfer() error {
 	var arguments = rpc.Arguments{}
 	var err error
 
-	logger.Printf("[Send] Starting tx...\n")
 	if tx.Address.IsIntegratedAddress() {
 		if tx.Address.Arguments.Validate_Arguments() != nil {
 			logger.Errorf("[Service] Integrated Address arguments could not be validated\n")
@@ -2909,7 +2815,6 @@ func addTransfer() error {
 			return err
 		}
 
-		logger.Printf("[Send] Not Integrated..\n")
 		if !tx.Address.Arguments.Has(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
 			logger.Errorf("[Service] Integrated Address does not contain destination port\n")
 			err = errors.New("integrated address does not contain destination port")
@@ -2917,7 +2822,6 @@ func addTransfer() error {
 		}
 
 		arguments = append(arguments, rpc.Argument{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: tx.Address.Arguments.Value(rpc.RPC_DESTINATION_PORT, rpc.DataUint64).(uint64)})
-		logger.Printf("[Send] Added arguments..\n")
 
 		if tx.Address.Arguments.Has(rpc.RPC_EXPIRY, rpc.DataTime) {
 
@@ -2930,15 +2834,10 @@ func addTransfer() error {
 			}
 		}
 
-		logger.Printf("[Service] Destination port is integrated in address: %d\n", tx.Address.Arguments.Value(rpc.RPC_DESTINATION_PORT, rpc.DataUint64).(uint64))
-
 		if tx.Address.Arguments.Has(rpc.RPC_COMMENT, rpc.DataString) {
-			logger.Printf("[Service] Integrated Message: %s\n", tx.Address.Arguments.Value(rpc.RPC_COMMENT, rpc.DataString))
 			arguments = append(arguments, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: tx.Address.Arguments.Value(rpc.RPC_COMMENT, rpc.DataString)})
 		}
 	}
-
-	logger.Printf("[Send] Checking arguments..\n")
 
 	for _, arg := range tx.Address.Arguments {
 		if !(arg.Name == rpc.RPC_COMMENT || arg.Name == rpc.RPC_EXPIRY || arg.Name == rpc.RPC_DESTINATION_PORT || arg.Name == rpc.RPC_SOURCE_PORT || arg.Name == rpc.RPC_VALUE_TRANSFER || arg.Name == rpc.RPC_NEEDS_REPLYBACK_ADDRESS) {
@@ -2957,15 +2856,10 @@ func addTransfer() error {
 		}
 	}
 
-	logger.Printf("[Send] Checking Amount..\n")
-
 	if tx.Address.Arguments.Has(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64) {
-		logger.Printf("[Service] Transaction amount: %s\n", globals.FormatMoney(tx.Address.Arguments.Value(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64).(uint64)))
 		tx.Amount = tx.Address.Arguments.Value(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64).(uint64)
 	} else {
 		balance, _ := engram.Disk.Get_Balance()
-		logger.Printf("[Send] Balance: %d\n", balance)
-		logger.Printf("[Send] Amount: %d\n", tx.Amount)
 
 		if tx.Amount > balance {
 			logger.Errorf("[Send] Error: Insufficient funds\n")
@@ -2978,21 +2872,14 @@ func addTransfer() error {
 		}
 	}
 
-	logger.Printf("[Send] Checking services..\n")
-
 	if tx.Address.Arguments.Has(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataUint64) {
-		logger.Printf("[Service] Reply Address required, sending: %s\n", engram.Disk.GetAddress().String())
 		arguments = append(arguments, rpc.Argument{Name: rpc.RPC_REPLYBACK_ADDRESS, DataType: rpc.DataAddress, Value: engram.Disk.GetAddress()})
 	}
-
-	logger.Printf("[Send] Checking payment ID/destination port..\n")
 
 	if len(arguments) == 0 {
 		arguments = append(arguments, rpc.Argument{Name: rpc.RPC_DESTINATION_PORT, DataType: rpc.DataUint64, Value: tx.PaymentID})
 		arguments = append(arguments, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: tx.Comment})
 	}
-
-	logger.Printf("[Send] Checking Pack..\n")
 
 	if _, err := arguments.CheckPack(transaction.PAYLOAD0_LIMIT); err != nil {
 		logger.Errorf("[Send] Arguments packing err: %s\n", err)
@@ -3012,10 +2899,7 @@ func addTransfer() error {
 
 	tx.Status = "Unsent"
 
-	logger.Printf("[Send] Ringsize: %d\n", tx.Ringsize)
-
 	tx.Pending = append(tx.Pending, rpc.Transfer{Amount: tx.Amount, Destination: tx.Address.String(), Payload_RPC: arguments})
-	logger.Printf("[Send] Added transfer to the pending list.\n")
 
 	return nil
 }
@@ -3030,8 +2914,6 @@ func sendTransfers() (txid crypto.Hash, err error) {
 	if fees < 85 {
 		fees = 85
 	}
-
-	logger.Printf("[Send] Calculated Fees: %d\n", fees*uint64(len(tx.Pending)))
 
 	tx.TX, err = engram.Disk.TransferPayload0(tx.Pending, tx.Ringsize, false, rpc.Arguments{}, fees, false)
 	if err != nil {
@@ -3176,10 +3058,8 @@ func setRingSize(wallet *walletapi.Wallet_Disk, s int) bool {
 	// Minimum ring size is 2, only accept powers of 2.
 	if s < 2 {
 		wallet.SetRingSize(2)
-		logger.Printf("[Engram] Set minimum ring size: 2\n")
 	} else {
 		wallet.SetRingSize(s)
-		logger.Printf("[Engram] Set default ring size: %d\n", s)
 	}
 
 	return true
@@ -3488,10 +3368,7 @@ func sendMessage(m string, s string, r string) (txid crypto.Hash, err error) {
 			}
 		}
 
-		logger.Printf("[Send Message] Destination port is integrated in address. %x\n", a.Arguments.Value(rpc.RPC_DESTINATION_PORT, rpc.DataUint64).(uint64))
-
 		if a.Arguments.Has(rpc.RPC_COMMENT, rpc.DataString) {
-			logger.Printf("[Send Message] Integrated Message: %s\n", a.Arguments.Value(rpc.RPC_COMMENT, rpc.DataString))
 			arguments = append(arguments, rpc.Argument{Name: rpc.RPC_COMMENT, DataType: rpc.DataString, Value: a.Arguments.Value(rpc.RPC_COMMENT, rpc.DataString)})
 		}
 	}
@@ -3538,8 +3415,6 @@ func sendMessage(m string, s string, r string) (txid crypto.Hash, err error) {
 	}
 
 	fees := ((uint64(engram.Disk.GetRingSize()) + 1) * config.FEE_PER_KB) / 4
-
-	logger.Printf("[Message] Calculated Fees: %d\n", fees)
 
 	transfer := rpc.Transfer{Amount: amount, Destination: a.String(), Payload_RPC: arguments}
 
@@ -7036,26 +6911,13 @@ func setPermissions() {
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err = StoreEncryptedValue("XSWD", []byte("Globals"), data)
-		if err != nil {
-			logger.Debugf("[Engram] setPermissions (encrypted): %s\n", err)
-		} else {
-			logger.Printf("[Engram] Permissions saved to encrypted storage: %d bytes", len(data))
-		}
+		_ = StoreEncryptedValue("XSWD", []byte("Globals"), data)
 	}
 
 	// Always save to unencrypted storage as fallback with synchronization
 	remoteAccess.WS.Lock()
-	err = StoreValue("XSWDUnencrypted", []byte("Globals"), data)
-	if err != nil {
-		logger.Debugf("[Engram] setPermissions (fallback): %s\n", err)
-	} else {
-		logger.Printf("[Engram] Permissions saved to fallback storage: %d bytes", len(data))
-	}
+	_ = StoreValue("XSWDUnencrypted", []byte("Globals"), data)
 	remoteAccess.WS.Unlock()
-
-	// Force immediate save to ensure data is written
-	logger.Printf("[Engram] setPermissions completed - permissions saved to dual storage")
 
 	// Save enabled state separately with dual storage
 	enabledValue := "0"
@@ -7065,21 +6927,11 @@ func setPermissions() {
 
 	// Try encrypted storage first (when wallet available)
 	if engram.Disk != nil {
-		err = StoreEncryptedValue("XSWD", []byte("Enabled"), []byte(enabledValue))
-		if err != nil {
-			logger.Debugf("[Engram] setPermissions enabled (encrypted): %s\n", err)
-		} else {
-			logger.Printf("[Engram] WebSocket enabled state saved to encrypted storage: %s\n", enabledValue)
-		}
+		_ = StoreEncryptedValue("XSWD", []byte("Enabled"), []byte(enabledValue))
 	}
 
 	// Always save to unencrypted storage as fallback
-	err = StoreValue("XSWDUnencrypted", []byte("Enabled"), []byte(enabledValue))
-	if err != nil {
-		logger.Debugf("[Engram] setPermissions enabled (fallback): %s\n", err)
-	} else {
-		logger.Printf("[Engram] WebSocket enabled state saved to fallback storage: %s\n", enabledValue)
-	}
+	_ = StoreValue("XSWDUnencrypted", []byte("Enabled"), []byte(enabledValue))
 }
 
 // getWalletXSWDID returns a stable identifier for the current wallet (short hash of address)
@@ -7098,15 +6950,11 @@ func getWalletXSWDID() string {
 // hasAskedXSWD checks if the first-time XSWD prompt has already been shown for this wallet
 func hasAskedXSWD() bool {
 	wid := getWalletXSWDID()
-	logger.Printf("[XSWD-PROMPT] hasAskedXSWD: wid=%q (empty=%v)\n", wid, wid == "")
 	if wid == "" {
-		logger.Printf("[XSWD-PROMPT] hasAskedXSWD: returning false (no wallet ID, show prompt)\n")
 		return false
 	}
 	_, err := GetValue("XSWDUnencrypted", []byte("Asked_"+wid))
-	result := err == nil
-	logger.Printf("[XSWD-PROMPT] hasAskedXSWD: key exists=%v (err=%v)\n", result, err)
-	return result
+	return err == nil
 }
 
 // setAskedXSWD records that the first-time XSWD prompt has been shown for this wallet
@@ -7414,9 +7262,6 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 	defaults["HandleTELALinks"] = xswd.Ask
 
 	// EPOCH methods - Comprehensive registration with fallback
-	logger.Printf("[Engram] EPOCH: Starting comprehensive method registration")
-
-	// Register all known EPOCH methods statically as fallback
 	epochMethods := []string{
 		"AttemptEPOCH", "AttemptEPOCHWithAddr", "CheckSignature", "Echo", "GetAddress",
 		"GetAddressEPOCH", "GetBalance", "GetDaemon", "GetHeight", "GetMaxHashesEPOCH",
@@ -7431,28 +7276,18 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 	// First, try dynamic registration from epoch.GetHandler()
 	dynamicMethods := make(map[string]bool)
 	if epochHandler := epoch.GetHandler(); epochHandler != nil {
-		logger.Printf("[Engram] EPOCH: epoch.GetHandler() returned handler with %d methods", len(epochHandler))
 		for method := range epochHandler {
 			defaults[method] = xswd.Ask
 			dynamicMethods[method] = true
-			logger.Printf("[Engram] EPOCH: Dynamically registered method: %s", method)
 		}
-	} else {
-		logger.Printf("[Engram] EPOCH: epoch.GetHandler() returned nil - no dynamic methods available")
 	}
 
 	// Then, ensure all expected EPOCH methods are registered (fallback)
-	registeredCount := 0
 	for _, method := range epochMethods {
 		if !dynamicMethods[method] {
 			defaults[method] = xswd.Ask
-			logger.Printf("[Engram] EPOCH: Statically registered fallback method: %s", method)
-			registeredCount++
 		}
 	}
-
-	logger.Printf("[Engram] EPOCH: Registration complete. %d static fallback methods registered, %d total EPOCH methods available",
-		registeredCount, len(epochMethods))
 
 	// Add specific methods that might be missing from your list
 	defaults["Echo"] = xswd.Ask
@@ -7484,13 +7319,8 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 	defaults["transfer_split"] = xswd.Ask
 	defaults["scinvoke"] = xswd.Ask
 
-	// Debug: Print a few key methods to verify they're in the defaults
-	logger.Printf("[Engram] DEBUG - Key methods in defaults: AttemptEPOCH=%v, GetAddress=%v, Transfer=%v",
-		defaults["AttemptEPOCH"], defaults["GetAddress"], defaults["Transfer"])
-
 	// Apply Simple Mode grouped defaults if enabled
 	if IsSimpleMode() {
-		logger.Printf("[Engram] Applying Simple Mode permission defaults")
 		for _, group := range permissionGroups {
 			groupPerm := GetGroupPermission(group.Name)
 			// If no stored permission, use category default
@@ -7501,7 +7331,6 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 				defaults[method] = groupPerm
 			}
 		}
-		logger.Printf("[Engram] Applied Simple Mode defaults to %d permission groups", len(permissionGroups))
 	}
 
 	return
@@ -7512,81 +7341,44 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 	remoteAccess.WS.Lock()
 	defer remoteAccess.WS.Unlock()
 
-	logger.Printf("[Engram] getPermissions() called - wallet available: %v", engram.Disk != nil)
 	remoteAccess.WS.global.permissions = SetDefaultPermissions()
-	logger.Printf("[Engram] SetDefaultPermissions created %d methods", len(remoteAccess.WS.global.permissions))
-
-	// Debug: Print all methods that should be available
-	logger.Printf("[Engram] DEBUG - All methods in remoteAccess.WS.global.permissions:")
-	for methodName := range remoteAccess.WS.global.permissions {
-		logger.Printf("[Engram]   - %s", methodName)
-	}
 
 	// Load permissions (only if wallet is available for encrypted storage)
 	if engram.Disk != nil {
 		stored, err := GetEncryptedValue("XSWD", []byte("Globals"))
-		if err != nil {
-			logger.Printf("[Engram] getPermissions: stored permissions not found: %s (using defaults)\n", err)
-		} else {
-			// Load stored permissions into a temporary map
+		if err == nil {
 			var storedPermissions map[string]xswd.Permission
 			if err := json.Unmarshal(stored, &storedPermissions); err != nil {
-				logger.Errorf("[Engram] getPermissions: JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
 				// Delete corrupted data so it will be recreated on next save
-				if delErr := DeleteKey("XSWD", []byte("Globals")); delErr != nil {
-					logger.Debugf("[Engram] getPermissions: could not delete corrupted encrypted globals: %s\n", delErr)
-				}
+				DeleteKey("XSWD", []byte("Globals"))
 			} else {
-				logger.Printf("[Engram] getPermissions: Successfully loaded %d stored permissions\n", len(storedPermissions))
-				// Merge stored permissions with defaults (stored takes precedence)
 				for method, permission := range storedPermissions {
 					if _, exists := remoteAccess.WS.global.permissions[method]; exists {
 						remoteAccess.WS.global.permissions[method] = permission
-						logger.Printf("[Engram] getPermissions: Merged stored permission for %s: %s", method, permission)
 					}
 				}
-				logger.Printf("[Engram] getPermissions: After merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 			}
 		}
 
 		// Load enabled state
 		storedEnabled, err := GetEncryptedValue("XSWD", []byte("Enabled"))
 		if err != nil {
-			logger.Printf("[Engram] WebSocket enabled state NOT FOUND (error: %v), defaulting to false", err)
-			remoteAccess.WS.global.enabled = false // Default to disabled
+			remoteAccess.WS.global.enabled = false
 		} else {
-			enabledStr := string(storedEnabled)
-			remoteAccess.WS.global.enabled = enabledStr == "1"
-			logger.Printf("[Engram] WebSocket enabled state loaded: '%s' -> %v", enabledStr, remoteAccess.WS.global.enabled)
+			remoteAccess.WS.global.enabled = string(storedEnabled) == "1"
 		}
 	} else {
 		// Try to load permissions from unencrypted fallback storage
 		stored, err := GetValue("XSWDUnencrypted", []byte("Globals"))
-		if err != nil {
-			logger.Printf("[Engram] getPermissions: fallback permissions not found: %s (using defaults)\n", err)
-		} else {
-			// Validate we have data before attempting to unmarshal
-			if len(stored) == 0 {
-				logger.Printf("[Engram] getPermissions: fallback storage empty (using defaults)\n")
+		if err == nil && len(stored) > 0 {
+			var storedPermissions map[string]xswd.Permission
+			if err := json.Unmarshal(stored, &storedPermissions); err != nil {
+				DeleteKey("XSWDUnencrypted", []byte("Globals"))
 			} else {
-				// Load fallback permissions into a temporary map
-				var storedPermissions map[string]xswd.Permission
-				if err := json.Unmarshal(stored, &storedPermissions); err != nil {
-					logger.Errorf("[Engram] getPermissions: fallback JSON unmarshal error: %s (corrupted data, deleting and using defaults)\n", err)
-					// Delete corrupted data so it will be recreated on next save
-					if delErr := DeleteKey("XSWDUnencrypted", []byte("Globals")); delErr != nil {
-						logger.Debugf("[Engram] getPermissions: could not delete corrupted fallback globals: %s\n", delErr)
+				for method, permission := range storedPermissions {
+					if _, exists := remoteAccess.WS.global.permissions[method]; exists {
+						remoteAccess.WS.global.permissions[method] = permission
 					}
-				} else {
-					logger.Printf("[Engram] getPermissions: Successfully loaded %d fallback permissions\n", len(storedPermissions))
-					// Merge fallback permissions with defaults (stored takes precedence)
-					for method, permission := range storedPermissions {
-						if _, exists := remoteAccess.WS.global.permissions[method]; exists {
-							remoteAccess.WS.global.permissions[method] = permission
-							logger.Printf("[Engram] getPermissions: Merged fallback permission for %s: %s", method, permission)
-						}
-					}
-					logger.Printf("[Engram] getPermissions: After fallback merge, total permissions: %d", len(remoteAccess.WS.global.permissions))
 				}
 			}
 		}
@@ -7594,23 +7386,17 @@ func getPermissions() (handler map[string]xswd.Permission, methods []string) {
 		// Try to load enabled state from unencrypted fallback storage
 		storedEnabled, err := GetValue("XSWDUnencrypted", []byte("Enabled"))
 		if err != nil {
-			logger.Printf("[Engram] WebSocket enabled state NOT FOUND in fallback (error: %v), defaulting to false", err)
-			remoteAccess.WS.global.enabled = false // Default to disabled
+			remoteAccess.WS.global.enabled = false
 		} else {
-			enabledStr := string(storedEnabled)
-			remoteAccess.WS.global.enabled = enabledStr == "1"
-			logger.Printf("[Engram] WebSocket enabled state loaded from fallback: '%s' -> %v", enabledStr, remoteAccess.WS.global.enabled)
+			remoteAccess.WS.global.enabled = string(storedEnabled) == "1"
 		}
-		logger.Printf("[Engram] getPermissions: Wallet not available, using fallback permissions and enabled state")
 	}
 
 	for k := range remoteAccess.WS.global.permissions {
 		methods = append(methods, k)
-		logger.Printf("[Engram] Found method in permissions: %s", k)
 	}
 
 	sort.Strings(methods)
-	logger.Printf("[Engram] Total methods for UI: %d", len(methods))
 
 	return remoteAccess.WS.global.permissions, methods
 }

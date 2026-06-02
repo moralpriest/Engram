@@ -631,21 +631,15 @@ func layoutDashboard() fyne.CanvasObject {
 	bottomRowWidth := ui.Width * 0.9
 
 	btnTELAWeb := newTELAButton(func() {
-		logger.Printf("[TELA-BUTTON] === ENTRY - button callback started ===\n")
-
 		if session.Navigating {
-			logger.Printf("[TELA-BUTTON] Already navigating, returning early\n")
 			return
 		}
 
 		session.Navigating = true
-		logger.Printf("[TELA-BUTTON] Set Navigating=true\n")
 
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Errorf("[TELA-BUTTON] === PANIC RECOVERED ===\n")
-				logger.Errorf("[TELA-BUTTON] Panic value: %v\n", r)
-				logger.Errorf("[TELA-BUTTON] Stack: %s\n", debug.Stack())
+				logger.Errorf("[TELA-BUTTON] Panic: %v\n%s\n", r, debug.Stack())
 				session.Navigating = false
 				session.Domain = "app.wallet"
 
@@ -654,20 +648,14 @@ func layoutDashboard() fyne.CanvasObject {
 						session.Window.SetContent(layoutDashboard())
 					}
 				})
-				logger.Printf("[TELA-BUTTON] === PANIC RECOVERY COMPLETE ===\n")
 			}
 		}()
 
 		defer func() {
 			session.Navigating = false
-			logger.Printf("[TELA-BUTTON] Reset Navigating=false\n")
 		}()
 
-		logger.Printf("[TELA-BUTTON] Checking state - gnomon.Index=%v walletapi.Connected=%v engram.Disk=%v session.WalletOpen=%v\n",
-			gnomon.Index != nil, walletapi.Connected, engram.Disk != nil, session.WalletOpen)
-
 		if gnomon.Index == nil {
-			logger.Printf("[TELA-BUTTON] Guard triggered - gnomon.Index is nil\n")
 			showLoadingOverlay()
 			fyne.Do(func() {
 				errLabel := canvas.NewText(i18n.T("wallet.gnomon_initializing"), colors.Yellow)
@@ -684,7 +672,6 @@ func layoutDashboard() fyne.CanvasObject {
 					}
 				}()
 				time.Sleep(3 * time.Second)
-				logger.Printf("[TELA-BUTTON] Retry check - gnomon.Index=%v walletapi.Connected=%v\n", gnomon.Index != nil, walletapi.Connected)
 				if gnomon.Index != nil {
 					fyne.Do(func() {
 						if session.Window != nil && session.WalletOpen {
@@ -705,7 +692,6 @@ func layoutDashboard() fyne.CanvasObject {
 		}
 
 		if !walletapi.Connected {
-			logger.Printf("[TELA-BUTTON] Guard triggered - walletapi.Connected is false\n")
 			showLoadingOverlay()
 			fyne.Do(func() {
 				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), colors.Yellow)
@@ -722,7 +708,6 @@ func layoutDashboard() fyne.CanvasObject {
 					}
 				}()
 				time.Sleep(3 * time.Second)
-				logger.Printf("[TELA-BUTTON] Connection retry check - gnomon.Index=%v walletapi.Connected=%v\n", gnomon.Index != nil, walletapi.Connected)
 				if walletapi.Connected && gnomon.Index != nil {
 					fyne.Do(func() {
 						if session.Window != nil && session.WalletOpen {
@@ -744,33 +729,24 @@ func layoutDashboard() fyne.CanvasObject {
 		}
 
 		if session.Window == nil {
-			logger.Errorf("[TELA-BUTTON] ERROR: session.Window is nil, cannot proceed\n")
 			return
 		}
 
 		if !session.WalletOpen {
-			logger.Errorf("[TELA-BUTTON] ERROR: session.WalletOpen is false, wallet not open\n")
 			return
 		}
 
 		if engram.Disk == nil {
-			logger.Errorf("[TELA-BUTTON] ERROR: engram.Disk is nil, wallet not loaded\n")
 			return
 		}
 
-		logger.Printf("[TELA-BUTTON] All guards passed, proceeding to open TELA...\n")
-
 		asked := hasAskedXSWD()
 		alreadyEnabled := remoteAccess.WS.global.enabled
-		logger.Printf("[TELA-BUTTON] hasAskedXSWD returned: %v, WS enabled: %v\n", asked, alreadyEnabled)
 		if !asked && !alreadyEnabled {
-			logger.Printf("[TELA-BUTTON] First-time XSWD prompt for wallet\n")
 			session.LastDomain = session.Window.Content()
 			session.Window.SetContent(layoutTransition())
 			go func() {
-				logger.Printf("[TELA-BUTTON] showXSWDPrompt() called from goroutine\n")
 				if showXSWDPrompt() {
-					logger.Printf("[TELA-BUTTON] User allowed XSWD\n")
 					remoteAccess.WS.global.enabled = true
 					if remoteAccess.WS.port == "" {
 						remoteAccess.WS.port = fmt.Sprintf("127.0.0.1:%d", xswd.XSWD_PORT)
@@ -781,7 +757,6 @@ func layoutDashboard() fyne.CanvasObject {
 						toggleXSWD(remoteAccess.WS.port)
 					}
 				} else {
-					logger.Printf("[TELA-BUTTON] User denied XSWD\n")
 					remoteAccess.WS.global.enabled = false
 					setPermissions()
 					if remoteAccess.WS.server != nil {
@@ -804,31 +779,21 @@ func layoutDashboard() fyne.CanvasObject {
 			return
 		}
 
-		logger.Printf("[TELA-BUTTON] Capturing session.Window.Content()\n")
 		currentContent := session.Window.Content()
-		if currentContent == nil {
-			logger.Printf("[TELA-BUTTON] Warning: current content is nil\n")
-		}
 		session.LastDomain = currentContent
 
-		logger.Printf("[TELA-BUTTON] Setting transition content\n")
 		session.Window.SetContent(layoutTransition())
 
-		logger.Printf("[TELA-BUTTON] Calling layoutTELA()\n")
 		telaLayout := layoutTELA()
-		logger.Printf("[TELA-BUTTON] layoutTELA() returned, setting content\n")
 
 		if telaLayout == nil {
-			logger.Errorf("[TELA-BUTTON] ERROR: layoutTELA() returned nil\n")
 			session.Window.SetContent(layoutDashboard())
 			return
 		}
 
 		session.Window.SetContent(telaLayout)
-		logger.Printf("[TELA-BUTTON] TELA content set, removing overlays\n")
 
 		removeOverlays()
-		logger.Printf("[TELA-BUTTON] === TELA opened successfully ===\n")
 	}, buttonWidth)
 
 	bottom := container.NewStack(
@@ -1224,9 +1189,7 @@ func layoutSend() fyne.CanvasObject {
 		wRings,
 		rectSpacer,
 		wrapMobileButton(widget.NewButtonWithIcon(i18n.T("send.scan_qr"), theme.MediaPhotoIcon(), func() {
-			log.Println("QR: Scan button tapped")
 			s := camera.NewScanner(session.Window, func(code string) {
-				log.Println("QR: Scan result received:", code)
 				wReceiver.SetText(code)
 				wReceiver.SetValidationError(nil)
 				wReceiver.Refresh()

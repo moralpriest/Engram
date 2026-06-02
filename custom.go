@@ -376,7 +376,6 @@ func newHoverButton(onTap func(), onIn func(), onOut func()) *hoverButton {
 }
 
 func (b *hoverButton) MouseIn(e *desktop.MouseEvent) {
-	fmt.Println("MouseIn called!")
 	if b.onMouseIn != nil {
 		b.onMouseIn()
 	}
@@ -388,7 +387,6 @@ func (b *hoverButton) MouseMoved(e *desktop.MouseEvent) {
 }
 
 func (b *hoverButton) MouseOut() {
-	fmt.Println("MouseOut called!")
 	if b.onMouseOut != nil {
 		b.onMouseOut()
 	}
