@@ -4647,8 +4647,6 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	var zeroscid crypto.Hash
 	messageAmount, _ := globals.ParseAmount("0.00001")
 	entries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, currentHeight, "", "", 0, 0)
-	logger.Printf("[MsgDebug] Show_Transfers returned %d entries for message scan", len(entries))
-
 	if cacheReusable {
 		result = make([]MessageRecord, len(messageCache.Records))
 		copy(result, messageCache.Records)
@@ -4773,7 +4771,6 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 		}
 	}
 
-	logger.Printf("[MsgDebug] scanMessageTransfers returning %d messages", len(result))
 	return result
 }
 
