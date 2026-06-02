@@ -3051,6 +3051,8 @@ func layoutTELA() fyne.CanvasObject {
 		maybeStartTelaWork(true)
 	}
 
+	searchDebouncer := NewDebouncer(300 * time.Millisecond)
+
 	entrySearch.OnChanged = func(s string) {
 		errorText.Text = ""
 		errorText.Refresh()
@@ -3122,134 +3124,136 @@ func layoutTELA() fyne.CanvasObject {
 			return
 		}
 
-		var queryResult []INDEXwithRatings
-		query := strings.Split(s, ":")
-		if len(query) < 2 {
-			if len(s) == 64 {
-				// Search scid
-				for _, ind := range telaSearch {
-					_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
-					if err != nil {
-						continue
-					}
-
-					if ind.SCID == s {
+		searchDebouncer.Debounce(func() {
+			var queryResult []INDEXwithRatings
+			query := strings.Split(s, ":")
+			if len(query) < 2 {
+				if len(s) == 64 {
+					for _, ind := range telaSearch {
+						if ind.SCID != s {
+							continue
+						}
+						_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
+						if err != nil {
+							continue
+						}
 						queryResult = append(queryResult, ind)
 						break
 					}
+				} else {
+					for _, ind := range telaSearch {
+						data := []string{ind.NameHdr, ind.DescrHdr, ind.DURL, ind.SCID}
+						matched := false
+						for _, split := range data {
+							if strings.Contains(normalizeTelaSearch(split), normalizedInput) {
+								matched = true
+								break
+							}
+						}
+						if !matched {
+							continue
+						}
+						_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
+						if err != nil {
+							continue
+						}
+						queryResult = append(queryResult, ind)
+					}
 				}
-			} else {
-				// Search all
-				for _, ind := range telaSearch {
+
+				resultDisplay := telaSearchDisplayAll(queryResult, sortBy, sortDescending)
+				fyne.Do(func() {
+					searching = resultDisplay
+					searchData.Set(searching)
+					searchList.Refresh()
+					results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
+					results.Color = colors.Green
+					results.Refresh()
+					entrySearch.Enable()
+				})
+				return
+			}
+
+			switch normalizeTelaSearch(query[0]) {
+			case "name":
+				searchMu.RLock()
+				snapshot := make([]INDEXwithRatings, len(telaSearch))
+				copy(snapshot, telaSearch)
+				searchMu.RUnlock()
+				for _, ind := range snapshot {
+					if !strings.Contains(normalizeTelaSearch(ind.NameHdr), normalizeTelaSearch(query[1])) {
+						continue
+					}
 					_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
 					if err != nil {
 						continue
 					}
-
-					data := []string{
-						ind.NameHdr,
-						ind.DescrHdr,
-						ind.DURL,
-						ind.SCID,
+					queryResult = append(queryResult, ind)
+				}
+			case "durl":
+				searchMu.RLock()
+				snapshot := make([]INDEXwithRatings, len(telaSearch))
+				copy(snapshot, telaSearch)
+				searchMu.RUnlock()
+				for _, ind := range snapshot {
+					if !strings.Contains(normalizeTelaSearch(ind.DURL), normalizeTelaSearch(query[1])) {
+						continue
 					}
-
-					for _, split := range data {
-						if strings.Contains(normalizeTelaSearch(split), normalizedInput) {
+					_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
+					if err != nil {
+						continue
+					}
+					queryResult = append(queryResult, ind)
+				}
+			case "my":
+				if engram.Disk != nil {
+					walletAddr := engram.Disk.GetAddress().String()
+					for _, ind := range telaSearch {
+						if ind.Author == walletAddr {
 							queryResult = append(queryResult, ind)
-							break
 						}
 					}
 				}
-			}
+			case "author":
+				if len(query[1]) != 66 {
+					return
+				}
 
-			searching = telaSearchDisplayAll(queryResult, sortBy, sortDescending)
-			searchData.Set(searching)
-			searchList.Refresh()
-
-			results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
-			results.Color = colors.Green
-			results.Refresh()
-			entrySearch.Enable()
-
-			return
-		}
-
-		switch normalizeTelaSearch(query[0]) {
-		case "name":
-			searchMu.RLock()
-			snapshot := make([]INDEXwithRatings, len(telaSearch))
-			copy(snapshot, telaSearch)
-			searchMu.RUnlock()
-			for _, ind := range snapshot {
-				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
+				_, err := globals.ParseValidateAddress(query[1])
 				if err != nil {
-					continue
+					return
 				}
 
-				if strings.Contains(normalizeTelaSearch(ind.NameHdr), normalizeTelaSearch(query[1])) {
-					queryResult = append(queryResult, ind)
-				}
-			}
-		case "durl":
-			searchMu.RLock()
-			snapshot := make([]INDEXwithRatings, len(telaSearch))
-			copy(snapshot, telaSearch)
-			searchMu.RUnlock()
-			for _, ind := range snapshot {
-				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
-				if err != nil {
-					continue
-				}
-
-				if strings.Contains(normalizeTelaSearch(ind.DURL), normalizeTelaSearch(query[1])) {
-					queryResult = append(queryResult, ind)
-				}
-			}
-		case "my":
-			if engram.Disk != nil {
-				walletAddr := engram.Disk.GetAddress().String()
 				for _, ind := range telaSearch {
-					if ind.Author == walletAddr {
-						queryResult = append(queryResult, ind)
+					if ind.Author != query[1] {
+						continue
 					}
-				}
-			}
-		case "author":
-			if len(query[1]) != 66 {
-				return
-			}
-
-			_, err := globals.ParseValidateAddress(query[1])
-			if err != nil {
-				return
-			}
-
-			for _, ind := range telaSearch {
-				_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
-				if err != nil {
-					continue
-				}
-
-				if ind.Author == query[1] {
+					_, _, err := getLikesRatio(ind.SCID, ind.DURL, searchExclusions, minLikes)
+					if err != nil {
+						continue
+					}
 					queryResult = append(queryResult, ind)
 				}
+			default:
+				fyne.Do(func() {
+					errorText.Text = "unknown search prefix"
+					errorText.Color = colors.Red
+					errorText.Refresh()
+				})
+				return
 			}
-		default:
-			errorText.Text = "unknown search prefix"
-			errorText.Color = colors.Red
-			errorText.Refresh()
 
-			return
-		}
-
-		searching = telaSearchDisplayAll(queryResult, sortBy, sortDescending)
-		searchData.Set(searching)
-		searchList.Refresh()
-
-		results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
-		results.Color = colors.Green
-		results.Refresh()
-		entrySearch.Enable()
+			resultDisplay := telaSearchDisplayAll(queryResult, sortBy, sortDescending)
+			fyne.Do(func() {
+				searching = resultDisplay
+				searchData.Set(searching)
+				searchList.Refresh()
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
+				results.Color = colors.Green
+				results.Refresh()
+				entrySearch.Enable()
+			})
+		})
 	}
 
 	entryAddSCID.OnChanged = func(s string) {
