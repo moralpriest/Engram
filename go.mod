@@ -4,7 +4,7 @@ go 1.26
 
 replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
-replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260504162827-1362dfd72409
+replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.1-waitfix-dev
 
 require (
 	fyne.io/fyne/v2 v2.7.4
