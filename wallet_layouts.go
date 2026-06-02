@@ -17,7 +17,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"image"
 	"image/color"
 	"log"
 	"net/url"
@@ -210,25 +209,6 @@ func layoutDashboard() fyne.CanvasObject {
 
 	rectStatus := canvas.NewRectangle(color.Transparent)
 	rectStatus.SetMinSize(statusDotSize())
-
-	rectBannerSpacer := canvas.NewRectangle(color.Transparent)
-	rectBannerSpacer.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(0)))
-
-	session.DaemonBannerColor = color.Transparent
-	session.DaemonBannerBg = canvas.NewRaster(func(w, h int) image.Image {
-		c := session.DaemonBannerColor
-		if c == nil {
-			c = color.Transparent
-		}
-		img := image.NewRGBA(image.Rect(0, 0, w, h))
-		drawRoundedRect(img, c, 8)
-		return img
-	})
-	session.DaemonBannerBg.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(28)))
-
-	session.DaemonBannerText = canvas.NewText("", color.White)
-	session.DaemonBannerText.TextSize = scaleFont(12)
-	session.DaemonBannerText.Alignment = fyne.TextAlignCenter
 
 	frame := &iframe{}
 
@@ -513,11 +493,7 @@ func layoutDashboard() fyne.CanvasObject {
 	rectOffset := canvas.NewRectangle(color.Transparent)
 	rectOffset.SetMinSize(scalePoint(81, 1))
 
-	bannerContainer := container.NewStack(session.DaemonBannerBg, session.DaemonBannerText)
-
 	deroForm := container.NewVBox(
-		rectBannerSpacer,
-		bannerContainer,
 		rectSpacer,
 		logoStack,
 		rectSpacer,
@@ -3356,43 +3332,4 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	)
 
 	return layout
-}
-
-func drawRoundedRect(img *image.RGBA, c color.Color, r int) {
-	b := img.Bounds()
-	dx := b.Dx()
-	dy := b.Dy()
-	if r > dx/2 {
-		r = dx / 2
-	}
-	if r > dy/2 {
-		r = dy / 2
-	}
-	if r < 0 {
-		r = 0
-	}
-	rr := r * r
-	maxX := b.Max.X - 1
-	maxY := b.Max.Y - 1
-	for y := b.Min.Y; y <= maxY; y++ {
-		for x := b.Min.X; x <= maxX; x++ {
-			in := true
-			if x < b.Min.X+r && y < b.Min.Y+r {
-				dxx, dyy := x-(b.Min.X+r), y-(b.Min.Y+r)
-				in = dxx*dxx+dyy*dyy <= rr
-			} else if x > maxX-r && y < b.Min.Y+r {
-				dxx, dyy := x-(maxX-r), y-(b.Min.Y+r)
-				in = dxx*dxx+dyy*dyy <= rr
-			} else if x < b.Min.X+r && y > maxY-r {
-				dxx, dyy := x-(b.Min.X+r), y-(maxY-r)
-				in = dxx*dxx+dyy*dyy <= rr
-			} else if x > maxX-r && y > maxY-r {
-				dxx, dyy := x-(maxX-r), y-(maxY-r)
-				in = dxx*dxx+dyy*dyy <= rr
-			}
-			if in {
-				img.Set(x, y, c)
-			}
-		}
-	}
 }
