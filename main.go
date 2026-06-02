@@ -236,23 +236,18 @@ func main() {
 	// Set up mobile lifecycle handling - handle app background/foreground transitions
 	// This prevents crashes when switching apps on mobile
 	a.Lifecycle().SetOnExitedForeground(func() {
-		logger.Printf("[Lifecycle] App losing focus (background)")
-		// Save current domain before going to background
 		if session.Domain != "" {
 			previousDomain = session.Domain
 		}
 	})
 
 	a.Lifecycle().SetOnEnteredForeground(func() {
-		logger.Printf("[Lifecycle] App gaining focus (foreground), previous domain: %s", previousDomain)
-
 		isMobileDevice := a.Driver().Device().IsMobile()
 
 		now := time.Now().Unix()
 		if telaViewActive.Load() {
 			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
 		} else if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
-			logger.Printf("[Lifecycle] Foreground cooldown active, skipping heavy refresh (mobile: %v)", isMobileDevice)
 			return
 		}
 		lastForegroundTime = now
