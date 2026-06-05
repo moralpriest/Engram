@@ -56,6 +56,7 @@ func layoutLanguageSelector() fyne.CanvasObject {
 
 	var wLang *widget.Select
 	selecting := false
+	userSelected := false
 
 	pulseIndex := 0
 	updatePulseText := func(idx int, animate bool) {
@@ -137,7 +138,7 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	// Dropdown pulses through languages, user selection stops pulse and transitions
+	// Dropdown pulses through languages for preview; user picks and clicks Confirm
 	langNames := []string{}
 	for _, code := range languages {
 		langNames = append(langNames, i18n.AvailableLanguages()[code])
@@ -145,10 +146,23 @@ func layoutLanguageSelector() fyne.CanvasObject {
 
 	wLang = widget.NewSelect(langNames, nil)
 	wLang.PlaceHolder = "..."
+
+	btnConfirm := widget.NewButton(i18n.T("common.confirm"), func() {
+		idx := wLang.SelectedIndex()
+		if idx < 0 {
+			idx = 0
+		}
+		i18n.SetLanguageFromIndex(idx)
+		StoreValue("settings", []byte("language"), []byte(languages[idx]))
+		transitionToMain()
+	})
+
 	wLang.OnChanged = func(s string) {
 		if selecting {
 			return
 		}
+		selecting = true
+		userSelected = true
 		idx := 0
 		for i, name := range langNames {
 			if name == s {
@@ -156,13 +170,8 @@ func layoutLanguageSelector() fyne.CanvasObject {
 				break
 			}
 		}
-		i18n.SetLanguageFromIndex(idx)
-		StoreValue("settings", []byte("language"), []byte(languages[idx]))
-		time.AfterFunc(150*time.Millisecond, func() {
-			fyne.Do(func() {
-				transitionToMain()
-			})
-		})
+		updatePulseText(idx, false)
+		selecting = false
 	}
 
 	updatePulseText(0, false)
@@ -182,6 +191,8 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		container.NewCenter(
 			container.NewStack(dropdownCard, wLang),
 		),
+		rectSpacer,
+		wrapMobileButton(btnConfirm),
 	)
 
 	layout := container.NewStack(
@@ -194,11 +205,11 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		time.Sleep(2 * time.Second)
 		for !appExiting {
 			time.Sleep(3 * time.Second)
-			if session.Domain != "app.language" {
+			if session.Domain != "app.language" || userSelected {
 				return
 			}
 			fyne.Do(func() {
-				if session.Domain != "app.language" {
+				if session.Domain != "app.language" || userSelected {
 					return
 				}
 				newIdx := pulseIndex + 1

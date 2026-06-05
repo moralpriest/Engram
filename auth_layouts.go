@@ -325,6 +325,18 @@ func layoutMain() fyne.CanvasObject {
 		return s
 	}
 
+	loginSection := container.NewVBox(
+		newSpacer(),
+		wPassword,
+		newSpacer(),
+		mode,
+		newSpacer(),
+		btnLogin,
+	)
+	if len(list) == 0 {
+		loginSection.Hide()
+	}
+
 	status.Connection.FillColor = colors.Gray
 	status.RemoteAccess.FillColor = colors.Gray
 	status.Gnomon.FillColor = colors.Gray
@@ -368,12 +380,7 @@ func layoutMain() fyne.CanvasObject {
 		newSpacer(),
 		newSpacer(),
 		walletButtons,
-		newSpacer(),
-		wPassword,
-		newSpacer(),
-		mode,
-		newSpacer(),
-		btnLogin,
+		loginSection,
 		newSpacer(),
 		buttonGrid,
 		footer,
@@ -385,6 +392,18 @@ func layoutMain() fyne.CanvasObject {
 		btnLoginSizeEnforcer.SetMinSize(fyne.NewSize(ui.Width*0.9, scaleSize(btnLoginHeight)))
 		wrappedBtnLogin := container.NewStack(btnLoginSizeEnforcer, btnLogin)
 
+		mobileLoginSection := container.NewVBox(
+			newSpacer(),
+			wPassword,
+			newSpacer(),
+			mode,
+			newSpacer(),
+			wrappedBtnLogin,
+		)
+		if len(list) == 0 {
+			mobileLoginSection.Hide()
+		}
+
 		form = container.NewVBox(
 			wSpacer,
 			container.NewStack(
@@ -393,12 +412,7 @@ func layoutMain() fyne.CanvasObject {
 			newSpacer(),
 			newSpacer(),
 			walletButtons,
-			newSpacer(),
-			wPassword,
-			newSpacer(),
-			mode,
-			newSpacer(),
-			wrappedBtnLogin,
+			mobileLoginSection,
 			newSpacer(),
 			container.New(layout.NewGridLayout(1),
 				btnNewAccount,
