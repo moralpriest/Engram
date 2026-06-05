@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/DEROFDN/engram/i18n"
@@ -147,7 +148,7 @@ func layoutLanguageSelector() fyne.CanvasObject {
 	wLang = widget.NewSelect(langNames, nil)
 	wLang.PlaceHolder = "..."
 
-	btnConfirm := widget.NewButton(i18n.T("common.confirm"), func() {
+	btnConfirm := widget.NewButtonWithIcon("", theme.LoginIcon(), func() {
 		idx := wLang.SelectedIndex()
 		if idx < 0 {
 			idx = 0
@@ -156,6 +157,8 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		StoreValue("settings", []byte("language"), []byte(languages[idx]))
 		transitionToMain()
 	})
+	btnConfirm.Disable()
+	btnConfirm.Importance = widget.HighImportance
 
 	wLang.OnChanged = func(s string) {
 		if selecting {
@@ -171,6 +174,8 @@ func layoutLanguageSelector() fyne.CanvasObject {
 			}
 		}
 		updatePulseText(idx, false)
+		btnConfirm.Enable()
+		btnConfirm.Refresh()
 		selecting = false
 	}
 
