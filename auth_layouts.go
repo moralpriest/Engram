@@ -22,6 +22,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -1427,7 +1428,9 @@ func layoutRestore() fyne.CanvasObject {
 		scrollToFieldOnMobile(wAccount, scrollBox)
 	}
 
-	wLanguage := widget.NewSelect(mnemonics.Language_List(), nil)
+	seedLanguages := mnemonics.Language_List()
+	sort.Strings(seedLanguages)
+	wLanguage := widget.NewSelect(seedLanguages, nil)
 	wLanguage.OnChanged = func(s string) {
 		index := wLanguage.SelectedIndex()
 		session.Language = index
