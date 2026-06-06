@@ -685,6 +685,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	session.PasswordConfirm = ""
 
 	languages := mnemonics.Language_List()
+	sort.Strings(languages)
 
 	errorText := canvas.NewText(" ", colors.Green)
 	errorText.TextSize = scaleFont(12)

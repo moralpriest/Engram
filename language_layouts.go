@@ -157,8 +157,6 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		StoreValue("settings", []byte("language"), []byte(languages[idx]))
 		transitionToMain()
 	})
-	btnConfirm.Disable()
-	btnConfirm.Importance = widget.HighImportance
 
 	wLang.OnChanged = func(s string) {
 		if selecting {
@@ -174,8 +172,6 @@ func layoutLanguageSelector() fyne.CanvasObject {
 			}
 		}
 		updatePulseText(idx, false)
-		btnConfirm.Enable()
-		btnConfirm.Refresh()
 		selecting = false
 	}
 
