@@ -2680,10 +2680,16 @@ func showLoadingOverlayWithText(title, eta string) {
 		rect := canvas.NewRectangle(colors.DarkMatter)
 		rect.SetMinSize(frame.Size())
 
-		lblTitle := canvas.NewText(title, colors.Green)
-		lblTitle.TextSize = scaleFont(16)
+		lblTitle := widget.NewLabel(title)
 		lblTitle.Alignment = fyne.TextAlignCenter
 		lblTitle.TextStyle = fyne.TextStyle{Bold: true}
+		lblTitle.Wrapping = fyne.TextWrapWord
+
+		themedTitle := container.NewThemeOverride(lblTitle, &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
+
+		rectTitleWidth := canvas.NewRectangle(color.Transparent)
+		rectTitleWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.85, 0))
+		titleStack := container.NewStack(rectTitleWidth, themedTitle)
 
 		lblETA := canvas.NewText(eta, colors.Gray)
 		lblETA.TextSize = scaleFont(12)
@@ -2698,7 +2704,7 @@ func showLoadingOverlayWithText(title, eta string) {
 				container.NewVBox(
 					container.NewStack(res.loading),
 					widget.NewLabel(""),
-					lblTitle,
+					titleStack,
 					rectPassSpacer,
 					lblETA,
 				),
