@@ -31,8 +31,6 @@ github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/chengxilo/virtualterm v1.0.4 h1:Z6IpERbRVlfB8WkOmtbHiDbBANU7cimRIof7mk9/PwM=
 github.com/chengxilo/virtualterm v1.0.4/go.mod h1:DyxxBZz/x1iqJjFxTFcr6/x+jSpqN0iwWCOK1q10rlY=
-github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb h1:ZM5hGZMiUvheyVjzJYgvY/A34NeDZ2WO8x7oMQA6Oyc=
-github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb/go.mod h1:aATobu9h/6BK9C+1e/DRBi6+dUNrHFqmykhhrxQvbTQ=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/coder/websocket v1.8.14 h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=
@@ -150,6 +148,8 @@ github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db h1:62I3jR2Em
 github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db/go.mod h1:l0dey0ia/Uv7NcFFVbCLtqEBQbrT4OCwCSKTEv6enCw=
 github.com/moralpriest/Gnomon v0.0.1-waitfix-dev h1:lK9jY3sWEM1dSS2HlMIdXylmGuziK3T15vM3mqYxc2E=
 github.com/moralpriest/Gnomon v0.0.1-waitfix-dev/go.mod h1:8lK2/fREyBTGblRSph/zOQ99gvqfEGzFGCDNPAZSgBM=
+github.com/moralpriest/epoch v0.0.0-20260607210939-1bb1734a8874 h1:E7Pb7kACac3JesxBKWb1OGmAs1HbQJafUEqc6yRZrF4=
+github.com/moralpriest/epoch v0.0.0-20260607210939-1bb1734a8874/go.mod h1:x9oUuXPLlGgzM40MijuKMi8PybbDEw80a5DZDkwD6y8=
 github.com/moralpriest/tela v0.0.0-20260507234742-2edd3a5771fc h1:hh+/gxN1V/FfxcJ/YreLpcvkktwyYIPsgoSeZ1GoXG4=
 github.com/moralpriest/tela v0.0.0-20260507234742-2edd3a5771fc/go.mod h1:RNWl/QyXNh1XC1Tja/ziYKR3NJynX9VG7FKkH/dKFd0=
 github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 h1:zYyBkD/k9seD2A7fsi6Oo2LfFZAehjjQMERAvZLEDnQ=
