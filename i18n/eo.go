@@ -343,6 +343,7 @@ var stringsEO = map[string]string{
 	"send.comment":     "Komento",
 	"send.fee":         "Kotizo",
 	"send.send":        "Sendi",
+	"send.sending":     "Sendante...",
 	"send.send_all":    "Sendi Ĉion",
 	"send.heading":     "S E N D I    D E R O - n",
 	"send.optional":    "L A Ŭ V O L A",
@@ -636,6 +637,12 @@ var stringsEO = map[string]string{
 	"xswd.foreground_notification_text":   "XSWD-servilo funkcias",
 	"xswd.foreground_channel_name":        "XSWD-servo",
 	"xswd.foreground_channel_description": "Subtenas Engram aktiva por XSWD WebSocket-konektoj",
+
+	"notification.send_success":     "DERO sukcese sendita!",
+	"notification.send_failed":      "Translokigo malsukcesis — transakcio ne estis konfirmita",
+	"notification.incoming":         "Ricevitaj %s DERO",
+	"settings.enable_notifications": "Ebligi sciigojn",
+	"settings.notifications_desc":   "Montri alertojn por envenantaj kaj elirantaj translokigoj",
 
 	"messages.warning_daemon": "Ruli de via propra demono donas pli fidindan sperton\n\nĈiuj mesaĝoj estas konstante skribitaj al la blokĉeno\n\nDaŭrigu nur se vi akceptas tiujn riskojn",
 }

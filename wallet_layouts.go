@@ -1078,22 +1078,40 @@ func layoutSend() fyne.CanvasObject {
 		_, err := globals.ParseAmount(wAmount.Text)
 		if tx.Address != nil {
 			if wRings != nil && err == nil && tx.Address != nil {
+				sendAmount := tx.Amount
+				sendDest := tx.Address.String()
 				err = addTransfer()
 				if err == nil {
-					showLoadingOverlay()
-					txid, err := sendTransfers()
-					if err != nil {
-						log.Printf("[Send] Error: %v\n", err)
-						removeOverlays()
-						dialog.ShowError(err, session.Window)
-						return
-					}
-					log.Printf("[Send] Transaction sent: %s\n", txid)
-					removeOverlays()
-					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-					removeOverlays()
+					btnSendNow.Disable()
+					btnSendNow.Text = i18n.T("send.sending")
+					btnSendNow.Refresh()
+					go func() {
+						showLoadingOverlay()
+						txid, sendErr := sendTransfers()
+						if sendErr != nil {
+							log.Printf("[Send] Error: %v\n", sendErr)
+							uiDo(func() {
+								removeOverlays()
+								btnSendNow.Text = i18n.T("send.send")
+								btnSendNow.Enable()
+								btnSendNow.Refresh()
+								dialog.ShowError(sendErr, session.Window)
+							})
+							return
+						}
+						log.Printf("[Send] Transaction sent: %s\n", txid)
+						uiDo(func() {
+							removeOverlays()
+							session.LastDomain = session.Window.Content()
+							session.Window.SetContent(layoutTransition())
+							session.Window.SetContent(layoutDashboard())
+							removeOverlays()
+						})
+						if getNotificationsEnabled() {
+							fyne.CurrentApp().SendNotification(fyne.NewNotification("Engram", i18n.T("notification.send_success")))
+						}
+						confirmSendAsync(txid, sendAmount, sendDest)
+					}()
 				}
 			} else {
 				wReceiver.SetValidationError(errors.New("invalid address"))

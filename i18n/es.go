@@ -343,6 +343,7 @@ var stringsES = map[string]string{
 	"send.comment":     "Comentario",
 	"send.fee":         "Tarifa",
 	"send.send":        "Enviar",
+	"send.sending":     "Enviando...",
 	"send.send_all":    "Enviar todo",
 	"send.heading":     "E N V I A R    D E R O",
 	"send.optional":    "O P C I O N A L",
@@ -635,6 +636,12 @@ var stringsES = map[string]string{
 	"xswd.foreground_notification_text":   "Servidor XSWD en ejecución",
 	"xswd.foreground_channel_name":        "Servicio XSWD",
 	"xswd.foreground_channel_description": "Mantiene Engram activo para conexiones WebSocket XSWD",
+
+	"notification.send_success":     "¡DERO enviado con éxito!",
+	"notification.send_failed":      "Transferencia fallida — la transacción no fue confirmada",
+	"notification.incoming":         "%s DERO recibidos",
+	"settings.enable_notifications": "Activar notificaciones",
+	"settings.notifications_desc":   "Mostrar alertas para transferencias entrantes y salientes",
 
 	"messages.warning_daemon": "Usar su propio daemon proporciona una experiencia más fiable\n\nTodos los mensajes se escriben permanentemente en la blockchain\n\nContinúe solo si acepta estos riesgos",
 }

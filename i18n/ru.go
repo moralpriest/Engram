@@ -343,6 +343,7 @@ var stringsRU = map[string]string{
 	"send.comment":     "Комментарий",
 	"send.fee":         "Комиссия",
 	"send.send":        "Отправить",
+	"send.sending":     "Отправка...",
 	"send.send_all":    "Отправить все",
 	"send.heading":     "О Т П Р А В И Т Ь    D E R O",
 	"send.optional":    "Н Е О Б Я З А Т Е Л Ь Н О",
@@ -636,6 +637,12 @@ var stringsRU = map[string]string{
 	"xswd.foreground_notification_text":   "Сервер XSWD запущен",
 	"xswd.foreground_channel_name":        "Служба XSWD",
 	"xswd.foreground_channel_description": "Поддерживает Engram активным для WebSocket-соединений XSWD",
+
+	"notification.send_success":     "DERO успешно отправлен!",
+	"notification.send_failed":      "Перевод не выполнен — транзакция не подтверждена",
+	"notification.incoming":         "Получено %s DERO",
+	"settings.enable_notifications": "Включить уведомления",
+	"settings.notifications_desc":   "Показывать оповещения о входящих и исходящих переводах",
 
 	"messages.warning_daemon": "Запуск с собственного демона обеспечивает более надежную работу\n\nВсе сообщения навсегда записываются в блокчейн\n\nПродолжайте только если вы принимаете эти риски",
 }

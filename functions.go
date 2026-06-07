@@ -172,6 +172,11 @@ type Session struct {
 	VillagerPixels      string
 	IsRecovery          bool
 	IsNewWallet         bool
+	PendingSend         bool
+	PendingSendAmount   uint64
+	PendingSendDest     string
+	BalancePulseStop    chan struct{}
+	LastSeenTxIDs       map[string]bool
 }
 
 type RemoteAccess struct {
@@ -1533,7 +1538,8 @@ func refreshPulseWalletState(sentNotifications *bool) {
 		return
 	}
 
-	if session.WalletHeight != engram.Disk.Get_Height() {
+	heightChanged := session.WalletHeight != engram.Disk.Get_Height()
+	if heightChanged {
 		*sentNotifications = false
 	}
 
@@ -1552,13 +1558,36 @@ func refreshPulseWalletState(sentNotifications *bool) {
 	}
 
 	var zeroscid crypto.Hash
-	entries := engram.Disk.Show_Transfers(zeroscid, false, true, false, session.WalletHeight-1, session.WalletHeight-1, "", "", uint64(1337), 0)
+	entries := engram.Disk.Show_Transfers(zeroscid, false, true, false, session.WalletHeight-1, session.WalletHeight-1, "", "", uint64(0), 0)
 	for e := range entries {
 		if entries[e].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) && !*sentNotifications {
 			sender := entries[e].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)
 			notification := fyne.NewNotification(sender, "New message was received (Height: "+fmt.Sprintf("%d", entries[e].Height)+")")
 			fyne.CurrentApp().SendNotification(notification)
 			*sentNotifications = true
+		}
+
+		if heightChanged && getNotificationsEnabled() {
+			txidStr := entries[e].TXID
+			if txidStr == "" {
+				continue
+			}
+			if session.LastSeenTxIDs == nil {
+				session.LastSeenTxIDs = make(map[string]bool)
+			}
+			if session.LastSeenTxIDs[txidStr] {
+				continue
+			}
+			session.LastSeenTxIDs[txidStr] = true
+			if len(session.LastSeenTxIDs) > 200 {
+				for k := range session.LastSeenTxIDs {
+					delete(session.LastSeenTxIDs, k)
+					break
+				}
+			}
+			amountStr := globals.FormatMoney(entries[e].Amount)
+			msg := fmt.Sprintf(i18n.T("notification.incoming"), amountStr)
+			fyne.CurrentApp().SendNotification(fyne.NewNotification("Engram", msg))
 		}
 	}
 
@@ -2905,6 +2934,133 @@ func sendTransfers() (txid crypto.Hash, err error) {
 	tx = Transfers{}
 
 	return
+}
+
+func getNotificationsEnabled() bool {
+	v, err := GetValue("settings", []byte("notifications"))
+	if err != nil || len(v) == 0 {
+		return true
+	}
+	return string(v) == "true"
+}
+
+func setNotificationsEnabled(enabled bool) {
+	if enabled {
+		_ = StoreValue("settings", []byte("notifications"), []byte("true"))
+	} else {
+		_ = StoreValue("settings", []byte("notifications"), []byte("false"))
+	}
+}
+
+func immediateBalanceRefresh() {
+	if engram.Disk == nil || !session.WalletOpen {
+		return
+	}
+	session.Balance, _ = engram.Disk.Get_Balance()
+	uiDo(func() {
+		if session.BalanceText != nil && !session.BalanceHidden {
+			session.BalanceText.Text = globals.FormatMoney(session.Balance)
+			session.BalanceText.Refresh()
+		}
+	})
+}
+
+func pulseBalancePending(stop chan struct{}) {
+	if session.BalanceText == nil {
+		return
+	}
+	green := colors.Green
+	yellow := colors.Yellow
+	anim := canvas.NewColorRGBAAnimation(green, yellow, 800*time.Millisecond, func(c color.Color) {
+		select {
+		case <-stop:
+			return
+		default:
+			if session.BalanceText != nil && session.Domain == "app.wallet" {
+				session.BalanceText.Color = c
+				session.BalanceText.Refresh()
+			}
+		}
+	})
+	anim.AutoReverse = true
+	anim.RepeatCount = fyne.AnimationRepeatForever
+	uiDo(func() {
+		anim.Start()
+	})
+
+	select {
+	case <-stop:
+	case <-time.After(60 * time.Second):
+	}
+
+	uiDo(func() {
+		anim.Stop()
+		if session.BalanceText != nil {
+			session.BalanceText.Color = colors.Green
+			session.BalanceText.Refresh()
+		}
+	})
+}
+
+func confirmSendAsync(txid crypto.Hash, amount uint64, destination string) {
+	generation := currentWalletGeneration()
+
+	session.PendingSend = true
+	session.PendingSendAmount = amount
+	session.PendingSendDest = destination
+
+	stop := make(chan struct{})
+	session.BalancePulseStop = stop
+
+	go pulseBalancePending(stop)
+
+	go func() {
+		defer func() {
+			session.PendingSend = false
+			select {
+			case <-stop:
+			default:
+				close(stop)
+			}
+			session.BalancePulseStop = nil
+		}()
+
+		walletapi.WaitNewHeightBlock()
+
+		if !isWalletGenerationActive(generation) {
+			immediateBalanceRefresh()
+			return
+		}
+
+		sHeight := walletapi.Get_Daemon_Height()
+
+		for {
+			if !isWalletGenerationActive(generation) {
+				immediateBalanceRefresh()
+				return
+			}
+
+			if session.Domain != "app.wallet" {
+				immediateBalanceRefresh()
+				return
+			}
+
+			var zeroscid crypto.Hash
+			_, result := engram.Disk.Get_Payments_TXID(zeroscid, txid.String())
+
+			if result.TXID == txid.String() {
+				immediateBalanceRefresh()
+				return
+			}
+
+			if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
+				immediateBalanceRefresh()
+				return
+			}
+
+			time.Sleep(time.Second)
+		}
+	}()
 }
 
 // Go Routine for account registration

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela"
 )
 
@@ -184,5 +186,49 @@ func TestSessionDomainToString(t *testing.T) {
 		if got := sessionDomainToString(tt.input); got != tt.expected {
 			t.Errorf("sessionDomainToString(%q) = %q; want %q", tt.input, got, tt.expected)
 		}
+	}
+}
+
+func TestNotificationI18nKeysExist(t *testing.T) {
+	keys := []string{
+		"notification.send_success",
+		"notification.send_failed",
+		"notification.incoming",
+		"settings.enable_notifications",
+		"settings.notifications_desc",
+	}
+	for _, key := range keys {
+		got := i18n.T(key)
+		if got == key {
+			t.Errorf("i18n key %q not found (returned raw key)", key)
+		}
+		if got == "" {
+			t.Errorf("i18n key %q returned empty string", key)
+		}
+	}
+}
+
+func TestFormatNotificationIncoming(t *testing.T) {
+	tmpl := i18n.T("notification.incoming")
+	got := fmt.Sprintf(tmpl, "1.50000")
+	if got == tmpl {
+		t.Error("expected formatted string, got raw template")
+	}
+	if len(got) == 0 {
+		t.Error("expected non-empty formatted string")
+	}
+}
+
+func TestFormatNotificationSendSuccess(t *testing.T) {
+	got := i18n.T("notification.send_success")
+	if got == "" || got == "notification.send_success" {
+		t.Error("notification.send_success key missing or empty")
+	}
+}
+
+func TestFormatNotificationSendFailed(t *testing.T) {
+	got := i18n.T("notification.send_failed")
+	if got == "" || got == "notification.send_failed" {
+		t.Error("notification.send_failed key missing or empty")
 	}
 }

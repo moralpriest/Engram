@@ -328,6 +328,7 @@ var stringsZH = map[string]string{
 	"send.comment":                                   "注释",
 	"send.fee":                                       "手续费",
 	"send.send":                                      "发送",
+	"send.sending":                                   "发送中...",
 	"send.send_all":                                  "发送全部",
 	"send.heading":                                   "发 送  D E R O",
 	"send.optional":                                  "可 选",
@@ -601,5 +602,10 @@ var stringsZH = map[string]string{
 	"xswd.foreground_notification_text":              "XSWD 服务器正在运行",
 	"xswd.foreground_channel_name":                   "XSWD 服务",
 	"xswd.foreground_channel_description":            "保持 Engram 活跃以进行 XSWD WebSocket 连接",
+	"notification.send_success":                      "DERO 发送成功！",
+	"notification.send_failed":                       "转账失败 — 交易未确认",
+	"notification.incoming":                          "收到 %s DERO",
+	"settings.enable_notifications":                  "启用通知",
+	"settings.notifications_desc":                    "显示转入和转出提醒",
 	"messages.warning_daemon":                        "使用自己的节点运行可获得更可靠的体验\n\n所有消息都将永久写入区块链\n\n仅当您接受这些风险时才继续",
 }

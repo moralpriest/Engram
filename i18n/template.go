@@ -381,6 +381,7 @@ var stringsTemplate = map[string]string{
 	"send.comment":     "",
 	"send.fee":         "",
 	"send.send":        "",
+	"send.sending":     "",
 	"send.send_all":    "",
 	"send.heading":     "",
 	"send.optional":    "",
@@ -667,6 +668,12 @@ var stringsTemplate = map[string]string{
 	"xswd.foreground_notification_text":   "",
 	"xswd.foreground_channel_name":        "",
 	"xswd.foreground_channel_description": "",
+
+	"notification.send_success":     "",
+	"notification.send_failed":      "",
+	"notification.incoming":         "",
+	"settings.enable_notifications": "",
+	"settings.notifications_desc":   "",
 
 	"messages.warning_daemon": "",
 }

@@ -343,6 +343,7 @@ var stringsEN = map[string]string{
 	"send.comment":     "Comment",
 	"send.fee":         "Fee",
 	"send.send":        "Send",
+	"send.sending":     "Sending...",
 	"send.send_all":    "Send All",
 	"send.heading":     "S E N D    D E R O",
 	"send.optional":    "O P T I O N A L",
@@ -636,6 +637,12 @@ var stringsEN = map[string]string{
 	"xswd.foreground_notification_text":   "XSWD server running",
 	"xswd.foreground_channel_name":        "XSWD Service",
 	"xswd.foreground_channel_description": "Keeps Engram alive for XSWD WebSocket connections",
+
+	"notification.send_success":     "DERO sent successfully!",
+	"notification.send_failed":      "Transfer failed — transaction was not confirmed",
+	"notification.incoming":         "Received %s DERO",
+	"settings.enable_notifications": "Enable Notifications",
+	"settings.notifications_desc":   "Show alerts for incoming and outgoing transfers",
 
 	"messages.warning_daemon": "Running from your own daemon yields a more reliable experience\n\nAll messages are permanently written to the blockchain\n\nProceed only if you accept these risks",
 }

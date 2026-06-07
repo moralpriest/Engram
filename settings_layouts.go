@@ -1390,6 +1390,20 @@ func layoutAppSettings() fyne.CanvasObject {
 		checkGnomon.SetChecked(false)
 	}
 
+	// NOTIFICATIONS Section
+	notifTitle := canvas.NewText(i18n.T("settings.enable_notifications"), colors.Gray)
+	notifTitle.TextSize = scaleFont(11)
+	notifTitle.Alignment = fyne.TextAlignCenter
+	notifTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	notifDescription := widget.NewRichTextFromMarkdown(i18n.T("settings.notifications_desc"))
+	notifDescription.Wrapping = fyne.TextWrapWord
+
+	checkNotif := widget.NewCheck(i18n.T("settings.enable_notifications"), func(b bool) {
+		setNotificationsEnabled(b)
+	})
+	checkNotif.SetChecked(getNotificationsEnabled())
+
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), colors.Gray)
 	epochTitle.TextSize = scaleFont(11)
@@ -1759,6 +1773,23 @@ func layoutAppSettings() fyne.CanvasObject {
 		gnomonDescription,
 		rectSpacer,
 		checkGnomon,
+
+		// NOTIFICATIONS Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			notifTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		notifDescription,
+		rectSpacer,
+		checkNotif,
 
 		// LANGUAGE Section
 		rectSpacer,
