@@ -607,5 +607,8 @@ var stringsJA = map[string]string{
 	"notification.incoming":                          "%s DERO を受信しました",
 	"settings.enable_notifications":                  "通知を有効にする",
 	"settings.notifications_desc":                    "送受信の転送アラートを表示する",
+	"settings.prioritise_status":                     "ステータスを優先",
+	"settings.prioritise_status_desc":                "有効の場合、ステータスインジケーターは中央に表示されます；無効の場合、下部に配置されます。",
+	"settings.status_area":                           "ステータスエリア",
 	"messages.warning_daemon":                        "独自のデーモンから実行すると、より信頼性の高い体験が得られます\n\nすべてのメッセージはブロックチェーンに永久に書き込まれます\n\nこれらのリスクを承諾する場合のみ続行してください",
 }

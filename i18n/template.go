@@ -669,11 +669,14 @@ var stringsTemplate = map[string]string{
 	"xswd.foreground_channel_name":        "",
 	"xswd.foreground_channel_description": "",
 
-	"notification.send_success":     "",
-	"notification.send_failed":      "",
-	"notification.incoming":         "",
-	"settings.enable_notifications": "",
-	"settings.notifications_desc":   "",
+	"notification.send_success":       "",
+	"notification.send_failed":        "",
+	"notification.incoming":           "",
+	"settings.enable_notifications":   "",
+	"settings.notifications_desc":     "",
+	"settings.prioritise_status":      "",
+	"settings.prioritise_status_desc": "",
+	"settings.status_area":            "",
 
 	"messages.warning_daemon": "",
 }

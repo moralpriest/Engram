@@ -638,11 +638,14 @@ var stringsDE = map[string]string{
 	"xswd.foreground_channel_name":        "XSWD-Dienst",
 	"xswd.foreground_channel_description": "Hält Engram für XSWD-WebSocket-Verbindungen aktiv",
 
-	"notification.send_success":     "DERO erfolgreich gesendet!",
-	"notification.send_failed":      "Überweisung fehlgeschlagen — Transaktion wurde nicht bestätigt",
-	"notification.incoming":         "%s DERO erhalten",
-	"settings.enable_notifications": "Benachrichtigungen aktivieren",
-	"settings.notifications_desc":   "Benachrichtigungen für ein- und ausgehende Überweisungen anzeigen",
+	"notification.send_success":       "DERO erfolgreich gesendet!",
+	"notification.send_failed":        "Überweisung fehlgeschlagen — Transaktion wurde nicht bestätigt",
+	"notification.incoming":           "%s DERO erhalten",
+	"settings.enable_notifications":   "Benachrichtigungen aktivieren",
+	"settings.notifications_desc":     "Benachrichtigungen für ein- und ausgehende Überweisungen anzeigen",
+	"settings.prioritise_status":      "Status priorisieren",
+	"settings.prioritise_status_desc": "Wenn aktiviert, erscheinen die Statusindikatoren in der Mitte; wenn deaktiviert, werden sie unten positioniert.",
+	"settings.status_area":            "Statusbereich",
 
 	"messages.warning_daemon": "Der Betrieb Ihres eigenen Daemons bietet ein zuverlässigeres Erlebnis\n\nAlle Nachrichten werden dauerhaft in der Blockchain gespeichert\n\nFahren Sie nur fort, wenn Sie diese Risiken akzeptieren",
 }

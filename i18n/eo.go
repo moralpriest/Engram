@@ -638,11 +638,14 @@ var stringsEO = map[string]string{
 	"xswd.foreground_channel_name":        "XSWD-servo",
 	"xswd.foreground_channel_description": "Subtenas Engram aktiva por XSWD WebSocket-konektoj",
 
-	"notification.send_success":     "DERO sukcese sendita!",
-	"notification.send_failed":      "Translokigo malsukcesis — transakcio ne estis konfirmita",
-	"notification.incoming":         "Ricevitaj %s DERO",
-	"settings.enable_notifications": "Ebligi sciigojn",
-	"settings.notifications_desc":   "Montri alertojn por envenantaj kaj elirantaj translokigoj",
+	"notification.send_success":       "DERO sukcese sendita!",
+	"notification.send_failed":        "Translokigo malsukcesis — transakcio ne estis konfirmita",
+	"notification.incoming":           "Ricevitaj %s DERO",
+	"settings.enable_notifications":   "Ebligi sciigojn",
+	"settings.notifications_desc":     "Montri alertojn por envenantaj kaj elirantaj translokigoj",
+	"settings.prioritise_status":      "Prioritigi staton",
+	"settings.prioritise_status_desc": "Kiam ebligita, la statindikiloj aperas en la centro; kiam malŝaltita, ili estas poziciigitaj malsupre.",
+	"settings.status_area":            "Stata areo",
 
 	"messages.warning_daemon": "Ruli de via propra demono donas pli fidindan sperton\n\nĈiuj mesaĝoj estas konstante skribitaj al la blokĉeno\n\nDaŭrigu nur se vi akceptas tiujn riskojn",
 }

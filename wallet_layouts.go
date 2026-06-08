@@ -364,6 +364,21 @@ func layoutDashboard() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
+	sep3 := canvas.NewRectangle(colors.Gray)
+	sep3.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
+	statusLine1 := container.NewVBox(
+		layout.NewSpacer(),
+		sep3,
+		layout.NewSpacer(),
+	)
+	sep4 := canvas.NewRectangle(colors.Gray)
+	sep4.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
+	statusLine2 := container.NewVBox(
+		layout.NewSpacer(),
+		sep4,
+		layout.NewSpacer(),
+	)
+
 	buttonWidth := ui.Width * 0.9 / 3
 
 	btnExit := newIconLabelButtonWithColor(i18n.T("dashboard.exit"), theme.LogoutIcon(), colors.SoftRed, color.Black, func() {
@@ -493,7 +508,7 @@ func layoutDashboard() fyne.CanvasObject {
 	rectOffset := canvas.NewRectangle(color.Transparent)
 	rectOffset.SetMinSize(scalePoint(81, 1))
 
-	deroForm := container.NewVBox(
+	deroFormBody := container.NewVBox(
 		rectSpacer,
 		logoStack,
 		rectSpacer,
@@ -528,12 +543,15 @@ func layoutDashboard() fyne.CanvasObject {
 			),
 		),
 		rectSpacer,
+	)
+
+	statusSection := container.NewVBox(
 		container.NewHBox(
-			line1,
+			statusLine1,
 			layout.NewSpacer(),
 			statusLabel,
 			layout.NewSpacer(),
-			line2,
+			statusLine2,
 		),
 		rectSpacer,
 		container.NewVBox(
@@ -578,10 +596,6 @@ func layoutDashboard() fyne.CanvasObject {
 		),
 	)
 
-	grid := container.NewCenter(
-		deroForm,
-	)
-
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
 		if session.Domain != "app.wallet" {
 			return
@@ -597,12 +611,6 @@ func layoutDashboard() fyne.CanvasObject {
 			removeOverlays()
 		}
 	})
-
-	top := container.NewCenter(
-		layout.NewSpacer(),
-		grid,
-		layout.NewSpacer(),
-	)
 
 	bottomRowWidth := ui.Width * 0.9
 
@@ -772,7 +780,7 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, buttonWidth)
 
-	bottom := container.NewStack(
+	buttonsSection := container.NewStack(
 		container.NewVBox(
 			container.NewCenter(
 				container.NewHBox(
@@ -791,6 +799,38 @@ func layoutDashboard() fyne.CanvasObject {
 			rectSpacer,
 		),
 	)
+
+	prioritiseStatus := getPrioritiseStatus()
+
+	var gridContent fyne.CanvasObject
+	if prioritiseStatus {
+		gridContent = container.NewVBox(deroFormBody, statusSection)
+	} else {
+		gridContent = container.NewVBox(deroFormBody, buttonsSection)
+	}
+
+	grid := container.NewCenter(gridContent)
+	top := container.NewCenter(
+		layout.NewSpacer(),
+		grid,
+		layout.NewSpacer(),
+	)
+
+	var bottom fyne.CanvasObject
+	if prioritiseStatus {
+		bottom = buttonsSection
+	} else {
+		widthRect := canvas.NewRectangle(color.Transparent)
+		widthRect.SetMinSize(fyne.NewSize(ui.Width, 0))
+		bottom = container.NewStack(
+			container.NewVBox(
+				container.NewCenter(
+					container.NewStack(widthRect, statusSection),
+				),
+				rectSpacer,
+			),
+		)
+	}
 
 	c := container.NewBorder(
 		top,

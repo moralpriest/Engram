@@ -2952,6 +2952,22 @@ func setNotificationsEnabled(enabled bool) {
 	}
 }
 
+func getPrioritiseStatus() bool {
+	v, err := GetValue("settings", []byte("prioritiseStatus"))
+	if err != nil || len(v) == 0 {
+		return true
+	}
+	return string(v) == "true"
+}
+
+func setPrioritiseStatus(enabled bool) {
+	if enabled {
+		_ = StoreValue("settings", []byte("prioritiseStatus"), []byte("true"))
+	} else {
+		_ = StoreValue("settings", []byte("prioritiseStatus"), []byte("false"))
+	}
+}
+
 func immediateBalanceRefresh() {
 	if engram.Disk == nil || !session.WalletOpen {
 		return

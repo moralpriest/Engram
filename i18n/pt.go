@@ -638,11 +638,14 @@ var stringsPT = map[string]string{
 	"xswd.foreground_channel_name":        "Serviço XSWD",
 	"xswd.foreground_channel_description": "Mantém o Engram ativo para conexões WebSocket XSWD",
 
-	"notification.send_success":     "DERO enviado com sucesso!",
-	"notification.send_failed":      "Falha na transferência — a transação não foi confirmada",
-	"notification.incoming":         "%s DERO recebidos",
-	"settings.enable_notifications": "Ativar notificações",
-	"settings.notifications_desc":   "Mostrar alertas para transferências recebidas e enviadas",
+	"notification.send_success":       "DERO enviado com sucesso!",
+	"notification.send_failed":        "Falha na transferência — a transação não foi confirmada",
+	"notification.incoming":           "%s DERO recebidos",
+	"settings.enable_notifications":   "Ativar notificações",
+	"settings.notifications_desc":     "Mostrar alertas para transferências recebidas e enviadas",
+	"settings.prioritise_status":      "Priorizar status",
+	"settings.prioritise_status_desc": "Quando ativado, os indicadores de status aparecem no centro; quando desativado, são posicionados na parte inferior.",
+	"settings.status_area":            "Área de status",
 
 	"messages.warning_daemon": "Rodar a partir de seu próprio daemon oferece uma experiência mais confiável\n\nTodas as mensagens são gravadas permanentemente no blockchain\n\nProssiga apenas se você aceitar esses riscos",
 }

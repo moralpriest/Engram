@@ -1406,6 +1406,21 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 	checkNotif.SetChecked(getNotificationsEnabled())
 
+	// STATUS AREA Section
+	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), colors.Gray)
+	statusAreaTitle.TextSize = scaleFont(11)
+	statusAreaTitle.Alignment = fyne.TextAlignCenter
+	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	// PRIORITISE STATUS Section
+	prioritiseDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.prioritise_status_desc"))
+	prioritiseDesc.Wrapping = fyne.TextWrapWord
+
+	prioritiseCheck := widget.NewCheck(i18n.T("settings.prioritise_status"), func(b bool) {
+		setPrioritiseStatus(b)
+	})
+	prioritiseCheck.SetChecked(getPrioritiseStatus())
+
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), colors.Gray)
 	epochTitle.TextSize = scaleFont(11)
@@ -1792,6 +1807,22 @@ func layoutAppSettings() fyne.CanvasObject {
 		notifDescription,
 		rectSpacer,
 		checkNotif,
+
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			statusAreaTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		prioritiseDesc,
+		rectSpacer,
+		prioritiseCheck,
 
 		// LANGUAGE Section
 		rectSpacer,
