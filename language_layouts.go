@@ -180,6 +180,9 @@ func layoutLanguageSelector() fyne.CanvasObject {
 	dropdownCard := canvas.NewRectangle(color.Transparent)
 	dropdownCard.SetMinSize(fyne.NewSize(ui.Width*0.6, 0))
 
+	btnCard := canvas.NewRectangle(color.Transparent)
+	btnCard.SetMinSize(fyne.NewSize(ui.Width*0.6, 0))
+
 	form := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
@@ -193,7 +196,9 @@ func layoutLanguageSelector() fyne.CanvasObject {
 			container.NewStack(dropdownCard, wLang),
 		),
 		rectSpacer,
-		wrapMobileButton(btnConfirm),
+		container.NewCenter(
+			container.NewStack(btnCard, wrapMobileButton(btnConfirm)),
+		),
 	)
 
 	layout := container.NewStack(
