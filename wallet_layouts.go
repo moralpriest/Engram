@@ -2504,6 +2504,18 @@ func layoutHistory() fyne.CanvasObject {
 	var historyCoinbaseRows []string
 	var historyMessageRows []string
 
+	// countNonHeaders returns the number of real transaction rows,
+	// excluding date separator headers ("HEADER;;;...").
+	countNonHeaders := func(rows []string) int {
+		count := 0
+		for _, row := range rows {
+			if !strings.HasPrefix(row, "HEADER") {
+				count++
+			}
+		}
+		return count
+	}
+
 	view := ""
 
 	header := canvas.NewText(i18n.T("history.title"), colors.Green)
@@ -2613,7 +2625,7 @@ func layoutHistory() fyne.CanvasObject {
 	}
 
 	ensureHistoryRows := func() {
-		cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows = waitForHistoryRefreshAndSync()
+		cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows = getHistoryData()
 	}
 
 	// Function to load Normal transactions
@@ -2641,7 +2653,7 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
+			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
 
 			_ = listData.Set(data)
 
@@ -2706,7 +2718,7 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
+			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
 
 			_ = listData.Set(data)
 
@@ -2771,7 +2783,7 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
+			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
 
 			_ = listData.Set(data)
 
@@ -2822,7 +2834,7 @@ func layoutHistory() fyne.CanvasObject {
 			historySortOrder = "Descending"
 			btnSortOrder.SetIcon(theme.MenuDropDownIcon())
 		}
-		refreshHistoryAsync(true)
+		sortHistoryRows()
 		if view == i18n.T("history.normal") {
 			loadNormal()
 		} else if view == i18n.T("history.coinbase") {
@@ -2847,6 +2859,15 @@ func layoutHistory() fyne.CanvasObject {
 
 	// Handle tab changes
 	tabs.OnChanged = func(tab *container.TabItem) {
+		// Invalidate cache so every tab switch triggers a fresh scan.
+		// This ensures each tab (Normal, Coinbase, Messages) gets its
+		// own data from the blockchain rather than relying on stale cache.
+		historyRowCache.Lock()
+		historyRowCache.Loaded = false
+		historyRowCache.Height = 0
+		historyRowCache.Unlock()
+		resetMessageCache()
+
 		switch tab.Text {
 		case i18n.T("history.normal"):
 			loadNormal()
@@ -2856,6 +2877,13 @@ func layoutHistory() fyne.CanvasObject {
 			loadMessages()
 		}
 	}
+
+	// Force full scan when history tab is opened (invalidate cache so
+	// getHistoryData falls through to waitForHistoryRefreshAndSync)
+	historyRowCache.Lock()
+	historyRowCache.Loaded = false
+	historyRowCache.Height = 0
+	historyRowCache.Unlock()
 
 	// Load Normal by default
 	loadNormal()

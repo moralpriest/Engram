@@ -1675,6 +1675,23 @@ func StartPulse() {
 		// Start Gnomon indexing as soon as daemon is connected
 		go startGnomon()
 
+		// Push-based sync: listen for daemon height notifications and sync immediately.
+		// The daemon sends "Height" notifications via WebSocket on every new block.
+		// walletapi's sync_loop only polls every 5s; this goroutine provides instant
+		// sync by reacting to the same notifications. The existing 5s fallback remains.
+		go func() {
+			for isWalletGenerationActive(generation) && session.WalletOpen {
+				walletapi.WaitNewHeightBlock()
+				if !isWalletGenerationActive(generation) || !session.WalletOpen {
+					break
+				}
+				if engram.Disk != nil && isDaemonConnected() {
+					engram.Disk.Sync_Wallet_Memory_With_Daemon()
+					refreshHistoryAsync(false)
+				}
+			}
+		}()
+
 		refreshPermissionsAfterConnect()
 
 		sentNotifications := false
@@ -3607,15 +3624,15 @@ type MessageThreadSummary struct {
 }
 
 type MessageCache struct {
-	Height      uint64
+	Height       uint64
 	DaemonHeight uint64
-	Records     []MessageRecord
-	ByTXID      map[string]MessageRecord
-	Address     string
-	Primed      bool
-	Loaded      bool
-	Threads     []MessageThreadSummary
-	ByThread    map[string][]MessageRecord
+	Records      []MessageRecord
+	ByTXID       map[string]MessageRecord
+	Address      string
+	Primed       bool
+	Loaded       bool
+	Threads      []MessageThreadSummary
+	ByThread     map[string][]MessageRecord
 }
 
 type RenderedThreadMessage struct {
@@ -3866,7 +3883,6 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 
 	// 2. Determine start height for delta fetch
 	startHeight := uint64(0)
-	daemonHeight := uint64(engram.Disk.Get_Daemon_Height())
 	walletHeight := engram.Disk.Get_Height()
 	regHeight := engram.Disk.Get_Registration_TopoHeight()
 
@@ -3903,7 +3919,6 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 			startHeight = 0
 		}
 	}
-
 	// 3. Fetch delta transfers (Normal and Coinbase separately to be sure)
 	var zeroscid crypto.Hash
 	var newEntries, newCoinbase []rpc.Entry
@@ -3911,19 +3926,14 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		newEntries = engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, daemonHeight, "", "", 0, 0)
+		newEntries = engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, walletHeight, "", "", 0, 0)
 	}()
 	go func() {
 		defer wg.Done()
-		newCoinbase = engram.Disk.Show_Transfers(zeroscid, true, true, true, startHeight, daemonHeight, "", "", 0, 0)
+		newCoinbase = engram.Disk.Show_Transfers(zeroscid, true, true, true, startHeight, walletHeight, "", "", 0, 0)
 	}()
 	wg.Wait()
 	newEntries = append(newEntries, newCoinbase...)
-
-	shouldLog := forceRebuild || startHeight == 0 || len(newEntries) > 0
-	if shouldLog {
-		logger.Debugf("[SyncHistory] Fetched %d new entries (%d normal, %d coinbase) starting from height %d\n", len(newEntries), len(newEntries)-len(newCoinbase), len(newCoinbase), startHeight)
-	}
 
 	// Incremental cache update after normal+coinbase transfers
 	{
@@ -3981,20 +3991,9 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 	}
 
 	transfers = make([]rpc.Entry, 0, len(uniqueTransfers))
-	coinbaseCount := 0
-	normalCount := 0
 	for _, t := range uniqueTransfers {
 		transfers = append(transfers, t)
-		if t.Coinbase {
-			coinbaseCount++
-		} else {
-			normalCount++
-		}
 	}
-	if shouldLog {
-		logger.Debugf("[SyncHistory] Deduplicated totals: %d coinbase, %d normal (from %d fetched)\n", coinbaseCount, normalCount, len(newEntries))
-	}
-
 	// 6. Sort according to user preference
 	sort.Slice(transfers, func(i, j int) bool {
 		if historySortOrder == "Descending" {
@@ -4020,6 +4019,52 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 	}
 
 	return transfers, normalRows, coinbaseRows, messageRows
+}
+
+// getHistoryData returns cached data if available, otherwise scans the blockchain.
+// This avoids unnecessary full scans when the cache is already valid (e.g. after sorting).
+func getHistoryData() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
+	cachedTransfers, normalRows, coinbaseRows, messageRows, _, _, _, ok := getHistoryRowCache()
+	if ok && len(cachedTransfers) > 0 {
+		return cachedTransfers, normalRows, coinbaseRows, messageRows
+	}
+	return waitForHistoryRefreshAndSync()
+}
+
+// sortHistoryRows re-sorts the cached transfers without scanning the blockchain.
+// Called when the user changes the sort order (Ascending/Descending) via the sort button.
+func sortHistoryRows() {
+	cachedTransfers, _, _, _, _, _, _, ok := getHistoryRowCache()
+	if !ok || len(cachedTransfers) == 0 {
+		return
+	}
+
+	transfers := append([]rpc.Entry(nil), cachedTransfers...)
+
+	// Re-sort according to new sort preference
+	sort.Slice(transfers, func(i, j int) bool {
+		if historySortOrder == "Descending" {
+			if transfers[i].Height != transfers[j].Height {
+				return transfers[i].Height > transfers[j].Height
+			}
+			return transfers[i].Time.After(transfers[j].Time)
+		}
+		if transfers[i].Height != transfers[j].Height {
+			return transfers[i].Height < transfers[j].Height
+		}
+		return transfers[i].Time.Before(transfers[j].Time)
+	})
+
+	// Rebuild rows from sorted transfers
+	normalRows, coinbaseRows, _ := buildHistoryRows(transfers, nil)
+
+	// Read existing messageRows from cache
+	historyRowCache.RLock()
+	messageRows := append([]string(nil), historyRowCache.MessageRows...)
+	historyRowCache.RUnlock()
+
+	// Update cache with new sort order
+	setHistoryRowCache(transfers, normalRows, coinbaseRows, messageRows)
 }
 
 func getDateLabel(t time.Time) string {
@@ -4118,6 +4163,8 @@ var historyRefreshState struct {
 	sync.Mutex
 	running bool
 }
+
+
 
 // refreshHistoryAsync performs a background update of the transaction history cache.
 func refreshHistoryAsync(force bool) {
