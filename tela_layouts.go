@@ -48,7 +48,6 @@ import (
 	"github.com/creachadair/jrpc2"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
-	"github.com/deroproject/derohe/walletapi"
 	"github.com/deroproject/derohe/walletapi/xswd"
 	"github.com/deroproject/graviton"
 )
@@ -1758,30 +1757,30 @@ func layoutTELA() fyne.CanvasObject {
 				return
 			}
 
-			// Check connection health - wait for reconnect if disconnected
-			if !walletapi.Connected {
-				interruptReason = "connection_lost_syncing"
-				results.Text = "  Connection lost, waiting for reconnect..."
-				results.Color = colors.Yellow
-				fyne.Do(func() {
-					results.Refresh()
-				})
+		// Check connection health - wait for reconnect if disconnected
+		if !isDaemonConnected() {
+			interruptReason = "connection_lost_syncing"
+			results.Text = "  Connection lost, waiting for reconnect..."
+			results.Color = colors.Yellow
+			fyne.Do(func() {
+				results.Refresh()
+			})
 
-				// Wait for connection to restore (up to 30 seconds)
-				reconnectAttempts := 0
-				for !walletapi.Connected && reconnectAttempts < 30 {
-					time.Sleep(time.Second)
-					reconnectAttempts++
+			// Wait for connection to restore (up to 30 seconds)
+			reconnectAttempts := 0
+			for !isDaemonConnected() && reconnectAttempts < 30 {
+				time.Sleep(time.Second)
+				reconnectAttempts++
 
-					// Check if user navigated away while waiting
-					if !strings.Contains(session.Domain, ".tela") {
-						saveProgress(0, 0, "", "interrupted")
-						return
-					}
+				// Check if user navigated away while waiting
+				if !strings.Contains(session.Domain, ".tela") {
+					saveProgress(0, 0, "", "interrupted")
+					return
 				}
+			}
 
-				// If still disconnected after 30 seconds, mark as interrupted
-				if !walletapi.Connected {
+			// If still disconnected after 30 seconds, mark as interrupted
+			if !isDaemonConnected() {
 					interruptReason = "connection_timeout_syncing"
 					keepProgressVisible = true
 					results.Text = "  Connection timeout"
@@ -2013,10 +2012,10 @@ func layoutTELA() fyne.CanvasObject {
 				cachedSlots := make(chan struct{}, cachedWorkers)
 				var cachedWg sync.WaitGroup
 
-				for i, sc := range missingSCIDs {
-					if !walletapi.Connected {
-						break
-					}
+			for i, sc := range missingSCIDs {
+				if !isDaemonConnected() {
+					break
+				}
 
 					cachedSlots <- struct{}{}
 					cachedWg.Add(1)
@@ -2605,17 +2604,17 @@ func layoutTELA() fyne.CanvasObject {
 				break
 			}
 
-			// Check connection during scan
-			if !walletapi.Connected {
-				interruptReason = "connection_lost_during_scan"
-				results.Text = "  Connection lost during scan"
-				results.Color = colors.Red
-				uiDo(func() {
-					results.Refresh()
-				})
-				interrupted = true
-				break
-			}
+		// Check connection during scan
+		if !isDaemonConnected() {
+			interruptReason = "connection_lost_during_scan"
+			results.Text = "  Connection lost during scan"
+			results.Color = colors.Red
+			uiDo(func() {
+				results.Refresh()
+			})
+			interrupted = true
+			break
+		}
 
 			scanMu.Lock()
 			alreadySeen := seenSCIDs[sc]

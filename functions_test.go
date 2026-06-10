@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela"
+	"github.com/deroproject/derohe/rpc"
 )
 
 func TestDecodeHex(t *testing.T) {
@@ -231,4 +234,73 @@ func TestFormatNotificationSendFailed(t *testing.T) {
 	if got == "" || got == "notification.send_failed" {
 		t.Error("notification.send_failed key missing or empty")
 	}
+}
+
+func TestWaitForHistoryRefreshAndSync(t *testing.T) {
+	t.Run("returns data when not running", func(t *testing.T) {
+		// Reset state
+		historyRefreshState.Lock()
+		historyRefreshState.running = false
+		historyRefreshState.Unlock()
+
+		// Call the function - should not block and should return
+		transfers, normalRows, coinbaseRows, messageRows := waitForHistoryRefreshAndSync()
+		_ = transfers
+		_ = normalRows
+		_ = coinbaseRows
+		_ = messageRows
+		// If we reach here, the function returned (didn't deadlock)
+	})
+
+	t.Run("blocks when running and unblocks when done", func(t *testing.T) {
+		// Set running to true
+		historyRefreshState.Lock()
+		historyRefreshState.running = true
+		historyRefreshState.Unlock()
+
+		done := make(chan struct{})
+		var resultTransfers []rpc.Entry
+
+		go func() {
+			transfers, _, _, _ := waitForHistoryRefreshAndSync()
+			resultTransfers = transfers
+			close(done)
+		}()
+
+		// Give goroutine time to start waiting
+		time.Sleep(50 * time.Millisecond)
+
+		// Release the lock
+		historyRefreshState.Lock()
+		historyRefreshState.running = false
+		historyRefreshState.Unlock()
+
+		select {
+		case <-done:
+			// Success - goroutine unblocked and returned
+			_ = resultTransfers
+		case <-time.After(5 * time.Second):
+			t.Fatal("waitForHistoryRefreshAndSync did not unblock after running became false")
+		}
+	})
+
+	t.Run("concurrent calls serialize correctly", func(t *testing.T) {
+		historyRefreshState.Lock()
+		historyRefreshState.running = false
+		historyRefreshState.Unlock()
+
+		var wg sync.WaitGroup
+		const numGoroutines = 10
+		wg.Add(numGoroutines)
+
+		for i := 0; i < numGoroutines; i++ {
+			go func() {
+				defer wg.Done()
+				waitForHistoryRefreshAndSync()
+			}()
+		}
+
+		wg.Wait()
+		// All goroutines completed without deadlock
+	})
 }

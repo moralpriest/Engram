@@ -144,7 +144,7 @@ func layoutMessages() fyne.CanvasObject {
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	}
 
-	if !walletapi.Connected {
+	if !isDaemonConnected() {
 		session.Window.SetContent(layoutSettings())
 	}
 
@@ -473,7 +473,7 @@ func layoutPM() fyne.CanvasObject {
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	}
 
-	if !walletapi.Connected {
+	if !isDaemonConnected() {
 		session.Window.SetContent(layoutSettings())
 	}
 

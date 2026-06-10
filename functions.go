@@ -1445,7 +1445,7 @@ func pulseReconnect(count int) (int, bool) {
 	if err != nil {
 		if count >= DEFAULT_DAEMON_RECONNECT_TIMEOUT {
 			count = 0
-			walletapi.Connected = false
+			setDaemonConnected(false)
 			setPulseDisconnectedStatus(true)
 			time.Sleep(5 * time.Second)
 			return count, true
@@ -1453,7 +1453,7 @@ func pulseReconnect(count int) (int, bool) {
 
 		count++
 		logger.Errorf("[Network] Failed to connect to: %s (%d / %d)\n", walletapi.Daemon_Endpoint, count, DEFAULT_DAEMON_RECONNECT_TIMEOUT)
-		walletapi.Connected = false
+		setDaemonConnected(false)
 		setPulseDisconnectedStatus(false)
 		time.Sleep(time.Second)
 		return count, true
@@ -1625,7 +1625,7 @@ func StartPulse() {
 	generation := currentWalletGeneration()
 	defer finishPulseForGeneration(generation)
 
-	if !walletapi.Connected && engram.Disk != nil {
+	if !isDaemonConnected() && engram.Disk != nil {
 		maxRetries := 3
 		var err error
 		var connected bool
@@ -1643,7 +1643,7 @@ func StartPulse() {
 				}
 				// Connection returned nil but daemon height is 0 = not really connected
 				logger.Printf("[Network] Connection succeeded but daemon unreachable (height=0), retrying...\n")
-				walletapi.Connected = false
+				setDaemonConnected(false)
 				err = fmt.Errorf("daemon height is 0")
 			}
 			logger.Printf("[Network] Connection attempt %d failed: %v\n", attempt, err)
@@ -1654,12 +1654,12 @@ func StartPulse() {
 		}
 		if !connected {
 			logger.Errorf("[Network] Failed to connect after %d attempts: %s\n", maxRetries, walletapi.Daemon_Endpoint)
-			walletapi.Connected = false
+			setDaemonConnected(false)
 			return
 		}
 
 		// Connection successful - set state immediately before goroutine
-		walletapi.Connected = true
+		setDaemonConnected(true)
 		engram.Disk.SetOnlineMode()
 
 		// Update UI to show connected status immediately
@@ -1685,19 +1685,19 @@ func StartPulse() {
 					break
 				}
 
-				if walletapi.Get_Daemon_Height() < 1 || !walletapi.Connected {
+				if walletapi.Get_Daemon_Height() < 1 || !isDaemonConnected() {
 					var shouldContinue bool
 					count, shouldContinue = pulseReconnect(count)
 					if shouldContinue {
 						continue
 					}
-					if !walletapi.Connected {
+					if !isDaemonConnected() {
 						break
 					}
 				}
 
 				if !engram.Disk.IsRegistered() {
-					if !walletapi.Connected {
+					if !isDaemonConnected() {
 						logger.Errorf("[Network] Could not connect to daemon...%d\n", engram.Disk.Get_Daemon_TopoHeight())
 						uiDo(func() {
 							status.Connection.FillColor = colors.Red
@@ -1718,8 +1718,8 @@ func StartPulse() {
 				}
 			}
 
-			if walletapi.Connected {
-				walletapi.Connected = false
+			if isDaemonConnected() {
+				setDaemonConnected(false)
 			}
 		}()
 	}
@@ -2163,6 +2163,19 @@ func closeWallet() {
 		wsClient := rpc_client.WS
 		rpcClient := rpc_client.RPC
 
+		// Clear history cache before resetting wallet state
+		historyRowCache.Lock()
+		historyRowCache.Address = ""
+		historyRowCache.Height = 0
+		historyRowCache.Transfers = nil
+		historyRowCache.NormalRows = nil
+		historyRowCache.CoinbaseRows = nil
+		historyRowCache.MessageRows = nil
+		historyRowCache.Loaded = false
+		historyRowCache.SchemaVersion = 0
+		historyRowCache.SortOrder = ""
+		historyRowCache.Unlock()
+
 		// Immediate state reset
 		engram.Disk = nil
 		session.WalletOpen = false
@@ -2220,7 +2233,7 @@ func closeWallet() {
 			// Save and close wallet disk
 			if disk != nil {
 				disk.SetOfflineMode()
-				walletapi.Connected = false
+				setDaemonConnected(false)
 				globals.Exit_In_Progress = true
 				if !shouldSkipWalletSave() {
 					if err := disk.Save_Wallet(); err != nil {
@@ -2363,7 +2376,7 @@ func login() {
 	session.LastBalance = 0
 
 	if !session.Offline {
-		walletapi.Connected = false
+		setDaemonConnected(false)
 		walletapi.SetDaemonAddress(session.Daemon)
 		engram.Disk.SetDaemonAddress(session.Daemon)
 
@@ -2540,12 +2553,12 @@ func login() {
 func waitForConnectionWithTimeout(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if walletapi.Connected {
+		if isDaemonConnected() {
 			return true
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return walletapi.Connected
+	return isDaemonConnected()
 }
 
 // waitForWalletSync waits briefly for wallet height to catch up
@@ -3594,14 +3607,15 @@ type MessageThreadSummary struct {
 }
 
 type MessageCache struct {
-	Height   uint64
-	Records  []MessageRecord
-	ByTXID   map[string]MessageRecord
-	Address  string
-	Primed   bool
-	Loaded   bool
-	Threads  []MessageThreadSummary
-	ByThread map[string][]MessageRecord
+	Height      uint64
+	DaemonHeight uint64
+	Records     []MessageRecord
+	ByTXID      map[string]MessageRecord
+	Address     string
+	Primed      bool
+	Loaded      bool
+	Threads     []MessageThreadSummary
+	ByThread    map[string][]MessageRecord
 }
 
 type RenderedThreadMessage struct {
@@ -3612,13 +3626,15 @@ type RenderedThreadMessage struct {
 }
 
 type HistoryRowCache struct {
-	Height       uint64
-	Address      string
-	Transfers    []rpc.Entry
-	NormalRows   []string
-	CoinbaseRows []string
-	MessageRows  []string
-	Loaded       bool
+	Height        uint64
+	Address       string
+	Transfers     []rpc.Entry
+	NormalRows    []string
+	CoinbaseRows  []string
+	MessageRows   []string
+	Loaded        bool
+	SchemaVersion int
+	SortOrder     string
 	sync.RWMutex
 }
 
@@ -3628,6 +3644,18 @@ var historyRowCache HistoryRowCache
 var historyRowCacheMu sync.RWMutex
 var renderedThreadCacheMu sync.RWMutex
 var renderedThreadCache = map[string][]RenderedThreadMessage{}
+
+// daemonConnected mirrors walletapi.Connected with atomic access to avoid races
+var daemonConnected atomic.Bool
+
+func setDaemonConnected(v bool) {
+	daemonConnected.Store(v)
+	walletapi.Connected = v
+}
+
+func isDaemonConnected() bool {
+	return daemonConnected.Load()
+}
 
 func uiDo(fn func()) {
 	if fn == nil || appExitFlag.Load() {
@@ -3730,28 +3758,28 @@ func setRenderedThreadCache(contact string, minHeight uint64, items []RenderedTh
 	renderedThreadCache[key] = append([]RenderedThreadMessage(nil), items...)
 }
 
-func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string, height uint64, ok bool) {
+func getHistoryRowCache() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string, height uint64, schemaVersion int, sortOrder string, ok bool) {
 	historyRowCache.RLock()
 	defer historyRowCache.RUnlock()
 
 	if engram.Disk == nil || !historyRowCache.Loaded {
-		return nil, nil, nil, nil, 0, false
+		return nil, nil, nil, nil, 0, 0, "", false
 	}
 
 	address := engram.Disk.GetAddress().String()
 	if historyRowCache.Address != address {
-		return nil, nil, nil, nil, 0, false
+		return nil, nil, nil, nil, 0, 0, "", false
 	}
 
 	transfers = append([]rpc.Entry(nil), historyRowCache.Transfers...)
 	normalRows = append([]string(nil), historyRowCache.NormalRows...)
 	coinbaseRows = append([]string(nil), historyRowCache.CoinbaseRows...)
 	messageRows = append([]string(nil), historyRowCache.MessageRows...)
-	return transfers, normalRows, coinbaseRows, messageRows, historyRowCache.Height, true
+	return transfers, normalRows, coinbaseRows, messageRows, historyRowCache.Height, historyRowCache.SchemaVersion, historyRowCache.SortOrder, true
 }
 
 func getTransferTime(txid string) time.Time {
-	transfers, _, _, _, _, ok := getHistoryRowCache()
+	transfers, _, _, _, _, _, _, ok := getHistoryRowCache()
 	if !ok {
 		return time.Time{}
 	}
@@ -3777,53 +3805,164 @@ func setHistoryRowCache(transfers []rpc.Entry, normalRows []string, coinbaseRows
 	historyRowCache.CoinbaseRows = append([]string(nil), coinbaseRows...)
 	historyRowCache.MessageRows = append([]string(nil), messageRows...)
 	historyRowCache.Loaded = true
+	historyRowCache.SchemaVersion = historyCacheSchemaVersion
+	historyRowCache.SortOrder = historySortOrder
+}
+
+func setHistoryRowCachePartial(transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
+	if engram.Disk == nil {
+		return
+	}
+
+	historyRowCache.Lock()
+	defer historyRowCache.Unlock()
+	historyRowCache.Address = engram.Disk.GetAddress().String()
+	historyRowCache.Height = engram.Disk.Get_Height()
+	if transfers != nil {
+		historyRowCache.Transfers = append([]rpc.Entry(nil), transfers...)
+	}
+	if normalRows != nil {
+		historyRowCache.NormalRows = append([]string(nil), normalRows...)
+	}
+	if coinbaseRows != nil {
+		historyRowCache.CoinbaseRows = append([]string(nil), coinbaseRows...)
+	}
+	if messageRows != nil {
+		historyRowCache.MessageRows = append([]string(nil), messageRows...)
+	}
+	historyRowCache.Loaded = true
+	historyRowCache.SchemaVersion = historyCacheSchemaVersion
+	historyRowCache.SortOrder = historySortOrder
 }
 
 // syncHistoryRows incrementally updates the history cache and returns the latest data.
 // It is optimized for fast loading on mobile and remote nodes.
 var historySortOrder string = "Descending"
+var historyCacheSchemaVersion int = 2
 
 func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
 	if engram.Disk == nil {
 		return nil, nil, nil, nil
 	}
 
-	// 1. Check if we can use the cache as-is or as a starting point
-	cachedTransfers, cachedNormal, cachedCoinbase, _, cachedHeight, ok := getHistoryRowCache()
+	if session.Offline {
+		return nil, nil, nil, nil
+	}
 
-	// Detect if cache needs a rebuild (e.g. after update adding headers or changing sort)
+	// 1. Check if we can use the cache as-is or as a starting point
+	cachedTransfers, cachedNormal, _, _, cachedHeight, cachedSchemaVersion, cachedSortOrder, ok := getHistoryRowCache()
+
+	// Detect if cache needs a rebuild (e.g. after update adding headers, changing sort, or schema version)
 	forceRebuild := false
 	if ok && len(cachedTransfers) > 0 && (len(cachedNormal) == 0 || !strings.Contains(cachedNormal[0], "HEADER")) {
 		forceRebuild = true
 	}
-
-	if ok && !forceRebuild && cachedHeight == engram.Disk.Get_Height() {
-		// Even if height matches, we return the cached rows (which include messages)
-		_, _, _, messageRows, _, _ := getHistoryRowCache()
-		return cachedTransfers, cachedNormal, cachedCoinbase, messageRows
+	if ok && cachedSchemaVersion != historyCacheSchemaVersion {
+		forceRebuild = true
+	}
+	if ok && cachedSortOrder != historySortOrder {
+		forceRebuild = true
 	}
 
 	// 2. Determine start height for delta fetch
 	startHeight := uint64(0)
-	if ok && !forceRebuild && cachedHeight > 0 && cachedHeight <= engram.Disk.Get_Height() {
-		// Massive overlap (5000 blocks ~ 20 hours) to ensure no transactions are ever missed
-		// due to indexing delays or network inconsistencies.
+	daemonHeight := uint64(engram.Disk.Get_Daemon_Height())
+	walletHeight := engram.Disk.Get_Height()
+	regHeight := engram.Disk.Get_Registration_TopoHeight()
+
+	if ok && !forceRebuild && cachedHeight > 0 && cachedHeight <= walletHeight {
+		// Delta scan with 5000-block overlap to catch delayed indexing
 		if cachedHeight > 5000 {
 			startHeight = cachedHeight - 5000
 		} else {
 			startHeight = 0
 		}
 	} else {
-		// For the very first load or forced rebuild, fetch EVERYTHING to ensure full history
-		startHeight = 0
+		// First load or forced rebuild: use registration height as starting point
+		if regHeight > 0 {
+			if regHeight > 5000 {
+				startHeight = uint64(regHeight) - 5000
+			} else {
+				startHeight = 0
+			}
+		} else if len(cachedTransfers) > 0 {
+			// Imported wallet without registration height - use earliest cached transaction
+			var minHeight uint64 = walletHeight
+			for _, t := range cachedTransfers {
+				if t.Height < minHeight {
+					minHeight = t.Height
+				}
+			}
+			if minHeight > 5000 {
+				startHeight = minHeight - 5000
+			} else {
+				startHeight = 0
+			}
+		} else {
+			// Unknown registration height and no cached data — scan from genesis
+			startHeight = 0
+		}
 	}
 
 	// 3. Fetch delta transfers (Normal and Coinbase separately to be sure)
 	var zeroscid crypto.Hash
-	newEntries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, 0, "", "", 0, 0)
-	newCoinbase := engram.Disk.Show_Transfers(zeroscid, true, true, true, startHeight, 0, "", "", 0, 0)
+	var newEntries, newCoinbase []rpc.Entry
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		newEntries = engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, daemonHeight, "", "", 0, 0)
+	}()
+	go func() {
+		defer wg.Done()
+		newCoinbase = engram.Disk.Show_Transfers(zeroscid, true, true, true, startHeight, daemonHeight, "", "", 0, 0)
+	}()
+	wg.Wait()
 	newEntries = append(newEntries, newCoinbase...)
-	logger.Printf("[SyncHistory] Fetched %d new entries (%d normal, %d coinbase) starting from height %d\n", len(newEntries), len(newEntries)-len(newCoinbase), len(newCoinbase), startHeight)
+
+	shouldLog := forceRebuild || startHeight == 0 || len(newEntries) > 0
+	if shouldLog {
+		logger.Debugf("[SyncHistory] Fetched %d new entries (%d normal, %d coinbase) starting from height %d\n", len(newEntries), len(newEntries)-len(newCoinbase), len(newCoinbase), startHeight)
+	}
+
+	// Incremental cache update after normal+coinbase transfers
+	{
+		mergedTransfers := make(map[string]rpc.Entry)
+		if !forceRebuild {
+			for _, t := range cachedTransfers {
+				key := fmt.Sprintf("%s-%d-%d", t.TXID, t.Height, t.Amount)
+				mergedTransfers[key] = t
+			}
+		}
+		for _, t := range newEntries {
+			key := fmt.Sprintf("%s-%d-%d", t.TXID, t.Height, t.Amount)
+			mergedTransfers[key] = t
+		}
+
+		transferList := make([]rpc.Entry, 0, len(mergedTransfers))
+		for _, t := range mergedTransfers {
+			transferList = append(transferList, t)
+		}
+
+		sort.Slice(transferList, func(i, j int) bool {
+			if historySortOrder == "Descending" {
+				if transferList[i].Height != transferList[j].Height {
+					return transferList[i].Height > transferList[j].Height
+				}
+				return transferList[i].Time.After(transferList[j].Time)
+			} else {
+				if transferList[i].Height != transferList[j].Height {
+					return transferList[i].Height < transferList[j].Height
+				}
+				return transferList[i].Time.Before(transferList[j].Time)
+			}
+		})
+
+		if len(transferList) > 0 {
+			tempNormalRows, tempCoinbaseRows, _ := buildHistoryRows(transferList, nil)
+			setHistoryRowCachePartial(transferList, tempNormalRows, tempCoinbaseRows, nil)
+		}
+	}
 
 	// 4. Also sync messages incrementally
 	allMessages := scanMessageTransfers(0)
@@ -3852,7 +3991,9 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 			normalCount++
 		}
 	}
-	logger.Printf("[SyncHistory] Deduplicated totals: %d coinbase, %d normal (from %d fetched)\n", coinbaseCount, normalCount, len(newEntries))
+	if shouldLog {
+		logger.Debugf("[SyncHistory] Deduplicated totals: %d coinbase, %d normal (from %d fetched)\n", coinbaseCount, normalCount, len(newEntries))
+	}
 
 	// 6. Sort according to user preference
 	sort.Slice(transfers, func(i, j int) bool {
@@ -3869,12 +4010,14 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 		}
 	})
 
-	// 6. Build ALL rows from the sorted list to ensure perfect order
+	// 7. Build ALL rows from the sorted list to ensure perfect order
 	normalRows, coinbaseRows, _ = buildHistoryRows(transfers, nil)
 	_, _, messageRows = buildHistoryRows(nil, allMessages)
 
-	// 7. Update cache
-	setHistoryRowCache(transfers, normalRows, coinbaseRows, messageRows)
+	// 8. Update cache with schema version and sort order
+	if len(transfers) > 0 || len(allMessages) > 0 {
+		setHistoryRowCache(transfers, normalRows, coinbaseRows, messageRows)
+	}
 
 	return transfers, normalRows, coinbaseRows, messageRows
 }
@@ -4011,6 +4154,27 @@ func refreshHistoryAsync(force bool) {
 
 		syncHistoryRows()
 	}()
+}
+
+// waitForHistoryRefreshAndSync waits for any ongoing history refresh to complete,
+// then runs syncHistoryRows under the same lock to prevent races with the pulse loop.
+func waitForHistoryRefreshAndSync() (transfers []rpc.Entry, normalRows []string, coinbaseRows []string, messageRows []string) {
+	historyRefreshState.Lock()
+	for historyRefreshState.running {
+		historyRefreshState.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		historyRefreshState.Lock()
+	}
+	historyRefreshState.running = true
+	historyRefreshState.Unlock()
+
+	defer func() {
+		historyRefreshState.Lock()
+		historyRefreshState.running = false
+		historyRefreshState.Unlock()
+	}()
+
+	return syncHistoryRows()
 }
 
 type persistedMessageRecord struct {
@@ -4294,11 +4458,12 @@ func resetMessageCache() {
 	messageRefreshState.Unlock()
 }
 
-func buildMessageCacheSnapshot(records []MessageRecord, height uint64, address string) {
+func buildMessageCacheSnapshot(records []MessageRecord, height uint64, daemonHeight uint64, address string) {
 	messageCacheMu.Lock()
 	defer messageCacheMu.Unlock()
 
 	messageCache.Height = height
+	messageCache.DaemonHeight = daemonHeight
 	messageCache.Address = address
 	messageCache.Primed = true
 	messageCache.Loaded = true
@@ -4319,13 +4484,13 @@ func buildMessageCacheSnapshot(records []MessageRecord, height uint64, address s
 	messageCache.Threads = buildMessageThreadSummaries(records)
 }
 
-func mergeMessageRecordsIntoCache(records []MessageRecord, height uint64, address string) {
+func mergeMessageRecordsIntoCache(records []MessageRecord, height uint64, daemonHeight uint64, address string) {
 	messageCacheMu.Lock()
 	defer messageCacheMu.Unlock()
 
 	if !messageCache.Primed || messageCache.Address != address || messageCache.ByTXID == nil || messageCache.ByThread == nil {
 		messageCacheMu.Unlock()
-		buildMessageCacheSnapshot(records, height, address)
+		buildMessageCacheSnapshot(records, height, daemonHeight, address)
 		messageCacheMu.Lock()
 		return
 	}
@@ -4532,7 +4697,7 @@ func loadPersistedMessageCache() {
 		})
 	}
 
-	buildMessageCacheSnapshot(records, persisted.Height, persisted.WalletAddress)
+	buildMessageCacheSnapshot(records, persisted.Height, persisted.Height, persisted.WalletAddress)
 	if len(persisted.Threads) > 0 {
 		messageCacheMu.Lock()
 		messageCache.Threads = make([]MessageThreadSummary, 0, len(persisted.Threads))
@@ -4772,22 +4937,23 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	}
 
 	currentHeight := engram.Disk.Get_Height()
+	daemonHeight := uint64(engram.Disk.Get_Daemon_Height())
 	currentAddress := engram.Disk.GetAddress().String()
-	if minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height == currentHeight && len(messageCache.Records) > 0 {
+	if minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height == currentHeight && messageCache.DaemonHeight == daemonHeight && len(messageCache.Records) > 0 {
 		cached := make([]MessageRecord, len(messageCache.Records))
 		copy(cached, messageCache.Records)
 		return cached
 	}
 
 	startHeight := minHeight
-	cacheReusable := minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height <= currentHeight
+	cacheReusable := minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height <= currentHeight && messageCache.DaemonHeight <= daemonHeight
 	if cacheReusable && messageCache.Height > 0 {
 		startHeight = messageCache.Height + 1
 	}
 
 	var zeroscid crypto.Hash
 	messageAmount, _ := globals.ParseAmount("0.00001")
-	entries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, currentHeight, "", "", 0, 0)
+	entries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, daemonHeight, "", "", 0, 0)
 	if cacheReusable {
 		result = make([]MessageRecord, len(messageCache.Records))
 		copy(result, messageCache.Records)
@@ -4906,9 +5072,9 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 					newRecords = append(newRecords, record)
 				}
 			}
-			mergeMessageRecordsIntoCache(newRecords, currentHeight, currentAddress)
+			mergeMessageRecordsIntoCache(newRecords, currentHeight, daemonHeight, currentAddress)
 		} else {
-			buildMessageCacheSnapshot(result, currentHeight, currentAddress)
+			buildMessageCacheSnapshot(result, currentHeight, daemonHeight, currentAddress)
 		}
 	}
 
@@ -5025,7 +5191,7 @@ func startGnomon() {
 	gnomonMu.Lock()
 	defer gnomonMu.Unlock()
 
-	if walletapi.Connected {
+	if isDaemonConnected() {
 		if gnomon.Index == nil && gnomon.Active == 1 {
 			gnomon.resetBootstrapState()
 			gnomon.setBootstrapPhase(i18n.T("tela.status_connecting_gnomon"), 0, 0)

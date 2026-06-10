@@ -693,7 +693,7 @@ func layoutDashboard() fyne.CanvasObject {
 			return
 		}
 
-		if !walletapi.Connected {
+		if !isDaemonConnected() {
 			showLoadingOverlay()
 			fyne.Do(func() {
 				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), colors.Yellow)
@@ -710,7 +710,7 @@ func layoutDashboard() fyne.CanvasObject {
 					}
 				}()
 				time.Sleep(3 * time.Second)
-				if walletapi.Connected && gnomon.Index != nil {
+				if isDaemonConnected() && gnomon.Index != nil {
 					fyne.Do(func() {
 						if session.Window != nil && session.WalletOpen {
 							session.Window.SetContent(layoutTransition())
@@ -2613,7 +2613,7 @@ func layoutHistory() fyne.CanvasObject {
 	}
 
 	ensureHistoryRows := func() {
-		cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows = syncHistoryRows()
+		cachedTransfers, historyNormalRows, historyCoinbaseRows, historyMessageRows = waitForHistoryRefreshAndSync()
 	}
 
 	// Function to load Normal transactions
@@ -2628,6 +2628,18 @@ func layoutHistory() fyne.CanvasObject {
 		go func() {
 			ensureHistoryRows()
 			data = append([]string(nil), historyNormalRows...)
+
+			// If empty, poll cache for up to 30s waiting for pulse loop to populate it
+			if len(data) == 0 {
+				for i := 0; i < 30; i++ {
+					time.Sleep(1 * time.Second)
+					_, historyNormalRows, _, _, _, _, _, ok := getHistoryRowCache()
+					if ok && len(historyNormalRows) > 0 {
+						data = append([]string(nil), historyNormalRows...)
+						break
+					}
+				}
+			}
 
 			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
 
@@ -2682,6 +2694,18 @@ func layoutHistory() fyne.CanvasObject {
 			ensureHistoryRows()
 			data = append([]string(nil), historyCoinbaseRows...)
 
+			// If empty, poll cache for up to 30s waiting for pulse loop to populate it
+			if len(data) == 0 {
+				for i := 0; i < 30; i++ {
+					time.Sleep(1 * time.Second)
+					_, _, historyCoinbaseRows, _, _, _, _, ok := getHistoryRowCache()
+					if ok && len(historyCoinbaseRows) > 0 {
+						data = append([]string(nil), historyCoinbaseRows...)
+						break
+					}
+				}
+			}
+
 			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
 
 			_ = listData.Set(data)
@@ -2734,6 +2758,18 @@ func layoutHistory() fyne.CanvasObject {
 		go func() {
 			ensureHistoryRows()
 			data = append([]string(nil), historyMessageRows...)
+
+			// If empty, poll cache for up to 30s waiting for pulse loop to populate it
+			if len(data) == 0 {
+				for i := 0; i < 30; i++ {
+					time.Sleep(1 * time.Second)
+					_, _, _, historyMessageRows, _, _, _, ok := getHistoryRowCache()
+					if ok && len(historyMessageRows) > 0 {
+						data = append([]string(nil), historyMessageRows...)
+						break
+					}
+				}
+			}
 
 			results.Text = fmt.Sprintf(i18n.T("history.results"), len(data))
 
