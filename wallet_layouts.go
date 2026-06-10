@@ -545,7 +545,64 @@ func layoutDashboard() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	statusSection := container.NewVBox(
+	var statusSection *fyne.Container
+
+	statusBtn := widget.NewButton("", func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutNetwork())
+		removeOverlays()
+	})
+	statusBtn.Importance = widget.LowImportance
+
+	rectHoverSpacer := canvas.NewRectangle(color.Transparent)
+	rectHoverSpacer.SetMinSize(scalePoint(1, 2))
+
+	statusContent := container.NewVBox(
+		rectHoverSpacer,
+		container.NewHBox(
+			connectionDot,
+			rectSquare,
+			daemonLabel,
+			layout.NewSpacer(),
+			container.NewStack(
+				rectOffset,
+				session.StatusText,
+			),
+			rectSquare,
+			syncDot,
+		),
+		rectOffset,
+		container.NewHBox(
+			gnomonDot,
+			rectSquare,
+			gnomonLabel,
+			layout.NewSpacer(),
+			container.NewStack(
+				rectOffset,
+				epochLabel,
+			),
+			rectSquare,
+			epochDot,
+		),
+		rectOffset,
+		container.NewHBox(
+			telaDot,
+			rectSquare,
+			telaLabel,
+			layout.NewSpacer(),
+			container.NewStack(
+				rectOffset,
+				remoteAccessLabel,
+			),
+			rectSquare,
+			remoteAccessDot,
+		),
+	)
+
+	statusContentStack := container.NewStack(statusContent, statusBtn)
+
+	statusSection = container.NewVBox(
 		container.NewHBox(
 			statusLine1,
 			layout.NewSpacer(),
@@ -554,46 +611,7 @@ func layoutDashboard() fyne.CanvasObject {
 			statusLine2,
 		),
 		rectSpacer,
-		container.NewVBox(
-			container.NewHBox(
-				connectionDot,
-				rectSquare,
-				daemonLabel,
-				layout.NewSpacer(),
-				container.NewStack(
-					rectOffset,
-					session.StatusText,
-				),
-				rectSquare,
-				syncDot,
-			),
-			rectOffset,
-			container.NewHBox(
-				gnomonDot,
-				rectSquare,
-				gnomonLabel,
-				layout.NewSpacer(),
-				container.NewStack(
-					rectOffset,
-					epochLabel,
-				),
-				rectSquare,
-				epochDot,
-			),
-			rectOffset,
-			container.NewHBox(
-				telaDot,
-				rectSquare,
-				telaLabel,
-				layout.NewSpacer(),
-				container.NewStack(
-					rectOffset,
-					remoteAccessLabel,
-				),
-				rectSquare,
-				remoteAccessDot,
-			),
-		),
+		statusContentStack,
 	)
 
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {

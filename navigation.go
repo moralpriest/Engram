@@ -147,6 +147,7 @@ var layoutRegistry = map[string]LayoutFunc{
 	"app.transfers":        layoutTransfers,
 	"app.settings":         layoutSettings,
 	"app.appsettings":      layoutAppSettings,
+	"app.network":          layoutNetwork,
 	"app.messages":         layoutMessages,
 	"app.messages.contact": layoutMessages, // Go back to messages list
 	"app.remoteaccess":     layoutRemoteAccess,

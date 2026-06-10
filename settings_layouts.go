@@ -1808,22 +1808,6 @@ func layoutAppSettings() fyne.CanvasObject {
 		rectSpacer,
 		checkNotif,
 
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			line1,
-			layout.NewSpacer(),
-			statusAreaTitle,
-			layout.NewSpacer(),
-			line2,
-			layout.NewSpacer(),
-		),
-		rectSpacer,
-		prioritiseDesc,
-		rectSpacer,
-		prioritiseCheck,
-
 		// LANGUAGE Section
 		rectSpacer,
 		rectSpacer,
@@ -2104,6 +2088,391 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// Register with navigation stack (app settings allows back navigation)
+	if session.NavStack != nil {
+		session.NavStack.Push(session.Domain, true)
+	}
+
+	return NewVScroll(layout)
+}
+
+func layoutNetwork() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+	session.Domain = "app.network"
+
+	frame := &iframe{}
+
+	rectScroll := canvas.NewRectangle(color.Transparent)
+	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	labelNode := canvas.NewText(i18n.T("settings.connection"), colors.Gray)
+	labelNode.TextStyle = fyne.TextStyle{Bold: true}
+	labelNode.TextSize = scaleFont(14)
+
+	type NodeItem struct {
+		Address string
+		Status  string
+	}
+
+	mainnetNodes := []NodeItem{
+		{Address: "127.0.0.1:10102", Status: "unknown"},
+		{Address: "dero.rabidmining.com:10102", Status: "unknown"},
+		{Address: "dero-node.net:10102", Status: "unknown"},
+		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
+		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+	}
+	testnetNodes := []NodeItem{
+		{Address: "69.30.234.163:40402", Status: "unknown"},
+		{Address: "testnet.derofoundation.co:40402", Status: "unknown"},
+		{Address: "127.0.0.1:40402", Status: "unknown"},
+	}
+	simulatorNodes := []NodeItem{
+		{Address: "127.0.0.1:20000", Status: "unknown"},
+	}
+
+	getNodesKey := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "testnet_nodes"
+		case NETWORK_SIMULATOR:
+			return "simulator_nodes"
+		default:
+			return "mainnet_nodes"
+		}
+	}
+
+	getDefaultNodes := func(network string) []NodeItem {
+		switch network {
+		case NETWORK_TESTNET:
+			return testnetNodes
+		case NETWORK_SIMULATOR:
+			return simulatorNodes
+		default:
+			return mainnetNodes
+		}
+	}
+
+	loadNodesForNetwork := func(network string) []NodeItem {
+		nodesKey := getNodesKey(network)
+		if data, err := GetValue("settings", []byte(nodesKey)); err == nil && len(data) > 0 {
+			var savedNodes []NodeItem
+			if err := json.Unmarshal(data, &savedNodes); err == nil && len(savedNodes) > 0 {
+				return savedNodes
+			}
+		}
+		return getDefaultNodes(network)
+	}
+
+	nodeData := loadNodesForNetwork(session.Network)
+	nodeContainer := container.NewVBox()
+
+	var updateNodeContainer func()
+
+	updateNodeContainer = func() {
+		nodeContainer.Objects = nil
+
+		for i := range nodeData {
+			i := i
+			item := &nodeData[i]
+
+			var iconResource fyne.Resource
+			switch item.Status {
+			case "connected":
+				iconResource = theme.ConfirmIcon()
+			case "failed":
+				iconResource = theme.CancelIcon()
+			}
+
+			rowIcon := widget.NewIcon(iconResource)
+
+			removeBtn := widget.NewButtonWithIcon("", theme.ContentRemoveIcon(), func() {
+				if len(nodeData) <= 1 {
+					return
+				}
+
+				removedAddress := item.Address
+				wasConnected := item.Status == "connected" || getDaemon() == removedAddress
+
+				nodeData = append(nodeData[:i], nodeData[i+1:]...)
+
+				if wasConnected {
+					newIndex := i - 1
+					if newIndex < 0 {
+						newIndex = 0
+					}
+					if newIndex >= len(nodeData) {
+						newIndex = len(nodeData) - 1
+					}
+					nodeData[newIndex].Status = "connected"
+					setDaemon(nodeData[newIndex].Address)
+
+					for j := range nodeData {
+						if j != newIndex {
+							nodeData[j].Status = "unknown"
+						}
+					}
+				}
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				updateNodeContainer()
+			})
+			removeBtn.Importance = widget.MediumImportance
+			if len(nodeData) <= 1 {
+				removeBtn.Disable()
+			}
+
+			addressLabel := widget.NewLabel(item.Address)
+			addressLabel.Truncation = fyne.TextTruncateEllipsis
+
+			row := container.NewBorder(
+				nil, nil, nil,
+				container.NewHBox(rowIcon, wrapMobileButton(removeBtn)),
+				addressLabel,
+			)
+
+			tapBtn := widget.NewButton("", func() {
+				if testNodeConnection(item.Address) {
+					item.Status = "connected"
+					setDaemon(item.Address)
+
+					for j := range nodeData {
+						if j != i {
+							nodeData[j].Status = "unknown"
+						}
+					}
+
+					if data, err := json.Marshal(nodeData); err == nil {
+						StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+					}
+				} else {
+					item.Status = "failed"
+				}
+				updateNodeContainer()
+			})
+			tapBtn.Importance = widget.LowImportance
+			tapBtn.Alignment = widget.ButtonAlignLeading
+			tapBtn.Text = ""
+
+			clickableRow := container.NewMax(
+				wrapMobileButton(tapBtn),
+				row,
+			)
+
+			nodeContainer.Add(clickableRow)
+		}
+		nodeContainer.Refresh()
+	}
+
+	currentDaemon := getDaemon()
+	for i := range nodeData {
+		if nodeData[i].Address == currentDaemon {
+			nodeData[i].Status = "connected"
+		}
+	}
+	updateNodeContainer()
+
+	getNodePlaceholder := func(network string) string {
+		switch network {
+		case NETWORK_TESTNET:
+			return "hostname:40402"
+		case NETWORK_SIMULATOR:
+			return "hostname:20000"
+		default:
+			return "hostname:10102"
+		}
+	}
+
+	entryCustomNode := widget.NewEntry()
+	entryCustomNode.PlaceHolder = getNodePlaceholder(session.Network)
+
+	showNodeError := func(err error) {
+		entryCustomNode.Validator = func(s string) error {
+			return err
+		}
+		entryCustomNode.SetValidationError(err)
+		entryCustomNode.FocusGained()
+		entryCustomNode.FocusLost()
+	}
+
+	clearNodeError := func() {
+		entryCustomNode.Validator = nil
+		entryCustomNode.SetValidationError(nil)
+		entryCustomNode.Refresh()
+	}
+
+	btnAddNode := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		nodeAddress := strings.TrimSpace(entryCustomNode.Text)
+		nodeAddress = strings.ReplaceAll(nodeAddress, " ", "")
+		if nodeAddress != "" {
+			for _, node := range nodeData {
+				if node.Address == nodeAddress {
+					showNodeError(errors.New("node already exists"))
+					return
+				}
+			}
+
+			if testNodeConnectionTimeout(nodeAddress, 500*time.Millisecond) {
+				clearNodeError()
+
+				for i := range nodeData {
+					nodeData[i].Status = "unknown"
+				}
+
+				nodeData = append(nodeData, NodeItem{
+					Address: nodeAddress,
+					Status:  "connected",
+				})
+				setDaemon(nodeAddress)
+
+				if data, err := json.Marshal(nodeData); err == nil {
+					StoreValue("settings", []byte(getNodesKey(session.Network)), data)
+				}
+
+				entryCustomNode.Text = ""
+				entryCustomNode.Refresh()
+				updateNodeContainer()
+			} else {
+				showNodeError(errors.New("node unreachable"))
+			}
+		}
+	})
+	btnAddNode.Importance = widget.MediumImportance
+	btnAddNode.Disable()
+
+	entryCustomNode.OnChanged = func(s string) {
+		clearNodeError()
+		s = strings.TrimSpace(s)
+		if s != "" {
+			btnAddNode.Enable()
+		} else {
+			btnAddNode.Disable()
+		}
+	}
+
+	entrySection := container.NewBorder(nil, nil, nil, wrapMobileButton(btnAddNode), entryCustomNode)
+	entryWrapper := container.NewStack(
+		canvas.NewRectangle(color.Transparent),
+		entrySection,
+	)
+	entryWrapper.Resize(fyne.NewSize(ui.Width*0.9, 35))
+
+	sep1 := canvas.NewRectangle(colors.Gray)
+	sep1.SetMinSize(fyne.NewSize(ui.Width*0.3, 2))
+	line1 := container.NewVBox(
+		layout.NewSpacer(),
+		sep1,
+		layout.NewSpacer(),
+	)
+
+	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2.SetMinSize(fyne.NewSize(ui.Width*0.3, 2))
+	line2 := container.NewVBox(
+		layout.NewSpacer(),
+		sep2,
+		layout.NewSpacer(),
+	)
+
+	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), colors.Gray)
+	statusAreaTitle.TextSize = scaleFont(11)
+	statusAreaTitle.Alignment = fyne.TextAlignCenter
+	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	prioritiseDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.prioritise_status_desc"))
+	prioritiseDesc.Wrapping = fyne.TextWrapWord
+
+	prioritiseCheck := widget.NewCheck(i18n.T("settings.prioritise_status"), func(b bool) {
+		setPrioritiseStatus(b)
+	})
+	prioritiseCheck.SetChecked(getPrioritiseStatus())
+
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDashboard())
+		removeOverlays()
+	})
+
+	formNetwork := container.NewVBox(
+		rectSpacer,
+		labelNode,
+		rectSpacer,
+		rectSpacer,
+		entryWrapper,
+		rectSpacer,
+		nodeContainer,
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			statusAreaTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		prioritiseDesc,
+		rectSpacer,
+		prioritiseCheck,
+	)
+
+	scrollBox := container.NewVScroll(
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectScroll,
+				formNetwork,
+			),
+			layout.NewSpacer(),
+		),
+	)
+
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+
+	if isMobile() {
+		SetCurrentScrollBox(scrollBox)
+	}
+
+	heading := canvas.NewText(strings.ToUpper(session.Network), colors.Green)
+	heading.TextSize = scaleFont(22)
+	heading.Alignment = fyne.TextAlignCenter
+	heading.TextStyle = fyne.TextStyle{Bold: true}
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(heading),
+		rectSpacer,
+	)
+
+	footer := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			rectSpacer,
+		),
+	)
+
+	c := container.NewBorder(
+		top,
+		footer,
+		nil,
+		nil,
+		scrollBox,
+	)
+
+	layout := container.NewStack(
+		frame,
+		c,
+	)
+
 	if session.NavStack != nil {
 		session.NavStack.Push(session.Domain, true)
 	}
