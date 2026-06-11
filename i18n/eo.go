@@ -638,6 +638,10 @@ var stringsEO = map[string]string{
 	"xswd.foreground_channel_name":        "XSWD-servo",
 	"xswd.foreground_channel_description": "Subtenas Engram aktiva por XSWD WebSocket-konektoj",
 
+	"app.foreground_notification_text":   "Engram funkcias",
+	"app.foreground_channel_name":        "Servo de Engram",
+	"app.foreground_channel_description": "Subtenas Engram aktiva por fonaj servoj",
+
 	"notification.send_success":       "DERO sukcese sendita!",
 	"notification.send_failed":        "Translokigo malsukcesis — transakcio ne estis konfirmita",
 	"notification.incoming":           "Ricevitaj %s DERO",

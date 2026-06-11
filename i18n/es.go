@@ -637,6 +637,10 @@ var stringsES = map[string]string{
 	"xswd.foreground_channel_name":        "Servicio XSWD",
 	"xswd.foreground_channel_description": "Mantiene Engram activo para conexiones WebSocket XSWD",
 
+	"app.foreground_notification_text":   "Engram está en ejecución",
+	"app.foreground_channel_name":        "Servicio de Engram",
+	"app.foreground_channel_description": "Mantiene Engram activo para servicios de fondo",
+
 	"notification.send_success":       "¡DERO enviado con éxito!",
 	"notification.send_failed":        "Transferencia fallida — la transacción no fue confirmada",
 	"notification.incoming":           "%s DERO recibidos",

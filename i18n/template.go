@@ -669,6 +669,10 @@ var stringsTemplate = map[string]string{
 	"xswd.foreground_channel_name":        "",
 	"xswd.foreground_channel_description": "",
 
+	"app.foreground_notification_text":   "",
+	"app.foreground_channel_name":        "",
+	"app.foreground_channel_description": "",
+
 	"notification.send_success":       "",
 	"notification.send_failed":        "",
 	"notification.incoming":           "",

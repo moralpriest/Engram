@@ -155,6 +155,7 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		}
 		i18n.SetLanguageFromIndex(idx)
 		StoreValue("settings", []byte("language"), []byte(languages[idx]))
+		startAppForegroundAndroid()
 		transitionToMain()
 	})
 

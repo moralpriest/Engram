@@ -638,6 +638,10 @@ var stringsRU = map[string]string{
 	"xswd.foreground_channel_name":        "Служба XSWD",
 	"xswd.foreground_channel_description": "Поддерживает Engram активным для WebSocket-соединений XSWD",
 
+	"app.foreground_notification_text":   "Engram запущен",
+	"app.foreground_channel_name":        "Служба Engram",
+	"app.foreground_channel_description": "Поддерживает Engram активным для фоновых служб",
+
 	"notification.send_success":       "DERO успешно отправлен!",
 	"notification.send_failed":        "Перевод не выполнен — транзакция не подтверждена",
 	"notification.incoming":           "Получено %s DERO",

@@ -49,3 +49,23 @@ func stopXSWDForegroundAndroid() {
 		return nil
 	})
 }
+
+func startAppForegroundAndroid() {
+	title := C.CString("Engram")
+	text := C.CString(i18n.T("app.foreground_notification_text"))
+	channelName := C.CString(i18n.T("app.foreground_channel_name"))
+	channelDesc := C.CString(i18n.T("app.foreground_channel_description"))
+	defer C.free(unsafe.Pointer(title))
+	defer C.free(unsafe.Pointer(text))
+	defer C.free(unsafe.Pointer(channelName))
+	defer C.free(unsafe.Pointer(channelDesc))
+
+	driver.RunNative(func(ctx any) error {
+		ac, ok := ctx.(*driver.AndroidContext)
+		if !ok {
+			return nil
+		}
+		C.startXSWDForegroundService((*C.JNIEnv)(unsafe.Pointer(ac.Env)), title, text, channelName, channelDesc)
+		return nil
+	})
+}
