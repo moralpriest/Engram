@@ -300,6 +300,7 @@ var stringsZH = map[string]string{
 	"history.messages":                               "消息",
 	"history.scanning":                               "正在扫描...",
 	"history.results":                                "结果: %d",
+	"history.warning_daemon":                         "在远程节点上运行 Engram 可能导致交易数据显示不可用或延迟。使用您的本地 daemon 以获得交易历史的实时可见性。",
 	"detail.heading":                                 "交 易 详 情",
 	"detail.txid":                                    "交易 ID",
 	"detail.amount":                                  "金额",

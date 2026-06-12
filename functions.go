@@ -168,6 +168,7 @@ type Session struct {
 	VillagerBackground  bool
 	VillagerPopupShown  bool
 	MessageWarningShown bool
+	HistoryWarningShown bool
 	VillagerAddress     string
 	VillagerPixels      string
 	IsRecovery          bool
@@ -2207,6 +2208,7 @@ func closeWallet() {
 		session.VillagerBackground = true
 		session.VillagerPopupShown = false
 		session.MessageWarningShown = false
+		session.HistoryWarningShown = false
 		session.VillagerAddress = ""
 		session.VillagerPixels = ""
 
@@ -4163,8 +4165,6 @@ var historyRefreshState struct {
 	sync.Mutex
 	running bool
 }
-
-
 
 // refreshHistoryAsync performs a background update of the transaction history cache.
 func refreshHistoryAsync(force bool) {

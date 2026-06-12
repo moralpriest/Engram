@@ -300,6 +300,7 @@ var stringsJA = map[string]string{
 	"history.messages":                               "メッセージ",
 	"history.scanning":                               "スキャン中...",
 	"history.results":                                "結果: %d",
+	"history.warning_daemon":                         "リモートノードでEngramを実行すると、トランザクションデータが利用不可または遅延して表示される可能性があります。ローカルデーモンを使用して、トランザクション履歴をリアルタイムで確認してください。",
 	"detail.heading":                                 "取引の詳細",
 	"detail.txid":                                    "トランザクションID",
 	"detail.amount":                                  "金額",

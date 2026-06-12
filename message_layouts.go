@@ -36,7 +36,7 @@ import (
 	"github.com/deroproject/derohe/walletapi"
 )
 
-func showMessageWarningPopup() {
+func showWarningPopup(messageKey string) {
 	if session.Window == nil {
 		return
 	}
@@ -46,7 +46,7 @@ func showMessageWarningPopup() {
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	messageText := i18n.T("messages.warning_daemon")
+	messageText := i18n.T(messageKey)
 	message := widget.NewLabel(messageText)
 	message.Alignment = fyne.TextAlignCenter
 	message.Wrapping = fyne.TextWrapWord
@@ -150,7 +150,7 @@ func layoutMessages() fyne.CanvasObject {
 
 	if !session.MessageWarningShown {
 		session.MessageWarningShown = true
-		showMessageWarningPopup()
+		showWarningPopup("messages.warning_daemon")
 	}
 
 	title := canvas.NewText(i18n.T("messages.contacts"), colors.Gray)

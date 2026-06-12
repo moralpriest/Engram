@@ -421,8 +421,8 @@ func layoutDashboard() fyne.CanvasObject {
 	linkHistory := newBorderedButtonWithIcon(i18n.T("dashboard.history"), theme.HistoryIcon(), color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutHistory())
 		removeOverlays()
+		session.Window.SetContent(layoutHistory())
 	}, topButtonWidth)
 
 	linkMyAccount := newBorderedButtonWithIcon(i18n.T("dashboard.my_account"), theme.AccountIcon(), color.White, func() {
@@ -2495,6 +2495,11 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 
 func layoutHistory() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+
+	if !session.HistoryWarningShown {
+		session.HistoryWarningShown = true
+		showWarningPopup("history.warning_daemon")
+	}
 
 	var data []string
 	var listData binding.StringList
