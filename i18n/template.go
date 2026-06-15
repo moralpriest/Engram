@@ -257,8 +257,6 @@ var stringsTemplate = map[string]string{
 	"datapad.create":          "",
 	"datapad.note_name":       "",
 	"datapad.clear":           "",
-	"datapad.export":          "",
-	"datapad.import":          "",
 	"datapad.delete":          "",
 	"datapad.select_option":   "",
 	"datapad.clear_request":   "",

@@ -212,8 +212,6 @@ var stringsZH = map[string]string{
 	"datapad.create":                                 "创建",
 	"datapad.note_name":                              "笔记名称",
 	"datapad.clear":                                  "清除",
-	"datapad.export":                                 "导出 (纯文本)",
-	"datapad.import":                                 "从文件导入",
 	"datapad.delete":                                 "删除",
 	"datapad.select_option":                          "选择一个选项 ...",
 	"datapad.clear_request":                          "已请求重置安全笔记",

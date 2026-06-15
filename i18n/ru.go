@@ -219,8 +219,6 @@ var stringsRU = map[string]string{
 	"datapad.create":          "Создать",
 	"datapad.note_name":       "Имя заметки",
 	"datapad.clear":           "Очистить",
-	"datapad.export":          "Экспорт (Текст)",
-	"datapad.import":          "Импорт из файла",
 	"datapad.delete":          "Удалить",
 	"datapad.select_option":   "Выберите опцию...",
 	"datapad.clear_request":   "ЗАПРОС НА СБРОС СЕКРЕТНЫХ ЗАМЕТОК",

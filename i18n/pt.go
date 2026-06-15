@@ -219,8 +219,6 @@ var stringsPT = map[string]string{
 	"datapad.create":          "Criar",
 	"datapad.note_name":       "Nome da Nota",
 	"datapad.clear":           "Limpar",
-	"datapad.export":          "Exportar (Texto simples)",
-	"datapad.import":          "Importar de Arquivo",
 	"datapad.delete":          "Excluir",
 	"datapad.select_option":   "Selecione uma Opção ...",
 	"datapad.clear_request":   "REDEFINIÇÃO DE NOTAS SEGURAS SOLICITADA",

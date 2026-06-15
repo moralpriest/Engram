@@ -212,8 +212,6 @@ var stringsJA = map[string]string{
 	"datapad.create":                                 "作成",
 	"datapad.note_name":                              "メモ名",
 	"datapad.clear":                                  "クリア",
-	"datapad.export":                                 "エクスポート (プレーンテキスト)",
-	"datapad.import":                                 "ファイルからインポート",
 	"datapad.delete":                                 "削除",
 	"datapad.select_option":                          "オプションを選択してください...",
 	"datapad.clear_request":                          "セキュアノートリセットリクエスト",

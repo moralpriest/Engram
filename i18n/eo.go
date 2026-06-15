@@ -219,8 +219,6 @@ var stringsEO = map[string]string{
 	"datapad.create":          "Krei",
 	"datapad.note_name":       "Nota Nomo",
 	"datapad.clear":           "Vakigi",
-	"datapad.export":          "Eksporti",
-	"datapad.import":          "Importi De Dosiero",
 	"datapad.delete":          "Forigi",
 	"datapad.select_option":   "Elektu Opcion ...",
 	"datapad.clear_request":   "SEKURAJ NOTOJ  VAKIGO  PETITA",

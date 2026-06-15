@@ -219,8 +219,6 @@ var stringsDE = map[string]string{
 	"datapad.create":          "Erstellen",
 	"datapad.note_name":       "Name der Notiz",
 	"datapad.clear":           "Löschen",
-	"datapad.export":          "Exportieren (Klartext)",
-	"datapad.import":          "Aus Datei Importieren",
 	"datapad.delete":          "Löschen",
 	"datapad.select_option":   "Wählen Sie eine Option ...",
 	"datapad.clear_request":   "ZURÜCKSETZEN DER NOTIZEN ANGEFORDERT",

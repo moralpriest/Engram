@@ -298,8 +298,7 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	selectOptions := widget.NewSelect([]string{i18n.T("datapad.clear"), i18n.T("datapad.export"), i18n.T("datapad.import"), i18n.T("datapad.delete")}, nil)
-	selectOptions.PlaceHolder = i18n.T("datapad.select_option")
+	var handleAction func(action string)
 
 	data, err := GetEncryptedValue("Datapads", []byte(session.Datapad))
 	if err != nil {
@@ -317,11 +316,11 @@ func layoutPad() fyne.CanvasObject {
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
-	selectOptions.OnChanged = func(s string) {
+	handleAction = func(action string) {
 		errorText.Text = ""
 		errorText.Refresh()
 
-		if s == "Clear" {
+		if action == "clear" {
 			header := canvas.NewText(i18n.T("datapad.clear_request"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
@@ -338,8 +337,6 @@ func layoutPad() fyne.CanvasObject {
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
-				selectOptions.Selected = i18n.T("datapad.select_option")
-				selectOptions.Refresh()
 			}
 
 			btnSubmit := widget.NewButton(i18n.T("datapad.clear"), nil)
@@ -349,13 +346,9 @@ func layoutPad() fyne.CanvasObject {
 					err := StoreEncryptedValue("Datapads", []byte(session.Datapad), []byte(""))
 					if err != nil {
 						logger.Errorf("[Datapad] Err: %s\n", err)
-						selectOptions.Selected = i18n.T("datapad.select_option")
-						selectOptions.Refresh()
 						return
 					}
 
-					selectOptions.Selected = i18n.T("datapad.select_option")
-					selectOptions.Refresh()
 					entryPad.Text = ""
 					entryPad.Refresh()
 				}
@@ -368,8 +361,6 @@ func layoutPad() fyne.CanvasObject {
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
-				selectOptions.Selected = "Select an Option ..."
-				selectOptions.Refresh()
 			}
 
 			span := canvas.NewRectangle(color.Transparent)
@@ -409,10 +400,7 @@ func layoutPad() fyne.CanvasObject {
 					),
 				),
 			)
-		} else if s == "Export (Plaintext)" {
-			selectOptions.Selected = "Select an Option ..."
-			selectOptions.Refresh()
-
+		} else if action == "export" {
 			dialogFileSave := dialog.NewFileSave(func(uri fyne.URIWriteCloser, err error) {
 				if err != nil {
 					logger.Errorf("[Engram] File dialog: %s\n", err)
@@ -457,10 +445,7 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileSave.SetFileName(fmt.Sprintf("%s.txt", session.Datapad))
 			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileSave.Show()
-		} else if s == "Import From File" {
-			selectOptions.Selected = "Select an Option ..."
-			selectOptions.Refresh()
-
+		} else if action == "import" {
 			dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
 				if err != nil {
 					logger.Errorf("[Engram] File dialog: %s\n", err)
@@ -531,7 +516,7 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileImport.SetView(dialog.ListView)
 			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileImport.Show()
-		} else if s == "Delete" {
+		} else if action == "delete" {
 			header := canvas.NewText(i18n.T("datapad.delete_request"), colors.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
@@ -548,8 +533,6 @@ func layoutPad() fyne.CanvasObject {
 				overlay.Top().Hide()
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
-				selectOptions.Selected = i18n.T("datapad.select_option")
-				selectOptions.Refresh()
 			}
 
 			btnSubmit := widget.NewButton(i18n.T("datapad.delete"), nil)
@@ -558,8 +541,6 @@ func layoutPad() fyne.CanvasObject {
 				if session.Datapad != "" {
 					err := DeleteKey("Datapads", []byte(session.Datapad))
 					if err != nil {
-						selectOptions.Selected = i18n.T("datapad.select_option")
-						selectOptions.Refresh()
 						logger.Errorf("[Datapad] Error deleting %s: %s\n", session.Datapad, err)
 					} else {
 						session.Datapad = ""
@@ -608,15 +589,6 @@ func layoutPad() fyne.CanvasObject {
 					),
 				),
 			)
-		} else {
-			session.Datapad = ""
-			session.DatapadChanged = false
-			overlay := session.Window.Canvas().Overlays()
-			overlay.Top().Hide()
-			overlay.Remove(overlay.Top())
-			overlay.Remove(overlay.Top())
-			selectOptions.Selected = "Select an Option ..."
-			selectOptions.Refresh()
 		}
 	}
 
@@ -766,10 +738,10 @@ func layoutPad() fyne.CanvasObject {
 		rectSpacer,
 		container.NewCenter(
 			container.NewHBox(
-				wrapMobileButton(widget.NewButton(i18n.T("datapad.clear"), func() { selectOptions.OnChanged(i18n.T("datapad.clear")) })),
-				wrapMobileButton(widget.NewButton(i18n.T("datapad.export"), func() { selectOptions.OnChanged(i18n.T("datapad.export")) })),
-				wrapMobileButton(widget.NewButton(i18n.T("datapad.import"), func() { selectOptions.OnChanged(i18n.T("datapad.import")) })),
-				wrapMobileButton(widget.NewButton(i18n.T("datapad.delete"), func() { selectOptions.OnChanged(i18n.T("datapad.delete")) })),
+				newSizedIconButton(theme.ContentClearIcon(), func() { handleAction("clear") }, 48),
+				newSizedIconButton(theme.DocumentSaveIcon(), func() { handleAction("export") }, 48),
+				newSizedIconButton(theme.FolderOpenIcon(), func() { handleAction("import") }, 48),
+				newSizedIconButton(theme.DeleteIcon(), func() { handleAction("delete") }, 48),
 			),
 		),
 		rectSpacer,

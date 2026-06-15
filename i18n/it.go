@@ -219,8 +219,6 @@ var stringsIT = map[string]string{
 	"datapad.create":          "Crea",
 	"datapad.note_name":       "Nome Nota",
 	"datapad.clear":           "Svuota",
-	"datapad.export":          "Esporta",
-	"datapad.import":          "Importa da File",
 	"datapad.delete":          "Elimina",
 	"datapad.select_option":   "Seleziona un'Opzione ...",
 	"datapad.clear_request":   "RICHIESTA SVUOTAMENTO NOTE SECURE",
