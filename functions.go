@@ -4078,9 +4078,9 @@ func getDateLabel(t time.Time) string {
 	txDate := time.Date(txUTC.Year(), txUTC.Month(), txUTC.Day(), 0, 0, 0, 0, time.UTC)
 
 	if txDate.Equal(today) {
-		return "T O D A Y  -  " + txUTC.Format("JAN 02, 2006")
+		return "T O D A Y  -  " + strings.ToUpper(txUTC.Format("Jan 02, 2006"))
 	} else if txDate.Equal(yesterday) {
-		return "Y E S T E R D A Y  -  " + txUTC.Format("JAN 02, 2006")
+		return "Y E S T E R D A Y  -  " + strings.ToUpper(txUTC.Format("Jan 02, 2006"))
 	} else {
 		return strings.ToUpper(txUTC.Format("January 02, 2006"))
 	}
