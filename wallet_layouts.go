@@ -2563,14 +2563,31 @@ func layoutHistory() fyne.CanvasObject {
 	results := canvas.NewText("", colors.Green)
 	results.TextSize = scaleFont(13)
 
+	telaPurple := color.RGBA{163, 102, 255, 255}
+	rowIconStates := make(map[*fyne.Container]*struct {
+		tint *tintTheme
+		icon *widget.Icon
+	})
+
 	listData = binding.BindStringList(&data)
 	listBox = widget.NewListWithData(listData,
 		func() fyne.CanvasObject {
+			tint := &tintTheme{Theme: theme.Current(), iconColor: colors.Red}
+			icon := widget.NewIcon(theme.UploadIcon())
+			themed := container.NewThemeOverride(container.NewCenter(icon), tint)
+
+			col0Stack := container.NewStack(
+				rect,
+				widget.NewLabel(""),
+				themed,
+			)
+			rowIconStates[col0Stack] = &struct {
+				tint *tintTheme
+				icon *widget.Icon
+			}{tint: tint, icon: icon}
+
 			return container.NewHBox(
-				container.NewStack(
-					rect,
-					widget.NewLabel(""),
-				),
+				col0Stack,
 				container.NewStack(
 					rectMid,
 					widget.NewLabel(""),
@@ -2590,18 +2607,56 @@ func layoutHistory() fyne.CanvasObject {
 
 			split := strings.Split(str, ";;;")
 
-			if split[0] == "HEADER" {
-				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
-				co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{Bold: true}
-				co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
-				co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
+			col0Stack := co.(*fyne.Container).Objects[0].(*fyne.Container)
+			state, ok := rowIconStates[col0Stack]
+			if !ok {
 				return
 			}
 
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{} // Reset
-			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{} // Reset
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
+			label := col0Stack.Objects[1].(*widget.Label)
+			themedContainer := col0Stack.Objects[2]
+
+			if split[0] == "HEADER" {
+				label.SetText(split[1])
+				label.TextStyle = fyne.TextStyle{Bold: true}
+				label.Show()
+				themedContainer.Hide()
+				co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
+				co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{}
+				co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText("")
+				co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{}
+				return
+			}
+
+			label.Hide()
+			themedContainer.Show()
+
+			trimmed := strings.TrimSpace(split[0])
+			switch {
+			case view == i18n.T("history.coinbase"):
+				state.tint.iconColor = telaPurple
+				state.icon.SetResource(theme.DownloadIcon())
+			case view == i18n.T("history.messages"):
+				if trimmed == "Sent" {
+					state.tint.iconColor = colors.Account
+					state.icon.SetResource(theme.UploadIcon())
+				} else {
+					state.tint.iconColor = colors.Account
+					state.icon.SetResource(theme.DownloadIcon())
+				}
+			default:
+				if trimmed == "Sent" {
+					state.tint.iconColor = colors.Red
+					state.icon.SetResource(theme.UploadIcon())
+				} else {
+					state.tint.iconColor = colors.Green
+					state.icon.SetResource(theme.DownloadIcon())
+				}
+			}
+
+			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{}
 			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
+			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).TextStyle = fyne.TextStyle{}
 			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
 		})
 
@@ -3135,11 +3190,16 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	valueAmount.TextSize = scaleFont(22)
 	valueAmount.TextStyle = fyne.TextStyle{Bold: true}
 
+	telaPurple := color.RGBA{163, 102, 255, 255}
+	var valueDirIcon fyne.CanvasObject
+
 	valueDirection := canvas.NewText("", colors.Account)
 	valueDirection.TextSize = scaleFont(22)
 	valueDirection.TextStyle = fyne.TextStyle{Bold: true}
 	if details.Coinbase {
 		valueDirection.Text = i18n.T("detail.received")
+		icon := widget.NewIcon(theme.DownloadIcon())
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: telaPurple})
 		labelMember.Text = i18n.T("detail.source")
 		valueMember.ParseMarkdown(i18n.T("detail.mining_reward"))
 		valueAmount.Color = colors.Green
@@ -3147,6 +3207,8 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		valueAmount.Text = "  + " + globals.FormatMoney(amount)
 	} else if details.Incoming {
 		valueDirection.Text = i18n.T("detail.received")
+		icon := widget.NewIcon(theme.DownloadIcon())
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
 		labelMember.Text = i18n.T("detail.sender")
 		if details.Sender == "" || details.Sender == engram.Disk.GetAddress().String() {
 			valueMember.ParseMarkdown("--")
@@ -3163,6 +3225,8 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		}
 	} else {
 		valueDirection.Text = i18n.T("detail.sent")
+		icon := widget.NewIcon(theme.UploadIcon())
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: colors.Red})
 		labelMember.Text = i18n.T("detail.receiver_addr")
 		valueMember.ParseMarkdown("" + details.Destination)
 
@@ -3311,7 +3375,10 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 						rectSpacer,
 						labelDirection,
 						rectSpacer,
-						valueDirection,
+						container.NewHBox(
+							container.NewCenter(valueDirIcon),
+							valueDirection,
+						),
 						rectSpacer,
 						rectSpacer,
 						labelSeparator,
