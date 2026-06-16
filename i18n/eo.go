@@ -119,6 +119,7 @@ var stringsEO = map[string]string{
 	"settings.invalid_percent":                       "nevalida procento",
 	"settings.percent_range":                         "devas esti 0 ĝis 100",
 	"settings.gnomon_section":                        "GNOMON",
+	"settings.notifications_section":                 "AVIZOJ",
 	"settings.gnomon_desc":                           "Gnomon skanas kaj indeksas blokĉenajn datumojn por malŝlosi pliajn funkciojn.",
 	"settings.enable_gnomon":                         "Ebligi Gnomon",
 	"settings.epoch_section":                         "EPOCH STATISTIKOJ",

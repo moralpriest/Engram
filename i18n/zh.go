@@ -114,6 +114,7 @@ var stringsZH = map[string]string{
 	"settings.invalid_percent":                       "无效百分比",
 	"settings.percent_range":                         "必须为 0 到 100 之间",
 	"settings.gnomon_section":                        "GNOMON",
+	"settings.notifications_section":                 "通知",
 	"settings.gnomon_desc":                           "Gnomon 扫描并索引区块链数据，以解锁更多功能，例如原生资产追踪。",
 	"settings.enable_gnomon":                         "启用 Gnomon",
 	"settings.epoch_section":                         "EPOCH 统计",

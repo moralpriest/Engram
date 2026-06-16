@@ -114,6 +114,7 @@ var stringsJA = map[string]string{
 	"settings.invalid_percent":                       "無効なパーセンテージ",
 	"settings.percent_range":                         "0から100の間である必要があります",
 	"settings.gnomon_section":                        "GNOMON",
+	"settings.notifications_section":                 "通知",
 	"settings.gnomon_desc":                           "Gnomonは、ネイティブアセット追跡などの機能を利用可能にするために、ブロックチェーンデータをスキャンしてインデックス化します。",
 	"settings.enable_gnomon":                         "Gnomonを有効にする",
 	"settings.epoch_section":                         "EPOCH 統計",

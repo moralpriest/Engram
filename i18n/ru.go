@@ -119,6 +119,7 @@ var stringsRU = map[string]string{
 	"settings.invalid_percent":                       "неверный процент",
 	"settings.percent_range":                         "должно быть от 0 до 100",
 	"settings.gnomon_section":                        "GNOMON",
+	"settings.notifications_section":                 "УВЕДОМЛЕНИЯ",
 	"settings.gnomon_desc":                           "Gnomon сканирует и индексирует данные блокчейна, чтобы разблокировать дополнительные функции, такие как отслеживание нативных активов.",
 	"settings.enable_gnomon":                         "Включить Gnomon",
 	"settings.epoch_section":                         "СТАТИСТИКА EPOCH",

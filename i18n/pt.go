@@ -119,6 +119,7 @@ var stringsPT = map[string]string{
 	"settings.invalid_percent":                       "porcentagem inválida",
 	"settings.percent_range":                         "deve ser de 0 a 100",
 	"settings.gnomon_section":                        "GNOMON",
+	"settings.notifications_section":                 "NOTIFICAÇÕES",
 	"settings.gnomon_desc":                           "Gnomon escaneia e indexa dados da blockchain para desbloquear mais recursos, como rastreamento nativo de ativos.",
 	"settings.enable_gnomon":                         "Ativar Gnomon",
 	"settings.epoch_section":                         "ESTATÍSTICAS EPOCH",

@@ -1393,7 +1393,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// NOTIFICATIONS Section
-	notifTitle := canvas.NewText(i18n.T("settings.enable_notifications"), colors.Gray)
+	notifTitle := canvas.NewText(i18n.T("settings.notifications_section"), colors.Gray)
 	notifTitle.TextSize = scaleFont(11)
 	notifTitle.Alignment = fyne.TextAlignCenter
 	notifTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1765,6 +1765,11 @@ func layoutAppSettings() fyne.CanvasObject {
 		epochSection.Hide()
 	}
 
+	languageTitle := canvas.NewText(i18n.T("settings.language_section"), colors.Gray)
+	languageTitle.TextSize = scaleFont(11)
+	languageTitle.Alignment = fyne.TextAlignCenter
+	languageTitle.TextStyle = fyne.TextStyle{Bold: true}
+
 	advancedContent := container.NewVBox(
 		rectSpacer,
 		rectSpacer,
@@ -1815,7 +1820,7 @@ func layoutAppSettings() fyne.CanvasObject {
 			layout.NewSpacer(),
 			line1,
 			layout.NewSpacer(),
-			canvas.NewText(i18n.T("settings.language_section"), colors.Gray),
+			languageTitle,
 			layout.NewSpacer(),
 			line2,
 			layout.NewSpacer(),

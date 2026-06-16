@@ -157,6 +157,7 @@ var stringsTemplate = map[string]string{
 	"settings.invalid_percent":                       "",
 	"settings.percent_range":                         "",
 	"settings.gnomon_section":                        "",
+	"settings.notifications_section":                 "",
 	"settings.gnomon_desc":                           "",
 	"settings.enable_gnomon":                         "",
 	"settings.epoch_section":                         "",
