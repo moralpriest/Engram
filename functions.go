@@ -7898,6 +7898,11 @@ func toggleXSWD(endpoint string) {
 			})
 		}
 
+		// Set advanced mode BEFORE starting the server goroutine so that
+		// XSWDPrompt(ad) sees advanced=true and applies global permissions
+		// instead of restrictive mode when a TELA app connects immediately.
+		remoteAccess.WS.advanced = true
+
 		go func() {
 			// Check if port is already in use and wait up to 5 seconds for release
 			if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
@@ -7980,7 +7985,6 @@ func toggleXSWD(endpoint string) {
 				})
 
 				remoteAccess.WS.global.enabled = true
-				remoteAccess.WS.advanced = true
 				setPermissions()
 			} else {
 				logger.Errorf("[Engram] XSWD server failed to start on %s", endpoint)

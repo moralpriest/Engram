@@ -211,16 +211,19 @@ func AttemptEPOCHWithAddr(ctx context.Context, p Attempt_With_Address_Params) (r
 		return
 	}
 
-	err = epoch.StartGetWork(p.Address, session.Daemon)
-	if err != nil {
-		return
-	}
+	// Only start/stop EPOCH if it's not already active (e.g. from AskPermissionForRequest auto-start).
+	// This prevents the defer StopGetWork from killing a connection that the app needs to stay alive.
+	if !epoch.IsActive() {
+		err = epoch.StartGetWork(p.Address, session.Daemon)
+		if err != nil {
+			return
+		}
+		defer epoch.StopGetWork()
 
-	defer epoch.StopGetWork()
-
-	err = epoch.JobIsReady(time.Second * 10)
-	if err != nil {
-		return
+		err = epoch.JobIsReady(time.Second * 10)
+		if err != nil {
+			return
+		}
 	}
 
 	result, err = epoch.AttemptHashes(p.Hashes)

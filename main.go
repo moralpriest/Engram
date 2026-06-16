@@ -287,8 +287,14 @@ func main() {
 				}
 
 				if isMobileDevice {
-					logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
-					go StartPulse()
+					// Skip StartPulse if pulse is already running to avoid
+					// disrupting active XSWD/EPOCH connections during TELA use.
+					if pulseRunning {
+						logger.Printf("[Lifecycle] Mobile foreground - pulse already running, skipping reconnection")
+					} else {
+						logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
+						go StartPulse()
+					}
 					refreshForegroundUI("[Lifecycle] UI refreshed after foreground (mobile)")
 					return
 				}
