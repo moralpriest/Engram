@@ -29,6 +29,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
@@ -36,16 +37,16 @@ import (
 
 func layoutIdentity() fyne.CanvasObject {
 	session.Domain = "app.Identity"
-	title := canvas.NewText(i18n.T("identity.page_title"), colors.Gray)
+	title := canvas.NewText(i18n.T("identity.page_title"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
-	heading := canvas.NewText(i18n.T("identity.my_contacts"), colors.Green)
+	heading := canvas.NewText(i18n.T("identity.my_contacts"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -54,7 +55,7 @@ func layoutIdentity() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -74,7 +75,7 @@ func layoutIdentity() fyne.CanvasObject {
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.44))
 
-	shortShard := canvas.NewText(i18n.T("identity.primary_username"), colors.Gray)
+	shortShard := canvas.NewText(i18n.T("identity.primary_username"), apptheme.C.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
@@ -276,7 +277,7 @@ func layoutIdentity() fyne.CanvasObject {
 		dispUsername = "..." + dispUsername[len(dispUsername)-DEFAULT_USERADDR_SHORTEN_LENGTH:]
 	}
 
-	textUsername := canvas.NewText(dispUsername, colors.Green)
+	textUsername := canvas.NewText(dispUsername, apptheme.C.Green)
 	textUsername.TextStyle = fyne.TextStyle{Bold: true}
 	textUsername.TextSize = scaleFont(22)
 
@@ -297,7 +298,7 @@ func layoutIdentity() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 		overlay.Add(layoutIdentityDetail(userData[id]))
@@ -398,7 +399,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText(i18n.T("identity.contact_info"), colors.Gray)
+	heading := canvas.NewText(i18n.T("identity.contact_info"), apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -424,17 +425,17 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 	rectSpacerCompact := canvas.NewRectangle(color.Transparent)
 	rectSpacerCompact.SetMinSize(compactSpacerSize())
 
-	labelUsername := canvas.NewText(i18n.T("identity.registered_username"), colors.Gray)
+	labelUsername := canvas.NewText(i18n.T("identity.registered_username"), apptheme.C.Gray)
 	labelUsername.TextSize = scaleFont(11)
 	labelUsername.Alignment = fyne.TextAlignCenter
 	labelUsername.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelTransfer := canvas.NewText(i18n.T("identity.transfer"), colors.Gray)
+	labelTransfer := canvas.NewText(i18n.T("identity.transfer"), apptheme.C.Gray)
 	labelTransfer.TextSize = scaleFont(11)
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -443,7 +444,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -458,7 +459,7 @@ func layoutIdentityDetail(username string) fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	valueUsername := canvas.NewText(username, colors.Green)
+	valueUsername := canvas.NewText(username, apptheme.C.Green)
 	valueUsername.TextSize = scaleFont(22)
 	valueUsername.TextStyle = fyne.TextStyle{Bold: true}
 	valueUsername.Alignment = fyne.TextAlignCenter

@@ -17,6 +17,7 @@ import (
 	x "fyne.io/x/fyne/widget"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 func layoutTransition() fyne.CanvasObject {
@@ -63,14 +64,14 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	frame.SetMinSize(fyne.NewSize(ui.Width, ui.Height))
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
-	label := canvas.NewText(i18n.T("register.proof_of_work"), colors.Gray)
+	label := canvas.NewText(i18n.T("register.proof_of_work"), apptheme.C.Gray)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 	label.TextSize = scaleFont(12)
-	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), colors.Account)
+	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), apptheme.C.Account)
 	hashes.TextSize = scaleFont(18)
 
 	startTime := time.Now()
-	timeLabel := canvas.NewText(i18n.T("register.countdown_estimating"), colors.Green)
+	timeLabel := canvas.NewText(i18n.T("register.countdown_estimating"), apptheme.C.Green)
 	timeLabel.TextStyle = fyne.TextStyle{Bold: true}
 	timeLabel.TextSize = scaleFont(12)
 
@@ -192,12 +193,12 @@ func layoutAlert(t int) fyne.CanvasObject {
 	rectSpacer.SetMinSize(standardSpacerSize())
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText("", colors.Gray)
+	title := canvas.NewText("", apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 	title.Alignment = fyne.TextAlignCenter
 
-	heading := canvas.NewText("", colors.Red)
+	heading := canvas.NewText("", apptheme.C.Red)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
@@ -367,7 +368,7 @@ func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 	overlays := session.Window.Canvas().Overlays()
 	overlays.Add(
 		container.NewStack(
-			canvas.NewRectangle(colors.DarkMatter),
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		),
 	)
 

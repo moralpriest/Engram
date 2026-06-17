@@ -28,6 +28,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
@@ -41,7 +42,7 @@ func showWarningPopup(messageKey string) {
 		return
 	}
 
-	header := canvas.NewText(i18n.T("messages.note_title"), colors.Yellow)
+	header := canvas.NewText(i18n.T("messages.note_title"), apptheme.C.Yellow)
 	header.TextSize = 18
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -112,7 +113,7 @@ func showWarningPopup(messageKey string) {
 
 	blocker = container.NewStack(
 		&iframe{},
-		canvas.NewRectangle(colors.DarkMatter),
+		canvas.NewRectangle(apptheme.C.DarkMatter),
 	)
 
 	overlay = container.NewStack(
@@ -153,7 +154,7 @@ func layoutMessages() fyne.CanvasObject {
 		showWarningPopup("messages.warning_daemon")
 	}
 
-	title := canvas.NewText(i18n.T("messages.contacts"), colors.Gray)
+	title := canvas.NewText(i18n.T("messages.contacts"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -494,12 +495,12 @@ func layoutPM() fyne.CanvasObject {
 		contactAddress = "..." + short
 	}
 
-	heading := canvas.NewText(contactAddress, colors.Green)
+	heading := canvas.NewText(contactAddress, apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	lastActive := canvas.NewText("", colors.Gray)
+	lastActive := canvas.NewText("", apptheme.C.Gray)
 	lastActive.TextSize = scaleFont(12)
 	lastActive.Alignment = fyne.TextAlignCenter
 	lastActive.TextStyle = fyne.TextStyle{Bold: false}
@@ -673,9 +674,9 @@ func layoutPM() fyne.CanvasObject {
 			for _, rendered := range renderedMessages {
 				mdata := widget.NewRichTextFromMarkdown("")
 				mdata.Wrapping = fyne.TextWrapWord
-				datetime := canvas.NewText("", colors.Green)
+				datetime := canvas.NewText("", apptheme.C.Green)
 				datetime.TextSize = scaleFont(11)
-				boxColor := colors.Flint
+				boxColor := apptheme.C.Flint
 				rect := canvas.NewRectangle(boxColor)
 				rect.SetMinSize(fyne.NewSize(ui.Width*0.80, 30))
 				rect.CornerRadius = scaleSize(5)
@@ -683,7 +684,7 @@ func layoutPM() fyne.CanvasObject {
 				rect5.SetMinSize(smallSpacerSize())
 
 				if !rendered.IsIncoming {
-					rect.FillColor = colors.DarkGreen
+					rect.FillColor = apptheme.C.DarkGreen
 					mdata.ParseMarkdown(rendered.Comment)
 					datetime.Text = rendered.Timestamp
 					e = container.NewBorder(
@@ -705,7 +706,7 @@ func layoutPM() fyne.CanvasObject {
 						),
 					)
 				} else {
-					rect.FillColor = colors.Flint
+					rect.FillColor = apptheme.C.Flint
 					mdata.ParseMarkdown(rendered.Comment)
 					datetime.Text = rendered.Timestamp
 					e = container.NewBorder(
@@ -763,7 +764,7 @@ func layoutPM() fyne.CanvasObject {
 
 	btnSend := widget.NewButton(i18n.T("messages.send"), nil)
 	btnSend.Disable()
-	labelLimit := canvas.NewText("", colors.Gray)
+	labelLimit := canvas.NewText("", apptheme.C.Gray)
 	labelLimit.TextSize = scaleFont(11)
 	labelLimit.Alignment = fyne.TextAlignLeading
 	updateMessageLimit := func(message string, sender string) {

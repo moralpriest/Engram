@@ -181,6 +181,8 @@ var stringsTemplate = map[string]string{
 	"settings.language_section":                      "",
 	"settings.language_label":                        "",
 	"settings.language_desc":                         "",
+	"settings.theme_section":                         "",
+	"settings.theme_label":                           "",
 	"settings.global_permissions_heading":            "",
 	"settings.web_sockets_heading":                   "",
 	"settings.methods_label":                         "",

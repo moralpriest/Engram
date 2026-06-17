@@ -44,6 +44,7 @@ import (
 	"github.com/deroproject/graviton"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 func layoutAssetExplorer() fyne.CanvasObject {
@@ -51,7 +52,7 @@ func layoutAssetExplorer() fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText(i18n.T("assets.heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("assets.heading"), apptheme.C.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -129,7 +130,7 @@ func layoutMyAssets() fyne.CanvasObject {
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
 
-	heading := canvas.NewText(i18n.T("assets.my_heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("assets.my_heading"), apptheme.C.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -137,10 +138,10 @@ func layoutMyAssets() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	results := canvas.NewText("", colors.Green)
+	results := canvas.NewText("", apptheme.C.Green)
 	results.TextSize = scaleFont(13)
 
-	labelLastScan := canvas.NewText("", colors.Green)
+	labelLastScan := canvas.NewText("", apptheme.C.Green)
 	labelLastScan.TextSize = scaleFont(13)
 
 	listData = binding.BindStringList(&data)
@@ -177,7 +178,7 @@ func layoutMyAssets() fyne.CanvasObject {
 	entrySCID.PlaceHolder = i18n.T("assets.search_scid")
 	entrySCID.SetIcon(theme.SearchIcon())
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -186,7 +187,7 @@ func layoutMyAssets() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -245,11 +246,11 @@ func layoutMyAssets() fyne.CanvasObject {
 
 	if session.Offline {
 		results.Text = "  Asset tracking is disabled in offline mode."
-		results.Color = colors.Gray
+		results.Color = apptheme.C.Gray
 		results.Refresh()
 	} else if gnomon.Index == nil {
 		results.Text = "  Asset tracking is disabled. Gnomon is inactive."
-		results.Color = colors.Gray
+		results.Color = apptheme.C.Gray
 		results.Refresh()
 	}
 
@@ -266,14 +267,14 @@ func layoutMyAssets() fyne.CanvasObject {
 			}
 
 			results.Text = "  Gathering an index of smart contracts... "
-			results.Color = colors.Yellow
+			results.Color = apptheme.C.Yellow
 			fyne.Do(func() {
 				results.Refresh()
 			})
 
 			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
 				results.Text = fmt.Sprintf("  Gnomon is syncing... [%d / %d]", gnomon.Index.LastIndexedHeight, int64(engram.Disk.Get_Daemon_Height()))
-				results.Color = colors.Yellow
+				results.Color = apptheme.C.Yellow
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -283,7 +284,7 @@ func layoutMyAssets() fyne.CanvasObject {
 			}
 
 			results.Text = "  Loading previous scan results..."
-			results.Color = colors.Yellow
+			results.Color = apptheme.C.Yellow
 
 			fyne.Do(func() {
 				results.Refresh()
@@ -361,7 +362,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				StoreEncryptedValue("Asset Scan", []byte("Last Scan"), []byte(timeNow))
 
 				results.Text = "  Indexing..."
-				results.Color = colors.Yellow
+				results.Color = apptheme.C.Yellow
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -383,7 +384,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 					for len(assetList) < 5 {
 						logger.Printf("[Gnomon] Asset Scan Status: [%d / %d / %d]\n", gnomon.Index.LastIndexedHeight, engram.Disk.Get_Daemon_Height(), len(assetList))
-						results.Color = colors.Yellow
+						results.Color = apptheme.C.Yellow
 						switch gnomon.Index.DBType {
 						case "gravdb":
 							assetList = gnomon.Index.GravDBBackend.GetAllOwnersAndSCIDs()
@@ -395,7 +396,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				}
 
 				results.Text = "  Scanning results..."
-				results.Color = colors.Yellow
+				results.Color = apptheme.C.Yellow
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -447,7 +448,7 @@ func layoutMyAssets() fyne.CanvasObject {
 						assetTotal += 1
 
 						results.Text = "  Scanning... " + fmt.Sprintf("%d / %d", assetTotal, assetCount)
-						results.Color = colors.Yellow
+						results.Color = apptheme.C.Yellow
 
 						fyne.Do(func() {
 							results.Refresh()
@@ -501,10 +502,10 @@ func layoutMyAssets() fyne.CanvasObject {
 				}
 
 				results.Text = fmt.Sprintf("  Owned Assets:  %d", owned)
-				results.Color = colors.Green
+				results.Color = apptheme.C.Green
 
 				labelLastScan.Text = fmt.Sprintf("  %s", timeNow)
-				labelLastScan.Color = colors.Green
+				labelLastScan.Color = apptheme.C.Green
 
 				fyne.Do(func() {
 					listData.Set(assetData)
@@ -533,7 +534,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				labelLastScan.Text = ""
 			}
 
-			results.Color = colors.Green
+			results.Color = apptheme.C.Green
 
 			uiDo(func() {
 				results.Refresh()
@@ -549,7 +550,7 @@ func layoutMyAssets() fyne.CanvasObject {
 					overlay.Add(
 						container.NewStack(
 							&iframe{},
-							canvas.NewRectangle(colors.DarkMatter),
+							canvas.NewRectangle(apptheme.C.DarkMatter),
 						),
 					)
 					overlay.Add(
@@ -635,7 +636,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-	heading := canvas.NewText(i18n.T("assets.manager"), colors.Green)
+	heading := canvas.NewText(i18n.T("assets.manager"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -643,32 +644,32 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	labelSigner := canvas.NewText(i18n.T("assets.author"), colors.Gray)
+	labelSigner := canvas.NewText(i18n.T("assets.author"), apptheme.C.Gray)
 	labelSigner.TextSize = scaleFont(14)
 	labelSigner.Alignment = fyne.TextAlignCenter
 	labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelOwner := canvas.NewText(i18n.T("assets.owner"), colors.Gray)
+	labelOwner := canvas.NewText(i18n.T("assets.owner"), apptheme.C.Gray)
 	labelOwner.TextSize = scaleFont(14)
 	labelOwner.Alignment = fyne.TextAlignCenter
 	labelOwner.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSCID := canvas.NewText(i18n.T("assets.scid"), colors.Gray)
+	labelSCID := canvas.NewText(i18n.T("assets.scid"), apptheme.C.Gray)
 	labelSCID.TextSize = scaleFont(14)
 	labelSCID.Alignment = fyne.TextAlignCenter
 	labelSCID.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelBalance := canvas.NewText(i18n.T("assets.balance"), colors.Gray)
+	labelBalance := canvas.NewText(i18n.T("assets.balance"), apptheme.C.Gray)
 	labelBalance.TextSize = scaleFont(14)
 	labelBalance.Alignment = fyne.TextAlignCenter
 	labelBalance.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelTransfer := canvas.NewText(i18n.T("assets.transfer"), colors.Gray)
+	labelTransfer := canvas.NewText(i18n.T("assets.transfer"), apptheme.C.Gray)
 	labelTransfer.TextSize = scaleFont(14)
 	labelTransfer.Alignment = fyne.TextAlignCenter
 	labelTransfer.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelExecute := canvas.NewText(i18n.T("assets.execute"), colors.Gray)
+	labelExecute := canvas.NewText(i18n.T("assets.execute"), apptheme.C.Gray)
 	labelExecute.TextSize = scaleFont(14)
 	labelExecute.Alignment = fyne.TextAlignCenter
 	labelExecute.TextStyle = fyne.TextStyle{Bold: true}
@@ -693,7 +694,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 	entryAddress := widget.NewEntry()
 	entryAddress.PlaceHolder = "Username or Address"
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -702,7 +703,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -851,7 +852,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 	var zerobal uint64
 
-	balance := canvas.NewText(fmt.Sprintf("  %d", zerobal), colors.Green)
+	balance := canvas.NewText(fmt.Sprintf("  %d", zerobal), apptheme.C.Green)
 	balance.TextSize = scaleFont(20)
 	balance.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1156,12 +1157,12 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 			if contract.Functions[f].Name == s {
 				params = contract.Functions[f].Params
 
-				header := canvas.NewText(i18n.T("assets.execute_func"), colors.Gray)
+				header := canvas.NewText(i18n.T("assets.execute_func"), apptheme.C.Gray)
 				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
-				funcName := canvas.NewText(s, colors.Account)
+				funcName := canvas.NewText(s, apptheme.C.Account)
 				funcName.TextSize = scaleFont(22)
 				funcName.Alignment = fyne.TextAlignCenter
 				funcName.TextStyle = fyne.TextStyle{Bold: true}
@@ -1181,7 +1182,7 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 
@@ -1631,7 +1632,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	results := canvas.NewText("", colors.Green)
+	results := canvas.NewText("", apptheme.C.Green)
 	results.TextSize = scaleFont(14)
 
 	listData = binding.BindStringList(&data)
@@ -1741,18 +1742,18 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 	assetData = nil
 
 	results.Text = fmt.Sprintf("  Results:  %d", found)
-	results.Color = colors.Green
+	results.Color = apptheme.C.Green
 	results.Refresh()
 
 	listData.Set(nil)
 
 	if session.Offline {
 		results.Text = "  Disabled in offline mode."
-		results.Color = colors.Gray
+		results.Color = apptheme.C.Gray
 		results.Refresh()
 	} else if gnomon.Index == nil {
 		results.Text = "  Gnomon is inactive."
-		results.Color = colors.Gray
+		results.Color = apptheme.C.Gray
 		results.Refresh()
 	} else {
 		entrySCID.Enable()
@@ -1828,7 +1829,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 				}
 				entrySCID.Disable()
 				results.Text = "  Gnomon is syncing..."
-				results.Color = colors.Yellow
+				results.Color = apptheme.C.Yellow
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -1840,7 +1841,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 			fyne.Do(func() {
 				entrySCID.Enable()
 				results.Text = "  Loading previous scan history..."
-				results.Color = colors.Yellow
+				results.Color = apptheme.C.Yellow
 				results.Refresh()
 			})
 
@@ -1911,7 +1912,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 
 		fyne.Do(func() {
 			results.Text = fmt.Sprintf("  %s  %d", i18n.T("files.search_history"), found)
-			results.Color = colors.Green
+			results.Color = apptheme.C.Green
 			results.Refresh()
 			listBox.Refresh()
 		})

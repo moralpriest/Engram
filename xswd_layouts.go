@@ -36,6 +36,7 @@ import (
 	"github.com/deroproject/derohe/walletapi/xswd"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
@@ -71,7 +72,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		}})
 	labelDesc.Wrapping = fyne.TextWrapWord
 
-	labelID := canvas.NewText(i18n.T("xswd.app_id"), colors.Gray)
+	labelID := canvas.NewText(i18n.T("xswd.app_id"), apptheme.C.Gray)
 	labelID.TextSize = scaleFont(14)
 	labelID.Alignment = fyne.TextAlignLeading
 	labelID.TextStyle = fyne.TextStyle{Bold: true}
@@ -79,7 +80,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textID := widget.NewRichTextFromMarkdown(ad.Id)
 	textID.Wrapping = fyne.TextWrapWord
 
-	labelSignature := canvas.NewText(i18n.T("xswd.signature"), colors.Gray)
+	labelSignature := canvas.NewText(i18n.T("xswd.signature"), apptheme.C.Gray)
 	labelSignature.TextSize = scaleFont(14)
 	labelSignature.Alignment = fyne.TextAlignLeading
 	labelSignature.TextStyle = fyne.TextStyle{Bold: true}
@@ -87,7 +88,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textSignature := widget.NewRichTextFromMarkdown("")
 	textSignature.Wrapping = fyne.TextWrapWord
 
-	labelURL := canvas.NewText(i18n.T("xswd.url"), colors.Gray)
+	labelURL := canvas.NewText(i18n.T("xswd.url"), apptheme.C.Gray)
 	labelURL.TextSize = scaleFont(14)
 	labelURL.Alignment = fyne.TextAlignLeading
 	labelURL.TextStyle = fyne.TextStyle{Bold: true}
@@ -95,12 +96,12 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 	textURL := widget.NewRichTextFromMarkdown(ad.Url)
 	textURL.Wrapping = fyne.TextWrapWord
 
-	labelPermissions := canvas.NewText(i18n.T("xswd.permissions"), colors.Gray)
+	labelPermissions := canvas.NewText(i18n.T("xswd.permissions"), apptheme.C.Gray)
 	labelPermissions.TextSize = scaleFont(14)
 	labelPermissions.Alignment = fyne.TextAlignLeading
 	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelEvents := canvas.NewText(i18n.T("xswd.events"), colors.Gray)
+	labelEvents := canvas.NewText(i18n.T("xswd.events"), apptheme.C.Gray)
 	labelEvents.TextSize = scaleFont(14)
 	labelEvents.Alignment = fyne.TextAlignLeading
 	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
@@ -194,7 +195,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		eventItems.Add(container.NewBorder(nil, nil, widget.NewRichTextFromMarkdown(i18n.T("xswd.no_events")), nil))
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -203,7 +204,7 @@ func layoutXSWDAppManager(ad *xswd.ApplicationData) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -424,31 +425,31 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	title := canvas.NewText(i18n.T("settings.global_permissions_heading"), colors.Gray)
+	title := canvas.NewText(i18n.T("settings.global_permissions_heading"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
-	xswdLabel := canvas.NewText(i18n.T("settings.web_sockets_heading"), colors.Gray)
+	xswdLabel := canvas.NewText(i18n.T("settings.web_sockets_heading"), apptheme.C.Gray)
 	xswdLabel.TextSize = scaleFont(11)
 	xswdLabel.Alignment = fyne.TextAlignCenter
 	xswdLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelMethods := canvas.NewText(i18n.T("settings.methods_label"), colors.Gray)
+	labelMethods := canvas.NewText(i18n.T("settings.methods_label"), apptheme.C.Gray)
 	labelMethods.TextSize = scaleFont(14)
 	labelMethods.Alignment = fyne.TextAlignLeading
 	labelMethods.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnection := canvas.NewText(i18n.T("settings.connections_label"), colors.Gray)
+	labelConnection := canvas.NewText(i18n.T("settings.connections_label"), apptheme.C.Gray)
 	labelConnection.TextSize = scaleFont(14)
 	labelConnection.Alignment = fyne.TextAlignLeading
 	labelConnection.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelEpoch := canvas.NewText(i18n.T("settings.epoch_label"), colors.Gray)
+	labelEpoch := canvas.NewText(i18n.T("settings.epoch_label"), apptheme.C.Gray)
 	labelEpoch.TextSize = scaleFont(14)
 	labelEpoch.Alignment = fyne.TextAlignLeading
 	labelEpoch.TextStyle = fyne.TextStyle{Bold: true}
 
-	permissionInfo := canvas.NewText(i18n.T("settings.apply_on_connection"), colors.Gray)
+	permissionInfo := canvas.NewText(i18n.T("settings.apply_on_connection"), apptheme.C.Gray)
 	permissionInfo.TextSize = scaleFont(12)
 	permissionInfo.Alignment = fyne.TextAlignCenter
 	permissionInfo.TextStyle = fyne.TextStyle{Bold: true}
@@ -730,10 +731,10 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	}
 
 	statusText := i18n.T("settings.global_permissions.status_disabled")
-	statusColor := colors.Gray
+	statusColor := apptheme.C.Gray
 	if remoteAccess.WS.global.enabled {
 		statusText = i18n.T("settings.global_permissions.status_enabled")
-		statusColor = colors.Green
+		statusColor = apptheme.C.Green
 	}
 
 	remoteAccess.WS.global.status = canvas.NewText(statusText, statusColor)
@@ -745,12 +746,12 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			return
 		}
 
-		header := canvas.NewText(i18n.T("settings.restore_defaults_dialog_title"), colors.Gray)
+		header := canvas.NewText(i18n.T("settings.restore_defaults_dialog_title"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -798,7 +799,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -836,7 +837,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			setPermissions()
 			btnDefaults.Disable()
 			remoteAccess.WS.global.status.Text = i18n.T("settings.global_permissions.status_disabled")
-			remoteAccess.WS.global.status.Color = colors.Gray
+			remoteAccess.WS.global.status.Color = apptheme.C.Gray
 			remoteAccess.WS.global.status.Refresh()
 			remoteAccess.WS.global.enabled = false
 			wConnection.SetSelectedIndex(0)
@@ -856,7 +857,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 			}
 		} else {
 			remoteAccess.WS.global.status.Text = i18n.T("settings.global_permissions.status_enabled")
-			remoteAccess.WS.global.status.Color = colors.Green
+			remoteAccess.WS.global.status.Color = apptheme.C.Green
 			remoteAccess.WS.global.status.Refresh()
 			remoteAccess.WS.global.enabled = true
 			wConnection.Enable()
@@ -880,7 +881,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		}
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -889,7 +890,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(

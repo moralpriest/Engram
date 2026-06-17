@@ -142,6 +142,8 @@ var stringsEO = map[string]string{
 	"settings.export_debug":                          "Eksporti Sencimigan Protokolon",
 	"settings.language_section":                      "LINGVO",
 	"settings.language_label":                        "Apliklingvo",
+	"settings.theme_section":                         "TEMOJ",
+	"settings.theme_label":                           "Elektu temon",
 	"settings.language_desc":                         "Elektu montran lingvon por la aplikaĵo.",
 	"settings.global_permissions_heading":            "G L O B A L A J   P E R M E S O J",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

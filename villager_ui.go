@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -45,7 +46,7 @@ func showVillagerPopup(parent *fyne.Container) {
 	rect.CornerRadius = scaleSize(10)
 	rect.SetMinSize(fyne.NewSize(scaleSize(220), scaleSize(40)))
 
-	text := canvas.NewText(i18n.T("villager.click_edit"), colors.Green)
+	text := canvas.NewText(i18n.T("villager.click_edit"), apptheme.C.Green)
 	text.Alignment = fyne.TextAlignCenter
 	text.TextSize = scaleFont(14)
 

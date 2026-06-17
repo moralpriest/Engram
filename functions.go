@@ -77,6 +77,7 @@ import (
 	"github.com/deroproject/derohe/walletapi/xswd"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 type App struct {
@@ -91,23 +92,6 @@ type UI struct {
 	Width     float32
 	MaxHeight float32
 	Height    float32
-}
-
-type Colors struct {
-	Network    color.Color
-	Account    color.Color
-	Blue       color.Color
-	Red        color.Color
-	DarkGreen  color.Color
-	Green      color.Color
-	Gray       color.Color
-	Yellow     color.Color
-	DarkMatter color.Color
-	Cold       color.Color
-	Flint      color.Color
-	Purple     color.Color
-	LightBlue  color.Color
-	SoftRed    color.Color
 }
 
 type Navigation struct {
@@ -243,11 +227,6 @@ type telaDisplayCache []INDEXwithRatings
 
 type Engram struct {
 	Disk *walletapi.Wallet_Disk
-}
-
-type Theme struct {
-	main eTheme
-	alt  eTheme2
 }
 
 type Gnomon struct {
@@ -1397,7 +1376,7 @@ func initWebSocketState() {
 			if !remoteAccess.WS.global.enabled {
 				if remoteAccess.WS.status != nil {
 					remoteAccess.WS.status.Text = "Blocked"
-					remoteAccess.WS.status.Color = colors.Gray
+					remoteAccess.WS.status.Color = apptheme.C.Gray
 				}
 			}
 			remoteAccess.WS.toggle.Text = "Turn On"
@@ -1412,10 +1391,10 @@ func initWebSocketState() {
 
 func setPulseDisconnectedStatus(refresh bool) {
 	uiDo(func() {
-		status.Connection.FillColor = colors.Red
-		status.Sync.FillColor = colors.Red
-		status.Gnomon.FillColor = colors.Red
-		status.EPOCH.FillColor = colors.Red
+		status.Connection.FillColor = apptheme.C.Red
+		status.Sync.FillColor = apptheme.C.Red
+		status.Gnomon.FillColor = apptheme.C.Red
+		status.EPOCH.FillColor = apptheme.C.Red
 		if refresh {
 			status.Connection.Refresh()
 			status.Sync.Refresh()
@@ -1425,7 +1404,7 @@ func setPulseDisconnectedStatus(refresh bool) {
 		fyne.CurrentApp().SendNotification(fyne.NewNotification("Engram", "⚠ Disconnected from "+session.Daemon+" — Reconnecting..."))
 		if session.DaemonLabel != nil {
 			session.DaemonLabel.Text = "⚠ Disconnected"
-			session.DaemonLabel.Color = colors.Red
+			session.DaemonLabel.Color = apptheme.C.Red
 			session.DaemonLabel.Refresh()
 		}
 	})
@@ -1468,38 +1447,38 @@ func pulseReconnect(count int) (int, bool) {
 func updatePulseStatusIndicators() {
 	if walletapi.IsDaemonOnline() {
 		uiDo(func() {
-			status.Connection.FillColor = colors.Green
+			status.Connection.FillColor = color.RGBA{19, 202, 105, 255}
 			if session.DaemonHeight > 0 && session.DaemonHeight-session.WalletHeight < 2 {
-				status.Connection.FillColor = colors.Green
-				status.Sync.FillColor = colors.Green
+				status.Connection.FillColor = color.RGBA{19, 202, 105, 255}
+				status.Sync.FillColor = color.RGBA{19, 202, 105, 255}
 			} else if session.DaemonHeight == 0 {
-				status.Sync.FillColor = colors.Red
+				status.Sync.FillColor = apptheme.C.Red
 			} else {
 				status.Sync.FillColor = color.Transparent
 			}
 
 			if gnomon.Index != nil {
 				if gnomon.Index.Status == "indexed" {
-					status.Gnomon.FillColor = colors.Green
+					status.Gnomon.FillColor = color.RGBA{19, 202, 105, 255}
 				} else if uint64(gnomon.Index.LastIndexedHeight) < session.WalletHeight-15 {
-					status.Gnomon.FillColor = colors.Red
+					status.Gnomon.FillColor = apptheme.C.Red
 				} else {
 					status.Gnomon.FillColor = color.Transparent
 				}
 			} else {
-				status.Gnomon.FillColor = colors.Gray
+				status.Gnomon.FillColor = apptheme.C.Gray
 			}
 
 			if epoch.IsActive() {
 				if epoch.IsProcessing() {
 					status.EPOCH.FillColor = color.Transparent
 				} else {
-					status.EPOCH.FillColor = colors.Green
+					status.EPOCH.FillColor = color.RGBA{19, 202, 105, 255}
 				}
 			} else if remoteAccess.EPOCH.err != nil {
-				status.EPOCH.FillColor = colors.Red
+				status.EPOCH.FillColor = apptheme.C.Red
 			} else {
-				status.EPOCH.FillColor = colors.Gray
+				status.EPOCH.FillColor = apptheme.C.Gray
 			}
 			if session.DaemonLabel != nil {
 				addr := session.Daemon
@@ -1507,7 +1486,7 @@ func updatePulseStatusIndicators() {
 					addr = "..." + addr[len(addr)-27:]
 				}
 				session.DaemonLabel.Text = addr
-				session.DaemonLabel.Color = colors.Gray
+				session.DaemonLabel.Color = apptheme.C.Gray
 				session.DaemonLabel.Refresh()
 			}
 		})
@@ -1515,18 +1494,18 @@ func updatePulseStatusIndicators() {
 	}
 
 	uiDo(func() {
-		status.Connection.FillColor = colors.Gray
-		status.Sync.FillColor = colors.Gray
-		status.RemoteAccess.FillColor = colors.Gray
-		status.Gnomon.FillColor = colors.Gray
-		status.EPOCH.FillColor = colors.Gray
+		status.Connection.FillColor = apptheme.C.Gray
+		status.Sync.FillColor = apptheme.C.Gray
+		status.RemoteAccess.FillColor = apptheme.C.Gray
+		status.Gnomon.FillColor = apptheme.C.Gray
+		status.EPOCH.FillColor = apptheme.C.Gray
 		if session.DaemonLabel != nil {
 			if session.Offline {
 				session.DaemonLabel.Text = "OFFLINE"
-				session.DaemonLabel.Color = colors.Gray
+				session.DaemonLabel.Color = apptheme.C.Gray
 			} else {
 				session.DaemonLabel.Text = "⚠ Disconnected"
-				session.DaemonLabel.Color = colors.Red
+				session.DaemonLabel.Color = apptheme.C.Red
 			}
 			session.DaemonLabel.Refresh()
 		}
@@ -1665,9 +1644,9 @@ func StartPulse() {
 
 		// Update UI to show connected status immediately
 		uiDo(func() {
-			status.Connection.FillColor = colors.Green
+			status.Connection.FillColor = color.RGBA{19, 202, 105, 255}
 			status.Connection.Refresh()
-			status.Sync.FillColor = colors.Yellow
+			status.Sync.FillColor = apptheme.C.Yellow
 			status.Sync.Refresh()
 		})
 
@@ -1718,9 +1697,9 @@ func StartPulse() {
 					if !isDaemonConnected() {
 						logger.Errorf("[Network] Could not connect to daemon...%d\n", engram.Disk.Get_Daemon_TopoHeight())
 						uiDo(func() {
-							status.Connection.FillColor = colors.Red
+							status.Connection.FillColor = apptheme.C.Red
 							status.Connection.Refresh()
-							status.Sync.FillColor = colors.Red
+							status.Sync.FillColor = apptheme.C.Red
 						})
 					}
 
@@ -2421,8 +2400,8 @@ func login() {
 		go StartPulse()
 	} else {
 		engram.Disk.SetOfflineMode()
-		status.Connection.FillColor = colors.Gray
-		status.Sync.FillColor = colors.Gray
+		status.Connection.FillColor = apptheme.C.Gray
+		status.Sync.FillColor = apptheme.C.Gray
 	}
 
 	setRingSize(engram.Disk, 16)
@@ -2454,9 +2433,9 @@ func login() {
 	}
 
 	if !session.Offline {
-		status.Connection.FillColor = colors.Yellow
+		status.Connection.FillColor = apptheme.C.Yellow
 		status.Connection.Refresh()
-		status.Sync.FillColor = colors.Yellow
+		status.Sync.FillColor = apptheme.C.Yellow
 		status.Sync.Refresh()
 		session.Balance = 0
 
@@ -2491,9 +2470,9 @@ func login() {
 						return
 					}
 					removeOverlays()
-					status.Connection.FillColor = colors.Red
+					status.Connection.FillColor = apptheme.C.Red
 					status.Connection.Refresh()
-					status.Sync.FillColor = colors.Red
+					status.Sync.FillColor = apptheme.C.Red
 					status.Sync.Refresh()
 					session.Domain = "app.main"
 					session.Error = "Could not connect to daemon."
@@ -2503,7 +2482,7 @@ func login() {
 			}
 
 			fyne.Do(func() {
-				status.Connection.FillColor = colors.Green
+				status.Connection.FillColor = color.RGBA{19, 202, 105, 255}
 				status.Connection.Refresh()
 			})
 
@@ -2649,7 +2628,7 @@ func updateDashboardAfterLogin() {
 		}
 
 		if session.WalletHeight == session.DaemonHeight && !session.Offline {
-			status.Sync.FillColor = colors.Green
+			status.Sync.FillColor = color.RGBA{19, 202, 105, 255}
 			status.Sync.Refresh()
 		}
 	})
@@ -2693,7 +2672,7 @@ func showLoadingOverlay() {
 			res.loading.SetMinSize(fyne.NewSize(ui.Width*0.45, ui.Width*0.45))
 		}
 
-		rect := canvas.NewRectangle(colors.DarkMatter)
+		rect := canvas.NewRectangle(apptheme.C.DarkMatter)
 		rect.SetMinSize(frame.Size())
 
 		background := container.NewStack(
@@ -2738,7 +2717,7 @@ func showLoadingOverlayWithText(title, eta string) {
 		res.loading.SetMinSize(gifSize)
 		res.loading.Resize(gifSize)
 
-		rect := canvas.NewRectangle(colors.DarkMatter)
+		rect := canvas.NewRectangle(apptheme.C.DarkMatter)
 		rect.SetMinSize(frame.Size())
 
 		lblTitle := widget.NewLabel(title)
@@ -2746,13 +2725,13 @@ func showLoadingOverlayWithText(title, eta string) {
 		lblTitle.TextStyle = fyne.TextStyle{Bold: true}
 		lblTitle.Wrapping = fyne.TextWrapWord
 
-		themedTitle := container.NewThemeOverride(lblTitle, &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
+		themedTitle := container.NewThemeOverride(lblTitle, apptheme.NewTintTheme(theme.Current(), apptheme.C.Green))
 
 		rectTitleWidth := canvas.NewRectangle(color.Transparent)
 		rectTitleWidth.SetMinSize(fyne.NewSize(ui.MaxWidth*0.85, 0))
 		titleStack := container.NewStack(rectTitleWidth, themedTitle)
 
-		lblETA := canvas.NewText(eta, colors.Gray)
+		lblETA := canvas.NewText(eta, apptheme.C.Gray)
 		lblETA.TextSize = scaleFont(12)
 		lblETA.Alignment = fyne.TextAlignCenter
 
@@ -2819,6 +2798,18 @@ func loadResources() {
 	res.telaBg = canvas.NewImageFromResource(resourceTelaPng)
 	res.telaBg.FillMode = canvas.ImageFillContain
 
+}
+
+// UpdateThemeLogo swaps the DERO logo image based on the active theme.
+func UpdateThemeLogo() {
+	switch apptheme.ThemeMode {
+	case apptheme.ThemeDerotopia:
+		res.gram.Resource = resourceDerotopiaLogoPng
+	default:
+		res.gram.Resource = resourceDEROLogoPng
+	}
+	res.gram.Refresh()
+	RefreshVillagerLogo()
 }
 
 // Validate if the provided word is a seed word
@@ -3017,8 +3008,8 @@ func pulseBalancePending(stop chan struct{}) {
 	if session.BalanceText == nil {
 		return
 	}
-	green := colors.Green
-	yellow := colors.Yellow
+	green := apptheme.C.Green
+	yellow := apptheme.C.Yellow
 	anim := canvas.NewColorRGBAAnimation(green, yellow, 800*time.Millisecond, func(c color.Color) {
 		select {
 		case <-stop:
@@ -3044,7 +3035,7 @@ func pulseBalancePending(stop chan struct{}) {
 	uiDo(func() {
 		anim.Stop()
 		if session.BalanceText != nil {
-			session.BalanceText.Color = colors.Green
+			session.BalanceText.Color = apptheme.C.Green
 			session.BalanceText.Refresh()
 		}
 	})
@@ -3129,16 +3120,16 @@ func registerAccount() {
 		closeWallet()
 	}
 
-	title := canvas.NewText(i18n.T("registration.title"), colors.Green)
+	title := canvas.NewText(i18n.T("registration.title"), apptheme.C.Green)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = 16
 
-	heading := canvas.NewText(i18n.T("registration.wait"), colors.Gray)
+	heading := canvas.NewText(i18n.T("registration.wait"), apptheme.C.Gray)
 	heading.TextSize = 22
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	sub := canvas.NewText(i18n.T("registration.take_time"), colors.Gray)
+	sub := canvas.NewText(i18n.T("registration.take_time"), apptheme.C.Gray)
 	sub.TextSize = 14
 	sub.Alignment = fyne.TextAlignCenter
 	sub.TextStyle = fyne.TextStyle{Bold: true}
@@ -6057,7 +6048,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 		dismiss = "Submit"
 	}
 
-	header := canvas.NewText(headerText, colors.Gray)
+	header := canvas.NewText(headerText, apptheme.C.Gray)
 	header.TextSize = 14
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -6138,7 +6129,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 	overlay.Add(
 		container.NewStack(
 			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		),
 	)
 
@@ -6196,12 +6187,30 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 
 // Color for the TELA likes ratio and individual rating numbers
 func telaRatingColor(r uint64) color.Color {
-	if r > 65 {
-		return colors.Green
-	} else if r > 32 {
-		return colors.Yellow
-	} else {
-		return colors.Red
+	switch {
+	case r >= 90:
+		return color.RGBA{200, 100, 255, 255} // purple for top ratings
+	case r >= 70:
+		return color.RGBA{19, 202, 105, 255} // green for good ratings
+	case r >= 50:
+		return color.RGBA{244, 208, 11, 255} // yellow for average ratings
+	default:
+		return color.RGBA{214, 74, 70, 255} // red for poor ratings
+	}
+}
+
+// telaAverageColor returns a color for a TELA average rating (0-10 scale):
+// 9.0+ -> purple, 7.0+ -> green, 5.0+ -> yellow, below 5 -> red.
+func telaAverageColor(average float64) color.Color {
+	switch {
+	case average >= 9.0:
+		return color.RGBA{200, 100, 255, 255} // purple for top ratings
+	case average >= 7.0:
+		return color.RGBA{19, 202, 105, 255} // green for good ratings
+	case average >= 5.0:
+		return color.RGBA{244, 208, 11, 255} // yellow for average ratings
+	default:
+		return color.RGBA{214, 74, 70, 255} // red for poor ratings
 	}
 }
 
@@ -6250,7 +6259,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 		}
 
-		header := canvas.NewText(i18n.T("tela.ratings_header"), colors.Gray)
+		header := canvas.NewText(i18n.T("tela.ratings_header"), apptheme.C.Gray)
 		header.TextSize = scaleFont(16)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
@@ -6259,11 +6268,11 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			name = fmt.Sprintf("%s...", name[0:30])
 		}
 
-		nameHdr := canvas.NewText(name, colors.Account)
+		nameHdr := canvas.NewText(name, apptheme.C.Account)
 		nameHdr.Alignment = fyne.TextAlignCenter
 		nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
-		labelSCID := canvas.NewText(i18n.T("assets.scid"), colors.Gray)
+		labelSCID := canvas.NewText(i18n.T("assets.scid"), apptheme.C.Gray)
 		labelSCID.TextSize = 14
 		labelSCID.Alignment = fyne.TextAlignLeading
 		labelSCID.TextStyle = fyne.TextStyle{Bold: true}
@@ -6289,9 +6298,9 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 
 		overlay := session.Window.Canvas().Overlays()
 
-		ratingsBox.Add(container.NewHBox(textLikes, canvas.NewText(fmt.Sprintf("%d", ratings.Likes), colors.Green)))
-		ratingsBox.Add(container.NewHBox(textDislikes, canvas.NewText(fmt.Sprintf("%d", ratings.Dislikes), colors.Red)))
-		ratingsBox.Add(container.NewHBox(textAverage, canvas.NewText(fmt.Sprintf("%0.1f/10", ratings.Average), colors.Account)))
+		ratingsBox.Add(container.NewHBox(textLikes, canvas.NewText(fmt.Sprintf("%d", ratings.Likes), color.RGBA{19, 202, 105, 255})))
+		ratingsBox.Add(container.NewHBox(textDislikes, canvas.NewText(fmt.Sprintf("%d", ratings.Dislikes), apptheme.C.Red)))
+		ratingsBox.Add(container.NewHBox(textAverage, canvas.NewText(fmt.Sprintf("%0.1f/10", ratings.Average), telaAverageColor(ratings.Average))))
 
 		linkRate := widget.NewHyperlinkWithStyle(i18n.T("tela.rate_scid"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 		linkRate.OnTapped = func() {
@@ -6341,7 +6350,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 			userRatingsBox.Add(
 				container.NewVBox(
 					labelAddress,
-					container.NewHBox(widget.NewRichTextFromMarkdown(i18n.T("tela.height_label")), canvas.NewText(fmt.Sprintf("%d", r.Height), colors.Account)),
+					container.NewHBox(widget.NewRichTextFromMarkdown(i18n.T("tela.height_label")), canvas.NewText(fmt.Sprintf("%d", r.Height), apptheme.C.Account)),
 					container.NewHBox(widget.NewRichTextFromMarkdown(i18n.T("tela.rating_label")), canvas.NewText(fmt.Sprintf("%d", r.Rating), telaRatingColor(r.Rating))),
 					widget.NewRichTextFromMarkdown(ratingString),
 					labelSeparator,
@@ -6413,7 +6422,7 @@ func viewTELARatingsOverlay(name, scid string) (err error) {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -6446,7 +6455,7 @@ func rateTELAOverlay(name, scid string) {
 		rectSpacer.SetMinSize(fyne.NewSize(scaleSize(6), scaleSize(2)))
 	}
 
-	header := canvas.NewText(i18n.T("tela.rate_app_header"), colors.Gray)
+	header := canvas.NewText(i18n.T("tela.rate_app_header"), apptheme.C.Gray)
 	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -6458,7 +6467,7 @@ func rateTELAOverlay(name, scid string) {
 		name = fmt.Sprintf("%s...", name[0:30])
 	}
 
-	nameHdr := canvas.NewText(name, colors.Account)
+	nameHdr := canvas.NewText(name, apptheme.C.Account)
 	nameHdr.Alignment = fyne.TextAlignCenter
 	nameHdr.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -6469,12 +6478,12 @@ func rateTELAOverlay(name, scid string) {
 	ratingSlider.Step = 1
 	ratingSlider.SetValue(5)
 
-	ratingHeader := canvas.NewText(i18n.T("tela.rating_category"), colors.Account)
+	ratingHeader := canvas.NewText(i18n.T("tela.rating_category"), apptheme.C.Account)
 	ratingHeader.TextSize = scaleFont(18)
 	ratingHeader.Alignment = fyne.TextAlignCenter
 	ratingHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-	ratingDesc := canvas.NewText("5 - Good", colors.Gray)
+	ratingDesc := canvas.NewText("5 - Good", apptheme.C.Gray)
 	ratingDesc.TextSize = scaleFont(14)
 	ratingDesc.Alignment = fyne.TextAlignCenter
 
@@ -6482,16 +6491,16 @@ func rateTELAOverlay(name, scid string) {
 	detailSlider.Step = 1
 	detailSlider.SetValue(5)
 
-	detailHeader := canvas.NewText(i18n.T("tela.rating_detail"), colors.Account)
+	detailHeader := canvas.NewText(i18n.T("tela.rating_detail"), apptheme.C.Account)
 	detailHeader.TextSize = scaleFont(18)
 	detailHeader.Alignment = fyne.TextAlignCenter
 	detailHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-	detailDesc := canvas.NewText("5 - Solid", colors.Gray)
+	detailDesc := canvas.NewText("5 - Solid", apptheme.C.Gray)
 	detailDesc.TextSize = scaleFont(14)
 	detailDesc.Alignment = fyne.TextAlignCenter
 
-	labelRatingAverage := canvas.NewText("5.5", colors.Account)
+	labelRatingAverage := canvas.NewText("5.5", apptheme.C.Account)
 	labelRatingAverage.TextSize = scaleFont(24)
 	labelRatingAverage.Alignment = fyne.TextAlignCenter
 	labelRatingAverage.TextStyle = fyne.TextStyle{Bold: true}
@@ -6506,7 +6515,7 @@ func rateTELAOverlay(name, scid string) {
 		),
 	)
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -6529,7 +6538,7 @@ func rateTELAOverlay(name, scid string) {
 			}
 			if ratingStore != nil {
 				errorText.Text = i18n.T("tela.already_rated")
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -6538,7 +6547,7 @@ func rateTELAOverlay(name, scid string) {
 		category := int(ratingSlider.Value)
 		if category < 0 {
 			errorText.Text = i18n.T("tela.select_rating")
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		}
@@ -6553,7 +6562,7 @@ func rateTELAOverlay(name, scid string) {
 				if err != nil {
 					logger.Errorf("[Engram] Rate TX: %s\n", err)
 					errorText.Text = i18n.T("tela.error_submitting_rating")
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					btnConfirm.Enable()
 					return
@@ -6561,7 +6570,7 @@ func rateTELAOverlay(name, scid string) {
 
 				logger.Printf("[Engram] Rate TXID: %s\n", txid)
 				errorText.Text = i18n.T("tela.rating_submitted")
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 			}
 		})
@@ -6625,6 +6634,7 @@ func rateTELAOverlay(name, scid string) {
 		ratingDesc.Refresh()
 		ratingFloat := float64((ratingVal*10)+int(detailSlider.Value)) / 10.0
 		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
+		labelRatingAverage.Color = telaAverageColor(ratingFloat)
 		labelRatingAverage.Refresh()
 		hexagonImg.Resource = telaHexagonColor(tela.Rating_Result{Average: ratingFloat})
 		hexagonImg.Refresh()
@@ -6638,6 +6648,7 @@ func rateTELAOverlay(name, scid string) {
 		detailDesc.Refresh()
 		ratingFloat := float64((ratingVal*10)+detailVal) / 10.0
 		labelRatingAverage.Text = fmt.Sprintf("%.1f", ratingFloat)
+		labelRatingAverage.Color = telaAverageColor(ratingFloat)
 		labelRatingAverage.Refresh()
 		hexagonImg.Resource = telaHexagonColor(tela.Rating_Result{Average: ratingFloat})
 		hexagonImg.Refresh()
@@ -6647,7 +6658,7 @@ func rateTELAOverlay(name, scid string) {
 	overlay.Add(
 		container.NewStack(
 			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		),
 	)
 
@@ -6764,12 +6775,12 @@ func toggleRPCServer(port string) {
 		remoteAccess.RPC.server.RPCServer_Stop()
 		remoteAccess.RPC.server = nil
 		remoteAccess.RPC.status.Text = "Blocked"
-		remoteAccess.RPC.status.Color = colors.Gray
+		remoteAccess.RPC.status.Color = apptheme.C.Gray
 		remoteAccess.RPC.status.Refresh()
 		remoteAccess.RPC.toggle.Text = "Turn On"
 		remoteAccess.RPC.toggle.Refresh()
-		status.RemoteAccess.FillColor = colors.Gray
-		status.RemoteAccess.StrokeColor = colors.Gray
+		status.RemoteAccess.FillColor = apptheme.C.Gray
+		status.RemoteAccess.StrokeColor = apptheme.C.Gray
 		status.RemoteAccess.Refresh()
 		remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
 		remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
@@ -6795,12 +6806,12 @@ func toggleRPCServer(port string) {
 		if err != nil {
 			remoteAccess.RPC.server = nil
 			remoteAccess.RPC.status.Text = "Blocked"
-			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.status.Color = apptheme.C.Gray
 			remoteAccess.RPC.status.Refresh()
 			remoteAccess.RPC.toggle.Text = "Turn On"
 			remoteAccess.RPC.toggle.Refresh()
-			status.RemoteAccess.FillColor = colors.Gray
-			status.RemoteAccess.StrokeColor = colors.Gray
+			status.RemoteAccess.FillColor = apptheme.C.Gray
+			status.RemoteAccess.StrokeColor = apptheme.C.Gray
 			status.RemoteAccess.Refresh()
 			remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
 			remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
@@ -6808,12 +6819,12 @@ func toggleRPCServer(port string) {
 			remoteAccess.RPC.passText.Enable()
 		} else {
 			remoteAccess.RPC.status.Text = "Allowed"
-			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.status.Color = apptheme.C.Green
 			remoteAccess.RPC.status.Refresh()
 			remoteAccess.RPC.toggle.Text = "Turn Off"
 			remoteAccess.RPC.toggle.Refresh()
-			status.RemoteAccess.FillColor = colors.Green
-			status.RemoteAccess.StrokeColor = colors.Green
+			status.RemoteAccess.FillColor = color.RGBA{19, 202, 105, 255}
+			status.RemoteAccess.StrokeColor = color.RGBA{19, 202, 105, 255}
 			status.RemoteAccess.Refresh()
 			remoteAccess.RPC.userText.Text = remoteAccess.RPC.user
 			remoteAccess.RPC.passText.Text = remoteAccess.RPC.pass
@@ -7330,7 +7341,7 @@ func showXSWDPrompt() bool {
 	allowed := false
 	done := make(chan struct{})
 
-	header := canvas.NewText(i18n.T("tela.app_connections_prompt"), colors.Gray)
+	header := canvas.NewText(i18n.T("tela.app_connections_prompt"), apptheme.C.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -7390,7 +7401,7 @@ func showXSWDPrompt() bool {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 		overlay.Add(
@@ -7847,7 +7858,7 @@ func toggleXSWD(endpoint string) {
 		uiDo(func() {
 			if remoteAccess.WS.status != nil {
 				remoteAccess.WS.status.Text = "Blocked"
-				remoteAccess.WS.status.Color = colors.Gray
+				remoteAccess.WS.status.Color = apptheme.C.Gray
 				remoteAccess.WS.status.Refresh()
 			}
 			if remoteAccess.WS.toggle != nil {
@@ -7855,8 +7866,8 @@ func toggleXSWD(endpoint string) {
 				remoteAccess.WS.toggle.Refresh()
 			}
 			if status.RemoteAccess != nil {
-				status.RemoteAccess.FillColor = colors.Gray
-				status.RemoteAccess.StrokeColor = colors.Gray
+				status.RemoteAccess.FillColor = apptheme.C.Gray
+				status.RemoteAccess.StrokeColor = apptheme.C.Gray
 				status.RemoteAccess.Refresh()
 			}
 		})
@@ -7965,7 +7976,7 @@ func toggleXSWD(endpoint string) {
 				uiDo(func() {
 					if remoteAccess.WS.status != nil {
 						remoteAccess.WS.status.Text = "Allowed"
-						remoteAccess.WS.status.Color = colors.Green
+						remoteAccess.WS.status.Color = apptheme.C.Green
 						remoteAccess.WS.status.Refresh()
 					}
 					if remoteAccess.WS.toggle != nil {
@@ -7978,8 +7989,8 @@ func toggleXSWD(endpoint string) {
 						remoteAccess.WS.portText.Refresh()
 					}
 					if status.RemoteAccess != nil {
-						status.RemoteAccess.FillColor = colors.Green
-						status.RemoteAccess.StrokeColor = colors.Green
+						status.RemoteAccess.FillColor = color.RGBA{19, 202, 105, 255}
+						status.RemoteAccess.StrokeColor = color.RGBA{19, 202, 105, 255}
 						status.RemoteAccess.Refresh()
 					}
 				})
@@ -8048,12 +8059,12 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	headerText := i18n.T("xswd.new_connection_request")
 
-	header := canvas.NewText(headerText, colors.Gray)
+	header := canvas.NewText(headerText, apptheme.C.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText(i18n.T("xswd.connection_app_name"), colors.Gray)
+	labelApp := canvas.NewText(i18n.T("xswd.connection_app_name"), apptheme.C.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -8061,7 +8072,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelID := canvas.NewText(i18n.T("xswd.connection_app_id"), colors.Gray)
+	labelID := canvas.NewText(i18n.T("xswd.connection_app_id"), apptheme.C.Gray)
 	labelID.TextSize = 14
 	labelID.Alignment = fyne.TextAlignLeading
 	labelID.TextStyle = fyne.TextStyle{Bold: true}
@@ -8069,7 +8080,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textID := widget.NewRichTextFromMarkdown(ad.Id)
 	textID.Wrapping = fyne.TextWrapWord
 
-	labelURL := canvas.NewText(i18n.T("xswd.connection_url"), colors.Gray)
+	labelURL := canvas.NewText(i18n.T("xswd.connection_url"), apptheme.C.Gray)
 	labelURL.TextSize = 14
 	labelURL.Alignment = fyne.TextAlignLeading
 	labelURL.TextStyle = fyne.TextStyle{Bold: true}
@@ -8077,7 +8088,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	textURL := widget.NewRichTextFromMarkdown(ad.Url)
 	textURL.Wrapping = fyne.TextWrapWord
 
-	labelPermissions := canvas.NewText(i18n.T("xswd.connection_permissions"), colors.Gray)
+	labelPermissions := canvas.NewText(i18n.T("xswd.connection_permissions"), apptheme.C.Gray)
 	labelPermissions.TextSize = 14
 	labelPermissions.Alignment = fyne.TextAlignLeading
 	labelPermissions.TextStyle = fyne.TextStyle{Bold: true}
@@ -8097,18 +8108,18 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	for _, k := range methods {
 		perm := ad.Permissions[k]
-		permColor := colors.Account
+		permColor := apptheme.C.Account
 		switch perm {
 		case xswd.AlwaysAllow:
-			permColor = colors.Green
+			permColor = apptheme.C.Green
 		case xswd.AlwaysDeny:
-			permColor = colors.Red
+			permColor = apptheme.C.Red
 		}
 
 		textMethod := widget.NewRichTextFromMarkdown("### " + k)
 		textMethod.Wrapping = fyne.TextWrapWord
 
-		sep := canvas.NewRectangle(colors.Gray)
+		sep := canvas.NewRectangle(apptheme.C.Gray)
 		sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
 
 		permText := perm.String()
@@ -8150,7 +8161,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		permForm.Add(textSpacer)
 	}
 
-	labelEvents := canvas.NewText(i18n.T("xswd.connection_events"), colors.Gray)
+	labelEvents := canvas.NewText(i18n.T("xswd.connection_events"), apptheme.C.Gray)
 	labelEvents.TextSize = 14
 	labelEvents.Alignment = fyne.TextAlignLeading
 	labelEvents.TextStyle = fyne.TextStyle{Bold: true}
@@ -8159,15 +8170,15 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	// Get registered events from xswd.ApplicationData and create event objects
 	for name, b := range ad.RegisteredEvents {
-		eventColor := colors.Red
+		eventColor := apptheme.C.Red
 		if b {
-			eventColor = colors.Green
+			eventColor = apptheme.C.Green
 		}
 
 		textEvent := widget.NewRichTextFromMarkdown(fmt.Sprintf("### %s", name))
 		textEvent.Wrapping = fyne.TextWrapWord
 
-		sep := canvas.NewRectangle(colors.Gray)
+		sep := canvas.NewRectangle(apptheme.C.Gray)
 		sep.SetMinSize(fyne.NewSize(ui.Width*0.5, 2))
 
 		add := container.NewVBox(
@@ -8269,7 +8280,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -8471,12 +8482,12 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	headerText := i18n.T("xswd.new_permission_request")
 
-	header := canvas.NewText(headerText, colors.Gray)
+	header := canvas.NewText(headerText, apptheme.C.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText(i18n.T("xswd.from"), colors.Gray)
+	labelApp := canvas.NewText(i18n.T("xswd.from"), apptheme.C.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -8484,7 +8495,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelRequest := canvas.NewText(i18n.T("xswd.requesting"), colors.Gray)
+	labelRequest := canvas.NewText(i18n.T("xswd.requesting"), apptheme.C.Gray)
 	labelRequest.TextSize = 14
 	labelRequest.Alignment = fyne.TextAlignLeading
 	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
@@ -8492,7 +8503,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	textRequest := widget.NewRichTextFromMarkdown("### " + method)
 	textRequest.Wrapping = fyne.TextWrapWord
 
-	labelParams := canvas.NewText(i18n.T("xswd.parameters"), colors.Gray)
+	labelParams := canvas.NewText(i18n.T("xswd.parameters"), apptheme.C.Gray)
 	labelParams.TextSize = 14
 	labelParams.Alignment = fyne.TextAlignLeading
 	labelParams.TextStyle = fyne.TextStyle{Bold: true}
@@ -8634,7 +8645,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -8723,12 +8734,12 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 
 	headerText := "EPOCH  REQUEST"
 
-	header := canvas.NewText(headerText, colors.Gray)
+	header := canvas.NewText(headerText, apptheme.C.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp := canvas.NewText("FROM", apptheme.C.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -8736,7 +8747,7 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	textApp := widget.NewRichTextFromMarkdown("### " + ad.Name)
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelRequest := canvas.NewText("REQUESTING", colors.Gray)
+	labelRequest := canvas.NewText("REQUESTING", apptheme.C.Gray)
 	labelRequest.TextSize = 14
 	labelRequest.Alignment = fyne.TextAlignLeading
 	labelRequest.TextStyle = fyne.TextStyle{Bold: true}
@@ -8747,7 +8758,7 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	infoText := widget.NewLabel("This app needs EPOCH (Proof-of-Work) to interact with your wallet.\nEPOCH allows the app to perform mining operations.")
 	infoText.Wrapping = fyne.TextWrapWord
 
-	labelMiningAddr := canvas.NewText("Mining address:", colors.Gray)
+	labelMiningAddr := canvas.NewText("Mining address:", apptheme.C.Gray)
 	labelMiningAddr.TextSize = 12
 	labelMiningAddr.Alignment = fyne.TextAlignLeading
 
@@ -8843,7 +8854,7 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	overlay.Add(
 		container.NewStack(
 			&iframe{},
-			canvas.NewRectangle(colors.DarkMatter),
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		),
 	)
 
@@ -9017,12 +9028,12 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 
 	overlay := session.Window.Canvas().Overlays()
 
-	header := canvas.NewText(headerText, colors.Gray)
+	header := canvas.NewText(headerText, apptheme.C.Gray)
 	header.TextSize = 16
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelApp := canvas.NewText("FROM", colors.Gray)
+	labelApp := canvas.NewText("FROM", apptheme.C.Gray)
 	labelApp.TextSize = 14
 	labelApp.Alignment = fyne.TextAlignLeading
 	labelApp.TextStyle = fyne.TextStyle{Bold: true}
@@ -9030,7 +9041,7 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 	textApp := widget.NewRichTextFromMarkdown("### Engram")
 	textApp.Wrapping = fyne.TextWrapWord
 
-	labelParams := canvas.NewText("PARAMETERS", colors.Gray)
+	labelParams := canvas.NewText("PARAMETERS", apptheme.C.Gray)
 	labelParams.TextSize = 14
 	labelParams.Alignment = fyne.TextAlignLeading
 	labelParams.TextStyle = fyne.TextStyle{Bold: true}
@@ -9095,7 +9106,7 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 	})
@@ -9718,14 +9729,14 @@ const (
 // showFormError displays an error message on a canvas.Text element
 func showFormError(text *canvas.Text, msg string) {
 	text.Text = msg
-	text.Color = colors.Red
+	text.Color = apptheme.C.Red
 	text.Refresh()
 }
 
 // showFormSuccess displays a success message on a canvas.Text element
 func showFormSuccess(text *canvas.Text, msg string) {
 	text.Text = msg
-	text.Color = colors.Green
+	text.Color = apptheme.C.Green
 	text.Refresh()
 }
 
@@ -9817,13 +9828,13 @@ func getPasswordStrengthText(strength PasswordStrength) string {
 func getPasswordStrengthColor(strength PasswordStrength) color.Color {
 	switch strength {
 	case PasswordStrong:
-		return colors.Green
+		return apptheme.C.Green
 	case PasswordGood:
-		return colors.Green
+		return apptheme.C.Green
 	case PasswordFair:
-		return colors.Yellow
+		return apptheme.C.Yellow
 	default:
-		return colors.Red
+		return apptheme.C.Red
 	}
 }
 

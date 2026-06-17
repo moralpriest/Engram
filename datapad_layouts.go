@@ -31,6 +31,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/graviton"
 )
@@ -38,7 +39,7 @@ import (
 func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
 
-	title := canvas.NewText(i18n.T("datapad.heading"), colors.Gray)
+	title := canvas.NewText(i18n.T("datapad.heading"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -127,7 +128,7 @@ func layoutDatapad() fyne.CanvasObject {
 		}
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -136,7 +137,7 @@ func layoutDatapad() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -225,7 +226,7 @@ func layoutDatapad() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 		overlay.Add(
@@ -284,7 +285,7 @@ func layoutPad() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	heading := canvas.NewText(session.Datapad, colors.Gray)
+	heading := canvas.NewText(session.Datapad, apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -312,7 +313,7 @@ func layoutPad() fyne.CanvasObject {
 	entryPad := widget.NewEntry()
 	entryPad.Wrapping = fyne.TextWrapWord
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -321,12 +322,12 @@ func layoutPad() fyne.CanvasObject {
 		errorText.Refresh()
 
 		if action == "clear" {
-			header := canvas.NewText(i18n.T("datapad.clear_request"), colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.clear_request"), apptheme.C.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText(i18n.T("datapad.clear_prompt"), colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.clear_prompt"), apptheme.C.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -354,7 +355,7 @@ func layoutPad() fyne.CanvasObject {
 				}
 
 				errorText.Text = i18n.T("datapad.status_cleared")
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 
 				overlay := session.Window.Canvas().Overlays()
@@ -369,7 +370,7 @@ func layoutPad() fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 
@@ -405,7 +406,7 @@ func layoutPad() fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] File dialog: %s\n", err)
 					errorText.Text = "could not export datapad"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -419,13 +420,13 @@ func layoutPad() fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Exporting datapad %s: %s\n", session.Datapad, err)
 					errorText.Text = "error exporting datapad"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
 
 				errorText.Text = "exported datapad successfully"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 
 			}, session.Window)
@@ -450,7 +451,7 @@ func layoutPad() fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] File dialog: %s\n", err)
 					errorText.Text = "could not import file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -463,7 +464,7 @@ func layoutPad() fyne.CanvasObject {
 				if !strings.Contains(uri.URI().MimeType(), "text/") {
 					logger.Errorf("[Engram] Cannot import file %s\n", fileName)
 					errorText.Text = "cannot import file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -478,14 +479,14 @@ func layoutPad() fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
 					errorText.Text = "cannot read file data"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
 
 				if !isASCII(string(filedata)) {
 					errorText.Text = "invalid file data"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -497,7 +498,7 @@ func layoutPad() fyne.CanvasObject {
 				}
 
 				errorText.Text = "file data imported successfully"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 
 			}, session.Window)
@@ -517,12 +518,12 @@ func layoutPad() fyne.CanvasObject {
 			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileImport.Show()
 		} else if action == "delete" {
-			header := canvas.NewText(i18n.T("datapad.delete_request"), colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.delete_request"), apptheme.C.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText(i18n.T("datapad.delete_prompt"), colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.delete_prompt"), apptheme.C.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -558,7 +559,7 @@ func layoutPad() fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 
@@ -597,7 +598,7 @@ func layoutPad() fyne.CanvasObject {
 		if err != nil {
 			btnSave.Disable()
 			errorText.Text = "-  FAILED  -"
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 		} else {
 			session.DatapadChanged = false
@@ -605,7 +606,7 @@ func layoutPad() fyne.CanvasObject {
 			heading.Text = session.Datapad
 			heading.Refresh()
 			errorText.Text = "-  SAVED  -"
-			errorText.Color = colors.Green
+			errorText.Color = apptheme.C.Green
 			errorText.Refresh()
 		}
 	}
@@ -625,7 +626,7 @@ func layoutPad() fyne.CanvasObject {
 		btnSave.Enable()
 	}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -634,7 +635,7 @@ func layoutPad() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -647,12 +648,12 @@ func layoutPad() fyne.CanvasObject {
 
 	linkBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		if session.DatapadChanged {
-			header := canvas.NewText(i18n.T("datapad.change_detected"), colors.Gray)
+			header := canvas.NewText(i18n.T("datapad.change_detected"), apptheme.C.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText(i18n.T("datapad.save_prompt"), colors.Account)
+			subHeader := canvas.NewText(i18n.T("datapad.save_prompt"), apptheme.C.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -671,7 +672,7 @@ func layoutPad() fyne.CanvasObject {
 				if err != nil {
 					btnSave.Disable()
 					errorText.Text = i18n.T("datapad.err_save")
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					overlay.Remove(overlay.Top())
 					overlay.Remove(overlay.Top())
@@ -688,7 +689,7 @@ func layoutPad() fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 

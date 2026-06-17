@@ -142,6 +142,8 @@ var stringsFR = map[string]string{
 	"settings.export_debug":                          "Exporter journal debug",
 	"settings.language_section":                      "LANGUE",
 	"settings.language_label":                        "Langue de l'application",
+	"settings.theme_section":                         "THÈMES",
+	"settings.theme_label":                           "Choisir le thème",
 	"settings.language_desc":                         "Choisissez la langue d'affichage de l'application.",
 	"settings.global_permissions_heading":            "A U T O R I S A T I O N S   G L O B A L E S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

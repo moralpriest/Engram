@@ -23,6 +23,9 @@ coverage.html
 # Build artifacts
 vendor/
 
+# Backup files
+*.bak
+
 # Root patterns to prevent accidental re-tracking
 .lean-ctx/
 .opencode/

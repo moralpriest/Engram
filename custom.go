@@ -26,21 +26,11 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 var appDriver fyne.Device
-
-type tintTheme struct {
-	fyne.Theme
-	iconColor color.Color
-}
-
-func (t *tintTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
-	if name == theme.ColorNameForeground {
-		return t.iconColor
-	}
-	return t.Theme.Color(name, variant)
-}
 
 type returnEntry struct {
 	widget.Entry
@@ -394,17 +384,23 @@ func (b *hoverButton) MouseOut() {
 }
 
 func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
-	return newIconLabelButtonWithColor(label, icon, colors.Green, color.White, onTap, width...)
+	var iconColor color.Color
+	if apptheme.ThemeMode == apptheme.ThemeDerotopia {
+		iconColor = color.RGBA{56, 182, 255, 255} // blue for Derotopia
+	} else {
+		iconColor = color.RGBA{19, 202, 105, 255} // green for Engram Classic
+	}
+	return newIconLabelButtonWithColor(label, icon, iconColor, color.White, onTap, width...)
 }
 
 func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, hoverIconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImgNormal := widget.NewIcon(icon)
 	iconSizerNormal := container.NewGridWrap(scalePoint(28, 28), iconImgNormal)
-	themedIconNormal := container.NewThemeOverride(iconSizerNormal, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+	themedIconNormal := container.NewThemeOverride(iconSizerNormal, apptheme.NewTintTheme(apptheme.Main, iconColor))
 
 	iconImgHover := widget.NewIcon(icon)
 	iconSizerHover := container.NewGridWrap(scalePoint(28, 28), iconImgHover)
-	themedIconHover := container.NewThemeOverride(iconSizerHover, &tintTheme{Theme: theme.Current(), iconColor: hoverIconColor})
+	themedIconHover := container.NewThemeOverride(iconSizerHover, apptheme.NewTintTheme(apptheme.Main, hoverIconColor))
 	themedIconHover.Hide()
 
 	iconStack := container.NewStack(themedIconNormal, themedIconHover)
@@ -449,7 +445,7 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImg := widget.NewIcon(icon)
 	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
-	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+	themedIcon := container.NewThemeOverride(iconSizer, apptheme.NewTintTheme(theme.Current(), iconColor))
 
 	labelText := canvas.NewText(label, color.White)
 	labelText.TextSize = scaleFont(15)
@@ -487,7 +483,7 @@ func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color
 func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImg := widget.NewIcon(icon)
 	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
-	themedIcon := container.NewThemeOverride(iconSizer, &tintTheme{Theme: theme.Current(), iconColor: iconColor})
+	themedIcon := container.NewThemeOverride(iconSizer, apptheme.NewTintTheme(theme.Current(), iconColor))
 
 	labelText := canvas.NewText(label, color.White)
 	labelText.TextSize = scaleFont(15)
@@ -588,7 +584,7 @@ type slimProgressBar struct {
 
 func NewSlimProgressBar() *slimProgressBar {
 	bar := &slimProgressBar{height: scaleSize(6)}
-	bar.label = canvas.NewText("0%", colors.Gray)
+	bar.label = canvas.NewText("0%", apptheme.C.Gray)
 	bar.label.TextSize = scaleFont(11)
 	bar.label.Alignment = fyne.TextAlignTrailing
 	bar.ExtendBaseWidget(bar)
@@ -618,7 +614,7 @@ func (s *slimProgressBar) SetValue(value float64) {
 func (s *slimProgressBar) CreateRenderer() fyne.WidgetRenderer {
 	track := canvas.NewRectangle(color.NRGBA{R: 36, G: 38, B: 44, A: 0xff})
 	track.CornerRadius = s.height / 2
-	fill := canvas.NewRectangle(colors.Green)
+	fill := canvas.NewRectangle(apptheme.C.Green)
 	fill.CornerRadius = s.height / 2
 	barWrap := container.NewStack(track, fill)
 	objects := []fyne.CanvasObject{barWrap, s.label}
@@ -677,11 +673,11 @@ func (r *slimProgressBarRenderer) MinSize() fyne.Size {
 
 func (r *slimProgressBarRenderer) Refresh() {
 	r.track.FillColor = color.NRGBA{R: 36, G: 38, B: 44, A: 0xff}
-	r.fill.FillColor = colors.Green
+	r.fill.FillColor = apptheme.C.Green
 	r.track.CornerRadius = r.bar.height / 2
 	r.fill.CornerRadius = r.bar.height / 2
 	r.bar.label.Text = fmt.Sprintf("%d%%", int(r.bar.value*100+0.5))
-	r.bar.label.Color = colors.Gray
+	r.bar.label.Color = apptheme.C.Gray
 	r.bar.label.Refresh()
 	r.Layout(r.bar.Size())
 	canvas.Refresh(r.track)

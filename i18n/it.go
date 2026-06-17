@@ -142,6 +142,8 @@ var stringsIT = map[string]string{
 	"settings.export_debug":                          "Esporta Log Debug",
 	"settings.language_section":                      "LINGUA",
 	"settings.language_label":                        "Lingua App",
+	"settings.theme_section":                         "TEMI",
+	"settings.theme_label":                           "Seleziona tema",
 	"settings.language_desc":                         "Scegli la lingua per l'applicazione.",
 	"settings.global_permissions_heading":            "P E R M E S S I   G L O B A L I",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

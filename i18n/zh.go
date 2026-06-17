@@ -137,6 +137,8 @@ var stringsZH = map[string]string{
 	"settings.export_debug":                          "导出调试日志",
 	"settings.language_section":                      "语 言",
 	"settings.language_label":                        "应用语言",
+	"settings.theme_section":                         "主题",
+	"settings.theme_label":                           "选择主题",
 	"settings.language_desc":                         "选择应用程序的显示语言。",
 	"settings.global_permissions_heading":            "全 局 权 限",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

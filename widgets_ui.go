@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 // walletBtn is a custom tappable button for wallet selection with colored background
@@ -27,8 +28,8 @@ type walletBtn struct {
 
 func newWalletBtn(label string, onTap func()) *walletBtn {
 	w := &walletBtn{
-		BgColor:  colors.DarkMatter,
-		TxtColor: colors.Gray,
+		BgColor:  apptheme.C.DarkMatter,
+		TxtColor: apptheme.C.Gray,
 		Label:    label,
 		onTapped: onTap,
 	}
@@ -113,7 +114,7 @@ func pulseButton(rect *canvas.Rectangle, done chan struct{}) {
 	}
 
 	originalColor := rect.StrokeColor
-	green := colors.Green
+	green := apptheme.C.Green
 
 	anim := canvas.NewColorRGBAAnimation(originalColor, green, 1000*time.Millisecond, func(c color.Color) {
 		rect.StrokeColor = c

@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -56,12 +57,12 @@ func layoutFileManager() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	heading := canvas.NewText(i18n.T("files.heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("files.heading"), apptheme.C.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelResults := canvas.NewText("   "+i18n.T("files.results"), colors.Gray)
+	labelResults := canvas.NewText("   "+i18n.T("files.results"), apptheme.C.Gray)
 	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
@@ -122,7 +123,7 @@ func layoutFileManager() fyne.CanvasObject {
 		},
 	)
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -130,7 +131,7 @@ func layoutFileManager() fyne.CanvasObject {
 		if err != nil {
 			logger.Errorf("[Engram] Open file dialog: %s\n", err)
 			errorText.Text = "could not open file"
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		}
@@ -149,7 +150,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Save file dialog: %s\n", err)
 						fyne.Do(func() {
 							errorText.Text = "could not open signed file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 
@@ -165,7 +166,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
 						fyne.Do(func() {
 							errorText.Text = "could not read file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 
@@ -177,7 +178,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
 						fyne.Do(func() {
 							errorText.Text = "could not write signed file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 
@@ -194,7 +195,7 @@ func layoutFileManager() fyne.CanvasObject {
 
 					fyne.Do(func() {
 						errorText.Text = "signed file successfully"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 
 						signedResults = append(signedResults, outputFile)
@@ -231,7 +232,7 @@ func layoutFileManager() fyne.CanvasObject {
 			fileName := uc.URI().Name()
 			if !strings.HasSuffix(fileName, ".signed") {
 				errorText.Text = "verifying requires a .signed file"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -240,7 +241,7 @@ func layoutFileManager() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", fileName, err)
 				errorText.Text = "could not read file"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -251,14 +252,14 @@ func layoutFileManager() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 				errorText.Text = "signature verification failed"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
 			logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
 
 			errorText.Text = "verified file successfully"
-			errorText.Color = colors.Green
+			errorText.Color = apptheme.C.Green
 			errorText.Refresh()
 
 			verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
@@ -303,29 +304,29 @@ func layoutFileManager() fyne.CanvasObject {
 			rectSpan := canvas.NewRectangle(color.Transparent)
 			rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
-			header := canvas.NewText(i18n.T("files.signature_detail"), colors.Gray)
+			header := canvas.NewText(i18n.T("files.signature_detail"), apptheme.C.Gray)
 			header.TextSize = scaleFont(16)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			labelStatus := canvas.NewText(i18n.T("files.verification_status"), colors.Gray)
+			labelStatus := canvas.NewText(i18n.T("files.verification_status"), apptheme.C.Gray)
 			labelStatus.TextSize = scaleFont(12)
 			labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 			labelStatus.Alignment = fyne.TextAlignCenter
 
-			valueStatus := canvas.NewText(i18n.T("files.verified"), colors.Green)
+			valueStatus := canvas.NewText(i18n.T("files.verified"), apptheme.C.Green)
 			valueStatus.TextSize = scaleFont(22)
 			valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 			valueStatus.Alignment = fyne.TextAlignCenter
 
-			labelFilename := canvas.NewText(i18n.T("files.filename"), colors.Gray)
+			labelFilename := canvas.NewText(i18n.T("files.filename"), apptheme.C.Gray)
 			labelFilename.TextSize = scaleFont(14)
 			labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 			valueFilename := widget.NewRichTextFromMarkdown(filename)
 			valueFilename.Wrapping = fyne.TextWrapBreak
 
-			labelSigner := canvas.NewText(i18n.T("files.signer_address"), colors.Gray)
+			labelSigner := canvas.NewText(i18n.T("files.signer_address"), apptheme.C.Gray)
 			labelSigner.TextSize = scaleFont(14)
 			labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -353,7 +354,7 @@ func layoutFileManager() fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 			overlay.Add(
@@ -428,7 +429,7 @@ func layoutFileManager() fyne.CanvasObject {
 		dialogBrowse.Show()
 	}
 
-	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), apptheme.C.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
@@ -436,7 +437,7 @@ func layoutFileManager() fyne.CanvasObject {
 	entryAddress := widget.NewEntry()
 	entryAddress.PlaceHolder = "Username or Address"
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -445,7 +446,7 @@ func layoutFileManager() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -493,7 +494,7 @@ func layoutFileManager() fyne.CanvasObject {
 			if a.Driver().Device().IsMobile() {
 				if len(files) > 1 {
 					errorText.Text = "single file only"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -505,7 +506,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] File dialog: %s\n", err)
 						uiDo(func() {
 							errorText.Text = "could not open signed file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 						return
@@ -520,7 +521,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Cannot create reader for %s: %s\n", inputFileName, err)
 						uiDo(func() {
 							errorText.Text = "could not access file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 						return
@@ -531,7 +532,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
 						uiDo(func() {
 							errorText.Text = "could not read file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 						return
@@ -542,7 +543,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
 						uiDo(func() {
 							errorText.Text = "could not write signed file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 						})
 						return
@@ -555,7 +556,7 @@ func layoutFileManager() fyne.CanvasObject {
 
 					uiDo(func() {
 						errorText.Text = "signed file successfully"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 
 						signedResults = append(signedResults, outputFile)
@@ -586,7 +587,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if err != nil {
 						logger.Errorf("[Engram] Cannot create reader for %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("could not access file %d", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						continue
 					}
@@ -595,7 +596,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if err != nil {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("could not read file %d", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						continue
 					}
@@ -605,7 +606,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if err := os.WriteFile(outputfile, engram.Disk.SignData(filedata), 0600); err != nil {
 						logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("cannot sign file %d", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 					} else {
 						logger.Printf("[Engram] Successfully signed file: %s\n", outputfile)
@@ -627,7 +628,7 @@ func layoutFileManager() fyne.CanvasObject {
 						fileName := uc.URI().Name()
 						if filepath.Ext(fileName) != ".signed" {
 							errorText.Text = "requires a .signed file"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 							return
 						}
@@ -636,7 +637,7 @@ func layoutFileManager() fyne.CanvasObject {
 						if err != nil {
 							logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", fileName, err)
 							errorText.Text = "cannot read file data"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 							return
 						}
@@ -645,7 +646,7 @@ func layoutFileManager() fyne.CanvasObject {
 						if err != nil {
 							logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 							errorText.Text = "signature verification failed"
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 							return
 						}
@@ -653,7 +654,7 @@ func layoutFileManager() fyne.CanvasObject {
 						logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
 
 						errorText.Text = "verified file successfully"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 
 						verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
@@ -680,7 +681,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if err != nil {
 						logger.Errorf("[Engram] Cannot create reader for %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("could not access file %d", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						continue
 					}
@@ -689,7 +690,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if err != nil {
 						logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("could not read file %d", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						continue
 					}
@@ -699,7 +700,7 @@ func layoutFileManager() fyne.CanvasObject {
 					if signer, message, err := engram.Disk.CheckSignature(filedata); err != nil {
 						logger.Errorf("[Engram] Signature verification failed for %s: %s\n", inputFileName, err)
 						errorText.Text = fmt.Sprintf("signature verification %d failed", i)
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 					} else {
 						logger.Printf("[Engram] Signed by: %s\n", signer.String())
@@ -853,12 +854,12 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	heading := canvas.NewText(i18n.T("files.contract_builder"), colors.Gray)
+	heading := canvas.NewText(i18n.T("files.contract_builder"), apptheme.C.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	errorText := canvas.NewText(promptText, colors.Red)
+	errorText := canvas.NewText(promptText, apptheme.C.Red)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -870,14 +871,14 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 			if uc.URI().MimeType() != "text/plain" {
 				logger.Errorf("[Engram] Cannot open file %s in contract builder\n", filename)
 				errorText.Text = "cannot open file"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
 
 			if filepath.Ext(filename) != ".bas" {
 				errorText.Text = "requires a .bas file"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -886,14 +887,14 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", filename, err)
 				errorText.Text = "cannot read file data"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
 
 			if !isASCII(string(filedata)) {
 				errorText.Text = "invalid file data"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -935,12 +936,12 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		session.LastDomain = capture
 	}
 
-	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), apptheme.C.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -949,7 +950,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -980,14 +981,14 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 
 			if len(files) > 1 {
 				errorText.Text = "single .bas file only"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			} else {
 				uri, err := storage.Reader(files[0])
 				if err != nil {
 					errorText.Text = "could not read dropped file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -995,7 +996,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 				filename := files[0].Name()
 				if filepath.Ext(filename) != ".bas" {
 					errorText.Text = "requires a .bas file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -1004,7 +1005,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Cannot read file data for %s: %s\n", filename, err)
 					errorText.Text = "cannot read file data"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -1039,7 +1040,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Clone SC: %s\n", err)
 				errorText.Text = "cannot get contract for clone"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				session.Window.SetContent(layoutContractBuilder(errorText.Text))
 				return
@@ -1047,7 +1048,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 
 			if code == "" {
 				errorText.Text = "contract does not exists"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				session.Window.SetContent(layoutContractBuilder(errorText.Text))
 				return
@@ -1061,7 +1062,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 				errorText.Refresh()
 			} else {
 				errorText.Text = "not a valid scid"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 			}
 		}
@@ -1162,7 +1163,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(compactSpacerSize())
 
-	header := canvas.NewText(i18n.T("files.heading"), colors.Gray)
+	header := canvas.NewText(i18n.T("files.heading"), apptheme.C.Gray)
 	header.TextSize = scaleFont(16)
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -1183,7 +1184,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	})
 
 	// ==================== TAB 1: BROWSE FILES (File Manager) ====================
-	labelResults := canvas.NewText("   "+i18n.T("files.results"), colors.Gray)
+	labelResults := canvas.NewText("   "+i18n.T("files.results"), apptheme.C.Gray)
 	labelResults.TextSize = scaleFont(14)
 	labelResults.Alignment = fyne.TextAlignLeading
 	labelResults.TextStyle = fyne.TextStyle{Bold: true}
@@ -1244,7 +1245,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		},
 	)
 
-	browseErrorText := canvas.NewText(" ", colors.Green)
+	browseErrorText := canvas.NewText(" ", apptheme.C.Green)
 	browseErrorText.TextSize = scaleFont(12)
 	browseErrorText.Alignment = fyne.TextAlignCenter
 
@@ -1252,7 +1253,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		if err != nil {
 			logger.Errorf("[Engram] Open file dialog: %s\n", err)
 			browseErrorText.Text = "could not open file"
-			browseErrorText.Color = colors.Red
+			browseErrorText.Color = apptheme.C.Red
 			browseErrorText.Refresh()
 			return
 		}
@@ -1270,7 +1271,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 					logger.Errorf("[Engram] Save file dialog: %s\n", err)
 					uiDo(func() {
 						browseErrorText.Text = "could not open signed file"
-						browseErrorText.Color = colors.Red
+						browseErrorText.Color = apptheme.C.Red
 						browseErrorText.Refresh()
 					})
 
@@ -1286,7 +1287,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 					logger.Errorf("[Engram] Cannot read file data for %s: %s\n", inputFileName, err)
 					uiDo(func() {
 						browseErrorText.Text = "could not read file"
-						browseErrorText.Color = colors.Red
+						browseErrorText.Color = apptheme.C.Red
 						browseErrorText.Refresh()
 					})
 
@@ -1298,7 +1299,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 					logger.Errorf("[Engram] Cannot sign %s: %s\n", inputFileName, err)
 					uiDo(func() {
 						browseErrorText.Text = "could not write signed file"
-						browseErrorText.Color = colors.Red
+						browseErrorText.Color = apptheme.C.Red
 						browseErrorText.Refresh()
 					})
 
@@ -1314,7 +1315,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 				uiDo(func() {
 					browseErrorText.Text = "signed file successfully"
-					browseErrorText.Color = colors.Green
+					browseErrorText.Color = apptheme.C.Green
 					browseErrorText.Refresh()
 
 					signedResults = append(signedResults, outputFile)
@@ -1377,29 +1378,29 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		rectSpan := canvas.NewRectangle(color.Transparent)
 		rectSpan.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
 
-		detailHeader := canvas.NewText(i18n.T("files.signature_detail"), colors.Gray)
+		detailHeader := canvas.NewText(i18n.T("files.signature_detail"), apptheme.C.Gray)
 		detailHeader.TextSize = scaleFont(16)
 		detailHeader.Alignment = fyne.TextAlignCenter
 		detailHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		labelStatus := canvas.NewText(i18n.T("files.verification_status"), colors.Gray)
+		labelStatus := canvas.NewText(i18n.T("files.verification_status"), apptheme.C.Gray)
 		labelStatus.TextSize = scaleFont(12)
 		labelStatus.TextStyle = fyne.TextStyle{Bold: true}
 		labelStatus.Alignment = fyne.TextAlignCenter
 
-		valueStatus := canvas.NewText(i18n.T("files.verified"), colors.Green)
+		valueStatus := canvas.NewText(i18n.T("files.verified"), apptheme.C.Green)
 		valueStatus.TextSize = scaleFont(22)
 		valueStatus.TextStyle = fyne.TextStyle{Bold: true}
 		valueStatus.Alignment = fyne.TextAlignCenter
 
-		labelFilename := canvas.NewText(i18n.T("files.filename"), colors.Gray)
+		labelFilename := canvas.NewText(i18n.T("files.filename"), apptheme.C.Gray)
 		labelFilename.TextSize = scaleFont(14)
 		labelFilename.TextStyle = fyne.TextStyle{Bold: true}
 
 		valueFilename := widget.NewRichTextFromMarkdown(filename)
 		valueFilename.Wrapping = fyne.TextWrapBreak
 
-		labelSigner := canvas.NewText(i18n.T("files.signer_address"), colors.Gray)
+		labelSigner := canvas.NewText(i18n.T("files.signer_address"), apptheme.C.Gray)
 		labelSigner.TextSize = scaleFont(14)
 		labelSigner.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -1427,7 +1428,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 		overlay.Add(
@@ -1496,7 +1497,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Open file dialog: %s\n", err)
 				browseErrorText.Text = "could not open file"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
@@ -1508,7 +1509,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			fileName := uc.URI().Name()
 			if !strings.HasSuffix(fileName, ".signed") {
 				browseErrorText.Text = "verifying requires a .signed file"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
@@ -1517,7 +1518,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", fileName, err)
 				browseErrorText.Text = "could not read file"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
@@ -1527,14 +1528,14 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", fileName, err)
 				browseErrorText.Text = "signature verification failed"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
 			logger.Printf("[Engram] %s signed by: %s\n", fileName, signer.String())
 
 			browseErrorText.Text = "verified file successfully"
-			browseErrorText.Color = colors.Green
+			browseErrorText.Color = apptheme.C.Green
 			browseErrorText.Refresh()
 
 			verifiedResults = append(verifiedResults, fileName+";;;"+signer.String())
@@ -1583,7 +1584,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	)
 
 	// ==================== TAB 2: SMART CONTRACTS (Contract Builder) ====================
-	contractErrorText := canvas.NewText("", colors.Red)
+	contractErrorText := canvas.NewText("", apptheme.C.Red)
 	contractErrorText.TextSize = scaleFont(12)
 	contractErrorText.Alignment = fyne.TextAlignCenter
 
@@ -1594,14 +1595,14 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if uc.URI().MimeType() != "text/plain" {
 				logger.Errorf("[Engram] Cannot open file %s in contract builder\n", filename)
 				contractErrorText.Text = "cannot open file"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				return
 			}
 
 			if filepath.Ext(filename) != ".bas" {
 				contractErrorText.Text = "requires a .bas file"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				return
 			}
@@ -1610,14 +1611,14 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read URI file data for %s: %s\n", filename, err)
 				contractErrorText.Text = "cannot read file data"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				return
 			}
 
 			if !isASCII(string(filedata)) {
 				contractErrorText.Text = "invalid file data"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				return
 			}
@@ -1657,7 +1658,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		session.LastDomain = capture
 	}
 
-	labelAction := canvas.NewText(i18n.T("files.drag_drop"), colors.Gray)
+	labelAction := canvas.NewText(i18n.T("files.drag_drop"), apptheme.C.Gray)
 	labelAction.TextSize = scaleFont(12)
 	labelAction.Alignment = fyne.TextAlignLeading
 	labelAction.TextStyle = fyne.TextStyle{Bold: true}
@@ -1679,7 +1680,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Clone SC: %s\n", err)
 				contractErrorText.Text = "cannot get contract for clone"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				session.Window.SetContent(layoutFilesAndContracts())
 				return
@@ -1687,7 +1688,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 			if code == "" {
 				contractErrorText.Text = "contract does not exist"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 				session.Window.SetContent(layoutFilesAndContracts())
 				return
@@ -1701,7 +1702,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				contractErrorText.Refresh()
 			} else {
 				contractErrorText.Text = "not a valid scid"
-				contractErrorText.Color = colors.Red
+				contractErrorText.Color = apptheme.C.Red
 				contractErrorText.Refresh()
 			}
 		}
@@ -1745,7 +1746,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 		if len(files) > 1 {
 			browseErrorText.Text = "single file only"
-			browseErrorText.Color = colors.Red
+			browseErrorText.Color = apptheme.C.Red
 			browseErrorText.Refresh()
 			return
 		}
@@ -1753,7 +1754,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		uri, err := storage.Reader(files[0])
 		if err != nil {
 			browseErrorText.Text = "could not read dropped file"
-			browseErrorText.Color = colors.Red
+			browseErrorText.Color = apptheme.C.Red
 			browseErrorText.Refresh()
 			return
 		}
@@ -1767,7 +1768,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", filename, err)
 				browseErrorText.Text = "cannot read file data"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
@@ -1777,14 +1778,14 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Signature verification failed for %s: %s\n", filename, err)
 				browseErrorText.Text = "signature verification failed"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
 			logger.Printf("[Engram] %s signed by: %s\n", filename, signer.String())
 
 			browseErrorText.Text = "verified file successfully"
-			browseErrorText.Color = colors.Green
+			browseErrorText.Color = apptheme.C.Green
 			browseErrorText.Refresh()
 
 			verifiedResults = append(verifiedResults, filename+";;;"+signer.String())
@@ -1804,7 +1805,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Cannot read file data for %s: %s\n", filename, err)
 				browseErrorText.Text = "cannot read file data"
-				browseErrorText.Color = colors.Red
+				browseErrorText.Color = apptheme.C.Red
 				browseErrorText.Refresh()
 				return
 			}
@@ -1818,7 +1819,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			})
 		} else {
 			browseErrorText.Text = "unsupported file type"
-			browseErrorText.Color = colors.Red
+			browseErrorText.Color = apptheme.C.Red
 			browseErrorText.Refresh()
 		}
 	})
@@ -1888,26 +1889,26 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 	rectCode := canvas.NewRectangle(color.Transparent)
 	rectCode.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.35))
 
-	heading := canvas.NewText(i18n.T("files.contract_editor"), colors.Green)
+	heading := canvas.NewText(i18n.T("files.contract_editor"), apptheme.C.Green)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelHeaders := canvas.NewText(i18n.T("files.headers"), colors.Gray)
+	labelHeaders := canvas.NewText(i18n.T("files.headers"), apptheme.C.Gray)
 	labelHeaders.TextSize = scaleFont(14)
 	labelHeaders.Alignment = fyne.TextAlignLeading
 	labelHeaders.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelCode := canvas.NewText(i18n.T("files.code"), colors.Gray)
+	labelCode := canvas.NewText(i18n.T("files.code"), apptheme.C.Gray)
 	labelCode.TextSize = scaleFont(14)
 	labelCode.Alignment = fyne.TextAlignLeading
 	labelCode.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelCodeSize := canvas.NewText("(0.0KB) ", colors.Green)
+	labelCodeSize := canvas.NewText("(0.0KB) ", apptheme.C.Green)
 	labelCodeSize.TextSize = scaleFont(12)
 	labelCodeSize.Alignment = fyne.TextAlignTrailing
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -1952,7 +1953,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		if s == "" {
 			err = fmt.Errorf("enter a name")
 			errorText.Text = err.Error()
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		}
@@ -1970,7 +1971,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		if s == "" {
 			err = fmt.Errorf("enter icon URL")
 			errorText.Text = err.Error()
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		}
@@ -1989,7 +1990,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		if s == "" && entryUpdated {
 			err = fmt.Errorf("enter description")
 			errorText.Text = err.Error()
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		}
@@ -2014,14 +2015,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 		labelCodeSize.Text = fmt.Sprintf("(%.2fKB) ", size)
 		if size > 20 {
-			labelCodeSize.Color = colors.Red
+			labelCodeSize.Color = apptheme.C.Red
 			errorText.Text = "contract size is to large"
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 		} else if size > 18.5 {
-			labelCodeSize.Color = colors.Yellow
+			labelCodeSize.Color = apptheme.C.Yellow
 		} else {
-			labelCodeSize.Color = colors.Green
+			labelCodeSize.Color = apptheme.C.Green
 		}
 		labelCodeSize.Refresh()
 
@@ -2067,7 +2068,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		entryDescription,
 	)
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -2076,7 +2077,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -2125,7 +2126,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			if entryCode.Text == "" {
 				entryCode.SetText(dvmInitFuncExample())
 				errorText.Text = "new initialize function created"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 				return
 			}
@@ -2139,7 +2140,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 					if b {
 						entryCode.SetText(dvmInitFuncExample())
 						errorText.Text = "new initialize function created"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 					}
 				},
@@ -2161,7 +2162,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 			if !hasInitFunc {
 				errorText.Text = "no initialize function"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2173,7 +2174,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			}
 
 			errorText.Text = "new function added"
-			errorText.Color = colors.Green
+			errorText.Color = apptheme.C.Green
 			errorText.Refresh()
 		case "Import Function": // Import a function from an on-chain scid
 			var hasInitFunc bool
@@ -2207,12 +2208,12 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 			overlay := session.Window.Canvas().Overlays()
 
-			header := canvas.NewText(i18n.T("files.contract_editor"), colors.Gray)
+			header := canvas.NewText(i18n.T("files.contract_editor"), apptheme.C.Gray)
 			header.TextSize = scaleFont(14)
 			header.Alignment = fyne.TextAlignCenter
 			header.TextStyle = fyne.TextStyle{Bold: true}
 
-			subHeader := canvas.NewText(i18n.T("files.import_function"), colors.Account)
+			subHeader := canvas.NewText(i18n.T("files.import_function"), apptheme.C.Account)
 			subHeader.TextSize = scaleFont(22)
 			subHeader.Alignment = fyne.TextAlignCenter
 			subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -2230,7 +2231,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 
@@ -2255,7 +2256,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if !hasInitFunc {
 					if entryEntrypoint.Text != "InitializePrivate" && entryEntrypoint.Text != "Initialize" {
 						errorText.Text = "need initializing function first"
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						return
 					}
@@ -2265,14 +2266,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Editor import function error: %s\n", err)
 					errorText.Text = "cannot get contract for function import"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
 
 				if code == "" {
 					errorText.Text = "contract does not exists"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2282,7 +2283,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Editor import parsing error: %s %s\n", err, pos)
 					errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2299,7 +2300,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 				if tempSC.Functions[entrypoint].LineNumbers == nil {
 					errorText.Text = "function not found on scid"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2308,7 +2309,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Editor import formatting error: %s\n", err)
 					errorText.Text = "could not parse dvm to string"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2322,7 +2323,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				}
 
 				errorText.Text = "imported function successfully"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 			}
 
@@ -2370,7 +2371,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 					if b {
 						entryCode.SetText("")
 						errorText.Text = "contract code cleared"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 					}
 				},
@@ -2378,7 +2379,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		case "Parse": // Parse SC for errors
 			if entryCode.Text == "" {
 				errorText.Text = "contract code is empty"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2386,19 +2387,19 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			_, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				logger.Errorf("[Engram] Parse SC: %s %s\n", err, pos)
 				return
 			}
 
 			errorText.Text = "contract parsed successfully"
-			errorText.Color = colors.Green
+			errorText.Color = apptheme.C.Green
 			errorText.Refresh()
 		case "Set Headers": // Set Artificer standard headers into initialize func
 			if entryCode.Text == "" {
 				errorText.Text = "contract code is empty"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2406,7 +2407,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				logger.Errorf("[Engram] Set SC Headers: %s %s\n", err, pos)
 				return
@@ -2461,7 +2462,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 							logger.Errorf("[Engram] Format code error: %s\n", err)
 							err = errors.New("could not parse dvm to string")
 							errorText.Text = err.Error()
-							errorText.Color = colors.Red
+							errorText.Color = apptheme.C.Red
 							errorText.Refresh()
 							return
 						}
@@ -2469,7 +2470,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 						entryCode.SetText(code)
 
 						errorText.Text = "headers updated"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 						return
 					}
@@ -2499,13 +2500,13 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 									if index-1 < 0 {
 										err = errors.New("no room for header lines")
 										errorText.Text = err.Error()
-										errorText.Color = colors.Red
+										errorText.Color = apptheme.C.Red
 										errorText.Refresh()
 										return
 									} else if i > 0 && function.LineNumbers[index+1] < function.LineNumbers[index]+4 {
 										err = fmt.Errorf("no room for header lines below %d", function.LineNumbers[index])
 										errorText.Text = err.Error()
-										errorText.Color = colors.Red
+										errorText.Color = apptheme.C.Red
 										errorText.Refresh()
 										return
 									} else {
@@ -2574,7 +2575,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 					if !hasInitFunc {
 						err = errors.New("no initialize function")
 						errorText.Text = err.Error()
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						return
 					}
@@ -2584,14 +2585,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 						logger.Errorf("[Engram] Format code error: %s\n", err)
 						err = errors.New("could not parse dvm to string")
 						errorText.Text = err.Error()
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						return
 					}
 
 					if code == entryCode.Text {
 						errorText.Text = "did not change headers"
-						errorText.Color = colors.Red
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 						return
 					}
@@ -2599,7 +2600,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 					entryCode.SetText(code)
 
 					errorText.Text = "contract headers added successfully"
-					errorText.Color = colors.Green
+					errorText.Color = apptheme.C.Green
 					errorText.Refresh()
 				}
 
@@ -2608,7 +2609,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 					logger.Errorf("[Engram] Format code error: %s\n", err)
 					err = errors.New("could not parse dvm to string")
 					errorText.Text = err.Error()
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2633,7 +2634,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		case "Format": // Format SC code
 			if entryCode.Text == "" {
 				errorText.Text = "contract code is empty"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2641,7 +2642,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			contract, pos, err := dvm.ParseSmartContract(strings.ReplaceAll(entryCode.Text, "\x00", ""))
 			if err != nil {
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				logger.Errorf("[Engram] Format: %s %s\n", err, pos)
 				return
@@ -2652,14 +2653,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				logger.Errorf("[Engram] Format code error: %s\n", err)
 				err = errors.New("could not parse dvm to string")
 				errorText.Text = err.Error()
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
 
 			if code == entryCode.Text {
 				errorText.Text = "contract code is formatted"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 				return
 			}
@@ -2674,7 +2675,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 						entryCode.SetText(code)
 
 						errorText.Text = "contract code formatted successfully"
-						errorText.Color = colors.Green
+						errorText.Color = apptheme.C.Green
 						errorText.Refresh()
 					}
 				},
@@ -2682,7 +2683,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 		case "Export": // Export SC to file
 			if entryCode.Text == "" {
 				errorText.Text = "contract code is empty"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2694,7 +2695,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] File dialog: %s\n", err)
 					errorText.Text = "could not export contract file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2707,7 +2708,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				if err != nil {
 					logger.Errorf("[Engram] Exporting %s: %s\n", exportFileName, err)
 					errorText.Text = "error exporting contract file"
-					errorText.Color = colors.Red
+					errorText.Color = apptheme.C.Red
 					errorText.Refresh()
 					return
 				}
@@ -2715,7 +2716,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				unsavedChanges = false
 				filedata = entryCode.Text
 				errorText.Text = "exported contract file successfully"
-				errorText.Color = colors.Green
+				errorText.Color = apptheme.C.Green
 				errorText.Refresh()
 
 			}, session.Window)
@@ -2739,7 +2740,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			code := entryCode.Text
 			if code == "" {
 				errorText.Text = "contract code is empty"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2748,7 +2749,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			if err != nil {
 				logger.Errorf("[Engram] Install SC: %s %s\n", err, pos)
 				errorText.Text = fmt.Sprintf("error parsing contract %s", pos)
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2771,7 +2772,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 			if entrypoint == "" {
 				errorText.Text = "missing initializing entrypoint"
-				errorText.Color = colors.Red
+				errorText.Color = apptheme.C.Red
 				errorText.Refresh()
 				return
 			}
@@ -2813,12 +2814,12 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 
 				overlay := session.Window.Canvas().Overlays()
 
-				header := canvas.NewText(i18n.T("files.install_contract"), colors.Gray)
+				header := canvas.NewText(i18n.T("files.install_contract"), apptheme.C.Gray)
 				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
-				subHeader := canvas.NewText(fmt.Sprintf(i18n.T("files.params_fmt"), entrypoint), colors.Account)
+				subHeader := canvas.NewText(fmt.Sprintf(i18n.T("files.params_fmt"), entrypoint), apptheme.C.Account)
 				subHeader.TextSize = scaleFont(22)
 				subHeader.Alignment = fyne.TextAlignCenter
 				subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -2836,7 +2837,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 
@@ -2924,14 +2925,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 								_, err := installSC(code, args)
 								if err != nil {
 									errorText.Text = err.Error()
-									errorText.Color = colors.Red
+									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 									return
 								}
 
 								unsavedChanges = false
 								errorText.Text = "contract installed successfully"
-								errorText.Color = colors.Green
+								errorText.Color = apptheme.C.Green
 								errorText.Refresh()
 							}
 
@@ -2955,14 +2956,14 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 							_, err := installSC(code, args)
 							if err != nil {
 								errorText.Text = err.Error()
-								errorText.Color = colors.Red
+								errorText.Color = apptheme.C.Red
 								errorText.Refresh()
 								return
 							}
 
 							unsavedChanges = false
 							errorText.Text = "contract installed successfully"
-							errorText.Color = colors.Green
+							errorText.Color = apptheme.C.Green
 							errorText.Refresh()
 						}
 					},

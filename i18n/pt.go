@@ -142,6 +142,8 @@ var stringsPT = map[string]string{
 	"settings.export_debug":                          "Exportar Log de Depuração",
 	"settings.language_section":                      "IDIOMA",
 	"settings.language_label":                        "Idioma do App",
+	"settings.theme_section":                         "TEMAS",
+	"settings.theme_label":                           "Selecionar tema",
 	"settings.language_desc":                         "Escolha o idioma de exibição do aplicativo.",
 	"settings.global_permissions_heading":            "P E R M I S S Õ E S   G L O B A I S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

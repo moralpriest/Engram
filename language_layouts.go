@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 func layoutLanguageSelector() fyne.CanvasObject {
@@ -42,16 +43,16 @@ func layoutLanguageSelector() fyne.CanvasObject {
 	}
 	i18n.SetLanguage(savedLang)
 
-	title := canvas.NewText(pulseTexts[0].title, colors.Green)
+	title := canvas.NewText(pulseTexts[0].title, apptheme.C.Green)
 	title.TextSize = scaleFont(24)
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
-	sub1 := canvas.NewText(pulseTexts[0].subtitle1, colors.Gray)
+	sub1 := canvas.NewText(pulseTexts[0].subtitle1, apptheme.C.Gray)
 	sub1.TextSize = scaleFont(13)
 	sub1.Alignment = fyne.TextAlignCenter
 
-	sub2 := canvas.NewText(pulseTexts[0].subtitle2, colors.Gray)
+	sub2 := canvas.NewText(pulseTexts[0].subtitle2, apptheme.C.Gray)
 	sub2.TextSize = scaleFont(13)
 	sub2.Alignment = fyne.TextAlignCenter
 
@@ -80,9 +81,9 @@ func layoutLanguageSelector() fyne.CanvasObject {
 
 		if !animate {
 			applyText()
-			title.Color = colors.Green
-			sub1.Color = colors.Gray
-			sub2.Color = colors.Gray
+			title.Color = apptheme.C.Green
+			sub1.Color = apptheme.C.Gray
+			sub2.Color = apptheme.C.Gray
 			title.Refresh()
 			sub1.Refresh()
 			sub2.Refresh()
@@ -90,15 +91,15 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		}
 
 		// Fade out to transparent (background color)
-		fadeOutTitle := canvas.NewColorRGBAAnimation(colors.Green, color.Transparent, time.Millisecond*600, func(c color.Color) {
+		fadeOutTitle := canvas.NewColorRGBAAnimation(apptheme.C.Green, color.Transparent, time.Millisecond*600, func(c color.Color) {
 			title.Color = c
 			title.Refresh()
 		})
-		fadeOutSub1 := canvas.NewColorRGBAAnimation(colors.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
+		fadeOutSub1 := canvas.NewColorRGBAAnimation(apptheme.C.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
 			sub1.Color = c
 			sub1.Refresh()
 		})
-		fadeOutSub2 := canvas.NewColorRGBAAnimation(colors.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
+		fadeOutSub2 := canvas.NewColorRGBAAnimation(apptheme.C.Gray, color.Transparent, time.Millisecond*600, func(c color.Color) {
 			sub2.Color = c
 			sub2.Refresh()
 		})
@@ -108,15 +109,15 @@ func layoutLanguageSelector() fyne.CanvasObject {
 				applyText()
 
 				// Fade in from transparent
-				fadeInTitle := canvas.NewColorRGBAAnimation(color.Transparent, colors.Green, time.Millisecond*600, func(c color.Color) {
+				fadeInTitle := canvas.NewColorRGBAAnimation(color.Transparent, apptheme.C.Green, time.Millisecond*600, func(c color.Color) {
 					title.Color = c
 					title.Refresh()
 				})
-				fadeInSub1 := canvas.NewColorRGBAAnimation(color.Transparent, colors.Gray, time.Millisecond*600, func(c color.Color) {
+				fadeInSub1 := canvas.NewColorRGBAAnimation(color.Transparent, apptheme.C.Gray, time.Millisecond*600, func(c color.Color) {
 					sub1.Color = c
 					sub1.Refresh()
 				})
-				fadeInSub2 := canvas.NewColorRGBAAnimation(color.Transparent, colors.Gray, time.Millisecond*600, func(c color.Color) {
+				fadeInSub2 := canvas.NewColorRGBAAnimation(color.Transparent, apptheme.C.Gray, time.Millisecond*600, func(c color.Color) {
 					sub2.Color = c
 					sub2.Refresh()
 				})

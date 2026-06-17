@@ -37,6 +37,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
 	"github.com/DEROFDN/engram/internal/camera"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/cryptography/crypto"
@@ -63,7 +64,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 		"DERO PRIVACY TOGETHER",
 	}
 
-	text := canvas.NewText(messages[0], colors.LightBlue)
+	text := canvas.NewText(messages[0], apptheme.C.LightBlue)
 	text.TextStyle = fyne.TextStyle{Symbol: true}
 	text.TextSize = scaleFont(14)
 	text.Alignment = fyne.TextAlignCenter
@@ -80,7 +81,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 
 			// Fade out
 			fadeOut := canvas.NewColorRGBAAnimation(
-				colors.LightBlue.(color.RGBA),
+				apptheme.C.LightBlue.(color.RGBA),
 				color.RGBA{0, 0, 0, 0},
 				400*time.Millisecond,
 				func(c color.Color) {
@@ -100,7 +101,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 			// Fade in
 			fadeIn := canvas.NewColorRGBAAnimation(
 				color.RGBA{0, 0, 0, 0},
-				colors.LightBlue.(color.RGBA),
+				apptheme.C.LightBlue.(color.RGBA),
 				400*time.Millisecond,
 				func(c color.Color) {
 					text.Color = c
@@ -115,7 +116,7 @@ func layoutDashboardMarquee() fyne.CanvasObject {
 			return
 		}
 		fadeOutFinal := canvas.NewColorRGBAAnimation(
-			colors.LightBlue.(color.RGBA),
+			apptheme.C.LightBlue.(color.RGBA),
 			color.RGBA{0, 0, 0, 0},
 			400*time.Millisecond,
 			func(c color.Color) {
@@ -134,7 +135,7 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 
-	session.BalanceText = canvas.NewText("...", colors.Green)
+	session.BalanceText = canvas.NewText("...", apptheme.C.Green)
 	session.BalanceText.TextSize = scaleFont(28)
 	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -220,7 +221,7 @@ func layoutDashboard() fyne.CanvasObject {
 	)
 
 	path := strings.Split(session.Path, string(filepath.Separator))
-	accountName := canvas.NewText(path[len(path)-1], colors.Green)
+	accountName := canvas.NewText(path[len(path)-1], apptheme.C.Green)
 	accountName.TextStyle = fyne.TextStyle{Bold: true}
 	accountName.TextSize = scaleFont(18)
 
@@ -233,32 +234,32 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, topButtonWidth)
 
-	heading := canvas.NewText(i18n.T("dashboard.balance"), colors.Gray)
+	heading := canvas.NewText(i18n.T("dashboard.balance"), apptheme.C.Gray)
 	heading.TextSize = scaleFont(16)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	sendDesc := canvas.NewText(i18n.T("dashboard.transfer_details"), colors.Gray)
+	sendDesc := canvas.NewText(i18n.T("dashboard.transfer_details"), apptheme.C.Gray)
 	sendDesc.TextSize = scaleFont(18)
 	sendDesc.Alignment = fyne.TextAlignCenter
 	sendDesc.TextStyle = fyne.TextStyle{Bold: true}
 
-	sendHeading := canvas.NewText(i18n.T("dashboard.send_money"), colors.Green)
+	sendHeading := canvas.NewText(i18n.T("dashboard.send_money"), apptheme.C.Green)
 	sendHeading.TextSize = scaleFont(22)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
-	headerLabel := canvas.NewText("  "+network+"  ", colors.Gray)
+	headerLabel := canvas.NewText("  "+network+"  ", apptheme.C.Gray)
 	headerLabel.TextSize = scaleFont(11)
 	headerLabel.Alignment = fyne.TextAlignCenter
 	headerLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	statusLabel := canvas.NewText(i18n.T("dashboard.status"), colors.Gray)
+	statusLabel := canvas.NewText(i18n.T("dashboard.status"), apptheme.C.Gray)
 	statusLabel.TextSize = scaleFont(11)
 	statusLabel.Alignment = fyne.TextAlignCenter
 	statusLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	daemonLabel := canvas.NewText(i18n.T("dashboard.offline"), colors.Gray)
+	daemonLabel := canvas.NewText(i18n.T("dashboard.offline"), apptheme.C.Gray)
 	daemonLabel.TextSize = scaleFont(12)
 	daemonLabel.Alignment = fyne.TextAlignCenter
 	daemonLabel.TextStyle = fyne.TextStyle{Bold: false}
@@ -269,42 +270,42 @@ func layoutDashboard() fyne.CanvasObject {
 	} else if remoteAccess.RPC.server != nil {
 		remoteAccessText = i18n.T("dashboard.remote_rpc")
 	} else {
-		status.RemoteAccess.FillColor = colors.Gray
+		status.RemoteAccess.FillColor = apptheme.C.Gray
 		status.RemoteAccess.Refresh()
 	}
 
-	remoteAccessLabel := canvas.NewText(remoteAccessText, colors.Gray)
+	remoteAccessLabel := canvas.NewText(remoteAccessText, apptheme.C.Gray)
 	remoteAccessLabel.TextSize = scaleFont(12)
 	remoteAccessLabel.Alignment = fyne.TextAlignTrailing
 	remoteAccessLabel.TextStyle = fyne.TextStyle{Bold: false}
 
-	gnomonLabel := canvas.NewText(i18n.T("dashboard.gnomon"), colors.Gray)
+	gnomonLabel := canvas.NewText(i18n.T("dashboard.gnomon"), apptheme.C.Gray)
 	gnomonLabel.TextSize = scaleFont(12)
 	gnomonLabel.Alignment = fyne.TextAlignCenter
 	gnomonLabel.TextStyle = fyne.TextStyle{Bold: false}
 
-	epochLabel := canvas.NewText(i18n.T("dashboard.epoch"), colors.Gray)
+	epochLabel := canvas.NewText(i18n.T("dashboard.epoch"), apptheme.C.Gray)
 	epochLabel.TextSize = scaleFont(12)
 	epochLabel.Alignment = fyne.TextAlignTrailing
 	epochLabel.TextStyle = fyne.TextStyle{Bold: false}
 	if !epoch.IsActive() {
 		if remoteAccess.EPOCH.err != nil {
-			status.EPOCH.FillColor = colors.Red
+			status.EPOCH.FillColor = apptheme.C.Red
 			status.EPOCH.Refresh()
 		} else {
-			status.EPOCH.FillColor = colors.Gray
+			status.EPOCH.FillColor = apptheme.C.Gray
 			status.EPOCH.Refresh()
 		}
 	}
 
-	telaLabel := canvas.NewText(i18n.T("dashboard.tela"), colors.Gray)
+	telaLabel := canvas.NewText(i18n.T("dashboard.tela"), apptheme.C.Gray)
 	telaLabel.TextSize = scaleFont(12)
 	telaLabel.Alignment = fyne.TextAlignCenter
 	telaLabel.TextStyle = fyne.TextStyle{Bold: false}
 
-	telaStatus := canvas.NewCircle(colors.Gray)
+	telaStatus := canvas.NewCircle(apptheme.C.Gray)
 	if len(getTelaActiveServers()) > 0 {
-		telaStatus.FillColor = colors.Green
+		telaStatus.FillColor = color.RGBA{19, 202, 105, 255}
 	}
 
 	syncAnimationCanvas := canvas.NewCircle(color.Transparent)
@@ -322,7 +323,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 		animationStatus := canvas.NewColorRGBAAnimation(
 			color.Transparent,
-			colors.Yellow,
+			apptheme.C.Yellow,
 			2*time.Second,
 			func(c color.Color) {
 				syncAnimationCanvas.FillColor = c
@@ -339,12 +340,12 @@ func layoutDashboard() fyne.CanvasObject {
 	}
 
 	session.WalletHeight = engram.Disk.Get_Height()
-	session.StatusText = canvas.NewText(fmt.Sprintf("%d", session.WalletHeight), colors.Gray)
+	session.StatusText = canvas.NewText(fmt.Sprintf("%d", session.WalletHeight), apptheme.C.Gray)
 	session.StatusText.TextSize = scaleFont(12)
 	session.StatusText.Alignment = fyne.TextAlignTrailing
 	session.StatusText.TextStyle = fyne.TextStyle{Bold: false}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 
 	line1 := container.NewVBox(
@@ -353,7 +354,7 @@ func layoutDashboard() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 
 	line2 := container.NewVBox(
@@ -364,14 +365,14 @@ func layoutDashboard() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
-	sep3 := canvas.NewRectangle(colors.Gray)
+	sep3 := canvas.NewRectangle(apptheme.C.Gray)
 	sep3.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 	statusLine1 := container.NewVBox(
 		layout.NewSpacer(),
 		sep3,
 		layout.NewSpacer(),
 	)
-	sep4 := canvas.NewRectangle(colors.Gray)
+	sep4 := canvas.NewRectangle(apptheme.C.Gray)
 	sep4.SetMinSize(fyne.NewSize(ui.Width*0.2, scaleSize(2)))
 	statusLine2 := container.NewVBox(
 		layout.NewSpacer(),
@@ -381,7 +382,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 	buttonWidth := ui.Width * 0.9 / 3
 
-	btnExit := newIconLabelButtonWithColor(i18n.T("dashboard.exit"), theme.LogoutIcon(), colors.SoftRed, color.Black, func() {
+	btnExit := newIconLabelButtonWithColor(i18n.T("dashboard.exit"), theme.LogoutIcon(), apptheme.C.SoftRed, color.Black, func() {
 		if session.Navigating {
 			return
 		}
@@ -439,7 +440,7 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, topButtonWidth)
 
-	separator := canvas.NewText(" | ", colors.Gray)
+	separator := canvas.NewText(" | ", apptheme.C.Gray)
 	separator.TextSize = scaleFont(14)
 	separator.Alignment = fyne.TextAlignCenter
 
@@ -660,7 +661,7 @@ func layoutDashboard() fyne.CanvasObject {
 		if gnomon.Index == nil {
 			showLoadingOverlay()
 			fyne.Do(func() {
-				errLabel := canvas.NewText(i18n.T("wallet.gnomon_initializing"), colors.Yellow)
+				errLabel := canvas.NewText(i18n.T("wallet.gnomon_initializing"), apptheme.C.Yellow)
 				errLabel.Alignment = fyne.TextAlignCenter
 				content := container.NewCenter(container.NewVBox(errLabel))
 				if session.Window != nil {
@@ -696,7 +697,7 @@ func layoutDashboard() fyne.CanvasObject {
 		if !isDaemonConnected() {
 			showLoadingOverlay()
 			fyne.Do(func() {
-				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), colors.Yellow)
+				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), apptheme.C.Yellow)
 				errLabel.Alignment = fyne.TextAlignCenter
 				content := container.NewCenter(container.NewVBox(errLabel))
 				if session.Window != nil {
@@ -1178,17 +1179,17 @@ func layoutSend() fyne.CanvasObject {
 		}
 	}
 
-	sendHeading := canvas.NewText(i18n.T("send.heading"), colors.Gray)
+	sendHeading := canvas.NewText(i18n.T("send.heading"), apptheme.C.Gray)
 	sendHeading.TextSize = scaleFont(16)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
-	optionalLabel := canvas.NewText(i18n.T("send.optional"), colors.Gray)
+	optionalLabel := canvas.NewText(i18n.T("send.optional"), apptheme.C.Gray)
 	optionalLabel.TextSize = scaleFont(11)
 	optionalLabel.Alignment = fyne.TextAlignCenter
 	optionalLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -1197,7 +1198,7 @@ func layoutSend() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -1348,7 +1349,7 @@ func layoutReceive() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText(i18n.T("receive.heading"), colors.DarkGreen)
+	heading := canvas.NewText(i18n.T("receive.heading"), apptheme.C.DarkGreen)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -1359,7 +1360,7 @@ func layoutReceive() fyne.CanvasObject {
 		activeAddress = engram.Disk.GetAddress().String()
 	}
 
-	addressLabel := canvas.NewText("", colors.DarkGreen)
+	addressLabel := canvas.NewText("", apptheme.C.DarkGreen)
 	addressLabel.TextSize = scaleFont(22)
 	addressLabel.Alignment = fyne.TextAlignCenter
 	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -1567,17 +1568,17 @@ func layoutServiceAddress() fyne.CanvasObject {
 	}
 	wPaymentID.SetPlaceHolder(i18n.T("send.payment_id"))
 
-	sendHeading := canvas.NewText(i18n.T("payment.heading"), colors.Gray)
+	sendHeading := canvas.NewText(i18n.T("payment.heading"), apptheme.C.Gray)
 	sendHeading.TextSize = scaleFont(16)
 	sendHeading.Alignment = fyne.TextAlignCenter
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 
-	optionalLabel := canvas.NewText(i18n.T("payment.optional"), colors.Gray)
+	optionalLabel := canvas.NewText(i18n.T("payment.optional"), apptheme.C.Gray)
 	optionalLabel.TextSize = scaleFont(11)
 	optionalLabel.Alignment = fyne.TextAlignCenter
 	optionalLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -1586,7 +1587,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -1621,17 +1622,17 @@ func layoutServiceAddress() fyne.CanvasObject {
 			}
 
 			if err == nil {
-				header := canvas.NewText(i18n.T("payment.heading"), colors.Gray)
+				header := canvas.NewText(i18n.T("payment.heading"), apptheme.C.Gray)
 				header.TextSize = scaleFont(14)
 				header.Alignment = fyne.TextAlignCenter
 				header.TextStyle = fyne.TextStyle{Bold: true}
 
-				subHeader := canvas.NewText(i18n.T("payment.created"), colors.Account)
+				subHeader := canvas.NewText(i18n.T("payment.created"), apptheme.C.Account)
 				subHeader.TextSize = scaleFont(22)
 				subHeader.Alignment = fyne.TextAlignCenter
 				subHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-				labelAddress := canvas.NewText(i18n.T("payment.integrated_address"), colors.Gray)
+				labelAddress := canvas.NewText(i18n.T("payment.integrated_address"), apptheme.C.Gray)
 				labelAddress.TextSize = scaleFont(12)
 				labelAddress.Alignment = fyne.TextAlignCenter
 				labelAddress.TextStyle = fyne.TextStyle{Bold: true}
@@ -1685,8 +1686,8 @@ func layoutServiceAddress() fyne.CanvasObject {
 				if err != nil {
 
 				} else {
-					qr.BackgroundColor = colors.DarkMatter
-					qr.ForegroundColor = colors.Green
+					qr.BackgroundColor = apptheme.C.DarkMatter
+					qr.ForegroundColor = apptheme.C.Green
 				}
 
 				imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.65)))
@@ -1700,7 +1701,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 
@@ -1828,7 +1829,7 @@ func layoutServiceAddress() fyne.CanvasObject {
 func layoutTransfers() fyne.CanvasObject {
 	session.Domain = "app.transfers"
 
-	sendHeading := canvas.NewText(i18n.T("transfers.heading"), colors.Gray)
+	sendHeading := canvas.NewText(i18n.T("transfers.heading"), apptheme.C.Gray)
 	sendHeading.TextStyle = fyne.TextStyle{Bold: true}
 	sendHeading.TextSize = scaleFont(16)
 
@@ -1852,7 +1853,7 @@ func layoutTransfers() fyne.CanvasObject {
 	rectListBox := canvas.NewRectangle(color.Transparent)
 	rectListBox.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.53))
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -1861,7 +1862,7 @@ func layoutTransfers() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -1892,9 +1893,9 @@ func layoutTransfers() fyne.CanvasObject {
 			c := container.NewStack(
 				rectList,
 				container.NewHBox(
-					canvas.NewText("", colors.Account),
+					canvas.NewText("", apptheme.C.Account),
 					layout.NewSpacer(),
-					canvas.NewText("", colors.Account),
+					canvas.NewText("", apptheme.C.Account),
 				),
 			)
 			return c
@@ -1947,12 +1948,12 @@ func layoutTransfers() fyne.CanvasObject {
 	btnSend.OnTapped = func() {
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText(i18n.T("transfers.verification_heading"), colors.Gray)
+		header := canvas.NewText(i18n.T("transfers.verification_heading"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("transfers.confirm_password"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("transfers.confirm_password"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -2087,7 +2088,7 @@ func layoutTransfers() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -2218,7 +2219,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText(i18n.T("transfers_detail.heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("transfers_detail.heading"), apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -2235,38 +2236,38 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	labelDestination := canvas.NewText(i18n.T("transfers_detail.receiver_address"), colors.Gray)
+	labelDestination := canvas.NewText(i18n.T("transfers_detail.receiver_address"), apptheme.C.Gray)
 	labelDestination.TextSize = scaleFont(14)
 	labelDestination.Alignment = fyne.TextAlignLeading
 	labelDestination.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelAmount := canvas.NewText(i18n.T("transfers_detail.amount"), colors.Gray)
+	labelAmount := canvas.NewText(i18n.T("transfers_detail.amount"), apptheme.C.Gray)
 	labelAmount.TextSize = scaleFont(14)
 	labelAmount.Alignment = fyne.TextAlignLeading
 	labelAmount.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelService := canvas.NewText(i18n.T("transfers_detail.payment_request"), colors.Gray)
+	labelService := canvas.NewText(i18n.T("transfers_detail.payment_request"), apptheme.C.Gray)
 	labelService.TextSize = scaleFont(14)
 	labelService.Alignment = fyne.TextAlignLeading
 	labelService.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelDestPort := canvas.NewText(i18n.T("transfers_detail.dest_port"), colors.Gray)
+	labelDestPort := canvas.NewText(i18n.T("transfers_detail.dest_port"), apptheme.C.Gray)
 	labelDestPort.TextSize = scaleFont(14)
 	labelDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSourcePort := canvas.NewText(i18n.T("transfers_detail.source_port"), colors.Gray)
+	labelSourcePort := canvas.NewText(i18n.T("transfers_detail.source_port"), apptheme.C.Gray)
 	labelSourcePort.TextSize = scaleFont(14)
 	labelSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelFees := canvas.NewText(i18n.T("transfers_detail.fees"), colors.Gray)
+	labelFees := canvas.NewText(i18n.T("transfers_detail.fees"), apptheme.C.Gray)
 	labelFees.TextSize = scaleFont(14)
 	labelFees.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelPayload := canvas.NewText(i18n.T("transfers_detail.payload"), colors.Gray)
+	labelPayload := canvas.NewText(i18n.T("transfers_detail.payload"), apptheme.C.Gray)
 	labelPayload.TextSize = scaleFont(14)
 	labelPayload.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelReply := canvas.NewText(i18n.T("transfers_detail.reply_address"), colors.Gray)
+	labelReply := canvas.NewText(i18n.T("transfers_detail.reply_address"), apptheme.C.Gray)
 	labelReply.TextSize = scaleFont(14)
 	labelReply.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -2290,7 +2291,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 	labelSeparator5.Wrapping = fyne.TextWrapOff
 	labelSeparator5.ParseMarkdown("---")
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -2299,7 +2300,7 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -2347,12 +2348,12 @@ func layoutTransfersDetail(index int) fyne.CanvasObject {
 		}
 	}
 
-	valueAmount := canvas.NewText("", colors.Account)
+	valueAmount := canvas.NewText("", apptheme.C.Account)
 	valueAmount.TextSize = scaleFont(22)
 	valueAmount.TextStyle = fyne.TextStyle{Bold: true}
 	valueAmount.Text = "  " + globals.FormatMoney(details.Amount)
 
-	valueDestPort := canvas.NewText("", colors.Account)
+	valueDestPort := canvas.NewText("", apptheme.C.Account)
 	valueDestPort.TextSize = scaleFont(22)
 	valueDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -2523,11 +2524,11 @@ func layoutHistory() fyne.CanvasObject {
 
 	view := ""
 
-	header := canvas.NewText(i18n.T("history.title"), colors.Green)
+	header := canvas.NewText(i18n.T("history.title"), apptheme.C.Green)
 	header.TextSize = scaleFont(22)
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	details_header := canvas.NewText(i18n.T("history.detail_title"), colors.Green)
+	details_header := canvas.NewText(i18n.T("history.detail_title"), apptheme.C.Green)
 	details_header.TextSize = scaleFont(22)
 	details_header.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -2537,7 +2538,7 @@ func layoutHistory() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-	heading := canvas.NewText(i18n.T("history.heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("history.heading"), apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -2560,19 +2561,19 @@ func layoutHistory() fyne.CanvasObject {
 	rectMid := canvas.NewRectangle(color.Transparent)
 	rectMid.SetMinSize(fyne.NewSize(ui.Width*0.35, 35))
 
-	results := canvas.NewText("", colors.Green)
+	results := canvas.NewText("", apptheme.C.Green)
 	results.TextSize = scaleFont(13)
 
 	telaPurple := color.RGBA{163, 102, 255, 255}
 	rowIconStates := make(map[*fyne.Container]*struct {
-		tint *tintTheme
+		tint *apptheme.TintTheme
 		icon *widget.Icon
 	})
 
 	listData = binding.BindStringList(&data)
 	listBox = widget.NewListWithData(listData,
 		func() fyne.CanvasObject {
-			tint := &tintTheme{Theme: theme.Current(), iconColor: colors.Red}
+			tint := apptheme.NewTintTheme(theme.Current(), apptheme.C.Red)
 			icon := widget.NewIcon(theme.UploadIcon())
 			themed := container.NewThemeOverride(container.NewCenter(icon), tint)
 
@@ -2582,7 +2583,7 @@ func layoutHistory() fyne.CanvasObject {
 				themed,
 			)
 			rowIconStates[col0Stack] = &struct {
-				tint *tintTheme
+				tint *apptheme.TintTheme
 				icon *widget.Icon
 			}{tint: tint, icon: icon}
 
@@ -2634,22 +2635,22 @@ func layoutHistory() fyne.CanvasObject {
 			trimmed := strings.TrimSpace(split[0])
 			switch {
 			case view == i18n.T("history.coinbase"):
-				state.tint.iconColor = telaPurple
+				state.tint.SetIconColor(telaPurple)
 				state.icon.SetResource(theme.DownloadIcon())
 			case view == i18n.T("history.messages"):
 				if trimmed == "Sent" {
-					state.tint.iconColor = colors.Account
+					state.tint.SetIconColor(apptheme.C.Account)
 					state.icon.SetResource(theme.UploadIcon())
 				} else {
-					state.tint.iconColor = colors.Account
+					state.tint.SetIconColor(apptheme.C.Account)
 					state.icon.SetResource(theme.DownloadIcon())
 				}
 			default:
 				if trimmed == "Sent" {
-					state.tint.iconColor = colors.Red
+					state.tint.SetIconColor(apptheme.C.Red)
 					state.icon.SetResource(theme.UploadIcon())
 				} else {
-					state.tint.iconColor = colors.Green
+					state.tint.SetIconColor(color.RGBA{19, 202, 105, 255})
 					state.icon.SetResource(theme.DownloadIcon())
 				}
 			}
@@ -2672,7 +2673,7 @@ func layoutHistory() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	label := canvas.NewText(view, colors.Account)
+	label := canvas.NewText(view, apptheme.C.Account)
 	label.TextSize = scaleFont(15)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 	findCachedTransfer := func(txid string) rpc.Entry {
@@ -2739,7 +2740,7 @@ func layoutHistory() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 				overlay.Add(layoutHistoryDetail(split[4], result))
@@ -2804,7 +2805,7 @@ func layoutHistory() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 				overlay.Add(layoutHistoryDetail(split[4], result))
@@ -2858,7 +2859,7 @@ func layoutHistory() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 				overlay.Add(layoutHistoryDetail(split[4], result))
@@ -3016,7 +3017,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 
 	frame := &iframe{}
 
-	heading := canvas.NewText(i18n.T("detail.heading"), colors.Gray)
+	heading := canvas.NewText(i18n.T("detail.heading"), apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -3033,57 +3034,57 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	labelTXID := canvas.NewText(i18n.T("detail.txid"), colors.Gray)
+	labelTXID := canvas.NewText(i18n.T("detail.txid"), apptheme.C.Gray)
 	labelTXID.TextSize = scaleFont(14)
 	labelTXID.Alignment = fyne.TextAlignLeading
 	labelTXID.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelAmount := canvas.NewText(i18n.T("detail.amount"), colors.Gray)
+	labelAmount := canvas.NewText(i18n.T("detail.amount"), apptheme.C.Gray)
 	labelAmount.TextSize = scaleFont(14)
 	labelAmount.Alignment = fyne.TextAlignLeading
 	labelAmount.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelDirection := canvas.NewText(i18n.T("detail.direction"), colors.Gray)
+	labelDirection := canvas.NewText(i18n.T("detail.direction"), apptheme.C.Gray)
 	labelDirection.TextSize = scaleFont(14)
 	labelDirection.Alignment = fyne.TextAlignLeading
 	labelDirection.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelMember := canvas.NewText("", colors.Gray)
+	labelMember := canvas.NewText("", apptheme.C.Gray)
 	labelMember.TextSize = scaleFont(14)
 	labelMember.Alignment = fyne.TextAlignLeading
 	labelMember.TextStyle = fyne.TextStyle{Bold: true}
 
-	labeliMember := canvas.NewText("", colors.Gray)
+	labeliMember := canvas.NewText("", apptheme.C.Gray)
 	labeliMember.TextSize = scaleFont(14)
 	labeliMember.Alignment = fyne.TextAlignLeading
 	labeliMember.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelProof := canvas.NewText(i18n.T("detail.proof"), colors.Gray)
+	labelProof := canvas.NewText(i18n.T("detail.proof"), apptheme.C.Gray)
 	labelProof.TextSize = scaleFont(14)
 	labelProof.Alignment = fyne.TextAlignLeading
 	labelProof.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelDestPort := canvas.NewText(i18n.T("detail.dest_port"), colors.Gray)
+	labelDestPort := canvas.NewText(i18n.T("detail.dest_port"), apptheme.C.Gray)
 	labelDestPort.TextSize = scaleFont(14)
 	labelDestPort.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelSourcePort := canvas.NewText(i18n.T("detail.source_port"), colors.Gray)
+	labelSourcePort := canvas.NewText(i18n.T("detail.source_port"), apptheme.C.Gray)
 	labelSourcePort.TextSize = scaleFont(14)
 	labelSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelFees := canvas.NewText(i18n.T("detail.fees"), colors.Gray)
+	labelFees := canvas.NewText(i18n.T("detail.fees"), apptheme.C.Gray)
 	labelFees.TextSize = scaleFont(14)
 	labelFees.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelPayload := canvas.NewText(i18n.T("detail.payload"), colors.Gray)
+	labelPayload := canvas.NewText(i18n.T("detail.payload"), apptheme.C.Gray)
 	labelPayload.TextSize = scaleFont(14)
 	labelPayload.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelHeight := canvas.NewText(i18n.T("detail.height"), colors.Gray)
+	labelHeight := canvas.NewText(i18n.T("detail.height"), apptheme.C.Gray)
 	labelHeight.TextSize = scaleFont(14)
 	labelHeight.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelReply := canvas.NewText(i18n.T("detail.reply_address"), colors.Gray)
+	labelReply := canvas.NewText(i18n.T("detail.reply_address"), apptheme.C.Gray)
 	labelReply.TextSize = scaleFont(14)
 	labelReply.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -3131,7 +3132,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	labelSeparator11.Wrapping = fyne.TextWrapOff
 	labelSeparator11.ParseMarkdown("---")
 
-	sep := canvas.NewRectangle(colors.Gray)
+	sep := canvas.NewRectangle(apptheme.C.Gray)
 	sep.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -3140,7 +3141,7 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -3186,29 +3187,29 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		valuePayload.ParseMarkdown("" + comment)
 	}
 
-	valueAmount := canvas.NewText("", colors.Account)
+	valueAmount := canvas.NewText("", apptheme.C.Account)
 	valueAmount.TextSize = scaleFont(22)
 	valueAmount.TextStyle = fyne.TextStyle{Bold: true}
 
 	telaPurple := color.RGBA{163, 102, 255, 255}
 	var valueDirIcon fyne.CanvasObject
 
-	valueDirection := canvas.NewText("", colors.Account)
+	valueDirection := canvas.NewText("", apptheme.C.Account)
 	valueDirection.TextSize = scaleFont(22)
 	valueDirection.TextStyle = fyne.TextStyle{Bold: true}
 	if details.Coinbase {
 		valueDirection.Text = i18n.T("detail.received")
 		icon := widget.NewIcon(theme.DownloadIcon())
-		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: telaPurple})
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), apptheme.NewTintTheme(theme.Current(), telaPurple))
 		labelMember.Text = i18n.T("detail.source")
 		valueMember.ParseMarkdown(i18n.T("detail.mining_reward"))
-		valueAmount.Color = colors.Green
+		valueAmount.Color = color.RGBA{19, 202, 105, 255}
 		amount := details.Amount
 		valueAmount.Text = "  + " + globals.FormatMoney(amount)
 	} else if details.Incoming {
 		valueDirection.Text = i18n.T("detail.received")
 		icon := widget.NewIcon(theme.DownloadIcon())
-		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: colors.Green})
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), apptheme.NewTintTheme(theme.Current(), color.RGBA{19, 202, 105, 255}))
 		labelMember.Text = i18n.T("detail.sender")
 		if details.Sender == "" || details.Sender == engram.Disk.GetAddress().String() {
 			valueMember.ParseMarkdown("--")
@@ -3217,24 +3218,24 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		}
 
 		if details.Amount == 0 {
-			valueAmount.Color = colors.Account
+			valueAmount.Color = apptheme.C.Account
 			valueAmount.Text = "  0.00000"
 		} else {
-			valueAmount.Color = colors.Green
+			valueAmount.Color = color.RGBA{19, 202, 105, 255}
 			valueAmount.Text = "  + " + globals.FormatMoney(details.Amount)
 		}
 	} else {
 		valueDirection.Text = i18n.T("detail.sent")
 		icon := widget.NewIcon(theme.UploadIcon())
-		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), &tintTheme{Theme: theme.Current(), iconColor: colors.Red})
+		valueDirIcon = container.NewThemeOverride(container.NewCenter(icon), apptheme.NewTintTheme(theme.Current(), apptheme.C.Red))
 		labelMember.Text = i18n.T("detail.receiver_addr")
 		valueMember.ParseMarkdown("" + details.Destination)
 
 		if details.Amount == 0 {
-			valueAmount.Color = colors.Account
+			valueAmount.Color = apptheme.C.Account
 			valueAmount.Text = "  0.00000"
 		} else {
-			valueAmount.Color = colors.Account
+			valueAmount.Color = apptheme.C.Account
 			valueAmount.Text = "  - " + globals.FormatMoney(details.Amount)
 		}
 	}
@@ -3274,15 +3275,15 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 		}
 	}
 
-	valueTime := canvas.NewText(stamp, colors.Account)
+	valueTime := canvas.NewText(stamp, apptheme.C.Account)
 	valueTime.TextSize = scaleFont(14)
 	valueTime.TextStyle = fyne.TextStyle{Bold: true}
 
-	valueFees := canvas.NewText("  "+globals.FormatMoney(details.Fees), colors.Account)
+	valueFees := canvas.NewText("  "+globals.FormatMoney(details.Fees), apptheme.C.Account)
 	valueFees.TextSize = scaleFont(22)
 	valueFees.TextStyle = fyne.TextStyle{Bold: true}
 
-	valueHeight := canvas.NewText("  "+height, colors.Account)
+	valueHeight := canvas.NewText("  "+height, apptheme.C.Account)
 	valueHeight.TextSize = scaleFont(22)
 	valueHeight.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -3290,12 +3291,12 @@ func layoutHistoryDetail(txid string, transfer rpc.Entry) fyne.CanvasObject {
 	valueTXID.Wrapping = fyne.TextWrapBreak
 	valueTXID.ParseMarkdown("" + txid)
 
-	valuePort := canvas.NewText("", colors.Account)
+	valuePort := canvas.NewText("", apptheme.C.Account)
 	valuePort.TextSize = scaleFont(22)
 	valuePort.TextStyle = fyne.TextStyle{Bold: true}
 	valuePort.Text = "  " + strconv.FormatUint(details.DestinationPort, 10)
 
-	valueSourcePort := canvas.NewText("", colors.Account)
+	valueSourcePort := canvas.NewText("", apptheme.C.Account)
 	valueSourcePort.TextSize = scaleFont(22)
 	valueSourcePort.TextStyle = fyne.TextStyle{Bold: true}
 	valueSourcePort.Text = "  " + strconv.FormatUint(details.SourcePort, 10)

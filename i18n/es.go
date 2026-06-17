@@ -142,6 +142,8 @@ var stringsES = map[string]string{
 	"settings.export_debug":                          "Exportar registro debug",
 	"settings.language_section":                      "IDIOMA",
 	"settings.language_label":                        "Idioma de la aplicación",
+	"settings.theme_section":                         "TEMAS",
+	"settings.theme_label":                           "Seleccionar tema",
 	"settings.language_desc":                         "Elija el idioma de visualización de la aplicación.",
 	"settings.global_permissions_heading":            "P E R M I S O S   G L O B A L E S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

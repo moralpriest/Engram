@@ -30,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
 	qrcode "github.com/skip2/go-qrcode"
 )
@@ -44,7 +45,7 @@ func layoutAccount() fyne.CanvasObject {
 	rectBox := canvas.NewRectangle(color.Transparent)
 	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.99, ui.MaxHeight*0.80))
 
-	title := canvas.NewText(i18n.T("account.heading"), colors.Gray)
+	title := canvas.NewText(i18n.T("account.heading"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -62,7 +63,7 @@ func layoutAccount() fyne.CanvasObject {
 	)
 
 	addressStr := engram.Disk.GetAddress().String()
-	heading := canvas.NewText("", colors.Green)
+	heading := canvas.NewText("", apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -96,7 +97,7 @@ func layoutAccount() fyne.CanvasObject {
 		addressToggleBtn.SetIcon(theme.VisibilityIcon())
 	}
 
-	labelPassword := canvas.NewText(i18n.T("account.new_password"), colors.Gray)
+	labelPassword := canvas.NewText(i18n.T("account.new_password"), apptheme.C.Gray)
 	labelPassword.TextStyle = fyne.TextStyle{Bold: true}
 	labelPassword.TextSize = scaleFont(11)
 	labelPassword.Alignment = fyne.TextAlignCenter
@@ -146,7 +147,7 @@ func layoutAccount() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -157,12 +158,12 @@ func layoutAccount() fyne.CanvasObject {
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText(i18n.T("account.verification"), colors.Gray)
+		header := canvas.NewText(i18n.T("account.verification"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("account.confirm_password"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.confirm_password"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -197,7 +198,7 @@ func layoutAccount() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 				overlay.Add(layoutRecovery())
@@ -216,7 +217,7 @@ func layoutAccount() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -277,12 +278,12 @@ func layoutAccount() fyne.CanvasObject {
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText(i18n.T("account.verification"), colors.Gray)
+		header := canvas.NewText(i18n.T("account.verification"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("account.confirm_password"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.confirm_password"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -317,7 +318,7 @@ func layoutAccount() fyne.CanvasObject {
 				overlay.Add(
 					container.NewStack(
 						&iframe{},
-						canvas.NewRectangle(colors.DarkMatter),
+						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
 				overlay.Add(layoutRecoveryHex())
@@ -336,7 +337,7 @@ func layoutAccount() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -397,12 +398,12 @@ func layoutAccount() fyne.CanvasObject {
 		errorText.Refresh()
 		overlay := session.Window.Canvas().Overlays()
 
-		header := canvas.NewText(i18n.T("account.authorization"), colors.Gray)
+		header := canvas.NewText(i18n.T("account.authorization"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("account.change_password"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("account.change_password"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -484,7 +485,7 @@ func layoutAccount() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -560,7 +561,7 @@ func layoutAccount() fyne.CanvasObject {
 								logger.Errorf("[Engram] File dialog: %s\n", err)
 								fyne.Do(func() {
 									errorText.Text = "could not export wallet file"
-									errorText.Color = colors.Red
+									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
 								return
@@ -575,7 +576,7 @@ func layoutAccount() fyne.CanvasObject {
 								logger.Errorf("[Engram] Reading wallet file %s: %s\n", session.Path, err)
 								fyne.Do(func() {
 									errorText.Text = "error reading wallet file"
-									errorText.Color = colors.Red
+									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
 								return
@@ -586,7 +587,7 @@ func layoutAccount() fyne.CanvasObject {
 								logger.Errorf("[Engram] Exporting %s: %s\n", session.Path, err)
 								fyne.Do(func() {
 									errorText.Text = "error exporting wallet file"
-									errorText.Color = colors.Red
+									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
 								return
@@ -594,7 +595,7 @@ func layoutAccount() fyne.CanvasObject {
 
 							fyne.Do(func() {
 								errorText.Text = "exported wallet file successfully"
-								errorText.Color = colors.Green
+								errorText.Color = apptheme.C.Green
 								errorText.Refresh()
 							})
 						}, session.Window)
@@ -628,8 +629,8 @@ func layoutAccount() fyne.CanvasObject {
 	if err != nil {
 
 	} else {
-		qr.BackgroundColor = colors.DarkMatter
-		qr.ForegroundColor = colors.Green
+		qr.BackgroundColor = apptheme.C.DarkMatter
+		qr.ForegroundColor = apptheme.C.Green
 	}
 
 	imageQR = canvas.NewImageFromImage(qr.Image(int(ui.Width * 0.65)))
@@ -698,7 +699,7 @@ func layoutAccount() fyne.CanvasObject {
 
 func layoutRecovery() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
-	heading := canvas.NewText("Recovery Words", colors.Green)
+	heading := canvas.NewText("Recovery Words", apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -818,7 +819,7 @@ func layoutRecovery() fyne.CanvasObject {
 
 func layoutRecoveryHex() fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
-	heading := canvas.NewText("Recovery Hex Keys", colors.Green)
+	heading := canvas.NewText("Recovery Hex Keys", apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -911,12 +912,12 @@ func layoutRecoveryHex() fyne.CanvasObject {
 
 	linkCopyPublic := widget.NewHyperlinkWithStyle(i18n.T("account.copy_public"), nil, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
-	labelSecret := canvas.NewText(i18n.T("account.secret_key"), colors.Gray)
+	labelSecret := canvas.NewText(i18n.T("account.secret_key"), apptheme.C.Gray)
 	labelSecret.TextSize = scaleFont(14)
 	labelSecret.Alignment = fyne.TextAlignLeading
 	labelSecret.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelPublic := canvas.NewText(i18n.T("account.public_key"), colors.Gray)
+	labelPublic := canvas.NewText(i18n.T("account.public_key"), apptheme.C.Gray)
 	labelPublic.TextSize = scaleFont(14)
 	labelPublic.Alignment = fyne.TextAlignLeading
 	labelPublic.TextStyle = fyne.TextStyle{Bold: true}

@@ -36,6 +36,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
@@ -53,20 +54,20 @@ func layoutSettings() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText(i18n.T("settings.title"), colors.Green)
+	heading := canvas.NewText(i18n.T("settings.title"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelNetwork := canvas.NewText(i18n.T("settings.network"), colors.Gray)
+	labelNetwork := canvas.NewText(i18n.T("settings.network"), apptheme.C.Gray)
 	labelNetwork.TextStyle = fyne.TextStyle{Bold: true}
 	labelNetwork.TextSize = scaleFont(14)
 
-	labelNode := canvas.NewText(i18n.T("settings.connection"), colors.Gray)
+	labelNode := canvas.NewText(i18n.T("settings.connection"), apptheme.C.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
 	labelNode.TextSize = scaleFont(14)
 
-	labelSecurity := canvas.NewText(i18n.T("settings.security"), colors.Gray)
+	labelSecurity := canvas.NewText(i18n.T("settings.security"), apptheme.C.Gray)
 	labelSecurity.TextStyle = fyne.TextStyle{Bold: true}
 	labelSecurity.TextSize = scaleFont(14)
 
@@ -460,7 +461,7 @@ func layoutSettings() fyne.CanvasObject {
 		)
 	}
 
-	statusText := canvas.NewText("", colors.Account)
+	statusText := canvas.NewText("", apptheme.C.Account)
 	statusText.TextSize = scaleFont(12)
 
 	btnDelete.OnTapped = func() {
@@ -479,13 +480,13 @@ func layoutSettings() fyne.CanvasObject {
 							err = parseError.Err
 						}
 
-						statusText.Color = colors.Red
+						statusText.Color = apptheme.C.Red
 						statusText.Text = err.Error()
 						statusText.Refresh()
 						return
 					}
 
-					statusText.Color = colors.Green
+					statusText.Color = apptheme.C.Green
 					statusText.Text = fmt.Sprintf(i18n.T("settings.gnomon_deleted"), strings.ToLower(session.Network))
 					statusText.Refresh()
 				}
@@ -588,7 +589,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText(i18n.T("settings.title"), colors.Green)
+	heading := canvas.NewText(i18n.T("settings.title"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -601,7 +602,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText(i18n.T("settings.remote_access_heading"), colors.Gray)
+	title := canvas.NewText(i18n.T("settings.remote_access_heading"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -611,22 +612,22 @@ func layoutAppSettings() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
+	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), apptheme.C.Gray)
 	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
+	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), apptheme.C.Gray)
 	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnections := canvas.NewText(i18n.T("settings.connections"), colors.Gray)
+	labelConnections := canvas.NewText(i18n.T("settings.connections"), apptheme.C.Gray)
 	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep1 := canvas.NewRectangle(colors.Gray)
+	sep1 := canvas.NewRectangle(apptheme.C.Gray)
 	sep1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -635,7 +636,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -646,22 +647,22 @@ func layoutAppSettings() fyne.CanvasObject {
 	_ = line1
 	_ = line2
 
-	shortShard := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
+	shortShard := canvas.NewText(i18n.T("settings.app_connections"), apptheme.C.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
-	linkColor := colors.Green
+	linkColor := apptheme.C.Green
 
 	if remoteAccess.RPC.server == nil {
 		session.Link = i18n.T("settings.blocked")
-		linkColor = colors.Gray
+		linkColor = apptheme.C.Gray
 	}
 
 	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
 	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
+	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), apptheme.C.Gray)
 	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
@@ -702,11 +703,11 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
 
-	linkColor = colors.Green
+	linkColor = apptheme.C.Green
 
 	if remoteAccess.WS.server == nil {
 		session.Link = i18n.T("settings.blocked")
-		linkColor = colors.Gray
+		linkColor = apptheme.C.Gray
 	}
 
 	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
@@ -817,7 +818,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	} else {
 		if remoteAccess.RPC.server != nil {
 			remoteAccess.RPC.status.Text = i18n.T("settings.allowed")
-			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.status.Color = apptheme.C.Green
 			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.RPC.userText.Disable()
 			remoteAccess.RPC.passText.Disable()
@@ -825,7 +826,7 @@ func layoutAppSettings() fyne.CanvasObject {
 			deckChoice.Disable()
 		} else {
 			remoteAccess.RPC.status.Text = i18n.T("settings.blocked")
-			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.status.Color = apptheme.C.Gray
 			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.RPC.userText.Enable()
 			remoteAccess.RPC.passText.Enable()
@@ -834,13 +835,13 @@ func layoutAppSettings() fyne.CanvasObject {
 
 		if remoteAccess.WS.server != nil {
 			remoteAccess.WS.status.Text = i18n.T("settings.allowed")
-			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.status.Color = apptheme.C.Green
 			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
 			remoteAccess.WS.status.Text = i18n.T("settings.blocked")
-			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.status.Color = apptheme.C.Gray
 			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.WS.portText.Enable()
 		}
@@ -1032,7 +1033,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// TELA Tab Content
-	telaTitle := canvas.NewText(i18n.T("settings.tela_heading"), colors.Gray)
+	telaTitle := canvas.NewText(i18n.T("settings.tela_heading"), apptheme.C.Gray)
 	telaTitle.TextStyle = fyne.TextStyle{Bold: true}
 	telaTitle.TextSize = scaleFont(16)
 
@@ -1357,12 +1358,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	)
 
 	// Advanced Tab Content
-	advancedTitle := canvas.NewText(i18n.T("settings.advanced_heading"), colors.Gray)
+	advancedTitle := canvas.NewText(i18n.T("settings.advanced_heading"), apptheme.C.Gray)
 	advancedTitle.TextStyle = fyne.TextStyle{Bold: true}
 	advancedTitle.TextSize = scaleFont(16)
 
 	// GNOMON Section
-	gnomonTitle := canvas.NewText(i18n.T("settings.gnomon_section"), colors.Gray)
+	gnomonTitle := canvas.NewText(i18n.T("settings.gnomon_section"), apptheme.C.Gray)
 	gnomonTitle.TextSize = scaleFont(11)
 	gnomonTitle.Alignment = fyne.TextAlignCenter
 	gnomonTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1393,7 +1394,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// NOTIFICATIONS Section
-	notifTitle := canvas.NewText(i18n.T("settings.notifications_section"), colors.Gray)
+	notifTitle := canvas.NewText(i18n.T("settings.notifications_section"), apptheme.C.Gray)
 	notifTitle.TextSize = scaleFont(11)
 	notifTitle.Alignment = fyne.TextAlignCenter
 	notifTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1407,7 +1408,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	checkNotif.SetChecked(getNotificationsEnabled())
 
 	// STATUS AREA Section
-	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), colors.Gray)
+	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), apptheme.C.Gray)
 	statusAreaTitle.TextSize = scaleFont(11)
 	statusAreaTitle.Alignment = fyne.TextAlignCenter
 	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1422,7 +1423,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	prioritiseCheck.SetChecked(getPrioritiseStatus())
 
 	// EPOCH STATISTICS Section
-	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), colors.Gray)
+	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), apptheme.C.Gray)
 	epochTitle.TextSize = scaleFont(11)
 	epochTitle.Alignment = fyne.TextAlignCenter
 	epochTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1473,7 +1474,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// SCANNING Section
-	scanningTitle := canvas.NewText(i18n.T("settings.scanning_section"), colors.Gray)
+	scanningTitle := canvas.NewText(i18n.T("settings.scanning_section"), apptheme.C.Gray)
 	scanningTitle.TextSize = scaleFont(11)
 	scanningTitle.Alignment = fyne.TextAlignCenter
 	scanningTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1508,7 +1509,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// MAINTENANCE Section
-	maintenanceTitle := canvas.NewText(i18n.T("settings.maintenance_section"), colors.Gray)
+	maintenanceTitle := canvas.NewText(i18n.T("settings.maintenance_section"), apptheme.C.Gray)
 	maintenanceTitle.TextSize = scaleFont(11)
 	maintenanceTitle.Alignment = fyne.TextAlignCenter
 	maintenanceTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -1616,12 +1617,12 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 
 	// DATASHARD Section components
-	labelDatashard := canvas.NewText(i18n.T("settings.datashard_section"), colors.Gray)
+	labelDatashard := canvas.NewText(i18n.T("settings.datashard_section"), apptheme.C.Gray)
 	labelDatashard.TextSize = scaleFont(11)
 	labelDatashard.Alignment = fyne.TextAlignCenter
 	labelDatashard.TextStyle = fyne.TextStyle{Bold: true}
 
-	headerDatashard := canvas.NewText(i18n.T("settings.datashard_id"), colors.Gray)
+	headerDatashard := canvas.NewText(i18n.T("settings.datashard_id"), apptheme.C.Gray)
 	headerDatashard.TextSize = scaleFont(16)
 	headerDatashard.Alignment = fyne.TextAlignCenter
 	headerDatashard.TextStyle = fyne.TextStyle{Bold: true}
@@ -1640,12 +1641,12 @@ func layoutAppSettings() fyne.CanvasObject {
 
 	btnClearDatashard := widget.NewButton(i18n.T("settings.delete_datashard"), nil)
 	btnClearDatashard.OnTapped = func() {
-		header := canvas.NewText(i18n.T("settings.datashard_delete_request"), colors.Gray)
+		header := canvas.NewText(i18n.T("settings.datashard_delete_request"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
 		header.Alignment = fyne.TextAlignCenter
 		header.TextStyle = fyne.TextStyle{Bold: true}
 
-		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), colors.Account)
+		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), apptheme.C.Account)
 		subHeader.TextSize = scaleFont(22)
 		subHeader.Alignment = fyne.TextAlignCenter
 		subHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -1679,7 +1680,7 @@ func layoutAppSettings() fyne.CanvasObject {
 		overlay.Add(
 			container.NewStack(
 				&iframe{},
-				canvas.NewRectangle(colors.DarkMatter),
+				canvas.NewRectangle(apptheme.C.DarkMatter),
 			),
 		)
 
@@ -1765,10 +1766,15 @@ func layoutAppSettings() fyne.CanvasObject {
 		epochSection.Hide()
 	}
 
-	languageTitle := canvas.NewText(i18n.T("settings.language_section"), colors.Gray)
+	languageTitle := canvas.NewText(i18n.T("settings.language_section"), apptheme.C.Gray)
 	languageTitle.TextSize = scaleFont(11)
 	languageTitle.Alignment = fyne.TextAlignCenter
 	languageTitle.TextStyle = fyne.TextStyle{Bold: true}
+
+	themeTitle := canvas.NewText(i18n.T("settings.theme_section"), apptheme.C.Gray)
+	themeTitle.TextSize = scaleFont(11)
+	themeTitle.Alignment = fyne.TextAlignCenter
+	themeTitle.TextStyle = fyne.TextStyle{Bold: true}
 
 	advancedContent := container.NewVBox(
 		rectSpacer,
@@ -1860,6 +1866,59 @@ func layoutAppSettings() fyne.CanvasObject {
 			return container.NewStack(
 				rectWidth90,
 				wLang,
+			)
+		}(),
+
+		// THEMES Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			themeTitle,
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.theme_label")),
+		rectSpacer,
+		func() *fyne.Container {
+			themeNames := []string{"Engram Classic", "Derotopia"}
+			themeKeys := []string{apptheme.ThemeEngram, apptheme.ThemeDerotopia}
+			savedTheme := apptheme.ThemeEngram
+			if data, err := GetValue("settings", []byte("theme")); err == nil && len(data) > 0 {
+				savedTheme = string(data)
+			}
+			wTheme := widget.NewSelect(themeNames, func(s string) {
+				idx := 0
+				for i, name := range themeNames {
+					if name == s {
+						idx = i
+						break
+					}
+				}
+				key := themeKeys[idx]
+				if key == savedTheme {
+					return
+				}
+				StoreValue("settings", []byte("theme"), []byte(key))
+				apptheme.Activate(key)
+				a.Settings().SetTheme(apptheme.Main)
+				UpdateThemeLogo()
+				settingsActiveTab = 2
+				session.Window.SetContent(layoutAppSettings())
+			})
+			for i, key := range themeKeys {
+				if key == savedTheme {
+					wTheme.SetSelectedIndex(i)
+					break
+				}
+			}
+			return container.NewStack(
+				rectWidth90,
+				wTheme,
 			)
 		}(),
 
@@ -2111,7 +2170,7 @@ func layoutNetwork() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	labelNode := canvas.NewText(i18n.T("settings.connection"), colors.Gray)
+	labelNode := canvas.NewText(i18n.T("settings.connection"), apptheme.C.Gray)
 	labelNode.TextStyle = fyne.TextStyle{Bold: true}
 	labelNode.TextSize = scaleFont(14)
 
@@ -2365,7 +2424,7 @@ func layoutNetwork() fyne.CanvasObject {
 	)
 	entryWrapper.Resize(fyne.NewSize(ui.Width*0.9, 35))
 
-	sep1 := canvas.NewRectangle(colors.Gray)
+	sep1 := canvas.NewRectangle(apptheme.C.Gray)
 	sep1.SetMinSize(fyne.NewSize(ui.Width*0.3, 2))
 	line1 := container.NewVBox(
 		layout.NewSpacer(),
@@ -2373,7 +2432,7 @@ func layoutNetwork() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.3, 2))
 	line2 := container.NewVBox(
 		layout.NewSpacer(),
@@ -2381,7 +2440,7 @@ func layoutNetwork() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), colors.Gray)
+	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), apptheme.C.Gray)
 	statusAreaTitle.TextSize = scaleFont(11)
 	statusAreaTitle.Alignment = fyne.TextAlignCenter
 	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
@@ -2443,7 +2502,7 @@ func layoutNetwork() fyne.CanvasObject {
 		SetCurrentScrollBox(scrollBox)
 	}
 
-	heading := canvas.NewText(strings.ToUpper(session.Network), colors.Green)
+	heading := canvas.NewText(strings.ToUpper(session.Network), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
@@ -2492,7 +2551,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 	wSpacer := widget.NewLabel(" ")
 
-	title := canvas.NewText(i18n.T("settings.remote_access_heading"), colors.Gray)
+	title := canvas.NewText(i18n.T("settings.remote_access_heading"), apptheme.C.Gray)
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.TextSize = scaleFont(16)
 
@@ -2507,22 +2566,22 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
 	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, scaleSize(0)))
 
-	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
+	rpcLabel := canvas.NewText(i18n.T("settings.rpc_config"), apptheme.C.Gray)
 	rpcLabel.TextSize = scaleFont(11)
 	rpcLabel.Alignment = fyne.TextAlignCenter
 	rpcLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), colors.Gray)
+	wsLabel := canvas.NewText(i18n.T("settings.rpc_config"), apptheme.C.Gray)
 	wsLabel.TextSize = scaleFont(11)
 	wsLabel.Alignment = fyne.TextAlignCenter
 	wsLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	labelConnections := canvas.NewText(i18n.T("settings.connections"), colors.Gray)
+	labelConnections := canvas.NewText(i18n.T("settings.connections"), apptheme.C.Gray)
 	labelConnections.TextSize = scaleFont(11)
 	labelConnections.Alignment = fyne.TextAlignCenter
 	labelConnections.TextStyle = fyne.TextStyle{Bold: true}
 
-	sep1 := canvas.NewRectangle(colors.Gray)
+	sep1 := canvas.NewRectangle(apptheme.C.Gray)
 	sep1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line1 := container.NewVBox(
@@ -2531,7 +2590,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	sep2 := canvas.NewRectangle(colors.Gray)
+	sep2 := canvas.NewRectangle(apptheme.C.Gray)
 	sep2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
 
 	line2 := container.NewVBox(
@@ -2552,22 +2611,22 @@ func layoutRemoteAccess() fyne.CanvasObject {
 		removeOverlays()
 	})
 
-	shortShard := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
+	shortShard := canvas.NewText(i18n.T("settings.app_connections"), apptheme.C.Gray)
 	shortShard.TextStyle = fyne.TextStyle{Bold: true}
 	shortShard.TextSize = scaleFont(12)
 
-	linkColor := colors.Green
+	linkColor := apptheme.C.Green
 
 	if remoteAccess.RPC.server == nil {
 		session.Link = i18n.T("settings.blocked")
-		linkColor = colors.Gray
+		linkColor = apptheme.C.Gray
 	}
 
 	remoteAccess.RPC.status = canvas.NewText(session.Link, linkColor)
 	remoteAccess.RPC.status.TextSize = scaleFont(22)
 	remoteAccess.RPC.status.TextStyle = fyne.TextStyle{Bold: true}
 
-	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), colors.Gray)
+	serverStatus := canvas.NewText(i18n.T("settings.app_connections"), apptheme.C.Gray)
 	serverStatus.TextSize = scaleFont(12)
 	serverStatus.Alignment = fyne.TextAlignCenter
 	serverStatus.TextStyle = fyne.TextStyle{Bold: true}
@@ -2610,11 +2669,11 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	}
 	remoteAccess.RPC.portText.SetText(getRemoteAccess("RPC"))
 
-	linkColor = colors.Green
+	linkColor = apptheme.C.Green
 
 	if remoteAccess.WS.server == nil {
 		session.Link = i18n.T("settings.blocked")
-		linkColor = colors.Gray
+		linkColor = apptheme.C.Gray
 	}
 
 	remoteAccess.WS.status = canvas.NewText(session.Link, linkColor)
@@ -2745,7 +2804,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 	} else {
 		if remoteAccess.RPC.server != nil {
 			remoteAccess.RPC.status.Text = i18n.T("settings.allowed")
-			remoteAccess.RPC.status.Color = colors.Green
+			remoteAccess.RPC.status.Color = apptheme.C.Green
 			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.RPC.userText.Disable()
 			remoteAccess.RPC.passText.Disable()
@@ -2753,7 +2812,7 @@ func layoutRemoteAccess() fyne.CanvasObject {
 			deckChoice.Disable()
 		} else {
 			remoteAccess.RPC.status.Text = i18n.T("settings.blocked")
-			remoteAccess.RPC.status.Color = colors.Gray
+			remoteAccess.RPC.status.Color = apptheme.C.Gray
 			remoteAccess.RPC.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.RPC.userText.Enable()
 			remoteAccess.RPC.passText.Enable()
@@ -2762,13 +2821,13 @@ func layoutRemoteAccess() fyne.CanvasObject {
 
 		if remoteAccess.WS.server != nil {
 			remoteAccess.WS.status.Text = i18n.T("settings.allowed")
-			remoteAccess.WS.status.Color = colors.Green
+			remoteAccess.WS.status.Color = apptheme.C.Green
 			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_off")
 			remoteAccess.WS.portText.Disable()
 			deckChoice.Disable()
 		} else {
 			remoteAccess.WS.status.Text = i18n.T("settings.blocked")
-			remoteAccess.WS.status.Color = colors.Gray
+			remoteAccess.WS.status.Color = apptheme.C.Gray
 			remoteAccess.WS.toggle.Text = i18n.T("settings.turn_on")
 			remoteAccess.WS.portText.Enable()
 		}

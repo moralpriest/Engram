@@ -36,6 +36,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/globals"
@@ -46,7 +47,7 @@ import (
 
 func layoutMain() fyne.CanvasObject {
 	// Set theme
-	a.Settings().SetTheme(themes.main)
+	a.Settings().SetTheme(apptheme.Main)
 	session.Domain = "app.main"
 	session.Path = ""
 	session.Password = ""
@@ -139,7 +140,7 @@ func layoutMain() fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Connection Settings button with icon
-	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), colors.Green, func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), apptheme.C.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -245,11 +246,17 @@ func layoutMain() fyne.CanvasObject {
 
 	unselectButtons := func() {
 		for _, b := range walletBtns {
-			b.SetColors(colors.DarkMatter, colors.Gray)
+			b.SetColors(apptheme.C.DarkMatter, apptheme.C.Gray)
 		}
 	}
 
-	logoGreen := color.RGBA{R: 70, G: 184, B: 104, A: 0xff}
+	// Wallet selection highlight color - theme aware
+	var logoGreen color.Color
+	if apptheme.ThemeMode == apptheme.ThemeDerotopia {
+		logoGreen = color.RGBA{200, 100, 255, 255} // bright purple for Derotopia
+	} else {
+		logoGreen = color.RGBA{R: 70, G: 184, B: 104, A: 0xff} // original green for Engram Classic
+	}
 
 	for i, walletName := range list {
 		if i >= 3 {
@@ -338,11 +345,11 @@ func layoutMain() fyne.CanvasObject {
 		loginSection.Hide()
 	}
 
-	status.Connection.FillColor = colors.Gray
-	status.RemoteAccess.FillColor = colors.Gray
-	status.Gnomon.FillColor = colors.Gray
-	status.EPOCH.FillColor = colors.Gray
-	status.Sync.FillColor = colors.Gray
+	status.Connection.FillColor = apptheme.C.Gray
+	status.RemoteAccess.FillColor = apptheme.C.Gray
+	status.Gnomon.FillColor = apptheme.C.Gray
+	status.EPOCH.FillColor = apptheme.C.Gray
+	status.Sync.FillColor = apptheme.C.Gray
 
 	// Create uniform button container - each button same size
 	buttonGrid := container.NewVBox(
@@ -360,11 +367,11 @@ func layoutMain() fyne.CanvasObject {
 	)
 
 	// Footer text
-	copyrightLabel := canvas.NewText(i18n.T("auth.copyright"), colors.Gray)
+	copyrightLabel := canvas.NewText(i18n.T("auth.copyright"), apptheme.C.Gray)
 	copyrightLabel.TextSize = scaleFont(10)
 	copyrightLabel.Alignment = fyne.TextAlignCenter
 
-	versionLabel := canvas.NewText(fmt.Sprintf("Engram v%s", versionString), colors.Gray)
+	versionLabel := canvas.NewText(fmt.Sprintf("Engram v%s", versionString), apptheme.C.Gray)
 	versionLabel.TextSize = scaleFont(10)
 	versionLabel.Alignment = fyne.TextAlignCenter
 
@@ -454,7 +461,7 @@ func layoutMain() fyne.CanvasObject {
 
 // layoutSingleWalletLogin shows a simplified login screen for when only 1 wallet exists
 func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
-	a.Settings().SetTheme(themes.main)
+	a.Settings().SetTheme(apptheme.Main)
 	session.Domain = "app.main"
 	session.Password = ""
 
@@ -469,7 +476,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}
 
 	// Display wallet name
-	lblWalletName := canvas.NewText(strings.TrimSuffix(walletName, ".db"), colors.Green)
+	lblWalletName := canvas.NewText(strings.TrimSuffix(walletName, ".db"), apptheme.C.Green)
 	lblWalletName.TextSize = scaleFont(16)
 	lblWalletName.Alignment = fyne.TextAlignCenter
 	lblWalletName.TextStyle = fyne.TextStyle{Bold: true}
@@ -557,7 +564,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}
 
 	// Switch Account button
-	btnSwitchAccount := newGunmetalButtonWithIcon("Switch Account", theme.AccountIcon(), colors.Green, func() {
+	btnSwitchAccount := newGunmetalButtonWithIcon("Switch Account", theme.AccountIcon(), apptheme.C.Green, func() {
 		session.Domain = "app.main"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -566,7 +573,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Connection Settings button
-	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), colors.Green, func() {
+	btnConnectionSettings := newGunmetalButtonWithIcon(i18n.T("main.connection_settings"), theme.SettingsIcon(), apptheme.C.Green, func() {
 		session.Domain = "app.settings"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -675,7 +682,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	if !isMobile() {
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	}
-	a.Settings().SetTheme(themes.alt)
+	a.Settings().SetTheme(apptheme.Alt)
 
 	session.Domain = "app.register"
 	session.Language = -1
@@ -687,7 +694,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	languages := mnemonics.Language_List()
 	sort.Strings(languages)
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
@@ -735,7 +742,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	}
 
 	var addressStr string
-	lblAddress := canvas.NewText("", colors.Green)
+	lblAddress := canvas.NewText("", apptheme.C.Green)
 	lblAddress.TextSize = scaleFont(22)
 	lblAddress.Alignment = fyne.TextAlignCenter
 	lblAddress.TextStyle = fyne.TextStyle{Bold: true}
@@ -858,7 +865,7 @@ func layoutNewAccount() fyne.CanvasObject {
 		if findAccount() {
 			err = errors.New("account name already exists")
 			errorText.Text = err.Error()
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		} else {
@@ -897,12 +904,12 @@ func layoutNewAccount() fyne.CanvasObject {
 	wLanguage.PlaceHolder = i18n.T("create.select_language")
 
 	wSpacer := widget.NewLabel(" ")
-	heading := canvas.NewText(i18n.T("main.new_account"), colors.Green)
+	heading := canvas.NewText(i18n.T("main.new_account"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	heading2 := canvas.NewText(i18n.T("restore.recover"), colors.Green)
+	heading2 := canvas.NewText(i18n.T("restore.recover"), apptheme.C.Green)
 	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
@@ -1014,7 +1021,7 @@ func layoutNewAccount() fyne.CanvasObject {
 	btnCreate.OnTapped = func() {
 		if findAccount() {
 			errorText.Text = "Account name already exists."
-			errorText.Color = colors.Red
+			errorText.Color = apptheme.C.Red
 			errorText.Refresh()
 			return
 		} else {
@@ -1108,7 +1115,7 @@ func layoutRestore() fyne.CanvasObject {
 	if !isMobile() {
 		resizeWindow(ui.MaxWidth, ui.MaxHeight)
 	}
-	a.Settings().SetTheme(themes.alt)
+	a.Settings().SetTheme(apptheme.Alt)
 
 	session.Domain = "app.restore"
 	session.Language = -1
@@ -1129,12 +1136,12 @@ func layoutRestore() fyne.CanvasObject {
 		SetCurrentScrollBox(scrollBox)
 	}
 
-	errorText := canvas.NewText(" ", colors.Green)
+	errorText := canvas.NewText(" ", apptheme.C.Green)
 	errorText.TextSize = scaleFont(12)
 	errorText.Alignment = fyne.TextAlignCenter
 
 	// Password strength indicator
-	strengthText := canvas.NewText(" ", colors.Gray)
+	strengthText := canvas.NewText(" ", apptheme.C.Gray)
 	strengthText.TextSize = scaleFont(11)
 	strengthText.Alignment = fyne.TextAlignCenter
 
@@ -1205,16 +1212,16 @@ func layoutRestore() fyne.CanvasObject {
 	selectedRecoveryType = 0 // 0=Words, 1=Hex, 2=Import
 
 	// Card backgrounds for selection state
-	cardBgWords := canvas.NewRectangle(colors.Green)
-	cardBgHex := canvas.NewRectangle(colors.Gray)
-	cardBgImport := canvas.NewRectangle(colors.Gray)
+	cardBgWords := canvas.NewRectangle(apptheme.C.Green)
+	cardBgHex := canvas.NewRectangle(apptheme.C.Gray)
+	cardBgImport := canvas.NewRectangle(apptheme.C.Gray)
 
 	cardBgWords.CornerRadius = scaleSize(12)
 	cardBgHex.CornerRadius = scaleSize(12)
 	cardBgImport.CornerRadius = scaleSize(12)
 
 	// Card labels
-	lblWords := canvas.NewText(i18n.T("restore.words"), colors.DarkMatter)
+	lblWords := canvas.NewText(i18n.T("restore.words"), apptheme.C.DarkMatter)
 	lblWords.TextSize = scaleFont(14)
 	lblWords.Alignment = fyne.TextAlignCenter
 	lblWords.TextStyle = fyne.TextStyle{Bold: true}
@@ -1230,7 +1237,7 @@ func layoutRestore() fyne.CanvasObject {
 	lblImport.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Card descriptions
-	descWords := canvas.NewText(i18n.T("restore.25_words"), colors.DarkMatter)
+	descWords := canvas.NewText(i18n.T("restore.25_words"), apptheme.C.DarkMatter)
 	descWords.TextSize = scaleFont(11)
 	descWords.Alignment = fyne.TextAlignCenter
 
@@ -1281,9 +1288,9 @@ func layoutRestore() fyne.CanvasObject {
 	// Function to update card styles based on selection
 	updateRecoveryTypeCards := func() {
 		// Reset all to unselected
-		cardBgWords.FillColor = colors.Gray
-		cardBgHex.FillColor = colors.Gray
-		cardBgImport.FillColor = colors.Gray
+		cardBgWords.FillColor = apptheme.C.Gray
+		cardBgHex.FillColor = apptheme.C.Gray
+		cardBgImport.FillColor = apptheme.C.Gray
 		lblWords.Color = color.White
 		lblHex.Color = color.White
 		lblImport.Color = color.White
@@ -1294,17 +1301,17 @@ func layoutRestore() fyne.CanvasObject {
 		// Highlight selected with animation
 		switch selectedRecoveryType {
 		case 0:
-			animateCardPulse(cardBgWords, colors.Green)
-			lblWords.Color = colors.DarkMatter
-			descWords.Color = colors.DarkMatter
+			animateCardPulse(cardBgWords, apptheme.C.Green)
+			lblWords.Color = apptheme.C.DarkMatter
+			descWords.Color = apptheme.C.DarkMatter
 		case 1:
-			animateCardPulse(cardBgHex, colors.Green)
-			lblHex.Color = colors.DarkMatter
-			descHex.Color = colors.DarkMatter
+			animateCardPulse(cardBgHex, apptheme.C.Green)
+			lblHex.Color = apptheme.C.DarkMatter
+			descHex.Color = apptheme.C.DarkMatter
 		case 2:
-			animateCardPulse(cardBgImport, colors.Green)
-			lblImport.Color = colors.DarkMatter
-			descImport.Color = colors.DarkMatter
+			animateCardPulse(cardBgImport, apptheme.C.Green)
+			lblImport.Color = apptheme.C.DarkMatter
+			descImport.Color = apptheme.C.DarkMatter
 		}
 
 		cardBgWords.Refresh()
@@ -1526,22 +1533,22 @@ func layoutRestore() fyne.CanvasObject {
 		}
 	}
 
-	heading := canvas.NewText(i18n.T("main.recover_account"), colors.Green)
+	heading := canvas.NewText(i18n.T("main.recover_account"), apptheme.C.Green)
 	heading.TextSize = scaleFont(22)
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
 	// Network indicator
 	networkName := strings.ToUpper(cachedNetwork)
-	networkColor := colors.Green
+	networkColor := apptheme.C.Green
 	if cachedNetwork != NETWORK_MAINNET {
-		networkColor = colors.Yellow
+		networkColor = apptheme.C.Yellow
 	}
 	networkIndicator := canvas.NewText(networkName, networkColor)
 	networkIndicator.TextSize = scaleFont(12)
 	networkIndicator.Alignment = fyne.TextAlignCenter
 
-	heading2 := canvas.NewText(i18n.T("restore.success"), colors.Green)
+	heading2 := canvas.NewText(i18n.T("restore.success"), apptheme.C.Green)
 	heading2.TextSize = scaleFont(22)
 	heading2.Alignment = fyne.TextAlignCenter
 	heading2.TextStyle = fyne.TextStyle{Bold: true}
@@ -1555,10 +1562,10 @@ func layoutRestore() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(fyne.NewSize(ui.Width, scaleSize(5)))
 
-	status.Connection.FillColor = colors.Gray
-	status.RemoteAccess.FillColor = colors.Gray
-	status.Gnomon.FillColor = colors.Gray
-	status.Sync.FillColor = colors.Gray
+	status.Connection.FillColor = apptheme.C.Gray
+	status.RemoteAccess.FillColor = apptheme.C.Gray
+	status.Gnomon.FillColor = apptheme.C.Gray
+	status.Sync.FillColor = apptheme.C.Gray
 
 	grid := container.NewVBox()
 	grid.Objects = nil
@@ -1592,7 +1599,7 @@ func layoutRestore() fyne.CanvasObject {
 		}
 	}
 
-	seedInfo := canvas.NewText(" ", colors.Gray)
+	seedInfo := canvas.NewText(" ", apptheme.C.Gray)
 	seedInfo.TextSize = scaleFont(11)
 	seedInfo.Alignment = fyne.TextAlignCenter
 
@@ -1601,16 +1608,16 @@ func layoutRestore() fyne.CanvasObject {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			seedInfo.Text = " "
-			seedInfo.Color = colors.Gray
+			seedInfo.Color = apptheme.C.Gray
 		} else {
 			wordCount := len(strings.Fields(s))
 			seedInfo.Text = fmt.Sprintf("%d/25 words", wordCount)
 			if wordCount == 24 || wordCount == 25 {
-				seedInfo.Color = colors.Green
+				seedInfo.Color = apptheme.C.Green
 			} else if wordCount > 25 {
-				seedInfo.Color = colors.Red
+				seedInfo.Color = apptheme.C.Red
 			} else {
-				seedInfo.Color = colors.Gray
+				seedInfo.Color = apptheme.C.Gray
 			}
 		}
 		seedInfo.Refresh()
@@ -1760,7 +1767,7 @@ func layoutRestore() fyne.CanvasObject {
 		wrapMobileButton(btnCreate),
 	)
 
-	importFileText := canvas.NewText(" ", colors.Green)
+	importFileText := canvas.NewText(" ", apptheme.C.Green)
 	importFileText.TextSize = scaleFont(12)
 	importFileText.Alignment = fyne.TextAlignCenter
 
@@ -1860,7 +1867,7 @@ func layoutRestore() fyne.CanvasObject {
 	formSuccess.Hide()
 
 	btnSelectFile.OnTapped = func() {
-		a.Settings().SetTheme(themes.alt)
+		a.Settings().SetTheme(apptheme.Alt)
 		dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
 			if err != nil {
 				logger.Errorf("[Engram] File dialog: %s\n", err)
@@ -1938,12 +1945,12 @@ func layoutRestore() fyne.CanvasObject {
 			rectPassSpacer := canvas.NewRectangle(color.Transparent)
 			rectPassSpacer.SetMinSize(fyne.NewSize(10, 5))
 
-			passHeader := canvas.NewText(i18n.T("restore.enter_password"), colors.Gray)
+			passHeader := canvas.NewText(i18n.T("restore.enter_password"), apptheme.C.Gray)
 			passHeader.TextSize = scaleFont(14)
 			passHeader.Alignment = fyne.TextAlignCenter
 			passHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-			passSubHeader := canvas.NewText(i18n.T("restore.unlock_wallet"), colors.Account)
+			passSubHeader := canvas.NewText(i18n.T("restore.unlock_wallet"), apptheme.C.Account)
 			passSubHeader.TextSize = scaleFont(22)
 			passSubHeader.Alignment = fyne.TextAlignCenter
 			passSubHeader.TextStyle = fyne.TextStyle{Bold: true}
@@ -2035,8 +2042,8 @@ func layoutRestore() fyne.CanvasObject {
 					if qrSize > ui.Height*0.3 {
 						qrSize = ui.Height * 0.3
 					}
-					qr.BackgroundColor = colors.DarkMatter
-					qr.ForegroundColor = colors.Green
+					qr.BackgroundColor = apptheme.C.DarkMatter
+					qr.ForegroundColor = apptheme.C.Green
 					successQR.Image = qr.Image(int(qrSize))
 					successQR.SetMinSize(fyne.NewSize(qrSize, qrSize))
 					successQR.Refresh()
@@ -2079,7 +2086,7 @@ func layoutRestore() fyne.CanvasObject {
 			overlay.Add(
 				container.NewStack(
 					&iframe{},
-					canvas.NewRectangle(colors.DarkMatter),
+					canvas.NewRectangle(apptheme.C.DarkMatter),
 				),
 			)
 
@@ -2259,8 +2266,8 @@ func layoutRestore() fyne.CanvasObject {
 					if qrSize > ui.Height*0.3 {
 						qrSize = ui.Height * 0.3
 					}
-					qr.BackgroundColor = colors.DarkMatter
-					qr.ForegroundColor = colors.Green
+					qr.BackgroundColor = apptheme.C.DarkMatter
+					qr.ForegroundColor = apptheme.C.Green
 					successImage = qr.Image(int(qrSize))
 				}
 

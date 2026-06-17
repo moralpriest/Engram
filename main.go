@@ -16,7 +16,6 @@ package main
 
 import (
 	"fmt"
-	"image/color"
 	"os"
 	"runtime"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/civilware/tela/logger"
 
 	"github.com/DEROFDN/engram/i18n"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi"
@@ -79,9 +79,7 @@ var messages Messages
 var status Status
 var tx Transfers
 var res Res
-var colors Colors
 var remoteAccess RemoteAccess
-var themes Theme
 var rpc_client Client
 var Connected bool
 var nav Navigation
@@ -124,7 +122,32 @@ func main() {
 			panic(r)
 		}
 	}()
-	a.Settings().SetTheme(themes.main)
+
+	apptheme.Main = &apptheme.ETheme{
+		Regular:       resourceRegularTtf,
+		Bold:          resourceBoldTtf,
+		Italic:        resourceItalicTtf,
+		BoldItalic:    resourceBoldItalicTtf,
+		Astrolyt:      resourceAstrolytTtf,
+		GoNoto:        resourceGoNotoCurrentTtf,
+		ScaleFontSize: scaleFont,
+	}
+	apptheme.Alt = &apptheme.ETheme2{
+		Regular:       resourceRegularTtf,
+		Bold:          resourceBoldTtf,
+		Italic:        resourceItalicTtf,
+		BoldItalic:    resourceBoldItalicTtf,
+		Astrolyt:      resourceAstrolytTtf,
+		GoNoto:        resourceGoNotoCurrentTtf,
+		ScaleFontSize: scaleFont,
+	}
+
+	a.Settings().SetTheme(apptheme.Main)
+
+	// Load saved theme setting
+	if themeData, err := GetValue("settings", []byte("theme")); err == nil && len(themeData) > 0 {
+		apptheme.Activate(string(themeData))
+	}
 
 	if safeMode {
 		// Disable Gnomon in safe mode
@@ -155,48 +178,33 @@ func main() {
 
 	// Load resources
 	loadResources()
+	UpdateThemeLogo()
 
 	a.SetIcon(resourceIconPng)
 	session.Window.SetIcon(resourceIconPng)
 
-	// Init colors
-	colors.Network = color.RGBA{R: 67, G: 239, B: 67, A: 255}
-	colors.Account = color.RGBA{R: 233, G: 228, B: 233, A: 0xff}
-	colors.DarkMatter = color.RGBA{21, 23, 30, 255}
-	colors.Red = color.RGBA{R: 214, B: 74, G: 70, A: 255}
-	colors.DarkGreen = color.RGBA{17, 127, 78, 0xff}
-	colors.Green = color.RGBA{19, 202, 105, 0xff}
-	colors.Blue = color.RGBA{R: 27, B: 249, G: 127, A: 255}
-	colors.Gray = color.RGBA{R: 99, B: 110, G: 99, A: 0xff}
-	colors.Yellow = color.RGBA{244, 208, 11, 255}
-	colors.Cold = color.RGBA{60, 73, 92, 255}
-	colors.Flint = color.RGBA{44, 44, 52, 0xff}
-	colors.Purple = color.RGBA{191, 64, 191, 0xff}
-	colors.LightBlue = color.RGBA{56, 182, 255, 255}
-	colors.SoftRed = color.RGBA{R: 240, G: 110, B: 110, A: 255}
-
 	// Init objects
-	status.Canvas = canvas.NewText("", colors.Network)
-	status.Network = canvas.NewText("", colors.Network)
-	session.BalanceText = canvas.NewText("", colors.Account)
-	status.Connection = canvas.NewCircle(colors.Red)
-	status.Connection.StrokeColor = colors.Red
+	status.Canvas = canvas.NewText("", apptheme.C.Network)
+	status.Network = canvas.NewText("", apptheme.C.Network)
+	session.BalanceText = canvas.NewText("", apptheme.C.Account)
+	status.Connection = canvas.NewCircle(apptheme.C.Red)
+	status.Connection.StrokeColor = apptheme.C.Red
 	status.Connection.StrokeWidth = 0
 	status.Connection.Refresh()
-	status.Sync = canvas.NewCircle(colors.Red)
-	status.Sync.StrokeColor = colors.Red
+	status.Sync = canvas.NewCircle(apptheme.C.Red)
+	status.Sync.StrokeColor = apptheme.C.Red
 	status.Sync.StrokeWidth = 0
 	status.Sync.Refresh()
-	status.RemoteAccess = canvas.NewCircle(colors.Red)
-	status.RemoteAccess.StrokeColor = colors.Red
+	status.RemoteAccess = canvas.NewCircle(apptheme.C.Red)
+	status.RemoteAccess.StrokeColor = apptheme.C.Red
 	status.RemoteAccess.StrokeWidth = 0
 	status.RemoteAccess.Refresh()
-	status.Gnomon = canvas.NewCircle(colors.Red)
-	status.Gnomon.StrokeColor = colors.Red
+	status.Gnomon = canvas.NewCircle(apptheme.C.Red)
+	status.Gnomon.StrokeColor = apptheme.C.Red
 	status.Gnomon.StrokeWidth = 0
 	status.Gnomon.Refresh()
-	status.EPOCH = canvas.NewCircle(colors.Red)
-	status.EPOCH.StrokeColor = colors.Red
+	status.EPOCH = canvas.NewCircle(apptheme.C.Red)
+	status.EPOCH.StrokeColor = apptheme.C.Red
 	status.EPOCH.StrokeWidth = 0
 	status.EPOCH.Refresh()
 
