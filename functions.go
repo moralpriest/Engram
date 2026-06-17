@@ -2805,6 +2805,8 @@ func UpdateThemeLogo() {
 	switch apptheme.ThemeMode {
 	case apptheme.ThemeDerotopia:
 		res.gram.Resource = resourceDerotopiaLogoPng
+	case apptheme.ThemeElDorado:
+		res.gram.Resource = resourceElDoradoDEROPng
 	default:
 		res.gram.Resource = resourceDEROLogoPng
 	}
@@ -3010,6 +3012,12 @@ func pulseBalancePending(stop chan struct{}) {
 	}
 	green := apptheme.C.Green
 	yellow := apptheme.C.Yellow
+	switch apptheme.ThemeMode {
+	case apptheme.ThemeDerotopia:
+		yellow = color.RGBA{56, 182, 255, 255} // blue, matching dashboard icons
+	case apptheme.ThemeElDorado:
+		green = color.RGBA{R: 19, G: 202, B: 105, A: 255}
+	}
 	anim := canvas.NewColorRGBAAnimation(green, yellow, 800*time.Millisecond, func(c color.Color) {
 		select {
 		case <-stop:

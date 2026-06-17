@@ -383,16 +383,6 @@ func (b *hoverButton) MouseOut() {
 	b.Button.MouseOut()
 }
 
-func newIconLabelButton(label string, icon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
-	var iconColor color.Color
-	if apptheme.ThemeMode == apptheme.ThemeDerotopia {
-		iconColor = color.RGBA{56, 182, 255, 255} // blue for Derotopia
-	} else {
-		iconColor = color.RGBA{19, 202, 105, 255} // green for Engram Classic
-	}
-	return newIconLabelButtonWithColor(label, icon, iconColor, color.White, onTap, width...)
-}
-
 func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, hoverIconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImgNormal := widget.NewIcon(icon)
 	iconSizerNormal := container.NewGridWrap(scalePoint(28, 28), iconImgNormal)

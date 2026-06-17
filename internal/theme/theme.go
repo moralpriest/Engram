@@ -62,8 +62,11 @@ func getBaseSize(s fyne.ThemeSizeName) float32 {
 }
 
 func accentNRGBA(r, g, b, a uint8) color.Color {
-	if ThemeMode == ThemeDerotopia {
+	switch ThemeMode {
+	case ThemeDerotopia:
 		return color.NRGBA{R: 138, G: 43, B: 226, A: a}
+	case ThemeElDorado:
+		return color.NRGBA{R: 255, G: 215, B: 0, A: a}
 	}
 	return color.NRGBA{R: r, G: g, B: b, A: a}
 }

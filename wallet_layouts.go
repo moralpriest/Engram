@@ -391,28 +391,54 @@ func layoutDashboard() fyne.CanvasObject {
 		closeWallet()
 	}, buttonWidth)
 
-	btnSettings := newIconLabelButton(i18n.T("dashboard.settings"), theme.SettingsIcon(), func() {
+	// Dashboard icon colours — per-theme, and per-icon for El Dorado gold shades
+	var (
+		cSettings  color.Color
+		cNotes     color.Color
+		cMessages  color.Color
+		cContracts color.Color
+	)
+	switch apptheme.ThemeMode {
+	case apptheme.ThemeDerotopia:
+		cSettings = color.RGBA{56, 182, 255, 255}
+		cNotes = color.RGBA{56, 182, 255, 255}
+		cMessages = color.RGBA{56, 182, 255, 255}
+		cContracts = color.RGBA{56, 182, 255, 255}
+	case apptheme.ThemeElDorado:
+		goldenrod := color.RGBA{218, 165, 32, 255}
+		cSettings = goldenrod
+		cNotes = goldenrod
+		cMessages = goldenrod
+		cContracts = goldenrod
+	default:
+		cSettings = color.RGBA{19, 202, 105, 255}
+		cNotes = color.RGBA{19, 202, 105, 255}
+		cMessages = color.RGBA{19, 202, 105, 255}
+		cContracts = color.RGBA{19, 202, 105, 255}
+	}
+
+	btnSettings := newIconLabelButtonWithColor(i18n.T("dashboard.settings"), theme.SettingsIcon(), cSettings, color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAppSettings())
 		removeOverlays()
 	}, buttonWidth)
 
-	btnNotes := newIconLabelButton(i18n.T("dashboard.notes"), theme.DocumentIcon(), func() {
+	btnNotes := newIconLabelButtonWithColor(i18n.T("dashboard.notes"), theme.DocumentIcon(), cNotes, color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutDatapad())
 		removeOverlays()
 	}, buttonWidth)
 
-	btnMessages := newIconLabelButton(i18n.T("dashboard.messages"), theme.MailComposeIcon(), func() {
+	btnMessages := newIconLabelButtonWithColor(i18n.T("dashboard.messages"), theme.MailComposeIcon(), cMessages, color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		removeOverlays()
 		session.Window.SetContent(layoutMessages())
 	}, buttonWidth)
 
-	btnContracts := newIconLabelButton(i18n.T("dashboard.contracts"), theme.FolderIcon(), func() {
+	btnContracts := newIconLabelButtonWithColor(i18n.T("dashboard.contracts"), theme.FolderIcon(), cContracts, color.White, func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutFilesAndContracts())
@@ -1419,6 +1445,24 @@ func layoutReceive() fyne.CanvasObject {
 		}
 	}
 
+	// Wrap buttons with gold tint for better contrast on the white receive page
+	var (
+		wrappedToggle fyne.CanvasObject = addressToggleBtn
+		wrappedCopy   fyne.CanvasObject = addressCopyBtn
+	)
+	wrappedBack := fyne.CanvasObject(btnBack)
+	if apptheme.ThemeMode == apptheme.ThemeElDorado {
+		gold := color.RGBA{R: 212, G: 175, B: 55, A: 255}
+		tint := apptheme.NewTintThemeWithPrimary(apptheme.Main, nil, gold)
+		wrappedToggle = container.NewThemeOverride(addressToggleBtn, tint)
+		wrappedCopy = container.NewThemeOverride(addressCopyBtn, tint)
+		if len(btnBack.Objects) > 1 {
+			if btn, ok := btnBack.Objects[1].(*widget.Button); ok {
+				btnBack.Objects[1] = container.NewThemeOverride(btn, tint)
+			}
+		}
+	}
+
 	qr, err := qrcode.New(activeAddress, qrcode.Highest)
 	if err != nil {
 		logger.Errorf("[Receive] Error generating QR: %v\n", err)
@@ -1445,8 +1489,8 @@ func layoutReceive() fyne.CanvasObject {
 		container.NewCenter(
 			container.NewHBox(
 				addressLabel,
-				addressToggleBtn,
-				addressCopyBtn,
+				wrappedToggle,
+				wrappedCopy,
 			),
 		),
 		rectSpacer,
@@ -1467,7 +1511,7 @@ func layoutReceive() fyne.CanvasObject {
 		container.NewVBox(
 			rectSpacer,
 			container.NewCenter(
-				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+				container.New(layout.NewGridLayoutWithColumns(1), wrappedBack),
 			),
 			rectSpacer,
 		),

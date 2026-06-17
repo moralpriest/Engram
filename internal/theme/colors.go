@@ -20,6 +20,23 @@ type Colors struct {
 	SoftRed    color.Color
 }
 
+var eldoradoColors = Colors{
+	Network:    color.RGBA{R: 255, G: 215, B: 0, A: 255},
+	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
+	DarkMatter: color.RGBA{21, 23, 30, 255},
+	Red:        color.RGBA{R: 214, B: 74, G: 70, A: 255},
+	DarkGreen:  color.RGBA{184, 134, 11, 0xff},
+	Green:      color.RGBA{R: 255, G: 215, B: 0, A: 255},
+	Blue:       color.RGBA{R: 218, G: 165, B: 32, A: 255},
+	Gray:       color.RGBA{R: 99, B: 110, G: 99, A: 0xff},
+	Yellow:     color.RGBA{255, 191, 0, 255},
+	Cold:       color.RGBA{60, 73, 92, 255},
+	Flint:      color.RGBA{44, 44, 52, 0xff},
+	Purple:     color.RGBA{205, 127, 50, 0xff},
+	LightBlue:  color.RGBA{80, 200, 120, 255},
+	SoftRed:    color.RGBA{R: 240, G: 110, B: 110, A: 255},
+}
+
 var engramColors = Colors{
 	Network:    color.RGBA{R: 67, G: 239, B: 67, A: 255},
 	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
@@ -61,6 +78,7 @@ var C = &engramColors
 const (
 	ThemeEngram    = "engram"
 	ThemeDerotopia = "derotopia"
+	ThemeElDorado  = "eldorado"
 )
 
 func Activate(name string) {
@@ -68,6 +86,9 @@ func Activate(name string) {
 	case ThemeDerotopia:
 		C = &derotopiaColors
 		ThemeMode = ThemeDerotopia
+	case ThemeElDorado:
+		C = &eldoradoColors
+		ThemeMode = ThemeElDorado
 	default:
 		C = &engramColors
 		ThemeMode = ThemeEngram

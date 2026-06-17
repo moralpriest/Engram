@@ -252,9 +252,12 @@ func layoutMain() fyne.CanvasObject {
 
 	// Wallet selection highlight color - theme aware
 	var logoGreen color.Color
-	if apptheme.ThemeMode == apptheme.ThemeDerotopia {
+	switch apptheme.ThemeMode {
+	case apptheme.ThemeDerotopia:
 		logoGreen = color.RGBA{200, 100, 255, 255} // bright purple for Derotopia
-	} else {
+	case apptheme.ThemeElDorado:
+		logoGreen = color.RGBA{255, 215, 0, 255} // gold for El Dorado
+	default:
 		logoGreen = color.RGBA{R: 70, G: 184, B: 104, A: 0xff} // original green for Engram Classic
 	}
 
