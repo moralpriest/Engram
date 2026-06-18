@@ -267,14 +267,14 @@ func layoutMyAssets() fyne.CanvasObject {
 			}
 
 			results.Text = "  Gathering an index of smart contracts... "
-			results.Color = apptheme.C.Yellow
+			results.Color = apptheme.StatusTextColor()
 			fyne.Do(func() {
 				results.Refresh()
 			})
 
 			for gnomon.Index.LastIndexedHeight < int64(engram.Disk.Get_Daemon_Height()) {
 				results.Text = fmt.Sprintf("  Gnomon is syncing... [%d / %d]", gnomon.Index.LastIndexedHeight, int64(engram.Disk.Get_Daemon_Height()))
-				results.Color = apptheme.C.Yellow
+				results.Color = apptheme.StatusTextColor()
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -284,7 +284,7 @@ func layoutMyAssets() fyne.CanvasObject {
 			}
 
 			results.Text = "  Loading previous scan results..."
-			results.Color = apptheme.C.Yellow
+			results.Color = apptheme.StatusTextColor()
 
 			fyne.Do(func() {
 				results.Refresh()
@@ -362,7 +362,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				StoreEncryptedValue("Asset Scan", []byte("Last Scan"), []byte(timeNow))
 
 				results.Text = "  Indexing..."
-				results.Color = apptheme.C.Yellow
+				results.Color = apptheme.StatusTextColor()
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -384,7 +384,7 @@ func layoutMyAssets() fyne.CanvasObject {
 
 					for len(assetList) < 5 {
 						logger.Printf("[Gnomon] Asset Scan Status: [%d / %d / %d]\n", gnomon.Index.LastIndexedHeight, engram.Disk.Get_Daemon_Height(), len(assetList))
-						results.Color = apptheme.C.Yellow
+						results.Color = apptheme.StatusTextColor()
 						switch gnomon.Index.DBType {
 						case "gravdb":
 							assetList = gnomon.Index.GravDBBackend.GetAllOwnersAndSCIDs()
@@ -396,7 +396,7 @@ func layoutMyAssets() fyne.CanvasObject {
 				}
 
 				results.Text = "  Scanning results..."
-				results.Color = apptheme.C.Yellow
+				results.Color = apptheme.StatusTextColor()
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -448,7 +448,7 @@ func layoutMyAssets() fyne.CanvasObject {
 						assetTotal += 1
 
 						results.Text = "  Scanning... " + fmt.Sprintf("%d / %d", assetTotal, assetCount)
-						results.Color = apptheme.C.Yellow
+						results.Color = apptheme.StatusTextColor()
 
 						fyne.Do(func() {
 							results.Refresh()
@@ -1829,7 +1829,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 				}
 				entrySCID.Disable()
 				results.Text = "  Gnomon is syncing..."
-				results.Color = apptheme.C.Yellow
+				results.Color = apptheme.StatusTextColor()
 
 				fyne.Do(func() {
 					results.Refresh()
@@ -1841,7 +1841,7 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 			fyne.Do(func() {
 				entrySCID.Enable()
 				results.Text = "  Loading previous scan history..."
-				results.Color = apptheme.C.Yellow
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 			})
 

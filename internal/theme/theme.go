@@ -67,11 +67,47 @@ func accentNRGBA(r, g, b, a uint8) color.Color {
 		return color.NRGBA{R: 138, G: 43, B: 226, A: a}
 	case ThemeElDorado:
 		return color.NRGBA{R: 255, G: 215, B: 0, A: a}
+	case ThemeCrystallina:
+		return color.NRGBA{R: 124, G: 92, B: 191, A: a} // amethyst
 	}
 	return color.NRGBA{R: r, G: g, B: b, A: a}
 }
 
+func crystallinaFyneColor(c fyne.ThemeColorName) color.Color {
+	switch c {
+	case theme.ColorNameBackground:
+		return color.NRGBA{R: 240, G: 242, B: 245, A: 0xff}
+	case theme.ColorNameForeground:
+		return color.NRGBA{R: 56, G: 56, B: 74, A: 0xff}
+	case theme.ColorNameMenuBackground:
+		return color.NRGBA{R: 250, G: 250, B: 252, A: 0xff}
+	case theme.ColorNameInputBackground:
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 0xff}
+	case theme.ColorNamePlaceHolder:
+		return color.NRGBA{R: 130, G: 130, B: 145, A: 0xff}
+	case theme.ColorNamePressed:
+		return color.NRGBA{R: 56, G: 56, B: 74, A: 0x19}
+	case theme.ColorNameSeparator:
+		return color.NRGBA{R: 0x88, G: 0x88, B: 0x88, A: 0x55}
+	case theme.ColorNameHyperlink:
+		return color.NRGBA{R: 124, G: 92, B: 191, A: 0xff}
+	case theme.ColorNameDisabled:
+		return color.NRGBA{R: 164, G: 164, B: 164, A: 0x60}
+	case theme.ColorNameShadow:
+		return color.Alpha16{0x0a}
+	case theme.ColorNameOverlayBackground:
+		return color.NRGBA{R: 255, G: 255, B: 255, A: 0xff}
+	default:
+		return nil
+	}
+}
+
 func (t *ETheme) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
+	if ThemeMode == ThemeCrystallina {
+		if cc := crystallinaFyneColor(c); cc != nil {
+			return cc
+		}
+	}
 	switch c {
 	case theme.ColorNameBackground:
 		return color.NRGBA{R: 21, G: 23, B: 30, A: 0xff}
@@ -142,6 +178,11 @@ func (t *ETheme) Size(s fyne.ThemeSizeName) float32 {
 }
 
 func (t *ETheme2) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
+	if ThemeMode == ThemeCrystallina {
+		if cc := crystallinaFyneColor(c); cc != nil {
+			return cc
+		}
+	}
 	switch c {
 	case theme.ColorNameBackground:
 		return color.NRGBA{R: 21, G: 23, B: 30, A: 0xff}

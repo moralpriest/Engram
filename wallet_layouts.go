@@ -410,6 +410,12 @@ func layoutDashboard() fyne.CanvasObject {
 		cNotes = goldenrod
 		cMessages = goldenrod
 		cContracts = goldenrod
+	case apptheme.ThemeCrystallina:
+		amethyst := color.RGBA{124, 92, 191, 255}
+		cSettings = amethyst
+		cNotes = amethyst
+		cMessages = amethyst
+		cContracts = amethyst
 	default:
 		cSettings = color.RGBA{19, 202, 105, 255}
 		cNotes = color.RGBA{19, 202, 105, 255}
@@ -445,14 +451,14 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, buttonWidth)
 
-	linkHistory := newBorderedButtonWithIcon(i18n.T("dashboard.history"), theme.HistoryIcon(), color.White, func() {
+	linkHistory := newBorderedButtonWithIcon(i18n.T("dashboard.history"), theme.HistoryIcon(), buttonTextColor(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		removeOverlays()
 		session.Window.SetContent(layoutHistory())
 	}, topButtonWidth)
 
-	linkMyAccount := newBorderedButtonWithIcon(i18n.T("dashboard.my_account"), theme.AccountIcon(), color.White, func() {
+	linkMyAccount := newBorderedButtonWithIcon(i18n.T("dashboard.my_account"), theme.AccountIcon(), buttonTextColor(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAccount())
@@ -470,8 +476,6 @@ func layoutDashboard() fyne.CanvasObject {
 	separator.TextSize = scaleFont(14)
 	separator.Alignment = fyne.TextAlignCenter
 
-	res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
-
 	res.logoContainer = container.NewStack()
 	var updateLogo func()
 	updateLogo = func() {
@@ -487,6 +491,7 @@ func layoutDashboard() fyne.CanvasObject {
 			vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 			res.logoContainer.Add(vImg)
 		} else {
+			res.gram.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
 			res.logoContainer.Add(res.gram)
 		}
 		res.logoContainer.Refresh()
@@ -687,7 +692,7 @@ func layoutDashboard() fyne.CanvasObject {
 		if gnomon.Index == nil {
 			showLoadingOverlay()
 			fyne.Do(func() {
-				errLabel := canvas.NewText(i18n.T("wallet.gnomon_initializing"), apptheme.C.Yellow)
+				errLabel := canvas.NewText(i18n.T("wallet.gnomon_initializing"), apptheme.StatusTextColor())
 				errLabel.Alignment = fyne.TextAlignCenter
 				content := container.NewCenter(container.NewVBox(errLabel))
 				if session.Window != nil {
@@ -723,7 +728,7 @@ func layoutDashboard() fyne.CanvasObject {
 		if !isDaemonConnected() {
 			showLoadingOverlay()
 			fyne.Do(func() {
-				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), apptheme.C.Yellow)
+				errLabel := canvas.NewText(i18n.T("wallet.waiting_connection"), apptheme.StatusTextColor())
 				errLabel.Alignment = fyne.TextAlignCenter
 				content := container.NewCenter(container.NewVBox(errLabel))
 				if session.Window != nil {
@@ -1375,7 +1380,7 @@ func layoutReceive() fyne.CanvasObject {
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
 
-	heading := canvas.NewText(i18n.T("receive.heading"), apptheme.C.DarkGreen)
+	heading := canvas.NewText(i18n.T("receive.heading"), apptheme.C.Gray)
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.TextSize = scaleFont(16)
 
@@ -1386,7 +1391,7 @@ func layoutReceive() fyne.CanvasObject {
 		activeAddress = engram.Disk.GetAddress().String()
 	}
 
-	addressLabel := canvas.NewText("", apptheme.C.DarkGreen)
+	addressLabel := canvas.NewText("", apptheme.C.Green)
 	addressLabel.TextSize = scaleFont(22)
 	addressLabel.Alignment = fyne.TextAlignCenter
 	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -1425,12 +1430,16 @@ func layoutReceive() fyne.CanvasObject {
 		}
 		updateView()
 	})
-	addressToggleBtn.Importance = widget.HighImportance
+	if !apptheme.IsLightTheme() {
+		addressToggleBtn.Importance = widget.HighImportance
+	}
 
 	addressCopyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		a.Clipboard().SetContent(activeAddress)
 	})
-	addressCopyBtn.Importance = widget.HighImportance
+	if !apptheme.IsLightTheme() {
+		addressCopyBtn.Importance = widget.HighImportance
+	}
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.ReceivingAddress = "" // Reset on exit
@@ -1439,13 +1448,15 @@ func layoutReceive() fyne.CanvasObject {
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
 	})
-	if len(btnBack.Objects) > 1 {
-		if btn, ok := btnBack.Objects[1].(*widget.Button); ok {
-			btn.Importance = widget.HighImportance
+	if !apptheme.IsLightTheme() {
+		if len(btnBack.Objects) > 1 {
+			if btn, ok := btnBack.Objects[1].(*widget.Button); ok {
+				btn.Importance = widget.HighImportance
+			}
 		}
 	}
 
-	// Wrap buttons with gold tint for better contrast on the white receive page
+	// Wrap buttons with tint for better contrast on the white receive page
 	var (
 		wrappedToggle fyne.CanvasObject = addressToggleBtn
 		wrappedCopy   fyne.CanvasObject = addressCopyBtn

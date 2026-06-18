@@ -38,3 +38,6 @@ final_classes.dex
 engram_test
 engram_test_build
 .claude/
+
+# Planning notes (not for commit)
+ENGRA_UPCOMING_CHANGES.md

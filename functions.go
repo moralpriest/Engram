@@ -2807,6 +2807,8 @@ func UpdateThemeLogo() {
 		res.gram.Resource = resourceDerotopiaLogoPng
 	case apptheme.ThemeElDorado:
 		res.gram.Resource = resourceElDoradoDEROPng
+	case apptheme.ThemeCrystallina:
+		res.gram.Resource = resourceCrystallinaDEROPng
 	default:
 		res.gram.Resource = resourceDEROLogoPng
 	}
@@ -3017,6 +3019,8 @@ func pulseBalancePending(stop chan struct{}) {
 		yellow = color.RGBA{56, 182, 255, 255} // blue, matching dashboard icons
 	case apptheme.ThemeElDorado:
 		green = color.RGBA{R: 19, G: 202, B: 105, A: 255}
+	case apptheme.ThemeCrystallina:
+		yellow = color.RGBA{56, 182, 255, 255} // Engram Classic blue
 	}
 	anim := canvas.NewColorRGBAAnimation(green, yellow, 800*time.Millisecond, func(c color.Color) {
 		select {

@@ -37,6 +37,23 @@ var eldoradoColors = Colors{
 	SoftRed:    color.RGBA{R: 240, G: 110, B: 110, A: 255},
 }
 
+var crystallinaColors = Colors{
+	Network:    color.RGBA{100, 200, 210, 255}, // aquamarine
+	Account:    color.RGBA{56, 56, 74, 255},    // dark slate text on white
+	DarkMatter: color.RGBA{240, 242, 245, 255}, // off-white background
+	Red:        color.RGBA{214, 74, 70, 255},
+	DarkGreen:  color.RGBA{92, 60, 159, 255},  // dark amethyst
+	Green:      color.RGBA{124, 92, 191, 255}, // amethyst primary
+	Blue:       color.RGBA{92, 180, 240, 255}, // ice blue
+	Gray:       color.RGBA{142, 142, 160, 255},
+	Yellow:     color.RGBA{245, 215, 68, 255},
+	Cold:       color.RGBA{160, 170, 190, 255},
+	Flint:      color.RGBA{216, 218, 230, 255}, // light card surfaces
+	Purple:     color.RGBA{200, 150, 255, 255}, // light lilac
+	LightBlue:  color.RGBA{56, 182, 255, 255},  // sky blue marquee
+	SoftRed:    color.RGBA{240, 110, 110, 255},
+}
+
 var engramColors = Colors{
 	Network:    color.RGBA{R: 67, G: 239, B: 67, A: 255},
 	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
@@ -76,10 +93,32 @@ var derotopiaColors = Colors{
 var C = &engramColors
 
 const (
-	ThemeEngram    = "engram"
-	ThemeDerotopia = "derotopia"
-	ThemeElDorado  = "eldorado"
+	ThemeEngram      = "engram"
+	ThemeDerotopia   = "derotopia"
+	ThemeElDorado    = "eldorado"
+	ThemeCrystallina = "crystallina"
 )
+
+// StatusTextColor returns an appropriate color for loading/status text,
+// chosen for readability against the current theme's background.
+// Returns dark teal for Crystallina (light background), yellow for all others.
+func StatusTextColor() color.Color {
+	if ThemeMode == ThemeCrystallina {
+		return color.RGBA{0, 130, 150, 255} // dark teal
+	}
+	return C.Yellow
+}
+
+// IsLightTheme returns true if the current theme uses a light background.
+// Used to skip dark-theme-only styling (e.g. HighImportance buttons).
+func IsLightTheme() bool {
+	switch ThemeMode {
+	case ThemeCrystallina:
+		return true
+	default:
+		return false
+	}
+}
 
 func Activate(name string) {
 	switch name {
@@ -89,6 +128,9 @@ func Activate(name string) {
 	case ThemeElDorado:
 		C = &eldoradoColors
 		ThemeMode = ThemeElDorado
+	case ThemeCrystallina:
+		C = &crystallinaColors
+		ThemeMode = ThemeCrystallina
 	default:
 		C = &engramColors
 		ThemeMode = ThemeEngram

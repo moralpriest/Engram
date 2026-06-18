@@ -383,6 +383,20 @@ func (b *hoverButton) MouseOut() {
 	b.Button.MouseOut()
 }
 
+func buttonCardColor() color.Color {
+	if apptheme.ThemeMode == apptheme.ThemeCrystallina {
+		return color.NRGBA{R: 230, G: 232, B: 240, A: 255}
+	}
+	return color.NRGBA{40, 42, 50, 255}
+}
+
+func buttonTextColor() color.Color {
+	if apptheme.ThemeMode == apptheme.ThemeCrystallina {
+		return color.NRGBA{R: 56, G: 56, B: 74, A: 255}
+	}
+	return color.White
+}
+
 func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor color.Color, hoverIconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImgNormal := widget.NewIcon(icon)
 	iconSizerNormal := container.NewGridWrap(scalePoint(28, 28), iconImgNormal)
@@ -395,7 +409,7 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 
 	iconStack := container.NewStack(themedIconNormal, themedIconHover)
 
-	labelText := canvas.NewText(label, color.White)
+	labelText := canvas.NewText(label, buttonTextColor())
 	labelText.TextSize = scaleFont(11)
 	labelText.Alignment = fyne.TextAlignCenter
 
@@ -422,7 +436,7 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 		h = 68
 	}
 
-	outline := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	outline := canvas.NewRectangle(buttonCardColor())
 	outline.StrokeWidth = 0
 	outline.CornerRadius = scaleFont(10)
 
@@ -437,7 +451,7 @@ func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
 	themedIcon := container.NewThemeOverride(iconSizer, apptheme.NewTintTheme(theme.Current(), iconColor))
 
-	labelText := canvas.NewText(label, color.White)
+	labelText := canvas.NewText(label, buttonTextColor())
 	labelText.TextSize = scaleFont(15)
 	labelText.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -460,7 +474,7 @@ func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color
 		h = 48
 	}
 
-	bg := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	bg := canvas.NewRectangle(buttonCardColor())
 	bg.StrokeWidth = 0
 	bg.CornerRadius = scaleFont(10)
 
@@ -475,7 +489,7 @@ func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)
 	themedIcon := container.NewThemeOverride(iconSizer, apptheme.NewTintTheme(theme.Current(), iconColor))
 
-	labelText := canvas.NewText(label, color.White)
+	labelText := canvas.NewText(label, buttonTextColor())
 	labelText.TextSize = scaleFont(15)
 	labelText.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -499,7 +513,7 @@ func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	}
 
 	bg := canvas.NewRectangle(color.Transparent)
-	bg.StrokeColor = color.NRGBA{40, 42, 50, 255}
+	bg.StrokeColor = buttonCardColor()
 	bg.StrokeWidth = scaleSize(3)
 	bg.CornerRadius = scaleFont(10)
 
@@ -539,7 +553,7 @@ func newTELAButton(onTap func(), width float32) *fyne.Container {
 
 	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
 
-	labelText := canvas.NewText("TELA Web", color.White)
+	labelText := canvas.NewText("TELA Web", buttonTextColor())
 	labelText.TextSize = scaleFont(11)
 	labelText.Alignment = fyne.TextAlignCenter
 
@@ -553,7 +567,7 @@ func newTELAButton(onTap func(), width float32) *fyne.Container {
 		h = 68
 	}
 
-	outline := canvas.NewRectangle(color.NRGBA{40, 42, 50, 255})
+	outline := canvas.NewRectangle(buttonCardColor())
 	outline.StrokeWidth = 0
 	outline.CornerRadius = scaleSize(6)
 

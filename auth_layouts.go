@@ -257,6 +257,8 @@ func layoutMain() fyne.CanvasObject {
 		logoGreen = color.RGBA{200, 100, 255, 255} // bright purple for Derotopia
 	case apptheme.ThemeElDorado:
 		logoGreen = color.RGBA{255, 215, 0, 255} // gold for El Dorado
+	case apptheme.ThemeCrystallina:
+		logoGreen = color.RGBA{124, 92, 191, 255} // amethyst for Crystallina
 	default:
 		logoGreen = color.RGBA{R: 70, G: 184, B: 104, A: 0xff} // original green for Engram Classic
 	}
@@ -1051,7 +1053,7 @@ func layoutNewAccount() fyne.CanvasObject {
 				wordsToggleBtn.SetIcon(theme.VisibilityIcon())
 				wordsToggleBtn.Refresh()
 
-				rect := canvas.NewRectangle(color.RGBA{21, 27, 36, 255})
+				rect := canvas.NewRectangle(apptheme.C.Flint)
 				rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
 				grid.Objects = nil
