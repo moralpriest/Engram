@@ -27,6 +27,11 @@ var resourceFavsCrystallinaSvg = &fyne.StaticResource{
 	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#7C5CBF" stroke="none"><polygon points="12,2 15,9 22,9 16.5,14 18.5,21 12,17 5.5,21 7.5,14 2,9 9,9"/></svg>`),
 }
 
+var resourceFavsAtlantisSvg = &fyne.StaticResource{
+	StaticName:    "favs_atlantis.svg",
+	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#34A2B5" stroke="none"><polygon points="12,2 15,9 22,9 16.5,14 18.5,21 12,17 5.5,21 7.5,14 2,9 9,9"/></svg>`),
+}
+
 // ---- Outline star icons (theme accent colour) ----
 
 var resourceFavsOutlineEngramSvg = &fyne.StaticResource{
@@ -47,6 +52,11 @@ var resourceFavsOutlineElDoradoSvg = &fyne.StaticResource{
 var resourceFavsOutlineCrystallinaSvg = &fyne.StaticResource{
 	StaticName:    "favs_outline_crystallina.svg",
 	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7C5CBF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15,9 22,9 16.5,14 18.5,21 12,17 5.5,21 7.5,14 2,9 9,9"/></svg>`),
+}
+
+var resourceFavsOutlineAtlantisSvg = &fyne.StaticResource{
+	StaticName:    "favs_outline_atlantis.svg",
+	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34A2B5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15,9 22,9 16.5,14 18.5,21 12,17 5.5,21 7.5,14 2,9 9,9"/></svg>`),
 }
 
 // ---- Muted outline star icons ----
@@ -71,6 +81,8 @@ func favsResource() fyne.Resource {
 		return resourceFavsElDoradoSvg
 	case apptheme.ThemeCrystallina:
 		return resourceFavsCrystallinaSvg
+	case apptheme.ThemeAtlantis:
+		return resourceFavsAtlantisSvg
 	default:
 		return resourceFavsEngramSvg
 	}
@@ -84,6 +96,8 @@ func favsOutlineResource() fyne.Resource {
 		return resourceFavsOutlineElDoradoSvg
 	case apptheme.ThemeCrystallina:
 		return resourceFavsOutlineCrystallinaSvg
+	case apptheme.ThemeAtlantis:
+		return resourceFavsOutlineAtlantisSvg
 	default:
 		return resourceFavsOutlineEngramSvg
 	}

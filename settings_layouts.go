@@ -1885,8 +1885,8 @@ func layoutAppSettings() fyne.CanvasObject {
 		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.theme_label")),
 		rectSpacer,
 		func() *fyne.Container {
-			themeNames := []string{"Engram Classic", "Derotopia", "El Dorado", "Crystallina"}
-			themeKeys := []string{apptheme.ThemeEngram, apptheme.ThemeDerotopia, apptheme.ThemeElDorado, apptheme.ThemeCrystallina}
+			themeNames := []string{"Engram Classic", "Derotopia", "El Dorado", "Crystallina", "Atlantis"}
+			themeKeys := []string{apptheme.ThemeEngram, apptheme.ThemeDerotopia, apptheme.ThemeElDorado, apptheme.ThemeCrystallina, apptheme.ThemeAtlantis}
 			savedTheme := apptheme.ThemeEngram
 			if data, err := GetValue("settings", []byte("theme")); err == nil && len(data) > 0 {
 				savedTheme = string(data)

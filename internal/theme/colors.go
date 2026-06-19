@@ -20,6 +20,23 @@ type Colors struct {
 	SoftRed    color.Color
 }
 
+var atlantisColors = Colors{
+	Network:    color.RGBA{R: 52, G: 162, B: 181, A: 255},  // cyan-teal
+	Account:    color.RGBA{R: 184, G: 212, B: 208, A: 255}, // pale seafoam
+	DarkMatter: color.RGBA{4, 18, 21, 255},                 // hadal zone background
+	Red:        color.RGBA{R: 214, B: 74, G: 70, A: 255},
+	DarkGreen:  color.RGBA{19, 108, 122, 255},             // darker cyan
+	Green:      color.RGBA{R: 52, G: 162, B: 181, A: 255}, // primary cyan-teal
+	Blue:       color.RGBA{R: 26, G: 99, B: 120, A: 255},  // deep ocean blue
+	Gray:       color.RGBA{R: 90, B: 122, G: 122, A: 255}, // muted seafoam
+	Yellow:     color.RGBA{122, 154, 74, 255},             // phosphorescent green
+	Cold:       color.RGBA{28, 63, 69, 255},               // inactive deep water
+	Flint:      color.RGBA{18, 42, 46, 255},               // card surface
+	Purple:     color.RGBA{107, 91, 138, 255},             // bioluminescent purple
+	LightBlue:  color.RGBA{R: 232, G: 184, B: 75, A: 255}, // ancient amber marquee
+	SoftRed:    color.RGBA{R: 240, G: 110, B: 110, A: 255},
+}
+
 var eldoradoColors = Colors{
 	Network:    color.RGBA{R: 255, G: 215, B: 0, A: 255},
 	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
@@ -97,6 +114,7 @@ const (
 	ThemeDerotopia   = "derotopia"
 	ThemeElDorado    = "eldorado"
 	ThemeCrystallina = "crystallina"
+	ThemeAtlantis    = "atlantis"
 )
 
 // StatusTextColor returns an appropriate color for loading/status text,
@@ -111,6 +129,8 @@ func StatusTextColor() color.Color {
 		return C.LightBlue // candy pink
 	case ThemeEngram, ThemeElDorado:
 		return C.LightBlue // sky blue / emerald green
+	case ThemeAtlantis:
+		return color.RGBA{52, 162, 181, 255} // cyan for TELA status/loading
 	default:
 		return C.Yellow // any fallback
 	}
@@ -132,7 +152,7 @@ func IsLightTheme() bool {
 	case ThemeCrystallina:
 		return true
 	default:
-		return false
+		return false // Atlantis is dark
 	}
 }
 
@@ -147,6 +167,9 @@ func Activate(name string) {
 	case ThemeCrystallina:
 		C = &crystallinaColors
 		ThemeMode = ThemeCrystallina
+	case ThemeAtlantis:
+		C = &atlantisColors
+		ThemeMode = ThemeAtlantis
 	default:
 		C = &engramColors
 		ThemeMode = ThemeEngram

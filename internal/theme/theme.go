@@ -74,6 +74,8 @@ func accentNRGBA(r, g, b, a uint8) color.Color {
 		return color.NRGBA{R: 255, G: 215, B: 0, A: a}
 	case ThemeCrystallina:
 		return color.NRGBA{R: 124, G: 92, B: 191, A: a} // amethyst
+	case ThemeAtlantis:
+		return color.NRGBA{R: 52, G: 162, B: 181, A: a} // cyan-teal
 	}
 	return color.NRGBA{R: r, G: g, B: b, A: a}
 }

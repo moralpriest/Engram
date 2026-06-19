@@ -2809,6 +2809,8 @@ func UpdateThemeLogo() {
 		res.gram.Resource = resourceElDoradoDEROPng
 	case apptheme.ThemeCrystallina:
 		res.gram.Resource = resourceCrystallinaDEROPng
+	case apptheme.ThemeAtlantis:
+		res.gram.Resource = resourceAtlantisDEROPng
 	default:
 		res.gram.Resource = resourceDEROLogoPng
 	}
@@ -3022,6 +3024,9 @@ func pulseBalancePending(stop chan struct{}) {
 		green = color.RGBA{R: 19, G: 202, B: 105, A: 255}
 	case apptheme.ThemeCrystallina:
 		yellow = color.RGBA{56, 182, 255, 255} // Engram Classic blue
+	case apptheme.ThemeAtlantis:
+		green = color.RGBA{R: 52, G: 162, B: 181, A: 255}  // cyan
+		yellow = color.RGBA{R: 232, G: 184, B: 75, A: 255} // amber
 	}
 	anim := canvas.NewColorRGBAAnimation(green, yellow, 800*time.Millisecond, func(c color.Color) {
 		select {

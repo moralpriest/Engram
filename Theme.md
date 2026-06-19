@@ -2,7 +2,7 @@
 
 > Design rules for the Engram DERO Protocol wallet — Desktop (Windows, Linux, macOS) & Mobile (Android, iOS).
 >
-> Four themes are available: **Engram Classic** (default), **Derotopia**, **El Dorado**, and **Crystallina**.
+> Five themes are available: **Engram Classic** (default), **Derotopia**, **El Dorado**, **Crystallina**, and **Atlantis**.
 > Theme selection persists via encrypted storage and is switchable at runtime from Settings.
 
 ---
@@ -87,6 +87,25 @@ Each theme defines a `Colors` struct (`internal/theme/colors.go`) with the follo
 | **Network** | `#64C8D2` | `(100,200,210,255)` | Connection status (aquamarine) |
 | **Account** | `#38384A` | `(56,56,74,255)` | Dark slate text |
 
+### Atlantis
+
+| Token | Hex | RGBA | Role |
+|-------|-----|------|------|
+| **DarkMatter** | `#041215` | `(4,18,21,255)` | Hadal zone background |
+| **Green** | `#34A2B5` | `(52,162,181,255)` | Primary cyan-teal accent |
+| **DarkGreen** | `#136C7A` | `(19,108,122,255)` | Darker cyan, pressed |
+| **LightBlue** | `#E8B84B` | `(232,184,75,255)` | Ancient amber marquee |
+| **Blue** | `#1A6378` | `(26,99,120,255)` | Deep ocean blue |
+| **Purple** | `#6B5B8A` | `(107,91,138,255)` | Bioluminescent purple |
+| **Yellow** | `#7A9A4A` | `(122,154,74,255)` | Phosphorescent green |
+| **Red** | `#D64A46` | `(214,74,70,255)` | Errors |
+| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error |
+| **Gray** | `#5A7A7A` | `(90,122,122,255)` | Muted seafoam labels |
+| **Flint** | `#122A2E` | `(18,42,46,255)` | Button/card surfaces |
+| **Cold** | `#1C3F45` | `(28,63,69,255)` | Inactive, muted |
+| **Network** | `#34A2B5` | `(52,162,181,255)` | Connection status (cyan) |
+| **Account** | `#B8D4D0` | `(184,212,208,255)` | Pale seafoam balance text |
+
 ### Color Architecture
 
 **Source:** `internal/theme/colors.go`
@@ -99,6 +118,7 @@ func Activate(name string) {
     case ThemeDerotopia:   C = &derotopiaColors;   ThemeMode = ThemeDerotopia
     case ThemeElDorado:    C = &eldoradoColors;    ThemeMode = ThemeElDorado
     case ThemeCrystallina: C = &crystallinaColors; ThemeMode = ThemeCrystallina
+    case ThemeAtlantis:    C = &atlantisColors;    ThemeMode = ThemeAtlantis
     default:               C = &engramColors;      ThemeMode = ThemeEngram
     }
 }
@@ -429,6 +449,7 @@ Source: `custom.go:386–398`
 | Derotopia | `#282A32` | `(40,42,50,255)` |
 | El Dorado | `#282A32` | `(40,42,50,255)` |
 | Crystallina | `#E6E8F0` | `(230,232,240,255)` |
+| Atlantis | `#282A32` | `(40,42,50,255)` |
 
 **`buttonTextColor()`** — label text on those buttons:
 
@@ -438,6 +459,7 @@ Source: `custom.go:386–398`
 | Derotopia | `#FFFFFF` | White |
 | El Dorado | `#FFFFFF` | White |
 | Crystallina | `#38384A` | `(56,56,74,255)` |
+| Atlantis | `#FFFFFF` | White |
 
 ---
 
@@ -608,6 +630,7 @@ Used for TELA loading indicators ("Connecting to node", "Fetching content", "Pre
 | Derotopia | LightBlue (candy pink) | `#FF69B4` | `(255,105,180,255)` |
 | El Dorado | LightBlue (emerald) | `#50C878` | `(80,200,120,255)` |
 | Crystallina | Dark teal (hardcoded) | `#008296` | `(0,130,150,255)` |
+| Atlantis | Cyan (hardcoded) | `#34A2B5` | `(52,162,181,255)` |
 
 ### Balance Text Color
 
@@ -621,6 +644,7 @@ Used for the DERO balance amount on the dashboard.
 | Derotopia | Sky blue | `#38B6FF` | `(56,182,255,255)` |
 | El Dorado | Green (gold) | `#FFD700` | `(255,215,0,255)` |
 | Crystallina | Green (amethyst) | `#7C5CBF` | `(124,92,191,255)` |
+| Atlantis | Green (cyan) | `#34A2B5` | `(52,162,181,255)` |
 
 ### Dashboard Icon Colors
 
@@ -634,6 +658,7 @@ Used for the Settings, Notes, Messages, and Contracts buttons on the main dashbo
 | Derotopia | Sky blue | `#38B6FF` | `(56,182,255,255)` |
 | El Dorado | Goldenrod | `#DAA520` | `(218,165,32,255)` |
 | Crystallina | Amethyst | `#7C5CBF` | `(124,92,191,255)` |
+| Atlantis | Cyan | `#34A2B5` | `(52,162,181,255)` |
 
 ### Balance Pulse Animation
 
@@ -647,6 +672,7 @@ When a send transaction is pending, the balance text pulses between two colors:
 | Derotopia | Sky blue `#38B6FF` | Candy pink `#FF69B4` |
 | El Dorado | Emerald `#13CA69` | Gold `#FFD700` |
 | Crystallina | Amethyst `#7C5CBF` | Sky blue `#38B6FF` |
+| Atlantis | Cyan `#34A2B5` | Amber `#E8B84B` |
 
 ### Marquee Text Color
 
@@ -658,6 +684,7 @@ Source: `wallet_layouts.go:67` — dashboard marquee uses `C.LightBlue`
 | Derotopia | `#FF69B4` | Candy pink |
 | El Dorado | `#50C878` | Emerald |
 | Crystallina | `#38B6FF` | Sky blue |
+| Atlantis | `#E8B84B` | Ancient amber |
 
 ### Globe Icon Resources
 
@@ -673,6 +700,7 @@ Two separate icon functions for different contexts:
 | Derotopia | `#8A2BE2` (purple) |
 | El Dorado | `#FFD700` (gold) |
 | Crystallina | `#7C5CBF` (amethyst) |
+| Atlantis | `#34A2B5` (cyan) |
 
 **`explorerGlobeResource()`** — TELA app detail "Open in explorer" button. Uses white/dark:
 

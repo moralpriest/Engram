@@ -259,6 +259,8 @@ func layoutMain() fyne.CanvasObject {
 		logoGreen = color.RGBA{255, 215, 0, 255} // gold for El Dorado
 	case apptheme.ThemeCrystallina:
 		logoGreen = color.RGBA{124, 92, 191, 255} // amethyst for Crystallina
+	case apptheme.ThemeAtlantis:
+		logoGreen = color.RGBA{52, 162, 181, 255} // cyan-teal for Atlantis
 	default:
 		logoGreen = color.RGBA{R: 70, G: 184, B: 104, A: 0xff} // original green for Engram Classic
 	}

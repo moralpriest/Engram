@@ -416,6 +416,12 @@ func layoutDashboard() fyne.CanvasObject {
 		cNotes = amethyst
 		cMessages = amethyst
 		cContracts = amethyst
+	case apptheme.ThemeAtlantis:
+		cyan := color.RGBA{52, 162, 181, 255}
+		cSettings = cyan
+		cNotes = cyan
+		cMessages = cyan
+		cContracts = cyan
 	default:
 		cSettings = color.RGBA{19, 202, 105, 255}
 		cNotes = color.RGBA{19, 202, 105, 255}
