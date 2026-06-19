@@ -23,7 +23,7 @@ type Colors struct {
 var eldoradoColors = Colors{
 	Network:    color.RGBA{R: 255, G: 215, B: 0, A: 255},
 	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
-	DarkMatter: color.RGBA{21, 23, 30, 255},
+	DarkMatter: color.RGBA{30, 20, 10, 255}, // dark bronze
 	Red:        color.RGBA{R: 214, B: 74, G: 70, A: 255},
 	DarkGreen:  color.RGBA{184, 134, 11, 0xff},
 	Green:      color.RGBA{R: 255, G: 215, B: 0, A: 255},
@@ -72,9 +72,9 @@ var engramColors = Colors{
 }
 
 var derotopiaColors = Colors{
-	Network:    color.RGBA{R: 138, G: 43, B: 226, A: 255},
+	Network:    color.RGBA{R: 138, G: 43, B: 226, A: 255}, // purple
 	Account:    color.RGBA{R: 233, G: 228, B: 233, A: 0xff},
-	DarkMatter: color.RGBA{21, 23, 30, 255},
+	DarkMatter: color.RGBA{18, 12, 28, 255}, // dark eggplant
 	Red:        color.RGBA{R: 214, B: 74, G: 70, A: 255},
 	DarkGreen:  color.RGBA{98, 20, 180, 0xff},
 	Green:      color.RGBA{138, 43, 226, 0xff},
@@ -101,12 +101,28 @@ const (
 
 // StatusTextColor returns an appropriate color for loading/status text,
 // chosen for readability against the current theme's background.
-// Returns dark teal for Crystallina (light background), yellow for all others.
+// Returns dark teal for Crystallina, yellow for El Dorado, and the
+// theme's LightBlue (marquee color) for Engram Classic and Derotopia.
 func StatusTextColor() color.Color {
-	if ThemeMode == ThemeCrystallina {
+	switch ThemeMode {
+	case ThemeCrystallina:
 		return color.RGBA{0, 130, 150, 255} // dark teal
+	case ThemeDerotopia:
+		return C.LightBlue // candy pink
+	case ThemeEngram, ThemeElDorado:
+		return C.LightBlue // sky blue / emerald green
+	default:
+		return C.Yellow // any fallback
 	}
-	return C.Yellow
+}
+
+// BalanceColor returns the color for the DERO balance amount text.
+// Returns sky blue for Derotopia (matching dashboard icons), green for all others.
+func BalanceColor() color.Color {
+	if ThemeMode == ThemeDerotopia {
+		return color.RGBA{56, 182, 255, 255} // sky blue, matching message icon and pulse
+	}
+	return C.Green
 }
 
 // IsLightTheme returns true if the current theme uses a light background.

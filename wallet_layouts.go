@@ -135,7 +135,7 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 
-	session.BalanceText = canvas.NewText("...", apptheme.C.Green)
+	session.BalanceText = canvas.NewText("...", apptheme.BalanceColor())
 	session.BalanceText.TextSize = scaleFont(28)
 	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
 

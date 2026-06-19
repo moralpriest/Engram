@@ -2,65 +2,115 @@
 
 > Design rules for the Engram DERO Protocol wallet — Desktop (Windows, Linux, macOS) & Mobile (Android, iOS).
 >
-> The current default theme is **"Engram Classic"** (green accent on dark background).
-> The architecture supports additional theme variants — see [Future-Proofing](#xiv-future-proofing-for-theme-variants).
+> Four themes are available: **Engram Classic** (default), **Derotopia**, **El Dorado**, and **Crystallina**.
+> Theme selection persists via encrypted storage and is switchable at runtime from Settings.
 
 ---
 
-## I. Color System — "Engram Classic" Default
+## I. Theme Palette Reference
 
-### Palette
+Each theme defines a `Colors` struct (`internal/theme/colors.go`) with the following tokens. The active theme's colors are accessed at runtime through the package-level pointer `apptheme.C`.
 
-Source: `theme.go` (custom `eTheme`), `main.go:163–176` (`colors.*` struct)
+### Engram Classic
 
 | Token | Hex | RGBA | Role |
 |-------|-----|------|------|
-| **DarkMatter** | `#15171E` | `(21,23,30,255)` | App background, shadows |
+| **DarkMatter** | `#15171E` | `(21,23,30,255)` | Background |
 | **Green** | `#13CA69` | `(19,202,105,255)` | Primary accent, active state |
 | **DarkGreen** | `#117F4E` | `(17,127,78,255)` | Secondary green, pressed |
-| **Foreground** | `#D0D0D0` | `(208,208,208,255)` | Body text, icons |
-| **Gray** | `#636363` | `(99,99,99,255)` | Labels, secondary text |
-| **Flint** | `#2C2C34` | `(44,44,52,255)` | Button/card backgrounds |
-| **MenuBackground** | `#1F2128` | `(31,33,40,238)` | Dropdowns, overlays |
-| **Cold** | `#3C495C` | `(60,73,92,255)` | Inactive, muted elements |
-| **Network** | `#43EF43` | `(67,239,67,255)` | Connection status indicators |
-| **Red** | `#F44336` | `(244,67,54,255)` | Errors, disconnected state |
-| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error, caution |
-| **Yellow** | `#F4D00B` | `(244,208,11,255)` | Warnings, attention |
-| **LightBlue** | `#38B6FF` | `(56,182,255,255)` | Info, marquee text |
+| **LightBlue** | `#38B6FF` | `(56,182,255,255)` | Marquee, info |
 | **Blue** | `#1BFD7F` | `(27,249,127,255)` | Links, secondary accent |
 | **Purple** | `#BF40BF` | `(191,64,191,255)` | Special status |
+| **Yellow** | `#F4D00B` | `(244,208,11,255)` | Warnings, attention |
+| **Red** | `#F44336` | `(244,67,54,255)` | Errors |
+| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error, caution |
+| **Gray** | `#636363` | `(99,99,99,255)` | Labels, secondary text |
+| **Flint** | `#2C2C34` | `(44,44,52,255)` | Button/card backgrounds |
+| **Cold** | `#3C495C` | `(60,73,92,255)` | Inactive, muted |
+| **Network** | `#43EF43` | `(67,239,67,255)` | Connection status |
 | **Account** | `#E9E4E9` | `(233,228,233,255)` | Balance text, highlighted data |
 
-### Semantic Usage Map
+### Derotopia
 
-| Element | Color |
-|---------|-------|
-| Headings | `colors.Green`, `Bold: true` |
-| Body text | `theme.Foreground` (`#D0D0D0`) |
-| Labels | `colors.Gray` |
-| Primary buttons | `theme.ColorNameButton` (green at 75%) |
-| Disabled buttons | `theme.ColorNameDisabledButton` (green at 13%) |
-| Error text | `theme.ColorNameError` / `colors.Red` |
-| Warning text | `colors.Yellow` |
-| Status dot (connected) | `colors.Network` (green) |
-| Status dot (disconnected) | `colors.Red` |
-| Background | `theme.ColorNameBackground` (`#15171E`) |
-| Input background | Transparent |
-| Separator | `#888888` at 35% |
-| Placeholder | `#888888` |
-| Scrollbar | `colors.Green` at 44% |
-| Focus ring | `colors.Green` at 88% |
-| Hover | `colors.Green` at 99% |
-| Overlay background | `#1F2128` |
+| Token | Hex | RGBA | Role |
+|-------|-----|------|------|
+| **DarkMatter** | `#120C1C` | `(18,12,28,255)` | Dark eggplant background |
+| **Green** | `#8A2BE2` | `(138,43,226,255)` | Purple accent |
+| **DarkGreen** | `#6214B4` | `(98,20,180,255)` | Dark purple |
+| **LightBlue** | `#FF69B4` | `(255,105,180,255)` | Candy pink marquee |
+| **Blue** | `#6A0DAD` | `(106,13,173,255)` | Deep purple |
+| **Purple** | `#13CA69` | `(19,202,105,255)` | Green (inverted role) |
+| **Yellow** | `#F4D00B` | `(244,208,11,255)` | Warnings |
+| **Red** | `#D64A46` | `(214,74,70,255)` | Errors |
+| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error |
+| **Gray** | `#636363` | `(99,99,99,255)` | Labels |
+| **Flint** | `#2C2C34` | `(44,44,52,255)` | Card backgrounds |
+| **Cold** | `#3C495C` | `(60,73,92,255)` | Inactive |
+| **Network** | `#8A2BE2` | `(138,43,226,255)` | Connection status (purple) |
+| **Account** | `#E9E4E9` | `(233,228,233,255)` | Balance text |
 
-### Future Remapping
+### El Dorado
 
-The `colors.*` struct (`functions.go:96–111`) holds all semantic color variables. A future theme variant replaces these values while keeping the same usage pattern.
+| Token | Hex | RGBA | Role |
+|-------|-----|------|------|
+| **DarkMatter** | `#1E140A` | `(30,20,10,255)` | Dark bronze background |
+| **Green** | `#FFD700` | `(255,215,0,255)` | Gold accent |
+| **DarkGreen** | `#B8860B` | `(184,134,11,255)` | Dark goldenrod |
+| **LightBlue** | `#50C878` | `(80,200,120,255)` | Emerald green marquee |
+| **Blue** | `#DAA520` | `(218,165,32,255)` | Goldenrod |
+| **Purple** | `#CD7F32` | `(205,127,50,255)` | Bronze |
+| **Yellow** | `#FFBF00` | `(255,191,0,255)` | Amber |
+| **Red** | `#D64A46` | `(214,74,70,255)` | Errors |
+| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error |
+| **Gray** | `#636363` | `(99,99,99,255)` | Labels |
+| **Flint** | `#2C2C34` | `(44,44,52,255)` | Card backgrounds |
+| **Cold** | `#3C495C` | `(60,73,92,255)` | Inactive |
+| **Network** | `#FFD700` | `(255,215,0,255)` | Connection status (gold) |
+| **Account** | `#E9E4E9` | `(233,228,233,255)` | Balance text |
+
+### Crystallina
+
+| Token | Hex | RGBA | Role |
+|-------|-----|------|------|
+| **DarkMatter** | `#F0F2F5` | `(240,242,245,255)` | Off-white background |
+| **Green** | `#7C5CBF` | `(124,92,191,255)` | Amethyst accent |
+| **DarkGreen** | `#5C3C9F` | `(92,60,159,255)` | Dark amethyst |
+| **LightBlue** | `#38B6FF` | `(56,182,255,255)` | Sky blue marquee |
+| **Blue** | `#5CB4F0` | `(92,180,240,255)` | Ice blue |
+| **Purple** | `#C896FF` | `(200,150,255,255)` | Light lilac |
+| **Yellow** | `#F5D744` | `(245,215,68,255)` | Warm yellow |
+| **Red** | `#D64A46` | `(214,74,70,255)` | Errors |
+| **SoftRed** | `#F06E6E` | `(240,110,110,255)` | Soft error |
+| **Gray** | `#8E8EA0` | `(142,142,160,255)` | Labels |
+| **Flint** | `#D8DAE6` | `(216,218,230,255)` | Light card surfaces |
+| **Cold** | `#A0AABE` | `(160,170,190,255)` | Inactive |
+| **Network** | `#64C8D2` | `(100,200,210,255)` | Connection status (aquamarine) |
+| **Account** | `#38384A` | `(56,56,74,255)` | Dark slate text |
+
+### Color Architecture
+
+**Source:** `internal/theme/colors.go`
+
+The active palette is selected via `Activate(name)` which swaps the `C` pointer:
+
+```go
+func Activate(name string) {
+    switch name {
+    case ThemeDerotopia:   C = &derotopiaColors;   ThemeMode = ThemeDerotopia
+    case ThemeElDorado:    C = &eldoradoColors;    ThemeMode = ThemeElDorado
+    case ThemeCrystallina: C = &crystallinaColors; ThemeMode = ThemeCrystallina
+    default:               C = &engramColors;      ThemeMode = ThemeEngram
+    }
+}
+```
+
+All theme color access goes through `apptheme.C.<Token>` — the pointer swap makes every reference instantly theme-aware.
 
 ---
 
 ## II. Typography
+
+Same as existing document — unchanged across themes.
 
 ### Font Stack
 
@@ -100,13 +150,15 @@ if factor > 1.2 {
 - **Headings**: `Bold: true` + `colors.Green`, size `scaleFont(22)`
 - **Section labels**: `Bold: true` + `colors.Gray`, size `scaleFont(14)`
 - **Body text**: Regular weight, no style override
-- **Balance/amounts**: `Bold: true` + `colors.Account`, size `scaleFont(28)`
+- **Balance/amounts**: `Bold: true` + `apptheme.BalanceColor()`, size `scaleFont(28)`
 - **Never** use italic or underlined text in production UI (except hyperlinks)
 - **Never** use Symbol font outside the dashboard marquee (`widgets_ui.go:pulseText`)
 
 ---
 
 ## III. Spacing & Layout Grid
+
+Same as existing document — unchanged across themes.
 
 ### Reference Canvas
 
@@ -179,6 +231,8 @@ Source: `main.go:321–332`, `shared_layouts.go:287–375`
 
 ## V. Layout Patterns
 
+Same as existing document — unchanged across themes.
+
 ### Every Screen Must Have This Root Structure
 
 ```go
@@ -233,6 +287,8 @@ func layoutMyScreen() fyne.CanvasObject {
 ---
 
 ## VI. Navigation System
+
+Same as existing document — unchanged across themes.
 
 ### Stack-Based Navigation
 
@@ -290,6 +346,8 @@ Always use `layoutTransition()` as the interstitial between screens. This shows 
 
 ## VII. Custom Widget Catalog
 
+Same as existing document — unchanged across themes.
+
 | Widget | File:Line | Type | When To Use |
 |--------|-----------|------|-------------|
 | `iframe` | `widgets_ui.go:106` | Transparent full-screen wrapper | **Every** screen root |
@@ -310,6 +368,8 @@ Always use `layoutTransition()` as the interstitial between screens. This shows 
 ---
 
 ## VIII. Button System
+
+Same as existing document — unchanged across themes.
 
 ### All Button Variants
 
@@ -357,9 +417,33 @@ sizeEnforcer.SetMinSize(fyne.NewSize(width, scaleSize(height)))
 return container.NewStack(sizeEnforcer, btn)
 ```
 
+### Theme-Aware Button Card Colors
+
+Source: `custom.go:386–398`
+
+**`buttonCardColor()`** — background of dashboard nav tiles and gunmetal buttons:
+
+| Theme | Hex | RGBA |
+|-------|-----|------|
+| Engram Classic | `#282A32` | `(40,42,50,255)` |
+| Derotopia | `#282A32` | `(40,42,50,255)` |
+| El Dorado | `#282A32` | `(40,42,50,255)` |
+| Crystallina | `#E6E8F0` | `(230,232,240,255)` |
+
+**`buttonTextColor()`** — label text on those buttons:
+
+| Theme | Hex | RGBA |
+|-------|-----|------|
+| Engram Classic | `#FFFFFF` | White |
+| Derotopia | `#FFFFFF` | White |
+| El Dorado | `#FFFFFF` | White |
+| Crystallina | `#38384A` | `(56,56,74,255)` |
+
 ---
 
 ## IX. Responsive Behavior
+
+Same as existing document — unchanged across themes.
 
 ### Mobile Detection
 
@@ -407,6 +491,8 @@ navIconSize()     // min(scaleSize(16), 20) × same
 
 ## X. Mobile-Specific Rules
 
+Same as existing document — unchanged across themes.
+
 ### Tap Targets
 
 Minimum interactive area: **48×48 density-independent pixels**.
@@ -448,6 +534,8 @@ All interactive elements smaller than 48×48 must be wrapped in `wrapMobileButto
 
 ## XI. Desktop-Specific Rules
 
+Same as existing document — unchanged across themes.
+
 ### Window
 
 - Fixed **360×680**, no resize (`SetFixedSize(true)`)
@@ -471,6 +559,8 @@ All interactive elements smaller than 48×48 must be wrapped in `wrapMobileButto
 
 ## XII. Status Indicators
 
+Same as existing document — unchanged across themes.
+
 ### Connection Dots
 
 Source: `main.go:182–201`
@@ -487,7 +577,7 @@ status.Connection = canvas.NewCircle(colors.Red)  // default: red
 | Gnomon | `status.Gnomon` | `statusDotSize()` (10×10) |
 | EPOCH | `status.EPOCH` | `statusDotSize()` (10×10) |
 
-Color: `colors.Red` → `colors.Network` (green) when active.
+Color: `colors.Red` → `colors.Network` (theme-specific) when active.
 
 ### Animated Text
 
@@ -502,102 +592,141 @@ Color: `colors.Red` → `colors.Network` (green) when active.
 
 ---
 
-## XIII. Future-Proofing for Theme Variants
+## XIII. Theme-Specific Color Functions
 
-### Architecture Extension Points
+Several functions return theme-appropriate colors for specific UI roles rather than using `C.<Token>` directly.
 
-The codebase already supports multiple themes. The current default is **"Engram Classic"**.
+### Status / Loading Text Color
 
-| Mechanism | Location | Purpose |
-|-----------|----------|---------|
-| `Theme` struct | `functions.go:242` | Holds theme implementations (`main`, `alt`) |
-| `eTheme` | `theme.go:26` | Engram Classic implementation |
-| `eTheme2` | `theme.go:128` | Alternative theme (Noto fonts, same palette) |
-| `tintTheme` | `custom.go:33` | Per-element color overlay |
-| `themes` global | `main.go:84` | Global theme manager |
-| `a.Settings().SetTheme()` | `main.go:127` | Activation mechanism |
+Source: `internal/theme/colors.go` — `StatusTextColor()`
 
-### How to Add a New Theme
+Used for TELA loading indicators ("Connecting to node", "Fetching content", "Preparing app", etc.), wallet connection status text, and the TELA app count display.
 
-1. Create a new struct implementing the `fyne.Theme` interface (e.g., `eThemeNight`):
-   - `Color(name, variant)` — return your palette
-   - `Font(style)` — return your font resources
-   - `Icon(name)` — delegate to `theme.DefaultTheme().Icon()`
-   - `Size(name)` — call `scaleFont(getBaseSize(s))`
-2. Add the instance to the `Theme` struct in `functions.go`
-3. Wire a theme selector in `settings_layouts.go` or `auth_layouts.go`:
-   ```go
-   a.Settings().SetTheme(themes.night)
-   ```
-4. Theme selection persists via `store.go` encrypted storage
+| Theme | Color | Hex | RGBA |
+|-------|-------|-----|------|
+| Engram Classic | LightBlue (sky blue) | `#38B6FF` | `(56,182,255,255)` |
+| Derotopia | LightBlue (candy pink) | `#FF69B4` | `(255,105,180,255)` |
+| El Dorado | LightBlue (emerald) | `#50C878` | `(80,200,120,255)` |
+| Crystallina | Dark teal (hardcoded) | `#008296` | `(0,130,150,255)` |
 
-### Design Rules for New Themes
+### Balance Text Color
 
-- The layout system, spacing, scaling, navigation, and widget architecture are **theme-agnostic** — they work with any color/font combination
-- Only `theme.go` + font resources need changes for a new theme
-- Do **not** change `scaling.go`, `custom.go`, or layout files for a theme variant
-- `tintTheme` can be used for per-widget color overrides in any theme
+Source: `internal/theme/colors.go` — `BalanceColor()`
+
+Used for the DERO balance amount on the dashboard.
+
+| Theme | Color | Hex | RGBA |
+|-------|-------|-----|------|
+| Engram Classic | Green | `#13CA69` | `(19,202,105,255)` |
+| Derotopia | Sky blue | `#38B6FF` | `(56,182,255,255)` |
+| El Dorado | Green (gold) | `#FFD700` | `(255,215,0,255)` |
+| Crystallina | Green (amethyst) | `#7C5CBF` | `(124,92,191,255)` |
+
+### Dashboard Icon Colors
+
+Source: `wallet_layouts.go:395–424`
+
+Used for the Settings, Notes, Messages, and Contracts buttons on the main dashboard.
+
+| Theme | Color | Hex | RGBA |
+|-------|-------|-----|------|
+| Engram Classic | Green | `#13CA69` | `(19,202,105,255)` |
+| Derotopia | Sky blue | `#38B6FF` | `(56,182,255,255)` |
+| El Dorado | Goldenrod | `#DAA520` | `(218,165,32,255)` |
+| Crystallina | Amethyst | `#7C5CBF` | `(124,92,191,255)` |
+
+### Balance Pulse Animation
+
+Source: `functions.go:3011–3054` — `pulseBalancePending()`
+
+When a send transaction is pending, the balance text pulses between two colors:
+
+| Theme | Color A | Color B |
+|-------|---------|---------|
+| Engram Classic | Green `#13CA69` | Yellow `#F4D00B` |
+| Derotopia | Sky blue `#38B6FF` | Candy pink `#FF69B4` |
+| El Dorado | Emerald `#13CA69` | Gold `#FFD700` |
+| Crystallina | Amethyst `#7C5CBF` | Sky blue `#38B6FF` |
+
+### Marquee Text Color
+
+Source: `wallet_layouts.go:67` — dashboard marquee uses `C.LightBlue`
+
+| Theme | Hex | Value |
+|-------|-----|-------|
+| Engram Classic | `#38B6FF` | Sky blue |
+| Derotopia | `#FF69B4` | Candy pink |
+| El Dorado | `#50C878` | Emerald |
+| Crystallina | `#38B6FF` | Sky blue |
+
+### Globe Icon Resources
+
+Source: `browser_globe_resource.go`
+
+Two separate icon functions for different contexts:
+
+**`globeResource()`** — TELA browser tab "Apps" button. Uses theme accent colors:
+
+| Theme | Hex |
+|-------|-----|
+| Engram Classic | `#13CA69` (green) |
+| Derotopia | `#8A2BE2` (purple) |
+| El Dorado | `#FFD700` (gold) |
+| Crystallina | `#7C5CBF` (amethyst) |
+
+**`explorerGlobeResource()`** — TELA app detail "Open in explorer" button. Uses white/dark:
+
+| Theme | Hex |
+|-------|-----|
+| Engram Classic | `#FFFFFF` (white) |
+| Derotopia | `#FFFFFF` (white) |
+| El Dorado | `#FFFFFF` (white) |
+| Crystallina | `#38384A` (dark slate) |
 
 ---
 
-## XIV. Best Practices
+## XIV. Architecture: Per-Theme Color System
 
-### Code Style
+### How It Works
 
-- Run `gofmt -w` on all touched Go files
-- Run `goimports -w` if imports change
-- Group imports: stdlib → third-party → `github.com/DEROFDN/engram`
-- Avoid unused imports — build must stay clean
+The theme system uses a **pointer-swap** architecture, not separate `fyne.Theme` implementations:
 
-### File Organization
+1. **`apptheme.C`** — a package-level pointer to the active `Colors` struct. All semantic color access goes through `apptheme.C.<Token>`.
+2. **`apptheme.ThemeMode`** — a package-level enum tracking the active theme name.
+3. **`apptheme.Activate(name)`** — swaps `C` and `ThemeMode` to the selected theme.
+4. **`a.Settings().SetTheme(apptheme.Main)`** — tells Fyne to re-read theme colors after activation.
 
-| Pattern | Contents |
-|---------|----------|
-| `*_layouts.go` | One `layout*()` function per screen domain |
-| `theme.go` | Theme implementations (`eTheme`, `eTheme2`) |
-| `scaling.go` | Responsive scale, spacers, icon sizes |
-| `widgets_ui.go` | App-specific widgets (`walletBtn`, `pulseText`, `iframe`) |
-| `custom.go` | Reusable custom widgets (`returnEntry`, `slimProgressBar`) |
-| `navigation.go` | `NavigationStack`, domain registry |
+### File Layout
 
-### UI Thread Safety
+| File | Contents |
+|------|----------|
+| `internal/theme/colors.go` | `Colors` struct, palette definitions, `Activate()`, `StatusTextColor()`, `BalanceColor()` |
+| `internal/theme/theme.go` | `ETheme`/`ETheme2` Fyne implementations, `bgColor()`, `accentNRGBA()`, `crystallinaFyneColor()` |
 
-```go
-// All UI updates from goroutines:
-fyne.Do(func() {
-    // UI code here
-})
+### The Fyne Theme Layer
 
-// Helper wrapper used throughout:
-func uiDo(fn func()) {
-    fyne.Do(fn)
-}
+The Fyne theme providers (`ETheme` and `ETheme2`) in `theme.go` return colors via:
 
-// Window resize wrapper:
-func resizeWindow(w, h float32) {
-    uiDo(func() {
-        session.Window.Resize(fyne.NewSize(w, h))
-    })
-}
-```
+- **`bgColor()`** — reads `C.DarkMatter` and converts to `color.NRGBA` for `ColorNameBackground`. Makes the app-wide background per-theme.
+- **`accentNRGBA()`** — returns the theme's accent color (Green equivalent) for `ColorNameButton`, `ColorNamePrimary`, `ColorNameFocus`, etc.
+- **`crystallinaFyneColor()`** — Crystallina-only intercept that overrides 10+ Fyne color names (Background, Foreground, MenuBackground, InputBackground, etc.) for the light theme.
 
-### Background Work
+### Adding a New Theme
 
-- Blocking calls (RPC, wallet, Gnomon, file I/O) in goroutines
-- Check `appExiting` before touching UI from goroutines
-- Check wallet generation is still active (`isWalletGenerationActive(generation)`)
-- Use `fyne.Do()` for every UI mutation from async paths
-- Never block the UI thread with network or disk operations
+1. Add a new `var <name>Colors` struct literal in `internal/theme/colors.go` with all 14 tokens.
+2. Add a `Theme<Name>` constant.
+3. Add a case in `Activate()`.
+4. If the theme is light, add entries to `crystallinaFyneColor()` (or rename it to handle all light themes).
+5. If `StatusTextColor()` or `BalanceColor()` need special handling, add a case there.
+6. Theme selection UI is in `settings_layouts.go:1888`.
 
-### Layout Construction Order
+### Design Rules
 
-1. Set `session.Domain` first
-2. Call `resizeWindow(ui.MaxWidth, ui.MaxHeight)`
-3. Define all visual elements at function top (canvases, texts, entries, buttons)
-4. Assemble spacers and groupings in the middle
-5. Create `&iframe{}` and pack into `container.NewStack`
-6. Wrap in `NewVScroll()` and return
-7. If applicable, push to `NavStack`
+- Layout, spacing, scaling, navigation, and widget architecture are **theme-agnostic** — they work with any palette.
+- The `C` pointer-swap means **no layout files need changes** for new palette values.
+- Explicit per-theme color functions (`StatusTextColor()`, `BalanceColor()`) are only needed when a color role doesn't map to a single `C.<Token>` value.
+- For dark themes: DarkMatter should use `(R, G, B)` values where each channel <= 40 to maintain contrast with white/gray text.
+- For light themes: add entries to `crystallinaFyneColor()` and update `IsLightTheme()`, `buttonCardColor()`, `buttonTextColor()`.
 
 ---
 

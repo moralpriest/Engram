@@ -123,7 +123,7 @@ func layoutTELA() fyne.CanvasObject {
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	results := canvas.NewText("", apptheme.C.Green)
+	results := canvas.NewText("", apptheme.StatusTextColor())
 	results.TextSize = scaleFont(13)
 
 	telaStatus := canvas.NewText("", color.Transparent)
@@ -1634,7 +1634,7 @@ func layoutTELA() fyne.CanvasObject {
 				searchMu.RLock()
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 				searchMu.RUnlock()
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				entrySearch.Enable()
 				entryAddSCID.Enable()
 			})
@@ -2154,7 +2154,7 @@ func layoutTELA() fyne.CanvasObject {
 					searchMu.RLock()
 					results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 					searchMu.RUnlock()
-					results.Color = apptheme.C.Green
+					results.Color = apptheme.StatusTextColor()
 					entrySearch.Enable()
 					entryAddSCID.Enable()
 				})
@@ -2824,7 +2824,7 @@ func layoutTELA() fyne.CanvasObject {
 				searchMu.RLock()
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
 				searchMu.RUnlock()
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 			}
 			results.Refresh()
 		})
@@ -3167,7 +3167,7 @@ func layoutTELA() fyne.CanvasObject {
 					searchData.Set(searching)
 					searchList.Refresh()
 					results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
-					results.Color = apptheme.C.Green
+					results.Color = apptheme.StatusTextColor()
 					results.Refresh()
 					entrySearch.Enable()
 				})
@@ -3249,7 +3249,7 @@ func layoutTELA() fyne.CanvasObject {
 				searchData.Set(searching)
 				searchList.Refresh()
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(queryResult))
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 				entrySearch.Enable()
 			})
@@ -3329,7 +3329,7 @@ func layoutTELA() fyne.CanvasObject {
 			}
 			if !isSearching && wSelect.Selected == "Search" && len(serversRunning) > 0 {
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 			}
 		})
@@ -3372,7 +3372,7 @@ func layoutTELA() fyne.CanvasObject {
 			searchList.Refresh()
 			if !isSearching && wSelect.Selected == "Search" {
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 			}
 		})
@@ -3669,7 +3669,7 @@ func layoutTELA() fyne.CanvasObject {
 				refreshAppsList()
 			} else {
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(searching))
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 			}
 			maybeStartTelaWork(true)
@@ -3692,7 +3692,7 @@ func layoutTELA() fyne.CanvasObject {
 				_ = searchData.Set(searching)
 				searchList.Refresh()
 				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
-				results.Color = apptheme.C.Green
+				results.Color = apptheme.StatusTextColor()
 				results.Refresh()
 				maybeStartTelaWork(true)
 				return
@@ -4245,7 +4245,7 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 	textSCID := widget.NewRichTextFromMarkdown(index.SCID)
 	textSCID.Wrapping = fyne.TextWrapWord
 
-	btnViewExplorer := widget.NewButtonWithIcon("", globeResource(), func() {
+	btnViewExplorer := widget.NewButtonWithIcon("", explorerGlobeResource(), func() {
 		if engram.Disk.GetNetwork() {
 			link, _ := url.Parse("https://explorer.derofoundation.org/tx/" + index.SCID)
 			_ = fyne.CurrentApp().OpenURL(link)

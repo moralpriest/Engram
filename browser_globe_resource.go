@@ -27,6 +27,16 @@ var resourceBrowserGlobeCrystallinaSvg = &fyne.StaticResource{
 	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7C5CBF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>`),
 }
 
+var resourceBrowserGlobeWhiteSvg = &fyne.StaticResource{
+	StaticName:    "browser_globe_white.svg",
+	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>`),
+}
+
+var resourceBrowserGlobeCrystallinaDarkSvg = &fyne.StaticResource{
+	StaticName:    "browser_globe_crystallina_dark.svg",
+	StaticContent: []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38384A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>`),
+}
+
 // ---- History icons (TELA History tab, Fyne Material Design path) ----
 
 var resourceBrowserHistoryEngramSvg = &fyne.StaticResource{
@@ -62,6 +72,13 @@ func globeResource() fyne.Resource {
 	default:
 		return resourceBrowserGlobeEngramSvg
 	}
+}
+
+func explorerGlobeResource() fyne.Resource {
+	if apptheme.ThemeMode == apptheme.ThemeCrystallina {
+		return resourceBrowserGlobeCrystallinaDarkSvg
+	}
+	return resourceBrowserGlobeWhiteSvg
 }
 
 func historyResource() fyne.Resource {

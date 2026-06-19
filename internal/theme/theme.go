@@ -61,6 +61,11 @@ func getBaseSize(s fyne.ThemeSizeName) float32 {
 	}
 }
 
+func bgColor() color.Color {
+	dm := C.DarkMatter.(color.RGBA)
+	return color.NRGBA{R: dm.R, G: dm.G, B: dm.B, A: dm.A}
+}
+
 func accentNRGBA(r, g, b, a uint8) color.Color {
 	switch ThemeMode {
 	case ThemeDerotopia:
@@ -110,7 +115,7 @@ func (t *ETheme) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	}
 	switch c {
 	case theme.ColorNameBackground:
-		return color.NRGBA{R: 21, G: 23, B: 30, A: 0xff}
+		return bgColor()
 	case theme.ColorNameHyperlink:
 		return color.NRGBA{R: 235, G: 235, B: 235, A: 0x99}
 	case theme.ColorNameButton:
@@ -185,7 +190,7 @@ func (t *ETheme2) Color(c fyne.ThemeColorName, v fyne.ThemeVariant) color.Color 
 	}
 	switch c {
 	case theme.ColorNameBackground:
-		return color.NRGBA{R: 21, G: 23, B: 30, A: 0xff}
+		return bgColor()
 	case theme.ColorNameHyperlink:
 		return color.NRGBA{R: 235, G: 235, B: 235, A: 0x99}
 	case theme.ColorNameButton:
