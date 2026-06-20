@@ -4995,9 +4995,12 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	currentHeight := engram.Disk.Get_Height()
 	daemonHeight := uint64(engram.Disk.Get_Daemon_Height())
 	currentAddress := engram.Disk.GetAddress().String()
+
+	messageCacheMu.RLock()
 	if minHeight == 0 && messageCache.Primed && messageCache.Address == currentAddress && messageCache.Height == currentHeight && messageCache.DaemonHeight == daemonHeight && len(messageCache.Records) > 0 {
 		cached := make([]MessageRecord, len(messageCache.Records))
 		copy(cached, messageCache.Records)
+		messageCacheMu.RUnlock()
 		return cached
 	}
 
@@ -5006,13 +5009,16 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	if cacheReusable && messageCache.Height > 0 {
 		startHeight = messageCache.Height + 1
 	}
+	messageCacheMu.RUnlock()
 
 	var zeroscid crypto.Hash
 	messageAmount, _ := globals.ParseAmount("0.00001")
 	entries := engram.Disk.Show_Transfers(zeroscid, false, true, true, startHeight, daemonHeight, "", "", 0, 0)
 	if cacheReusable {
+		messageCacheMu.RLock()
 		result = make([]MessageRecord, len(messageCache.Records))
 		copy(result, messageCache.Records)
+		messageCacheMu.RUnlock()
 	}
 
 	for i := range entries {
@@ -5101,7 +5107,10 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 		}
 
 		if cacheReusable {
-			if _, exists := messageCache.ByTXID[record.Entry.TXID]; exists {
+			messageCacheMu.RLock()
+			_, exists := messageCache.ByTXID[record.Entry.TXID]
+			messageCacheMu.RUnlock()
+			if exists {
 				for idx := range result {
 					if result[idx].Entry.TXID == record.Entry.TXID {
 						result[idx] = record
@@ -5123,11 +5132,13 @@ func scanMessageTransfers(minHeight uint64) (result []MessageRecord) {
 	if minHeight == 0 {
 		if cacheReusable && startHeight > 0 {
 			newRecords := []MessageRecord{}
+			messageCacheMu.RLock()
 			for _, record := range result {
 				if _, exists := messageCache.ByTXID[record.Entry.TXID]; !exists {
 					newRecords = append(newRecords, record)
 				}
 			}
+			messageCacheMu.RUnlock()
 			mergeMessageRecordsIntoCache(newRecords, currentHeight, daemonHeight, currentAddress)
 		} else {
 			buildMessageCacheSnapshot(result, currentHeight, daemonHeight, currentAddress)

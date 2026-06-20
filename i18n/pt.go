@@ -460,6 +460,7 @@ var stringsPT = map[string]string{
 	"language.portuguese": "Português",
 	"language.esperanto":  "Esperanto",
 	"language.italian":    "Italiano",
+	"language.dutch":      "Nederlands",
 
 	"common.yes":     "Sim",
 	"common.no":      "Não",
