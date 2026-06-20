@@ -1301,8 +1301,8 @@ func layoutRestore() fyne.CanvasObject {
 
 	// Animate card selection with color pulse
 	animateCardPulse := func(card *canvas.Rectangle, finalColor color.Color) {
-		// Start with bright highlight color
-		highlightColor := color.RGBA{R: 150, G: 255, B: 150, A: 255}
+		// Start with theme-aware bright highlight color
+		highlightColor := apptheme.PulseHighlightColor()
 		card.FillColor = highlightColor
 		card.Refresh()
 

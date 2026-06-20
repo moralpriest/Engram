@@ -156,6 +156,22 @@ func IsLightTheme() bool {
 	}
 }
 
+// PulseHighlightColor returns a brightened highlight version of the current
+// theme's accent color, used for card pulse animations and press feedback.
+func PulseHighlightColor() color.Color {
+	switch ThemeMode {
+	case ThemeDerotopia:
+		return color.RGBA{R: 220, G: 150, B: 255, A: 255} // bright purple
+	case ThemeElDorado:
+		return color.RGBA{R: 255, G: 240, B: 120, A: 255} // bright gold
+	case ThemeCrystallina:
+		return color.RGBA{R: 210, G: 170, B: 255, A: 255} // bright amethyst
+	case ThemeAtlantis:
+		return color.RGBA{R: 120, G: 235, B: 255, A: 255} // bright cyan
+	}
+	return color.RGBA{R: 150, G: 255, B: 150, A: 255} // bright green (Engram)
+}
+
 func Activate(name string) {
 	switch name {
 	case ThemeDerotopia:
