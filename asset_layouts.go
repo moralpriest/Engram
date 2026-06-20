@@ -790,64 +790,68 @@ func layoutAssetManager(scid string) fyne.CanvasObject {
 
 	btnSend := widget.NewButton(i18n.T("assets.send_asset"), nil)
 
-	entryAddress.Validator = func(s string) error {
+	assetAddrDebouncer := NewDebouncer(300 * time.Millisecond)
+
+	entryAddress.OnChanged = func(s string) {
 		btnSend.Text = i18n.T("assets.send_asset")
 		btnSend.Refresh()
-		_, err := globals.ParseValidateAddress(s)
-		if err != nil {
-			go func() {
+		assetAddrDebouncer.Debounce(func() {
+			_, err := globals.ParseValidateAddress(s)
+			if err != nil {
 				exists, err := checkUsername(s, -1)
-				if err != nil && exists == "" {
-					uiDo(func() {
+				uiDo(func() {
+					if err != nil && exists == "" {
 						btnSend.Disable()
 						entryAddress.SetValidationError(errors.New("invalid username or address"))
-					})
-				} else {
-					uiDo(func() {
+					} else {
 						entryAddress.SetValidationError(nil)
 						btnSend.Enable()
-					})
-				}
-			}()
-		} else {
-			entryAddress.SetValidationError(nil)
-			btnSend.Enable()
-		}
-		return nil
+					}
+				})
+			} else {
+				uiDo(func() {
+					entryAddress.SetValidationError(nil)
+					btnSend.Enable()
+				})
+			}
+		})
 	}
 
 	entryAmount := widget.NewEntry()
 	entryAmount.PlaceHolder = i18n.T("assets.amount")
-	entryAmount.Validator = func(s string) error {
-		if s != "" {
-			amount, err := globals.ParseAmount(s)
-			if err != nil {
-				btnSend.Disable()
-				entryAmount.SetValidationError(errors.New("invalid amount entered"))
-				return err
-			} else {
-				bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(hash, -1, engram.Disk.GetAddress().String())
-				if err != nil {
-					btnSend.Disable()
-					entryAmount.SetValidationError(errors.New("error parsing asset balance"))
-					return err
-				} else {
+	assetAmountDebouncer := NewDebouncer(250 * time.Millisecond)
+
+	entryAmount.OnChanged = func(s string) {
+		assetAmountDebouncer.Debounce(func() {
+			uiDo(func() {
+				if s != "" {
+					amount, err := globals.ParseAmount(s)
+					if err != nil {
+						btnSend.Disable()
+						entryAmount.SetValidationError(errors.New("invalid amount entered"))
+						return
+					}
+
+					bal, _, err := engram.Disk.GetDecryptedBalanceAtTopoHeight(hash, -1, engram.Disk.GetAddress().String())
+					if err != nil {
+						btnSend.Disable()
+						entryAmount.SetValidationError(errors.New("error parsing asset balance"))
+						return
+					}
+
 					if amount > bal || amount == 0 {
-						err = errors.New("insufficient asset balance")
 						btnSend.Text = "Insufficient transfer amount..."
 						btnSend.Disable()
-						entryAmount.SetValidationError(err)
-						return err
+						entryAmount.SetValidationError(errors.New("insufficient asset balance"))
+						return
 					}
 				}
-			}
-		}
 
-		btnSend.Text = i18n.T("assets.send_asset")
-		btnSend.Enable()
-		entryAmount.SetValidationError(nil)
-
-		return nil
+				btnSend.Text = i18n.T("assets.send_asset")
+				btnSend.Enable()
+				entryAmount.SetValidationError(nil)
+			})
+		})
 	}
 
 	var zerobal uint64

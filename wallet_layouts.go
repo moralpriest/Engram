@@ -964,84 +964,89 @@ func layoutSend() fyne.CanvasObject {
 
 	wReceiver := widget.NewEntry()
 	wReceiver.SetPlaceHolder(i18n.T("send.receiver"))
-	wReceiver.SetValidationError(nil)
-	wReceiver.Validator = func(s string) error {
-		address, err := globals.ParseValidateAddress(s)
-		if err != nil {
-			tx.Address = nil
-			addr, _ := checkUsername(s, -1)
-			if addr == "" {
-				btnSend.Disable()
-				btnSendNow.Disable()
-				err = errors.New("invalid username or address")
-				wReceiver.SetValidationError(err)
-				tx.Address = nil
-				return err
-			} else {
-				wReceiver.SetValidationError(nil)
-				tx.Address, _ = globals.ParseValidateAddress(addr)
-				if tx.Amount != 0 {
-					balance, _ := engram.Disk.Get_Balance()
-					if tx.Amount <= balance {
-						btnSend.Enable()
-						btnSendNow.Enable()
+
+	receiverDebouncer := NewDebouncer(300 * time.Millisecond)
+
+	wReceiver.OnChanged = func(s string) {
+		receiverDebouncer.Debounce(func() {
+			uiDo(func() {
+				address, err := globals.ParseValidateAddress(s)
+				if err != nil {
+					tx.Address = nil
+					addr, _ := checkUsername(s, -1)
+					if addr == "" {
+						btnSend.Disable()
+						btnSendNow.Disable()
+						err = errors.New("invalid username or address")
+						wReceiver.SetValidationError(err)
+						tx.Address = nil
+						return
+					} else {
+						wReceiver.SetValidationError(nil)
+						tx.Address, _ = globals.ParseValidateAddress(addr)
+						if tx.Amount != 0 {
+							balance, _ := engram.Disk.Get_Balance()
+							if tx.Amount <= balance {
+								btnSend.Enable()
+								btnSendNow.Enable()
+							}
+						}
+					}
+				} else {
+					if address.IsIntegratedAddress() {
+						tx.Address = address
+
+						if address.Arguments.HasValue(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64) {
+							amount := address.Arguments[address.Arguments.Index(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64)].Value
+							tx.Amount = amount.(uint64)
+							wAmount.Text = globals.FormatMoney(amount.(uint64))
+							if amount.(uint64) != 0.00000 {
+								wAmount.Disable()
+							}
+							wAmount.Refresh()
+						}
+
+						if address.Arguments.HasValue(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
+							port := address.Arguments[address.Arguments.Index(rpc.RPC_DESTINATION_PORT, rpc.DataUint64)].Value
+							tx.PaymentID = port.(uint64)
+							wPaymentID.Text = strconv.FormatUint(port.(uint64), 10)
+							wPaymentID.Disable()
+							wPaymentID.Refresh()
+						}
+
+						if address.Arguments.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
+							comment := address.Arguments[address.Arguments.Index(rpc.RPC_COMMENT, rpc.DataString)].Value
+							tx.Comment = comment.(string)
+							wMessage.Text = comment.(string)
+							if comment.(string) != "" {
+								wMessage.Disable()
+							}
+							wMessage.Refresh()
+						}
+
+						if tx.Ringsize == 0 {
+							wRings.SetSelected(i18n.T("send.ring_16"))
+						}
+
+						if tx.Amount != 0 {
+							balance, _ := engram.Disk.Get_Balance()
+							if tx.Amount <= balance {
+								btnSend.Enable()
+							}
+						}
+					} else {
+						tx.Address = address
+						wReceiver.SetValidationError(nil)
+						if tx.Amount != 0 {
+							balance, _ := engram.Disk.Get_Balance()
+							if tx.Amount <= balance {
+								btnSend.Enable()
+							}
+						}
 					}
 				}
-			}
-		} else {
-			if address.IsIntegratedAddress() {
-				tx.Address = address
-
-				if address.Arguments.HasValue(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64) {
-					amount := address.Arguments[address.Arguments.Index(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64)].Value
-					tx.Amount = amount.(uint64)
-					wAmount.Text = globals.FormatMoney(amount.(uint64))
-					if amount.(uint64) != 0.00000 {
-						wAmount.Disable()
-					}
-					wAmount.Refresh()
-				}
-
-				if address.Arguments.HasValue(rpc.RPC_DESTINATION_PORT, rpc.DataUint64) {
-					port := address.Arguments[address.Arguments.Index(rpc.RPC_DESTINATION_PORT, rpc.DataUint64)].Value
-					tx.PaymentID = port.(uint64)
-					wPaymentID.Text = strconv.FormatUint(port.(uint64), 10)
-					wPaymentID.Disable()
-					wPaymentID.Refresh()
-				}
-
-				if address.Arguments.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-					comment := address.Arguments[address.Arguments.Index(rpc.RPC_COMMENT, rpc.DataString)].Value
-					tx.Comment = comment.(string)
-					wMessage.Text = comment.(string)
-					if comment.(string) != "" {
-						wMessage.Disable()
-					}
-					wMessage.Refresh()
-				}
-
-				if tx.Ringsize == 0 {
-					wRings.SetSelected(i18n.T("send.ring_16"))
-				}
-
-				if tx.Amount != 0 {
-					balance, _ := engram.Disk.Get_Balance()
-					if tx.Amount <= balance {
-						btnSend.Enable()
-					}
-				}
-			} else {
-				tx.Address = address
-				wReceiver.SetValidationError(nil)
-				if tx.Amount != 0 {
-					balance, _ := engram.Disk.Get_Balance()
-					if tx.Amount <= balance {
-						btnSend.Enable()
-					}
-				}
-			}
-		}
-		return nil
+			})
+		})
 	}
 
 	/*
@@ -1057,47 +1062,52 @@ func layoutSend() fyne.CanvasObject {
 		})
 	*/
 
-	wAmount.Validator = func(s string) error {
-		if s == "" {
-			tx.Amount = 0
-			wAmount.SetValidationError(errors.New("invalid transaction amount"))
-			btnSend.Disable()
-			btnSendNow.Disable()
-		} else {
-			balance, _ := engram.Disk.Get_Balance()
-			entry, err := globals.ParseAmount(s)
-			if err != nil {
-				tx.Amount = 0
-				wAmount.SetValidationError(errors.New("invalid transaction amount"))
-				btnSend.Disable()
-				btnSendNow.Disable()
-				return errors.New("invalid transaction amount")
-			}
+	amountDebouncer := NewDebouncer(250 * time.Millisecond)
 
-			if entry == 0 {
-				tx.Amount = 0
-				wAmount.SetValidationError(errors.New("invalid transaction amount"))
-				btnSend.Disable()
-				btnSendNow.Disable()
-				return errors.New("invalid transaction amount")
-			}
-
-			if entry <= balance {
-				tx.Amount = entry
-				wAmount.SetValidationError(nil)
-				if wReceiver.Validate() == nil {
-					btnSend.Enable()
-					btnSendNow.Enable()
+	wAmount.OnChanged = func(s string) {
+		amountDebouncer.Debounce(func() {
+			uiDo(func() {
+				if s == "" {
+					tx.Amount = 0
+					wAmount.SetValidationError(errors.New("invalid transaction amount"))
+					btnSend.Disable()
+					btnSendNow.Disable()
+					return
 				}
-			} else {
-				tx.Amount = 0
-				btnSend.Disable()
-				btnSendNow.Disable()
-				wAmount.SetValidationError(errors.New("insufficient funds"))
-			}
-			return nil
-		}
-		return errors.New("invalid transaction amount")
+
+				balance, _ := engram.Disk.Get_Balance()
+				entry, err := globals.ParseAmount(s)
+				if err != nil {
+					tx.Amount = 0
+					wAmount.SetValidationError(errors.New("invalid transaction amount"))
+					btnSend.Disable()
+					btnSendNow.Disable()
+					return
+				}
+
+				if entry == 0 {
+					tx.Amount = 0
+					wAmount.SetValidationError(errors.New("invalid transaction amount"))
+					btnSend.Disable()
+					btnSendNow.Disable()
+					return
+				}
+
+				if entry <= balance {
+					tx.Amount = entry
+					wAmount.SetValidationError(nil)
+					if wReceiver.Validate() == nil {
+						btnSend.Enable()
+						btnSendNow.Enable()
+					}
+				} else {
+					tx.Amount = 0
+					btnSend.Disable()
+					btnSendNow.Disable()
+					wAmount.SetValidationError(errors.New("insufficient funds"))
+				}
+			})
+		})
 	}
 
 	wAmount.SetValidationError(nil)

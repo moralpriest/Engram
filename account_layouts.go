@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -421,28 +422,35 @@ func layoutAccount() fyne.CanvasObject {
 		curPass := widget.NewEntry()
 		curPass.Password = true
 		curPass.PlaceHolder = i18n.T("account.current_password")
-		curPass.OnChanged = func(s string) {
+
+		changeDebouncer := NewDebouncer(200 * time.Millisecond)
+		updateChangeBtn := func() {
 			btnChange.Text = i18n.T("account.submit")
 			btnChange.Enable()
-			btnChange.Refresh()
+		}
+
+		curPass.OnChanged = func(s string) {
+			changeDebouncer.Debounce(func() {
+				uiDo(updateChangeBtn)
+			})
 		}
 
 		newPass := widget.NewEntry()
 		newPass.Password = true
 		newPass.PlaceHolder = i18n.T("account.new_password_ph")
 		newPass.OnChanged = func(s string) {
-			btnChange.Text = i18n.T("account.submit")
-			btnChange.Enable()
-			btnChange.Refresh()
+			changeDebouncer.Debounce(func() {
+				uiDo(updateChangeBtn)
+			})
 		}
 
 		confirm := widget.NewEntry()
 		confirm.Password = true
 		confirm.PlaceHolder = i18n.T("account.confirm_ph")
 		confirm.OnChanged = func(s string) {
-			btnChange.Text = i18n.T("account.submit")
-			btnChange.Enable()
-			btnChange.Refresh()
+			changeDebouncer.Debounce(func() {
+				uiDo(updateChangeBtn)
+			})
 		}
 
 		btnChange.OnTapped = func() {

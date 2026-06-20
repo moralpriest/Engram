@@ -387,17 +387,20 @@ func layoutMessages() fyne.CanvasObject {
 		}
 
 		if _, err := globals.ParseValidateAddress(val); err == nil {
+			messages.Address = val
 			btnSend.Enable()
 			return
 		}
 
+		messages.Address = ""
 		btnSend.Disable()
 
 		go func(check string) {
-			if _, err := checkUsername(check, -1); err == nil {
+			if addr, err := checkUsername(check, -1); err == nil {
 				uiDo(func() {
 					// Only enable if the user hasn't changed the input in the meantime
 					if strings.TrimSpace(contactInput.Text) == check {
+						messages.Address = addr
 						btnSend.Enable()
 					}
 				})
@@ -805,13 +808,11 @@ func layoutPM() fyne.CanvasObject {
 	entry.OnChanged = func(s string) {
 		messages.Message = s
 		contact := messages.Contact
-		//check, err := engram.Disk.NameToAddress(messages.Contact)
-		check, err := checkUsername(messages.Contact, -1)
-		if err == nil {
-			contact = check
+		if messages.Address != "" {
+			contact = messages.Address
 		}
 
-		_, err = globals.ParseValidateAddress(contact)
+		_, err := globals.ParseValidateAddress(contact)
 		if err != nil {
 			session.LastDomain = session.Window.Content()
 			session.Window.SetContent(layoutTransition())
@@ -825,17 +826,14 @@ func layoutPM() fyne.CanvasObject {
 		if err != nil {
 			btnSend.Text = i18n.T("messages.too_long")
 			btnSend.Disable()
-			btnSend.Refresh()
 			return
 		} else {
 			if messages.Message == "" {
 				btnSend.Text = i18n.T("messages.send")
 				btnSend.Disable()
-				btnSend.Refresh()
 			} else {
 				btnSend.Text = i18n.T("messages.send")
 				btnSend.Enable()
-				btnSend.Refresh()
 			}
 		}
 	}
@@ -844,10 +842,10 @@ func layoutPM() fyne.CanvasObject {
 		if messages.Message == "" {
 			return
 		}
-		contact := ""
-		_, err := globals.ParseValidateAddress(messages.Contact)
-		if err != nil {
-			//check, err := engram.Disk.NameToAddress(messages.Contact)
+		contact := messages.Contact
+		if messages.Address != "" {
+			contact = messages.Address
+		} else if _, err := globals.ParseValidateAddress(messages.Contact); err != nil {
 			check, err := checkUsername(messages.Contact, -1)
 			if err != nil {
 				logger.Errorf("[Message] Failed to send: %s\n", err)
@@ -857,8 +855,6 @@ func layoutPM() fyne.CanvasObject {
 				return
 			}
 			contact = check
-		} else {
-			contact = messages.Contact
 		}
 
 		btnSend.Text = i18n.T("messages.setting_up")

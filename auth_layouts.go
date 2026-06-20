@@ -97,11 +97,9 @@ func layoutMain() fyne.CanvasObject {
 				if session.Path == "" {
 					btnLogin.Text = i18n.T("main.no_account")
 					btnLogin.Disable()
-					btnLogin.Refresh()
 				} else if session.Password == "" {
 					btnLogin.Text = i18n.T("main.invalid_password")
 					btnLogin.Disable()
-					btnLogin.Refresh()
 				} else {
 					if !session.Offline {
 						btnLogin.Text = i18n.T("main.connect")
@@ -109,11 +107,9 @@ func layoutMain() fyne.CanvasObject {
 						btnLogin.Text = i18n.T("main.decrypt")
 					}
 					btnLogin.Enable()
-					btnLogin.Refresh()
 					login()
 					btnLogin.Text = i18n.T("main.invalid_password")
 					btnLogin.Disable()
-					btnLogin.Refresh()
 					session.Error = ""
 				}
 			}
@@ -166,28 +162,31 @@ func layoutMain() fyne.CanvasObject {
 	wPassword := NewReturnEntry()
 	wPassword.OnReturn = btnLogin.OnTapped
 	wPassword.Password = true
+
+	loginDebouncer := NewDebouncer(200 * time.Millisecond)
+
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
-		if !session.Offline {
-			btnLogin.Text = i18n.T("main.connect")
-		} else {
-			btnLogin.Text = i18n.T("main.decrypt")
-		}
-		btnLogin.Enable()
-		btnLogin.Refresh()
 		session.Password = s
 
-		if len(s) < 1 {
-			btnLogin.Disable()
-			btnLogin.Refresh()
-		} else if session.Path == "" {
-			btnLogin.Disable()
-			btnLogin.Refresh()
-		} else {
-			btnLogin.Enable()
-		}
+		loginDebouncer.Debounce(func() {
+			uiDo(func() {
+				if !session.Offline {
+					btnLogin.Text = i18n.T("main.connect")
+				} else {
+					btnLogin.Text = i18n.T("main.decrypt")
+				}
+				btnLogin.Enable()
 
-		btnLogin.Refresh()
+				if len(session.Password) < 1 {
+					btnLogin.Disable()
+				} else if session.Path == "" {
+					btnLogin.Disable()
+				} else {
+					btnLogin.Enable()
+				}
+			})
+		})
 	}
 	wPassword.SetPlaceHolder(i18n.T("main.password"))
 
@@ -445,7 +444,7 @@ func layoutMain() fyne.CanvasObject {
 
 	var stackObjs []fyne.CanvasObject
 	stackObjs = append(stackObjs, frame, res.mainBg)
-	if apptheme.ThemeMode != apptheme.ThemeEngram {
+	if apptheme.ThemeMode != apptheme.ThemeEngram && !isMobile() {
 		res.gram.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
 		res.gram.FillMode = canvas.ImageFillContain
 		logoOffset := scaleSize(30)
@@ -692,7 +691,7 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 
 	var stackObjs []fyne.CanvasObject
 	stackObjs = append(stackObjs, frame, res.mainBg)
-	if apptheme.ThemeMode != apptheme.ThemeEngram {
+	if apptheme.ThemeMode != apptheme.ThemeEngram && !isMobile {
 		res.gram.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
 		res.gram.FillMode = canvas.ImageFillContain
 		logoOffset := scaleSize(30)
@@ -827,19 +826,26 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	wPassword := widget.NewEntry()
 	wPassword.Password = true
+
+	createDebouncer := NewDebouncer(200 * time.Millisecond)
+
+	updateCreateBtn := func() {
+		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && !findAccount() && session.Language != -1 {
+			btnCreate.Enable()
+		} else {
+			btnCreate.Disable()
+		}
+	}
+
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
 		errorText.Text = ""
 		errorText.Refresh()
 		session.Password = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && !findAccount() && session.Language != -1 {
-			btnCreate.Enable()
-			btnCreate.Refresh()
-		} else {
-			btnCreate.Disable()
-			btnCreate.Refresh()
-		}
+		createDebouncer.Debounce(func() {
+			uiDo(updateCreateBtn)
+		})
 	}
 	wPassword.SetPlaceHolder(i18n.T("main.password"))
 	wPassword.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
@@ -852,13 +858,9 @@ func layoutNewAccount() fyne.CanvasObject {
 		errorText.Refresh()
 		session.PasswordConfirm = s
 
-		if len(session.Password) > 0 && session.Password == session.PasswordConfirm && !findAccount() && session.Language != -1 {
-			btnCreate.Enable()
-			btnCreate.Refresh()
-		} else {
-			btnCreate.Disable()
-			btnCreate.Refresh()
-		}
+		createDebouncer.Debounce(func() {
+			uiDo(updateCreateBtn)
+		})
 	}
 	wPasswordConfirm.SetPlaceHolder(i18n.T("create.confirm_password"))
 	wPasswordConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
