@@ -1416,6 +1416,7 @@ func refreshPermissionsAfterConnect() {
 		uiDo(func() {
 			_, _ = getPermissions()
 		})
+		resetBlockedCountsForWallet()
 	}()
 }
 
@@ -8471,6 +8472,30 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	method := request.Method()
+
+	var raw json.RawMessage
+	_ = request.UnmarshalParams(&raw)
+	if op, detail, hit := InspectDangerous(method, raw); hit {
+		logger.Printf("[Engram][XSWD-SAFETY] BLOCKED: app=%s id=%s method=%s reason=%s detail=%s tier=%s\n",
+			ad.Name, ad.Id, method, op.Reason, detail, tierLabel(op.Tier))
+		n := incrementBlockedCount(ad.Id)
+		if n >= 2 {
+			defer func() {
+				time.Sleep(50 * time.Millisecond)
+				if remoteAccess.WS.server != nil {
+					remoteAccess.WS.server.RemoveApplication(ad)
+					logger.Printf("[Engram][XSWD-SAFETY] auto-disconnected %s after %d blocked attempts\n", ad.Name, n)
+				}
+			}()
+		} else {
+			go openBlockDialog(ad, method, op.Reason, detail, func() {
+				if remoteAccess.WS.server != nil {
+					remoteAccess.WS.server.RemoveApplication(ad)
+				}
+			})
+		}
+		return xswd.AlwaysDeny
+	}
 
 	// Check if we already have a stored permission for this app and method
 	if ad.Permissions != nil {
