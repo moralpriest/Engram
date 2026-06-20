@@ -200,8 +200,7 @@ func layoutMain() fyne.CanvasObject {
 	}
 
 	// Pulse animation for fresh install
-	if !appFirstOpenDone && len(list) == 0 {
-		appFirstOpenDone = true
+	if len(list) == 0 {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			if len(btnNewAccount.Objects) > 1 {

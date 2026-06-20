@@ -48,7 +48,7 @@ var telaBackfillFailed atomic.Bool
 var lastBackfillHeight int64
 
 var introShownThisSession bool
-var appFirstOpenDone bool
+
 var marqueeMu sync.Mutex
 
 func init() {
