@@ -11,6 +11,8 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - Mac install guide: `docs/INSTALL_MAC.md`
 - Windows install guide: `docs/INSTALL_WINDOWS.md`
 - Linux install guide: `docs/INSTALL_LINUX.md`
+- Theme system reference: `docs/Theme.md`
+- i18n template: `i18n/template.go`
 - Build tags commonly required: `migrated_fynedo`
 
 ## Rule Files
@@ -148,6 +150,11 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - Keep mobile and desktop behavior in mind; this codebase targets both.
 - Prefer incremental UI fixes over broad rewrites.
 - If adding background work for UI screens, ensure reload/navigation does not race stale updates.
+- **Theming:** see `docs/Theme.md` for the 5-theme color system, pointer-swap
+  architecture, and adding new themes. Custom images on the main dashboard are
+  supported — keep dimensions reasonable (existing logos are 500–1440 px wide).
+  Add the image to `assets/` and embed it in a `bundled_*.go` file via
+  `//go:embed` following the existing pattern.
 
 ## Messaging and History Notes
 

@@ -18,6 +18,7 @@
 - [x]  **QR Code Scanning** (Desktop + Android)
 - [x]  Supports [EPOCH](https://github.com/civilware/epoch) crowd mining protocol
 - [x]  **Multi-language support** (English, Français, Español, Deutsch, Italiano, Português, Русский, 日本語, 中文, Esperanto)
+- [x]  **5 built-in themes** with customizable palette — see [docs/Theme.md](docs/Theme.md)
 
 ### Upcoming Features
 - [ ]  Mobile QR Scanning (iOS)
