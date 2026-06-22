@@ -6,7 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 )
 
-//go:embed ElDoradoDERO.png
+//go:embed assets/ElDoradoDERO.png
 var resourceElDoradoDEROPngData []byte
 var resourceElDoradoDEROPng = &fyne.StaticResource{
 	StaticName:    "ElDoradoDERO.png",

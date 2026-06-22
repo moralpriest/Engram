@@ -1,4 +1,4 @@
-<img src="Icon.png" width="128" height="128" alt="Engram Enigma" title="Powered by DERO">
+<img src="assets/Icon.png" width="128" height="128" alt="Engram Enigma" title="Powered by DERO">
 
 # *One Wallet. All of DERO.*
 
@@ -22,10 +22,6 @@
 ### Upcoming Features
 - [ ]  Mobile QR Scanning (iOS)
 
-### TELA Performance
-Engram Dev features a significant overhaul of the TELA discovery architecture, reducing first-click discovery from >60s to ~2s.
-See [TELA_PERFORMANCE.md](TELA_PERFORMANCE.md) for technical details on the three-layer cache and Gnomon optimizations.
-
 ### Watch the Beta Release Video
 [<img src="https://img.youtube.com/vi/00-gpNbkRW4/hqdefault.jpg" width="100%" />](https://www.youtube.com/watch?v=00-gpNbkRW4)
 
@@ -38,6 +34,11 @@ We plan to deploy releases on the following platforms:
 - [x]  Android
 
 See [releases](https://github.com/DEROFDN/Engram/releases) for the latest builds.
+
+Platform installation guides:
+- [macOS](docs/INSTALL_MAC.md)
+- [Windows](docs/INSTALL_WINDOWS.md)
+- [Linux](docs/INSTALL_LINUX.md)
 
 ## Development
 
@@ -84,7 +85,7 @@ This task automatically runs `./fix_macos_permissions.sh` to apply the necessary
 
 #### Building for Windows
 ```bash
-fyne package -name Engram -os windows -appVersion 0.6.9 -icon Icon.png -tags migrated_fynedo
+fyne package -name Engram -os windows -appVersion 0.6.9 -icon assets/Icon.png -tags migrated_fynedo
 ```
 
 #### Building for Android

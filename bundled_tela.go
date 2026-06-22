@@ -8,7 +8,7 @@ import (
 	"fyne.io/fyne/v2"
 )
 
-//go:embed tela.png
+//go:embed assets/tela.png
 var resourceTelaPngData []byte
 var resourceTelaPng = &fyne.StaticResource{
 	StaticName:    "tela.png",

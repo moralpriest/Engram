@@ -8,6 +8,9 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - App type: Fyne desktop/mobile wallet for the DERO ecosystem
 - Module path: `github.com/DEROFDN/engram`
 - Primary areas: wallet UI, message flows, Gnomon indexing, local encrypted storage
+- Mac install guide: `docs/INSTALL_MAC.md`
+- Windows install guide: `docs/INSTALL_WINDOWS.md`
+- Linux install guide: `docs/INSTALL_LINUX.md`
 - Build tags commonly required: `migrated_fynedo`
 
 ## Rule Files
@@ -179,8 +182,6 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - Build Android APK: `task package-android`
 
 ## TELA Performance Notes
-
-- See `TELA_PERFORMANCE.md` for the current TELA app discovery architecture and timing expectations.
 - **First TELA click is now ~2 seconds** on both fresh installs and repeat visits, thanks to:
   - An **embedded SCID list** (`tela_embedded.go`) compiled into the binary (88 known TELA apps)
   - `GetTelaCandidates()` fallback to embedded list when Gnomon DB is empty

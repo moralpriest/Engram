@@ -6,7 +6,7 @@ import (
 	"fyne.io/fyne/v2"
 )
 
-//go:embed AtlantisDERO.png
+//go:embed assets/AtlantisDERO.png
 var resourceAtlantisDEROPngData []byte
 var resourceAtlantisDEROPng = &fyne.StaticResource{
 	StaticName:    "AtlantisDERO.png",

@@ -142,7 +142,7 @@ var resourceTelaHexagonPurple = &fyne.StaticResource{
 	StaticContent: []byte("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 330.87 382.06\"><g><path fill=\"#a366ff\" d=\"M165.44,382.06L0,286.54V95.51L165.44,0l165.44,95.51v191.03l-165.44,95.51ZM30,269.22l135.44,78.19,135.44-78.19V112.83L165.44,34.64,30,112.83v156.39Z\"/></g></svg>"),
 }
 
-//go:embed tela_logo.png
+//go:embed assets/tela_logo.png
 var resourceTelalogoPngData []byte
 
 var resourceTelalogoPng = &fyne.StaticResource{
