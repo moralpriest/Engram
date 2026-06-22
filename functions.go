@@ -2307,6 +2307,7 @@ func create() (address string, seed string, err error) {
 			}
 
 			languages := mnemonics.Language_List()
+			sort.Strings(languages)
 
 			if session.Language < 0 || session.Language > len(languages)-1 {
 				session.Language = 0 // English
