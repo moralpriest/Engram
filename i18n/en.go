@@ -461,6 +461,7 @@ var stringsEN = map[string]string{
 	"language.esperanto":  "Esperanto",
 	"language.italian":    "Italiano",
 	"language.dutch":      "Nederlands",
+	"language.arabic":     "العربية",
 
 	"common.yes":     "Yes",
 	"common.no":      "No",
