@@ -1407,7 +1407,11 @@ func layoutReceive() fyne.CanvasObject {
 		activeAddress = engram.Disk.GetAddress().String()
 	}
 
-	addressLabel := canvas.NewText("", apptheme.C.Green)
+	addressColor := apptheme.C.Green
+	if apptheme.ThemeMode == apptheme.ThemeElDorado {
+		addressColor = apptheme.C.DarkMatter
+	}
+	addressLabel := canvas.NewText("", addressColor)
 	addressLabel.TextSize = scaleFont(22)
 	addressLabel.Alignment = fyne.TextAlignCenter
 	addressLabel.TextStyle = fyne.TextStyle{Bold: true}
