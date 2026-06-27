@@ -133,3 +133,10 @@ func GetLanguageIndex() int {
 	}
 	return 0
 }
+
+// IsRTL returns true if the current language uses a right-to-left script.
+func IsRTL() bool {
+	langMu.RLock()
+	defer langMu.RUnlock()
+	return currentLang == LangAR
+}
