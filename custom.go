@@ -553,7 +553,7 @@ func newTELAButton(onTap func(), width float32) *fyne.Container {
 
 	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
 
-	labelText := canvas.NewText("TELA Web", buttonTextColor())
+	labelText := canvas.NewText("Web", buttonTextColor())
 	labelText.TextSize = scaleFont(11)
 	labelText.Alignment = fyne.TextAlignCenter
 
