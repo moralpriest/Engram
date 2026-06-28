@@ -5,9 +5,9 @@ import (
 	"image"
 
 	"fyne.io/fyne/v2"
+	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
-	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
 
 // renderWidth and renderHeight define the pixel resolution at which the enigma
@@ -289,5 +289,3 @@ var enigmaAtlantisSvg = &fyne.StaticResource{
   </g>
 </svg>`),
 }
-
-
