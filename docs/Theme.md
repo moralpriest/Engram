@@ -286,6 +286,7 @@ func layoutMyScreen() fyne.CanvasObject {
     return NewVScroll(layout)
 }
 ```
+> **Login pages** (`layoutMain()` / `layoutSingleWalletLogin()`) are an exception — they use a solid `DarkMatter` rectangle plus a pre-rendered theme SVG logo (`res.enigmaLogo`) instead of `res.mainBg`. See §XIV for how the bitmap is produced.
 
 ### Container Hierarchy Rules
 
@@ -723,6 +724,7 @@ The theme system uses a **pointer-swap** architecture, not separate `fyne.Theme`
 2. **`apptheme.ThemeMode`** — a package-level enum tracking the active theme name.
 3. **`apptheme.Activate(name)`** — swaps `C` and `ThemeMode` to the selected theme.
 4. **`a.Settings().SetTheme(apptheme.Main)`** — tells Fyne to re-read theme colors after activation.
+5. **`RasterizeEnigmaLogo()`** — re-renders the login-page enigma logo bitmap at 800×736px so the SVG rasterisation uses the new theme's colours.  Called after `Activate()` at startup (`main.go`) and on theme switch (`settings_layouts.go`).
 
 ### File Layout
 
@@ -747,6 +749,7 @@ The Fyne theme providers (`ETheme` and `ETheme2`) in `theme.go` return colors vi
 4. If the theme is light, add entries to `crystallinaFyneColor()` (or rename it to handle all light themes).
 5. If `StatusTextColor()` or `BalanceColor()` need special handling, add a case there.
 6. Theme selection UI is in `settings_layouts.go:1888`.
+7. Create a per‑theme SVG variant of the enigma logo in `bundled_enigma_logo.go` (follow the existing pattern of `enigma<Name>Svg`).  Add a `case` to the `RasterizeEnigmaLogo()` dispatcher to select the new SVG bytes.
 
 ### Design Rules
 
