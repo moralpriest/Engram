@@ -749,7 +749,7 @@ The Fyne theme providers (`ETheme` and `ETheme2`) in `theme.go` return colors vi
 4. If the theme is light, add entries to `crystallinaFyneColor()` (or rename it to handle all light themes).
 5. If `StatusTextColor()` or `BalanceColor()` need special handling, add a case there.
 6. Theme selection UI is in `settings_layouts.go:1888`.
-7. Create a per‑theme SVG variant of the enigma logo in `bundled_enigma_logo.go` (follow the existing pattern of `enigma<Name>Svg`).  Add a `case` to the `RasterizeEnigmaLogo()` dispatcher to select the new SVG bytes.
+7. Create a per‑theme SVG variant of the enigma logo in `enigma_logo.go` (follow the existing pattern of `enigma<Name>Svg`).  Add a `case` to the `RasterizeEnigmaLogo()` dispatcher to select the new SVG bytes.
 
 ### Design Rules
 
