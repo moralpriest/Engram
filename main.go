@@ -148,6 +148,7 @@ func main() {
 	if themeData, err := GetValue("settings", []byte("theme")); err == nil && len(themeData) > 0 {
 		apptheme.Activate(string(themeData))
 	}
+	RasterizeEnigmaLogo()
 
 	if safeMode {
 		// Disable Gnomon in safe mode

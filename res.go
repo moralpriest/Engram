@@ -15,6 +15,7 @@
 package main
 
 import (
+	"image"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,6 +47,7 @@ type Res struct {
 	telaBg           *canvas.Image
 	cachedTransition *fyne.Container
 	logoContainer    *fyne.Container
+	enigmaLogo       *image.NRGBA
 	transitionMu     sync.Mutex
 }
 

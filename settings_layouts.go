@@ -1907,6 +1907,7 @@ func layoutAppSettings() fyne.CanvasObject {
 				apptheme.Activate(key)
 				a.Settings().SetTheme(apptheme.Main)
 				UpdateThemeLogo()
+				RasterizeEnigmaLogo()
 				settingsActiveTab = 2
 				session.Window.SetContent(layoutAppSettings())
 			})

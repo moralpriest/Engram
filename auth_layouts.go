@@ -48,7 +48,6 @@ import (
 func layoutMain() fyne.CanvasObject {
 	// Set theme
 	a.Settings().SetTheme(apptheme.Main)
-	UpdateThemeLogo()
 	session.Domain = "app.main"
 	session.Path = ""
 	session.Password = ""
@@ -163,30 +162,23 @@ func layoutMain() fyne.CanvasObject {
 	wPassword.OnReturn = btnLogin.OnTapped
 	wPassword.Password = true
 
-	loginDebouncer := NewDebouncer(200 * time.Millisecond)
-
 	wPassword.OnChanged = func(s string) {
 		session.Error = ""
 		session.Password = s
 
-		loginDebouncer.Debounce(func() {
-			uiDo(func() {
-				if !session.Offline {
-					btnLogin.Text = i18n.T("main.connect")
-				} else {
-					btnLogin.Text = i18n.T("main.decrypt")
-				}
-				btnLogin.Enable()
+		if !session.Offline {
+			btnLogin.Text = i18n.T("main.connect")
+		} else {
+			btnLogin.Text = i18n.T("main.decrypt")
+		}
 
-				if len(session.Password) < 1 {
-					btnLogin.Disable()
-				} else if session.Path == "" {
-					btnLogin.Disable()
-				} else {
-					btnLogin.Enable()
-				}
-			})
-		})
+		if len(s) < 1 {
+			btnLogin.Disable()
+		} else if session.Path == "" {
+			btnLogin.Disable()
+		} else {
+			btnLogin.Enable()
+		}
 	}
 	wPassword.SetPlaceHolder(i18n.T("main.password"))
 
@@ -443,20 +435,16 @@ func layoutMain() fyne.CanvasObject {
 	}
 
 	var stackObjs []fyne.CanvasObject
-	stackObjs = append(stackObjs, frame, res.mainBg)
-	if apptheme.ThemeMode != apptheme.ThemeEngram && !isMobile() {
-		res.gram.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
-		res.gram.FillMode = canvas.ImageFillContain
-		logoOffset := scaleSize(30)
-		coverPad := canvas.NewRectangle(color.Transparent)
-		coverPad.SetMinSize(fyne.NewSize(1, logoOffset))
-		coverRect := canvas.NewRectangle(apptheme.C.DarkMatter)
-		coverRect.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.3))
-		stackObjs = append(stackObjs, container.NewVBox(coverPad, coverRect, layout.NewSpacer()))
-		logoPad := canvas.NewRectangle(color.Transparent)
-		logoPad.SetMinSize(fyne.NewSize(1, logoOffset))
-		stackObjs = append(stackObjs, container.NewVBox(logoPad, res.gram, layout.NewSpacer()))
-	}
+	stackObjs = append(stackObjs, frame)
+	bgRect := canvas.NewRectangle(apptheme.C.DarkMatter)
+	stackObjs = append(stackObjs, bgRect)
+	enigmaLogo := canvas.NewImageFromImage(res.enigmaLogo)
+	enigmaLogo.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
+	enigmaLogo.FillMode = canvas.ImageFillContain
+	logoOffset := scaleSize(30)
+	logoPad := canvas.NewRectangle(color.Transparent)
+	logoPad.SetMinSize(fyne.NewSize(1, logoOffset))
+	stackObjs = append(stackObjs, container.NewVBox(logoPad, enigmaLogo, layout.NewSpacer()))
 	stackObjs = append(stackObjs, container.NewCenter(form))
 	layout := container.NewStack(stackObjs...)
 
@@ -479,7 +467,6 @@ func layoutMain() fyne.CanvasObject {
 // layoutSingleWalletLogin shows a simplified login screen for when only 1 wallet exists
 func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	a.Settings().SetTheme(apptheme.Main)
-	UpdateThemeLogo()
 	session.Domain = "app.main"
 	session.Password = ""
 
@@ -690,20 +677,16 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 	}
 
 	var stackObjs []fyne.CanvasObject
-	stackObjs = append(stackObjs, frame, res.mainBg)
-	if apptheme.ThemeMode != apptheme.ThemeEngram && !isMobile {
-		res.gram.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
-		res.gram.FillMode = canvas.ImageFillContain
-		logoOffset := scaleSize(30)
-		coverPad := canvas.NewRectangle(color.Transparent)
-		coverPad.SetMinSize(fyne.NewSize(1, logoOffset))
-		coverRect := canvas.NewRectangle(apptheme.C.DarkMatter)
-		coverRect.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.3))
-		stackObjs = append(stackObjs, container.NewVBox(coverPad, coverRect, layout.NewSpacer()))
-		logoPad := canvas.NewRectangle(color.Transparent)
-		logoPad.SetMinSize(fyne.NewSize(1, logoOffset))
-		stackObjs = append(stackObjs, container.NewVBox(logoPad, res.gram, layout.NewSpacer()))
-	}
+	stackObjs = append(stackObjs, frame)
+	bgRect := canvas.NewRectangle(apptheme.C.DarkMatter)
+	stackObjs = append(stackObjs, bgRect)
+	enigmaLogo := canvas.NewImageFromImage(res.enigmaLogo)
+	enigmaLogo.SetMinSize(fyne.NewSize(ui.Width, ui.MaxHeight*0.2))
+	enigmaLogo.FillMode = canvas.ImageFillContain
+	logoOffset := scaleSize(30)
+	logoPad := canvas.NewRectangle(color.Transparent)
+	logoPad.SetMinSize(fyne.NewSize(1, logoOffset))
+	stackObjs = append(stackObjs, container.NewVBox(logoPad, enigmaLogo, layout.NewSpacer()))
 	stackObjs = append(stackObjs, container.NewCenter(form))
 	layout := container.NewStack(stackObjs...)
 
