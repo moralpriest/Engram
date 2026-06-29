@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="450.83" viewBox="0 0 390 450.83">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #39e281;
+      }
+
+      .cls-2 {
+        fill: #13ca69;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1" data-name="Layer 1"/>
+  <g id="Layer_2" data-name="Layer 2">
+    <g id="Dero_Green" data-name="Dero Green">
+      <polyline points="65 148 194 74 323 149 322 296 192 372 66 297 65 148"/>
+      <polyline class="cls-2" points="195 0 195 24 21 125 0 113 195 0"/>
+      <polyline class="cls-2" points="195 0 195 24 369 125 390 113 195 0"/>
+      <polyline class="cls-2" points="194.76 450.83 195 427 21 326 0 338 194.76 450.83"/>
+      <polyline class="cls-2" points="194.76 450.83 195 427 369 326 390 338 194.76 450.83"/>
+      <polyline class="cls-2" points="0 113 21 125 21 326 0 338 0 113"/>
+      <polyline class="cls-2" points="390 113 369 125 369 326 390 338 390 113"/>
+      <polyline class="cls-2" points="62 146 62 299 194 376 194 366 70 294 70 151 194 79 318 150 318 293 194 366 194 376 326 299 326 146 194 69 62 146"/>
+      <polyline class="cls-1" points="118 269 161 295 165 270 139 255 139 191 195 159 251 191 251 255 220 273 224 299 272 269 272 179 196 136 118 179 118 269"/>
+      <polyline class="cls-2" points="156 327 161 295 118 269 118 179 196 136 272 179 272 269 224 299 229 329 303 286 303 162 195 99 87 162 87 287 156 327"/>
+    </g>
+  </g>
+</svg>

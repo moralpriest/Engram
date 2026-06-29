@@ -523,6 +523,59 @@ func newBorderedButtonWithIcon(label string, icon fyne.Resource, iconColor color
 	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
 }
 
+// newBorderedButtonWithHoverIcon is like newBorderedButtonWithIcon but with
+// normal/hover icon swap (same hover highlight pattern as newIconLabelButtonWithColor).
+// Objects[1] in the returned container is the border *canvas.Rectangle.
+func newBorderedButtonWithHoverIcon(label string, normalIcon, hoverIcon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
+	iconImgNormal := widget.NewIcon(normalIcon)
+	iconSizerNormal := container.NewGridWrap(scalePoint(22, 22), iconImgNormal)
+
+	iconImgHover := widget.NewIcon(hoverIcon)
+	iconSizerHover := container.NewGridWrap(scalePoint(22, 22), iconImgHover)
+	iconSizerHover.Hide()
+
+	iconStack := container.NewStack(iconSizerNormal, iconSizerHover)
+
+	labelText := canvas.NewText(label, buttonTextColor())
+	labelText.TextSize = scaleFont(15)
+	labelText.TextStyle = fyne.TextStyle{Bold: true}
+
+	content := container.NewHBox(
+		layout.NewSpacer(),
+		iconStack,
+		labelText,
+		layout.NewSpacer(),
+	)
+
+	btn := newHoverButton(onTap, func() {
+		iconSizerNormal.Hide()
+		iconSizerHover.Show()
+	}, func() {
+		iconSizerHover.Hide()
+		iconSizerNormal.Show()
+	})
+	btn.Importance = widget.LowImportance
+
+	w := float32(160)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(40)
+	if isMobile() {
+		h = 48
+	}
+
+	bg := canvas.NewRectangle(color.Transparent)
+	bg.StrokeColor = buttonCardColor()
+	bg.StrokeWidth = scaleSize(3)
+	bg.CornerRadius = scaleFont(10)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
+
+	return container.NewStack(sizeEnforcer, bg, btn, container.NewCenter(content))
+}
+
 func newLargeIconButton(label string, icon fyne.Resource, onTap func(), width float32) *fyne.Container {
 	btn := widget.NewButtonWithIcon(label, icon, onTap)
 	btn.Importance = widget.MediumImportance

@@ -118,7 +118,7 @@ func layoutMain() fyne.CanvasObject {
 	})
 
 	// New Account button with icon
-	btnNewAccount := newBorderedButtonWithIcon(i18n.T("main.new_account"), theme.ContentAddIcon(), color.White, func() {
+	btnNewAccount := newBorderedButtonWithHoverIcon(i18n.T("main.new_account"), newAccountIconResource(), newAccountIconHoverResource(), func() {
 		session.Domain = "app.create"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
@@ -127,7 +127,7 @@ func layoutMain() fyne.CanvasObject {
 	}, ui.Width*0.9)
 
 	// Recover Account button with icon
-	btnRecoverAccount := newBorderedButtonWithIcon(i18n.T("main.recover_account"), theme.DocumentIcon(), color.White, func() {
+	btnRecoverAccount := newBorderedButtonWithHoverIcon(i18n.T("main.recover_account"), recoverAccountIconResource(), recoverAccountIconHoverResource(), func() {
 		session.Domain = "app.restore"
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
