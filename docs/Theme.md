@@ -661,6 +661,38 @@ Used for the Settings, Notes, Messages, and Contracts buttons on the main dashbo
 | Crystallina | Amethyst | `#7C5CBF` | `(124,92,191,255)` |
 | Atlantis | Cyan | `#34A2B5` | `(52,162,181,255)` |
 
+### Auth Icon Colors (New Account / Recover Account)
+
+Source: `bundled_auth_icons.go`
+
+Used for the **New Account** (green-dero.svg) and **Recover Account** (green-wallet.svg) buttons on the login screen.
+
+Each icon has two shades. The table below lists the outer/main body colour and the inner contrast shade (keyhole centre for dero, dark back panels for wallet).
+
+#### Normal state
+
+| Theme | Outer/main | Inner/dark |
+|-------|------------|------------|
+| Engram Classic | Green `#13CA69` | Lighter green `#39E281` / `#016531` |
+| Derotopia | Purple `#8A2BE2` | Light purple `#B98AFF` / `#6214B4` |
+| El Dorado | Gold `#FFD700` | Light gold `#FFE873` / `#B8860B` |
+| Crystallina | Amethyst `#7C5CBF` | Light lilac `#C896FF` / `#5C3C9F` |
+| Atlantis | Cyan `#34A2B5` | Light cyan `#6FD0E0` / `#136C7A` |
+
+#### Hover state (desktop only, 2‑shade contrast preserved)
+
+On desktop hover the outer/main body becomes the highlight colour while the inner/dark shade keeps its normal colour.
+
+| Theme | Outer/main (hover) | Inner/dark (unchanged) |
+|-------|--------------------|------------------------|
+| Engram Classic | White `#FFFFFF` | Keeps normal |
+| Derotopia | White `#FFFFFF` | Keeps normal |
+| El Dorado | White `#FFFFFF` | Keeps normal |
+| Crystallina | Dark slate `#38384A` | Keeps normal |
+| Atlantis | White `#FFFFFF` | Keeps normal |
+
+On mobile, hover is unavailable — the normal state is shown at all times.
+
 ### Balance Pulse Animation
 
 Source: `functions.go:3011–3054` — `pulseBalancePending()`
