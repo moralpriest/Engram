@@ -152,6 +152,7 @@ var layoutRegistry = map[string]LayoutFunc{
 	"app.messages.contact": layoutMessages, // Go back to messages list
 	"app.remoteaccess":     layoutRemoteAccess,
 	"app.register":         layoutNewAccount,
+	"app.nodeminer":        layoutDaemonMiner,
 }
 
 // getLayoutForDomain returns the layout function for a given domain

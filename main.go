@@ -26,7 +26,11 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/mobile"
+	"fyne.io/fyne/v2/widget"
+
+	"fyne.io/systray"
 
 	_ "golang.org/x/image/webp"
 
@@ -88,6 +92,7 @@ var appExiting bool
 var previousDomain string
 var lastForegroundTime int64           // unix timestamp of last foreground event (for cooldown)
 var currentScrollBox *container.Scroll // tracks current page's scroll container for mobile input scrolling
+var trayStart, trayEnd func()
 
 func main() {
 	// Parse version from ldflags-injected string
@@ -157,18 +162,24 @@ func main() {
 	session.Window = a.NewWindow("Engram")
 	session.Window.SetMaster()
 	session.Window.SetCloseIntercept(func() {
-		appExiting = true
-		appExitFlag.Store(true)
-		if engram.Disk != nil {
-			go func() {
-				closeWallet()
-				time.Sleep(2 * time.Second)
+		// Mobile: exit directly (no system tray)
+		if a.Driver().Device().IsMobile() {
+			appExiting = true
+			appExitFlag.Store(true)
+			if engram.Disk != nil {
+				go func() {
+					closeWallet()
+					time.Sleep(2 * time.Second)
+					os.Exit(0)
+				}()
+			} else {
 				os.Exit(0)
-			}()
-		} else {
-			os.Exit(0)
+			}
+			session.Window.Close()
+			return
 		}
-		session.Window.Close()
+		// Desktop: minimize to system tray
+		session.Window.Hide()
 	})
 	session.Window.SetPadded(false)
 	session.Domain = "app.main.loading"
@@ -183,6 +194,39 @@ func main() {
 
 	a.SetIcon(resourceIconPng)
 	session.Window.SetIcon(resourceIconPng)
+
+	// System tray setup (desktop only)
+	if !a.Driver().Device().IsMobile() {
+		onReady := func() {
+			systray.SetIcon(resourceIconPng.Content())
+			systray.SetTitle("Engram")
+			systray.SetTooltip("Engram - DERO Wallet")
+
+			showItem := systray.AddMenuItem(i18n.T("system_tray.show_engram"), "")
+			systray.AddSeparator()
+			quitItem := systray.AddMenuItem(i18n.T("system_tray.quit"), "")
+
+			go func() {
+				for {
+					select {
+					case <-showItem.ClickedCh:
+						fyne.Do(func() {
+							session.Window.Show()
+						})
+					case <-quitItem.ClickedCh:
+						fyne.Do(func() {
+							if session.Window != nil {
+								showQuitConfirmation()
+							}
+						})
+					}
+				}
+			}()
+		}
+
+		trayStart, trayEnd = systray.RunWithExternalLoop(onReady, nil)
+		trayStart()
+	}
 
 	// Init objects
 	status.Canvas = canvas.NewText("", apptheme.C.Network)
@@ -433,5 +477,63 @@ func handleBackNavigation() {
 		if mobileDriver, ok := a.(mobile.Driver); ok {
 			mobileDriver.GoBack()
 		}
+	}
+}
+
+// showQuitConfirmation displays a dialog with stop-options before exiting.
+func showQuitConfirmation() {
+	fyne.Do(func() {
+		session.Window.Show()
+
+		stopDaemonCB := widget.NewCheck(i18n.T("system_tray.stop_daemon"), nil)
+		stopMinerCB := widget.NewCheck(i18n.T("system_tray.stop_miner"), nil)
+
+		var dlg dialog.Dialog
+
+		cancelBtn := widget.NewButton(i18n.T("system_tray.cancel"), func() {
+			dlg.Hide()
+		})
+
+		quitBtn := widget.NewButton(i18n.T("system_tray.quit"), func() {
+			if stopDaemonCB.Checked {
+				stopDaemon()
+			}
+			if stopMinerCB.Checked {
+				stopMiner()
+			}
+			dlg.Hide()
+			performAppExit()
+		})
+
+		content := container.NewVBox(
+			widget.NewLabel(i18n.T("system_tray.quit_message")),
+			widget.NewSeparator(),
+			stopDaemonCB,
+			stopMinerCB,
+			container.NewHBox(cancelBtn, quitBtn),
+		)
+
+		dlg = dialog.NewCustomWithoutButtons(i18n.T("system_tray.quit_title"), content, session.Window)
+		dlg.Show()
+	})
+}
+
+// performAppExit performs the final shutdown sequence and terminates the process.
+func performAppExit() {
+	appExiting = true
+	appExitFlag.Store(true)
+
+	if trayEnd != nil {
+		trayEnd()
+	}
+
+	if engram.Disk != nil {
+		go func() {
+			closeWallet()
+			time.Sleep(2 * time.Second)
+			os.Exit(0)
+		}()
+	} else {
+		os.Exit(0)
 	}
 }

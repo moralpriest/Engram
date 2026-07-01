@@ -272,6 +272,177 @@ func layoutDatapad() fyne.CanvasObject {
 	return layout
 }
 
+func createDatapadTabContent() fyne.CanvasObject {
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	rectWidth90 := canvas.NewRectangle(color.Transparent)
+	rectWidth90.SetMinSize(fyne.NewSize(ui.Width*0.95, 10))
+
+	entryNewPad := widget.NewEntry()
+	entryNewPad.MultiLine = false
+	entryNewPad.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+
+	btnAdd := widget.NewButton(i18n.T("datapad.create"), nil)
+	btnAdd.Disable()
+
+	entryNewPad.PlaceHolder = i18n.T("datapad.note_name")
+	entryNewPad.SetIcon(theme.SearchIcon())
+	entryNewPad.Validator = func(s string) error {
+		session.Datapad = s
+		if len(s) > 0 {
+			_, err := GetEncryptedValue("Datapads", []byte(s))
+			if err == nil {
+				btnAdd.Text = i18n.T("datapad.err_exists")
+				btnAdd.Disable()
+				btnAdd.Refresh()
+				err := errors.New("datapad already exists")
+				entryNewPad.SetValidationError(err)
+				return err
+			} else {
+				btnAdd.Text = i18n.T("datapad.create")
+				btnAdd.Enable()
+				btnAdd.Refresh()
+				return nil
+			}
+		} else {
+			btnAdd.Text = i18n.T("datapad.create")
+			btnAdd.Disable()
+			err := errors.New("datapad name required")
+			entryNewPad.SetValidationError(err)
+			btnAdd.Refresh()
+			return err
+		}
+	}
+	entryNewPad.OnChanged = func(s string) {
+		entryNewPad.Validate()
+	}
+	entryNewPad.OnSubmitted = func(_ string) {
+		if entryNewPad.Validate() == nil {
+			btnAdd.OnTapped()
+		}
+	}
+
+	var padData []string
+
+	shard, err := GetShard()
+	if err != nil {
+		padData = []string{}
+	}
+
+	store, err := graviton.NewDiskStore(shard)
+	if err != nil {
+		padData = []string{}
+	}
+
+	ss, err := store.LoadSnapshot(0)
+	if err != nil {
+		padData = []string{}
+	}
+
+	tree, err := ss.GetTree("Datapads")
+	if err != nil {
+		padData = []string{}
+	}
+
+	cursor := tree.Cursor()
+	for k, _, err := cursor.First(); err == nil; k, _, err = cursor.Next() {
+		if string(k) != "" {
+			padData = append(padData, string(k))
+		}
+	}
+
+	padList := binding.BindStringList(&padData)
+
+	padBox := widget.NewListWithData(padList,
+		func() fyne.CanvasObject {
+			c := container.NewVBox(
+				widget.NewLabel(""),
+			)
+			return c
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+
+			co.(*fyne.Container).Objects[0].(*widget.Label).SetText(str)
+			co.(*fyne.Container).Objects[0].(*widget.Label).Wrapping = fyne.TextWrapWord
+			co.(*fyne.Container).Objects[0].(*widget.Label).TextStyle.Bold = false
+			co.(*fyne.Container).Objects[0].(*widget.Label).Alignment = fyne.TextAlignLeading
+		})
+
+	padBox.OnSelected = func(id widget.ListItemID) {
+		session.Datapad = padData[id]
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(apptheme.C.DarkMatter),
+			),
+		)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				layoutPad(),
+			),
+		)
+		overlay.Top().Show()
+		padBox.UnselectAll()
+		padBox.Refresh()
+	}
+
+	btnAdd.OnTapped = func() {
+		err := StoreEncryptedValue("Datapads", []byte(entryNewPad.Text), []byte(""))
+		if err != nil {
+			btnAdd.Text = i18n.T("datapad.err_create")
+			btnAdd.Disable()
+			btnAdd.Refresh()
+		} else {
+			padData = append(padData, entryNewPad.Text)
+			padList.Set(padData)
+			entryNewPad.SetText("")
+			padBox.Refresh()
+		}
+	}
+
+	top := container.NewVBox(
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				rectWidth90,
+				container.NewVBox(
+					entryNewPad,
+					rectSpacer,
+					wrapMobileButton(btnAdd),
+				),
+			),
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+	)
+
+	features := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewStack(
+			rectWidth90,
+			padBox,
+		),
+		layout.NewSpacer(),
+	)
+
+	return container.NewBorder(
+		top,
+		nil,
+		nil,
+		nil,
+		features,
+	)
+}
+
 func layoutPad() fyne.CanvasObject {
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))

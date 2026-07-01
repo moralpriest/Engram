@@ -144,6 +144,15 @@ func layoutMain() fyne.CanvasObject {
 		removeOverlays()
 	}, ui.Width*0.9)
 
+	// Daemon & Miner button
+	btnDaemonMiner := newGunmetalButtonWithIcon(i18n.T("main.daemon_miner"), cyberdeckIconResource(), apptheme.C.Green, func() {
+		session.Domain = "app.nodeminer"
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDaemonMiner())
+		removeOverlays()
+	}, ui.Width*0.9)
+
 	modeData := binding.BindBool(&session.Offline)
 	mode := widget.NewCheckWithData(i18n.T("main.offline_mode"), modeData)
 	mode.OnChanged = func(b bool) {
@@ -362,6 +371,10 @@ func layoutMain() fyne.CanvasObject {
 		newSpacer(),
 		container.New(layout.NewGridLayout(1),
 			btnConnectionSettings,
+		),
+		newSpacer(),
+		container.New(layout.NewGridLayout(1),
+			btnDaemonMiner,
 		),
 	)
 
@@ -586,6 +599,15 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 		removeOverlays()
 	}, ui.Width*0.9)
 
+	// Daemon & Miner button
+	btnDaemonMiner := newGunmetalButtonWithIcon(i18n.T("main.daemon_miner"), cyberdeckIconResource(), apptheme.C.Green, func() {
+		session.Domain = "app.nodeminer"
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDaemonMiner())
+		removeOverlays()
+	}, ui.Width*0.9)
+
 	// Handle return key
 	session.Window.Canvas().SetOnTypedKey(func(k *fyne.KeyEvent) {
 		if session.Domain == "app.main" {
@@ -635,6 +657,10 @@ func layoutSingleWalletLogin(walletName string) fyne.CanvasObject {
 			rectSpacer,
 			container.New(layout.NewGridLayout(1),
 				wrapMobileButton(btnConnectionSettings),
+			),
+			rectSpacer,
+			container.New(layout.NewGridLayout(1),
+				wrapMobileButton(btnDaemonMiner),
 			),
 		)
 

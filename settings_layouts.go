@@ -2461,6 +2461,9 @@ func layoutNetwork() fyne.CanvasObject {
 		removeOverlays()
 	})
 
+	// Refresh daemon/miner state for the indicators
+	updateDaemonStateFromDetection()
+
 	formNetwork := container.NewVBox(
 		rectSpacer,
 		labelNode,
@@ -2484,6 +2487,10 @@ func layoutNetwork() fyne.CanvasObject {
 		prioritiseDesc,
 		rectSpacer,
 		prioritiseCheck,
+		rectSpacer,
+		makeSmallStatusRow(daemonIconResource(), i18n.T("daemon_miner.daemon"), stateLabelDM(dmState.daemonState), stateColorDM(dmState.daemonState)),
+		rectSpacer,
+		makeSmallStatusRow(minerOffIconResource(), i18n.T("daemon_miner.miner"), stateLabelDM(dmState.minerState), stateColorDM(dmState.minerState)),
 	)
 
 	scrollBox := container.NewVScroll(

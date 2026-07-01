@@ -1731,10 +1731,12 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	assetTabContent := createAssetExplorerTabContent()
 
 	assetTab := container.NewTabItem(i18n.T("files.tab_assets"), assetTabContent)
+	notesTabContent := createDatapadTabContent()
 	tabs := container.NewAppTabs(
 		assetTab,
 		container.NewTabItem(i18n.T("files.tab_browse"), browseTabContent),
 		container.NewTabItem(i18n.T("files.tab_scids"), contractsTabContent),
+		container.NewTabItem(i18n.T("files.tab_notes"), notesTabContent),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 

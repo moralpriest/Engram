@@ -446,6 +446,57 @@ func newIconLabelButtonWithColor(label string, icon fyne.Resource, iconColor col
 	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
 }
 
+// newIconLabelButtonWithIcons creates a dashboard nav-tile button that swaps
+// between two separate icon resources on hover (normalIcon → hoverIcon),
+// matching the auth-icon hover pattern.  Styling is identical to
+// newIconLabelButtonWithColor.
+func newIconLabelButtonWithIcons(label string, normalIcon, hoverIcon fyne.Resource, onTap func(), width ...float32) *fyne.Container {
+	iconNormal := widget.NewIcon(normalIcon)
+	iconSizerNormal := container.NewGridWrap(scalePoint(28, 28), iconNormal)
+
+	iconHover := widget.NewIcon(hoverIcon)
+	iconSizerHover := container.NewGridWrap(scalePoint(28, 28), iconHover)
+	iconSizerHover.Hide()
+
+	iconStack := container.NewStack(iconSizerNormal, iconSizerHover)
+
+	labelText := canvas.NewText(label, buttonTextColor())
+	labelText.TextSize = scaleFont(11)
+	labelText.Alignment = fyne.TextAlignCenter
+
+	content := container.NewVBox(
+		container.NewCenter(iconStack),
+		labelText,
+	)
+
+	btn := newHoverButton(onTap, func() {
+		iconSizerNormal.Hide()
+		iconSizerHover.Show()
+	}, func() {
+		iconSizerHover.Hide()
+		iconSizerNormal.Show()
+	})
+	btn.Importance = widget.LowImportance
+
+	w := float32(100)
+	if len(width) > 0 && width[0] > 0 {
+		w = width[0]
+	}
+	h := float32(60)
+	if isMobile() {
+		h = 68
+	}
+
+	outline := canvas.NewRectangle(buttonCardColor())
+	outline.StrokeWidth = 0
+	outline.CornerRadius = scaleFont(10)
+
+	sizeEnforcer := canvas.NewRectangle(color.Transparent)
+	sizeEnforcer.SetMinSize(fyne.NewSize(w, scaleSize(h)))
+
+	return container.NewStack(sizeEnforcer, outline, btn, container.NewCenter(content))
+}
+
 func newGunmetalButtonWithIcon(label string, icon fyne.Resource, iconColor color.Color, onTap func(), width ...float32) *fyne.Container {
 	iconImg := widget.NewIcon(icon)
 	iconSizer := container.NewGridWrap(scalePoint(22, 22), iconImg)

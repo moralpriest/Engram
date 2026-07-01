@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="403" height="417" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 403 417">
+  <g id="Layer_1" data-name="Layer 1"/>
+  <g id="Layer_2" data-name="Layer 2">
+    <g id="CyberDeck_Green" data-name="CyberDeck Green">
+      <polyline fill="#13ca69" points="403 208 228 317 228 101 403 208 374 208 237 125 237 293 374 208 403 208"/>
+      <polyline fill="#13ca69" points="228 101 221 103 221 313 228 317 228 101"/>
+      <polyline fill="#13ca69" points="184 0 181 29 25 117 25 302 181 389 183 417 3 318 3 102 184 0"/>
+      <polyline fill="#015a2c" points="3 102 0 105 0 315 3 318 3 102"/>
+      <polyline fill="#13ca69" points="39 125 39 296 183 376 183 366 47 291 47 130 182 54 311 134 311 285 183 366 183 376 318 290 318 129 182 44 39 125"/>
+    </g>
+  </g>
+</svg>

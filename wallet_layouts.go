@@ -394,37 +394,31 @@ func layoutDashboard() fyne.CanvasObject {
 	// Dashboard icon colours — per-theme, and per-icon for El Dorado gold shades
 	var (
 		cSettings  color.Color
-		cNotes     color.Color
 		cMessages  color.Color
-		cContracts color.Color
+		cContracts   color.Color
 	)
 	switch apptheme.ThemeMode {
 	case apptheme.ThemeDerotopia:
 		cSettings = color.RGBA{56, 182, 255, 255}
-		cNotes = color.RGBA{56, 182, 255, 255}
 		cMessages = color.RGBA{56, 182, 255, 255}
 		cContracts = color.RGBA{56, 182, 255, 255}
 	case apptheme.ThemeElDorado:
 		goldenrod := color.RGBA{218, 165, 32, 255}
 		cSettings = goldenrod
-		cNotes = goldenrod
 		cMessages = goldenrod
 		cContracts = goldenrod
 	case apptheme.ThemeCrystallina:
 		amethyst := color.RGBA{124, 92, 191, 255}
 		cSettings = amethyst
-		cNotes = amethyst
 		cMessages = amethyst
 		cContracts = amethyst
 	case apptheme.ThemeAtlantis:
 		cyan := color.RGBA{52, 162, 181, 255}
 		cSettings = cyan
-		cNotes = cyan
 		cMessages = cyan
 		cContracts = cyan
 	default:
 		cSettings = color.RGBA{19, 202, 105, 255}
-		cNotes = color.RGBA{19, 202, 105, 255}
 		cMessages = color.RGBA{19, 202, 105, 255}
 		cContracts = color.RGBA{19, 202, 105, 255}
 	}
@@ -436,10 +430,10 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, buttonWidth)
 
-	btnNotes := newIconLabelButtonWithColor(i18n.T("dashboard.notes"), theme.DocumentIcon(), cNotes, color.White, func() {
+	btnDaemonMiner := newIconLabelButtonWithIcons("Daemon/Miner", cyberdeckDashboardIconResource(), cyberdeckDashboardIconHoverResource(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
-		session.Window.SetContent(layoutDatapad())
+		session.Window.SetContent(layoutDaemonMiner())
 		removeOverlays()
 	}, buttonWidth)
 
@@ -840,14 +834,14 @@ func layoutDashboard() fyne.CanvasObject {
 		container.NewVBox(
 			container.NewCenter(
 				container.NewHBox(
-					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnNotes.MinSize().Height), btnNotes),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnContracts.MinSize().Height), btnContracts),
 					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnTELAWeb.MinSize().Height), btnTELAWeb),
 					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnMessages.MinSize().Height), btnMessages),
 				),
 			),
 			container.NewCenter(
 				container.NewHBox(
-					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnContracts.MinSize().Height), btnContracts),
+					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnDaemonMiner.MinSize().Height), btnDaemonMiner),
 					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnExit.MinSize().Height), btnExit),
 					container.NewGridWrap(fyne.NewSize(bottomRowWidth/3, btnSettings.MinSize().Height), btnSettings),
 				),
