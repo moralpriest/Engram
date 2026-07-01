@@ -15,7 +15,10 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -589,25 +592,247 @@ func rewindChain(n int) error {
 	return nil
 }
 
+// githubReleaseAsset mirrors a GitHub release asset.
+type githubReleaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int    `json:"size"`
+}
+
+// githubReleaseResponse mirrors the GitHub latest-release API payload.
+type githubReleaseResponse struct {
+	TagName string               `json:"tag_name"`
+	Assets  []githubReleaseAsset `json:"assets"`
+}
+
+// platformAssetKeywords returns the OS keyword, arch keyword, and archive extension
+// used to identify the correct release asset for the current platform.
+func platformAssetKeywords() (osKeyword, archKeyword, ext string) {
+	switch runtime.GOOS {
+	case "darwin":
+		osKeyword = "darwin"
+		ext = ".tar.gz"
+	case "windows":
+		osKeyword = "windows"
+		ext = ".zip"
+	default:
+		osKeyword = "linux"
+		ext = ".tar.gz"
+	}
+
+	switch runtime.GOARCH {
+	case "amd64":
+		archKeyword = "amd64"
+	case "arm64":
+		archKeyword = "arm64"
+	default:
+		archKeyword = runtime.GOARCH
+	}
+	return
+}
+
+// extractTarGzBinary pulls a single named binary out of a .tar.gz archive.
+func extractTarGzBinary(archivePath, binaryName, destPath string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if filepath.Base(hdr.Name) == binaryName && hdr.Typeflag == tar.TypeReg {
+			out, err := os.Create(destPath)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(out, tr)
+			out.Close()
+			return err
+		}
+	}
+	return fmt.Errorf("binary %s not found in archive", binaryName)
+}
+
+// extractZipBinary pulls a single named binary out of a .zip archive.
+func extractZipBinary(archivePath, binaryName, destPath string) error {
+	r, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == binaryName && !f.FileInfo().IsDir() {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			out, err := os.Create(destPath)
+			if err != nil {
+				rc.Close()
+				return err
+			}
+			_, err = io.Copy(out, rc)
+			out.Close()
+			rc.Close()
+			return err
+		}
+	}
+	return fmt.Errorf("binary %s not found in archive", binaryName)
+}
+
+// downloadLatestBinary fetches the latest GitHub release for owner/repo,
+// finds an asset matching the current platform, downloads it, extracts the
+// requested binary, and places it in destDir.  progress is called periodically
+// with (downloadedBytes, totalBytes).
+func downloadLatestBinary(owner, repo, binaryName, destDir string, progress func(downloaded, total int64)) error {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(apiURL)
+	if err != nil {
+		return fmt.Errorf("GitHub API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release githubReleaseResponse
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return fmt.Errorf("failed to decode GitHub release: %w", err)
+	}
+
+	osKeyword, archKeyword, ext := platformAssetKeywords()
+	var assetURL, assetName string
+	var assetSize int64
+
+	for _, asset := range release.Assets {
+		name := strings.ToLower(asset.Name)
+		if strings.Contains(name, osKeyword) && strings.Contains(name, archKeyword) && strings.HasSuffix(name, ext) {
+			assetURL = asset.BrowserDownloadURL
+			assetName = asset.Name
+			assetSize = int64(asset.Size)
+			break
+		}
+	}
+
+	if assetURL == "" {
+		return fmt.Errorf("no release asset found for %s/%s (%s-%s)", owner, repo, runtime.GOOS, runtime.GOARCH)
+	}
+
+	// Download to a temp file
+	tmpFile, err := os.CreateTemp("", "engram-download-*"+ext)
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	downloadResp, err := client.Get(assetURL)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+	defer downloadResp.Body.Close()
+
+	if downloadResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download returned status %d", downloadResp.StatusCode)
+	}
+
+	if assetSize == 0 && downloadResp.ContentLength > 0 {
+		assetSize = downloadResp.ContentLength
+	}
+
+	var downloaded int64
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := downloadResp.Body.Read(buf)
+		if n > 0 {
+			_, werr := tmpFile.Write(buf[:n])
+			if werr != nil {
+				tmpFile.Close()
+				return fmt.Errorf("failed to write download: %w", werr)
+			}
+			downloaded += int64(n)
+			if progress != nil {
+				progress(downloaded, assetSize)
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			tmpFile.Close()
+			return fmt.Errorf("failed to read download: %w", err)
+		}
+	}
+	tmpFile.Close()
+
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	destPath := filepath.Join(destDir, binaryName)
+
+	if strings.HasSuffix(assetName, ".tar.gz") {
+		if err := extractTarGzBinary(tmpPath, binaryName, destPath); err != nil {
+			return fmt.Errorf("extraction failed: %w", err)
+		}
+	} else if strings.HasSuffix(assetName, ".zip") {
+		if err := extractZipBinary(tmpPath, binaryName, destPath); err != nil {
+			return fmt.Errorf("extraction failed: %w", err)
+		}
+	} else {
+		return fmt.Errorf("unsupported archive format: %s", assetName)
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(destPath, 0755); err != nil {
+			return fmt.Errorf("failed to set binary permissions: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// downloadBinarySource holds GitHub coordinates for a downloadable binary.
+type downloadBinarySource struct {
+	Owner string
+	Repo  string
+}
+
+var (
+	daemonDownloadSource  = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
+	minerDownloadSource   = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
+	dirtybirdDownloadSource = downloadBinarySource{Owner: "", Repo: ""} // set to your fork when available
+)
+
 // updateDaemonStateFromDetection refreshes dmState based on live checks.
 // Called periodically and on page load.
 func updateDaemonStateFromDetection() {
-	localNode := checkLocalNode()
-	if localNode {
-		if daemonCmd != nil && daemonCmd.Process != nil {
+	if checkLocalNode() {
+		if isDaemonConnected() {
 			dmState.daemonState = dmStateRunning
-		} else {
-			dmState.daemonState = dmStateExternal
+			if detectChainCorruption() {
+				dmState.daemonState = dmStateCorrupt
+			}
 		}
-	} else if isDaemonConnected() {
-		dmState.daemonState = dmStateRunning
-	} else if daemonCmd != nil && daemonCmd.Process != nil {
-		dmState.daemonState = dmStateRunning
 	} else {
-		if detectChainCorruption() {
-			dmState.daemonState = dmStateError
-		} else {
-			dmState.daemonState = dmStateStopped
-		}
+		dmState.daemonState = dmStateStopped
 	}
 }

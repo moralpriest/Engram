@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"image/color"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -45,6 +48,7 @@ const (
 	dmStateSyncing
 	dmStateError
 	dmStateExternal
+	dmStateCorrupt
 )
 
 func stateColorDM(s int) color.Color {
@@ -53,7 +57,7 @@ func stateColorDM(s int) color.Color {
 		return apptheme.C.Green
 	case dmStateSyncing:
 		return apptheme.C.Yellow
-	case dmStateError:
+	case dmStateError, dmStateCorrupt:
 		return apptheme.C.Red
 	case dmStateExternal:
 		return apptheme.C.Green
@@ -72,6 +76,8 @@ func stateLabelDM(s int) string {
 		return i18n.T("daemon_miner.state_error")
 	case dmStateExternal:
 		return i18n.T("daemon_miner.state_external")
+	case dmStateCorrupt:
+		return i18n.T("daemon_miner.state_corrupt")
 	default:
 		return i18n.T("daemon_miner.state_stopped")
 	}
@@ -102,6 +108,78 @@ func makeSmallStatusRow(icon fyne.Resource, label, status string, statusColor co
 		lbl,
 		statusText,
 	)
+}
+
+// showBinaryDownloadConfirm asks the user whether to download a missing binary,
+// then launches the download progress dialog.  onComplete is called on success.
+func showBinaryDownloadConfirm(binaryType string, onComplete func()) {
+	name := daemonBinary()
+	source := daemonDownloadSource
+	if binaryType == "miner" {
+		name = minerBinary()
+		if runtime.GOOS == "darwin" {
+			source = minerDownloadSource
+		} else {
+			source = dirtybirdDownloadSource
+		}
+	}
+
+	// No auto-download source configured (e.g. DirtyBird) – open browser instead.
+	if source.Owner == "" || source.Repo == "" {
+		openDownloadURL("https://github.com/deroproject/derohe/releases")
+		return
+	}
+
+	msg := fmt.Sprintf(i18n.T("daemon_miner.download_prompt"), name)
+	dlg := dialog.NewConfirm(i18n.T("daemon_miner.download_title"), msg, func(confirmed bool) {
+		if confirmed {
+			showBinaryDownloadProgress(binaryType, onComplete)
+		}
+	}, session.Window)
+	dlg.Show()
+}
+
+// showBinaryDownloadProgress displays a progress dialog and downloads the binary
+// in the background.  onComplete is called (on the UI goroutine) when finished.
+func showBinaryDownloadProgress(binaryType string, onComplete func()) {
+	name := daemonBinary()
+	source := daemonDownloadSource
+	if binaryType == "miner" {
+		name = minerBinary()
+		if runtime.GOOS == "darwin" {
+			source = minerDownloadSource
+		} else {
+			source = dirtybirdDownloadSource
+		}
+	}
+
+	progress := widget.NewProgressBar()
+	status := widget.NewLabel(i18n.T("common.loading"))
+
+	content := container.NewVBox(status, progress)
+	dlg := dialog.NewCustomWithoutButtons(i18n.T("daemon_miner.download_title"), content, session.Window)
+	dlg.Show()
+
+	go func() {
+		destDir := filepath.Join(AppPath(), "bin")
+		err := downloadLatestBinary(source.Owner, source.Repo, name, destDir, func(down, total int64) {
+			uiDo(func() {
+				if total > 0 {
+					progress.SetValue(float64(down) / float64(total))
+				}
+			})
+		})
+
+		uiDo(func() {
+			dlg.Hide()
+			if err != nil {
+				errDlg := dialog.NewError(fmt.Errorf(i18n.T("daemon_miner.download_failed")+": %v", err), session.Window)
+				errDlg.Show()
+			} else if onComplete != nil {
+				onComplete()
+			}
+		})
+	}()
 }
 
 func newDaemonMinerToggleButton(label string, iconResource fyne.Resource, state *int, onToggle func()) *fyne.Container {
@@ -211,6 +289,10 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	daemonBtn := newDaemonMinerToggleButton(i18n.T("daemon_miner.daemon"), daemonIconResource(), &dmState.daemonState, func() {
 		switch dmState.daemonState {
 		case dmStateStopped, dmStateError:
+			if findBinary(daemonBinary()) == "" {
+				showBinaryDownloadConfirm("daemon", func() { go startDaemon() })
+				return
+			}
 			go startDaemon()
 		default:
 			go stopDaemon()
@@ -219,6 +301,10 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	minerBtn := newDaemonMinerToggleButton(i18n.T("daemon_miner.miner"), minerOffIconResource(), &dmState.minerState, func() {
 		switch dmState.minerState {
 		case dmStateStopped, dmStateError:
+			if findBinary(minerBinary()) == "" {
+				showBinaryDownloadConfirm("miner", func() { go startMiner() })
+				return
+			}
 			go startMiner()
 		default:
 			go stopMiner()
@@ -344,13 +430,13 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Download buttons shown when binaries are missing
 	if findBinary(daemonBinary()) == "" {
 		btnDownloadDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
-			openDownloadURL("https://github.com/deroproject/derohe/releases")
+			showBinaryDownloadProgress("daemon", nil)
 		})
 		daemonInfoContainer.Add(container.NewCenter(btnDownloadDerod))
 	}
 	if findBinary(minerBinary()) == "" {
 		btnDownloadMiner := widget.NewButton(i18n.T("daemon_miner.download_miner"), func() {
-			openDownloadURL("https://github.com/deroproject/derohe/releases")
+			showBinaryDownloadProgress("miner", nil)
 		})
 		minerInfoContainer.Add(container.NewCenter(btnDownloadMiner))
 	}
