@@ -9489,7 +9489,7 @@ func layoutHistory() fyne.CanvasObject {
 	// never wait on it twice. Per Fyne v2.6, the non-binding widget calls
 	// (Text/Refresh/scroll) must run inside fyne.Do; listData.Set is kept on
 	// the UI thread too so it never races OnSelected reading data[id].
-	load := func(label string, fetch func() []rpc.Entry, build func(rpc.Entry) (string, bool), onSel func(widget.ListItemID)) {
+	load := func(label string, fetch func(w *walletapi.Wallet_Disk) []rpc.Entry, build func(rpc.Entry) (string, bool), onSel func(widget.ListItemID)) {
 		listBox.UnselectAll()
 		listBox.OnSelected = func(id widget.ListItemID) {
 			// The background refresh can swap the rows between the tap and
@@ -9501,10 +9501,15 @@ func layoutHistory() fyne.CanvasObject {
 			onSel(id)
 		}
 
-		if engram.Disk == nil {
+		// Snapshot the wallet for the whole load: the goroutine below may
+		// outlive a sign-out (closeWallet sets engram.Disk to nil while the
+		// fetch waits on the wallet's save lock), so it must never touch the
+		// global again — a nil deref in a bare goroutine would kill the app.
+		w := engram.Disk
+		if w == nil {
 			return
 		}
-		addr := engram.Disk.GetAddress().String()
+		addr := w.GetAddress().String()
 		byTXID = nil
 		loadGen++
 		gen := loadGen
@@ -9524,12 +9529,8 @@ func layoutHistory() fyne.CanvasObject {
 		}
 
 		go func() {
-			if engram.Disk == nil {
-				return
-			}
-
-			entries := fetch()
-			logger.Printf("[History] %s: entries=%d height=%d\n", label, len(entries), engram.Disk.Get_Height())
+			entries := fetch(w)
+			logger.Printf("[History] %s: entries=%d height=%d\n", label, len(entries), w.Get_Height())
 
 			var final []string
 			if hit {
@@ -9545,13 +9546,21 @@ func layoutHistory() fyne.CanvasObject {
 					})
 				})
 			}
+			if engram.Disk != w { // wallet closed or switched mid-fetch:
+				return // do not re-populate the cache closeWallet just cleared
+			}
 			// Cache even a superseded fetch: it is still the freshest full
 			// build of this view and the cache is keyed per view.
 			histCache.put(addr, label, final)
 
 			m := make(map[string]rpc.Entry, len(entries))
 			for _, e := range entries {
-				m[e.TXID] = e
+				// Keep the FIRST entry per TXID: multi-payload transactions
+				// repeat a TXID, and the old tap-time Get_Payments_TXID scan
+				// returned the first match in slice order.
+				if _, ok := m[e.TXID]; !ok {
+					m[e.TXID] = e
+				}
 			}
 
 			fyne.Do(func() {
@@ -9578,8 +9587,8 @@ func layoutHistory() fyne.CanvasObject {
 		switch s {
 		case "Normal":
 			load("Normal",
-				func() []rpc.Entry {
-					return engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Show_Transfers(zeroscid, false, true, true, 0, w.Get_Height(), "", "", 0, 0)
 				},
 				historyRowNormal,
 				func(id widget.ListItemID) {
@@ -9601,8 +9610,8 @@ func layoutHistory() fyne.CanvasObject {
 				})
 		case "Coinbase":
 			load("Coinbase",
-				func() []rpc.Entry {
-					return engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Show_Transfers(zeroscid, true, true, true, 0, w.Get_Height(), "", "", 0, 0)
 				},
 				historyRowCoinbase,
 				func(id widget.ListItemID) {
@@ -9610,8 +9619,8 @@ func layoutHistory() fyne.CanvasObject {
 				})
 		case "Messages":
 			load("Messages",
-				func() []rpc.Entry {
-					return engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
 				},
 				historyRowMessage,
 				func(id widget.ListItemID) {
