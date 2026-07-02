@@ -348,15 +348,25 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	baseFontSize := float32(14)
-	makeStatRow := func(label string, valueObj fyne.CanvasObject) *fyne.Container {
-		lbl := canvas.NewText(label, buttonTextColor())
-		lbl.TextSize = scaleFont(baseFontSize)
-		return container.NewBorder(nil, nil, lbl, nil, valueObj)
+	tightSpacer := func() *canvas.Rectangle {
+		r := canvas.NewRectangle(color.Transparent)
+		r.SetMinSize(fyne.NewSize(10, 2))
+		return r
+	}
+
+	makeStatField := func(label string, valueObj fyne.CanvasObject) fyne.CanvasObject {
+		lbl := canvas.NewText(label, apptheme.C.Gray)
+		lbl.TextSize = scaleFont(11)
+		lbl.TextStyle = fyne.TextStyle{Bold: true}
+		return container.NewVBox(
+			lbl,
+			valueObj,
+		)
 	}
 	makeStatValue := func(text string, c color.Color) *canvas.Text {
 		t := canvas.NewText(text, c)
-		t.TextSize = scaleFont(baseFontSize)
+		t.TextSize = scaleFont(16)
+		t.TextStyle = fyne.TextStyle{Bold: true}
 		return t
 	}
 
@@ -367,9 +377,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	// ---- Daemon Info Panel ----
-	daemonStatusText := makeStatValue(stateLabelDM(dmState.daemonState), stateColorDM(dmState.daemonState))
-	daemonStatusRow := makeStatRow("Status: ", daemonStatusText)
-
 	var daemonHeightText, daemonTopoText, daemonDiffText, daemonPeersText, daemonVersionText, daemonTxPoolText *canvas.Text
 
 	if infoErr == nil {
@@ -386,25 +393,29 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	daemonInfoBox := container.NewVBox(
-		daemonStatusRow,
-		makeStatRow("Height: ", daemonHeightText),
-		makeStatRow("Topoheight: ", daemonTopoText),
-		makeStatRow("Difficulty: ", daemonDiffText),
-		makeStatRow("Peers: ", daemonPeersText),
-		func() *fyne.Container {
+		makeStatField("Height", daemonHeightText),
+		tightSpacer(),
+		makeStatField("Topoheight", daemonTopoText),
+		tightSpacer(),
+		makeStatField("Difficulty", daemonDiffText),
+		tightSpacer(),
+		makeStatField("Peers", daemonPeersText),
+		tightSpacer(),
+		func() fyne.CanvasObject {
 			v := daemonVersionText
 			if infoErr == nil && len(info.Version) > 20 {
 				s := container.NewScroll(v)
 				s.SetMinSize(fyne.NewSize(ui.Width*0.35, v.MinSize().Height))
-				return makeStatRow("Version: ", s)
+				return makeStatField("Version", s)
 			}
-			return makeStatRow("Version: ", v)
+			return makeStatField("Version", v)
 		}(),
-		makeStatRow("Tx Pool: ", daemonTxPoolText),
+		tightSpacer(),
+		makeStatField("Tx Pool", daemonTxPoolText),
 	)
 
 	infoUI.mu.Lock()
-	infoUI.status = daemonStatusText
+	infoUI.status = nil
 	infoUI.height = daemonHeightText
 	infoUI.topo = daemonTopoText
 	infoUI.difficulty = daemonDiffText
@@ -437,11 +448,8 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	)
 
 	// ---- Miner Info Panel (basic state for now) ----
-	minerStatusText := makeStatValue(stateLabelDM(dmState.minerState), stateColorDM(dmState.minerState))
-	minerStatusRow := makeStatRow("Status: ", minerStatusText)
-
 	minerInfoBox := container.NewVBox(
-		minerStatusRow,
+	// Miner-specific info will be added here in future
 	)
 
 	// Miner section header (Settings style)
@@ -467,18 +475,20 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	// Download buttons shown when binaries are missing
+	// Download links shown when binaries are missing
 	if findBinary(daemonBinary()) == "" {
-		btnDownloadDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
+		linkDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
 			showBinaryDownloadProgress("daemon", nil)
 		})
-		daemonInfoBox.Add(container.NewCenter(btnDownloadDerod))
+		linkDerod.Importance = widget.LowImportance
+		daemonInfoBox.Add(linkDerod)
 	}
 	if findBinary(minerBinary()) == "" {
-		btnDownloadMiner := widget.NewButton(i18n.T("daemon_miner.download_miner"), func() {
+		linkMiner := widget.NewButton(i18n.T("daemon_miner.download_miner"), func() {
 			showBinaryDownloadProgress("miner", nil)
 		})
-		minerInfoBox.Add(container.NewCenter(btnDownloadMiner))
+		linkMiner.Importance = widget.LowImportance
+		minerInfoBox.Add(linkMiner)
 	}
 
 	topSection := container.NewVBox(
