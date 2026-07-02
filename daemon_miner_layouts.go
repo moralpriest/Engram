@@ -91,25 +91,6 @@ func openDownloadURL(urlStr string) {
 	fyne.CurrentApp().OpenURL(u)
 }
 
-// makeSmallStatusRow returns a compact HBox with a tiny icon and label for use
-// in cramped spaces such as the network settings page.
-func makeSmallStatusRow(icon fyne.Resource, label, status string, statusColor color.Color) fyne.CanvasObject {
-	iconWidget := widget.NewIcon(icon)
-	iconSizer := container.NewGridWrap(fyne.NewSize(18, 18), iconWidget)
-
-	lbl := canvas.NewText(label+": ", buttonTextColor())
-	lbl.TextSize = scaleFont(11)
-
-	statusText := canvas.NewText(status, statusColor)
-	statusText.TextSize = scaleFont(11)
-
-	return container.NewHBox(
-		iconSizer,
-		lbl,
-		statusText,
-	)
-}
-
 // showBinaryDownloadConfirm asks the user whether to download a missing binary,
 // then launches the download progress dialog.  onComplete is called on success.
 func showBinaryDownloadConfirm(binaryType string, onComplete func()) {
