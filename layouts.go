@@ -9417,6 +9417,12 @@ func layoutHistory() fyne.CanvasObject {
 	// re-scanning the wallet under its exclusive lock.
 	var byTXID map[string]rpc.Entry
 
+	// loadGen invalidates in-flight loads when the user switches views, so a
+	// slow older fetch (stalled behind a wallet save) can never repaint the
+	// screen after a newer view took over. Only touched on the UI thread
+	// (load itself and fyne.Do callbacks).
+	var loadGen int
+
 	header := canvas.NewText("  Transaction History", colors.Green)
 	header.TextSize = 22
 	header.TextStyle = fyne.TextStyle{Bold: true}
@@ -9500,6 +9506,8 @@ func layoutHistory() fyne.CanvasObject {
 		}
 		addr := engram.Disk.GetAddress().String()
 		byTXID = nil
+		loadGen++
+		gen := loadGen
 
 		cached, hit := histCache.get(addr, label)
 		if hit {
@@ -9530,10 +9538,15 @@ func layoutHistory() fyne.CanvasObject {
 			} else {
 				final = streamHistoryRows(entries, build, 50, func(snap []string) {
 					fyne.Do(func() {
+						if gen != loadGen {
+							return
+						}
 						listData.Set(snap)
 					})
 				})
 			}
+			// Cache even a superseded fetch: it is still the freshest full
+			// build of this view and the cache is keyed per view.
 			histCache.put(addr, label, final)
 
 			m := make(map[string]rpc.Entry, len(entries))
@@ -9542,6 +9555,9 @@ func layoutHistory() fyne.CanvasObject {
 			}
 
 			fyne.Do(func() {
+				if gen != loadGen {
+					return
+				}
 				byTXID = m
 				// After a cached paint, an identical rebuild is the common case;
 				// skipping the swap avoids flicker and keeps the scroll position.
