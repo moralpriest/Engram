@@ -164,19 +164,17 @@ func main() {
 	// Intercept mobile back button event
 	session.Window.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
 		if ev.Name == mobile.KeyBack {
+			// No layoutTransition on the back path: both SetContent calls run
+			// inside this key handler, so the transition frame never paints —
+			// it only re-decoded the loading GIF and left it animating unseen.
 			if session.LastDomain != nil {
-				session.Window.SetContent(layoutTransition())
 				session.Window.SetContent(session.LastDomain)
 			} else {
 				if engram.Disk != nil {
-					session.LastDomain = layoutDashboard()
 					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
 				} else {
-					session.LastDomain = layoutMain()
 					session.LastDomain = session.Window.Content()
-					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutMain())
 				}
 			}

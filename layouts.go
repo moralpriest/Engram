@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -551,7 +552,9 @@ func layoutDashboard() fyne.CanvasObject {
 	linkHistory := widget.NewHyperlinkWithStyle("View History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkHistory.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
+		// No layoutTransition here: both SetContent calls run in this event
+		// handler, so the transition frame never paints — it was only a GIF
+		// re-decode on the tap path.
 		session.Window.SetContent(layoutHistory())
 		removeOverlays()
 	}
@@ -3201,6 +3204,7 @@ func layoutRestore() fyne.CanvasObject {
 		session.Path = ""
 		session.Name = ""
 		tx = Transfers{}
+		histCache.clear()
 
 		btnCreate.Hide()
 		form.Hide()
@@ -9406,73 +9410,36 @@ func layoutAlert(t int) fyne.CanvasObject {
 
 func layoutHistory() fyne.CanvasObject {
 	var data []string
-	var entries []rpc.Entry
 	var zeroscid crypto.Hash
-	var listData binding.StringList
-	var listBox *widget.List
-	var txid string
 
-	view := ""
+	// TXID -> entry for the rows currently shown, published on the UI thread
+	// by load()'s final fyne.Do. Lets a row tap open the detail view without
+	// re-scanning the wallet under its exclusive lock.
+	var byTXID map[string]rpc.Entry
+
+	// loadGen invalidates in-flight loads when the user switches views, so a
+	// slow older fetch (stalled behind a wallet save) can never repaint the
+	// screen after a newer view took over. Only touched on the UI thread
+	// (load itself and fyne.Do callbacks).
+	var loadGen int
 
 	header := canvas.NewText("  Transaction History", colors.Green)
 	header.TextSize = 22
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	details_header := canvas.NewText("     Transaction Detail", colors.Green)
-	details_header.TextSize = 22
-	details_header.TextStyle = fyne.TextStyle{Bold: true}
-
 	frame := &iframe{}
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
-	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 	heading := canvas.NewText("H I S T O R Y", colors.Gray)
 	heading.TextSize = 16
 	heading.Alignment = fyne.TextAlignCenter
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 
-	rect := canvas.NewRectangle(color.Transparent)
-	rect.SetMinSize(fyne.NewSize(ui.Width*0.3, 35))
-
-	rectMid := canvas.NewRectangle(color.Transparent)
-	rectMid.SetMinSize(fyne.NewSize(ui.Width*0.35, 35))
-
 	results := canvas.NewText("", colors.Green)
 	results.TextSize = 13
 
-	listData = binding.BindStringList(&data)
-	listBox = widget.NewListWithData(listData,
-		func() fyne.CanvasObject {
-			return container.NewHBox(
-				container.NewStack(
-					rect,
-					widget.NewLabel(""),
-				),
-				container.NewStack(
-					rectMid,
-					widget.NewLabel(""),
-				),
-				container.NewStack(
-					rect,
-					widget.NewLabel(""),
-				),
-			)
-		},
-		func(di binding.DataItem, co fyne.CanvasObject) {
-			dat := di.(binding.String)
-			str, err := dat.Get()
-			if err != nil {
-				return
-			}
-
-			split := strings.Split(str, ";;;")
-
-			co.(*fyne.Container).Objects[0].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[0])
-			co.(*fyne.Container).Objects[1].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[1])
-			co.(*fyne.Container).Objects[2].(*fyne.Container).Objects[1].(*widget.Label).SetText(split[3])
-		})
+	listBox, listData := newHistoryList(&data)
 
 	menu := widget.NewSelect([]string{"Normal", "Coinbase", "Messages"}, nil)
 	menu.PlaceHolder = "(Select Transaction Type)"
@@ -9508,228 +9475,171 @@ func layoutHistory() fyne.CanvasObject {
 	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkBack.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
+		// No layoutTransition: it never paints (see linkHistory in layoutDashboard).
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
 	}
 
-	label := canvas.NewText(view, colors.Account)
-	label.TextSize = 15
-	label.TextStyle = fyne.TextStyle{Bold: true}
+	// load runs the (potentially heavy) transfer scan OFF the UI goroutine and
+	// reveals rows newest-first in batches, so the first screenful paints almost
+	// immediately instead of blocking on the full history. Revisits skip even
+	// that: rows cached by the last build (histCache) paint synchronously and
+	// the fresh scan swaps in underneath only if anything changed — the scan
+	// can stall for seconds behind the wallet's save lock, so the user must
+	// never wait on it twice. Per Fyne v2.6, the non-binding widget calls
+	// (Text/Refresh/scroll) must run inside fyne.Do; listData.Set is kept on
+	// the UI thread too so it never races OnSelected reading data[id].
+	load := func(label string, fetch func(w *walletapi.Wallet_Disk) []rpc.Entry, build func(rpc.Entry) (string, bool), onSel func(widget.ListItemID)) {
+		listBox.UnselectAll()
+		listBox.OnSelected = func(id widget.ListItemID) {
+			// The background refresh can swap the rows between the tap and
+			// this callback; never index past the current data.
+			if id < 0 || id >= len(data) {
+				listBox.UnselectAll()
+				return
+			}
+			onSel(id)
+		}
+
+		// Snapshot the wallet for the whole load: the goroutine below may
+		// outlive a sign-out (closeWallet sets engram.Disk to nil while the
+		// fetch waits on the wallet's save lock), so it must never touch the
+		// global again — a nil deref in a bare goroutine would kill the app.
+		w := engram.Disk
+		if w == nil {
+			return
+		}
+		addr := w.GetAddress().String()
+		byTXID = nil
+		loadGen++
+		gen := loadGen
+
+		cached, hit := histCache.get(addr, label)
+		if hit {
+			listData.Set(cached)
+			results.Text = fmt.Sprintf("  Results:  %d  (updating)", len(cached))
+			results.Refresh()
+			listBox.Refresh()
+			listBox.ScrollToTop()
+		} else {
+			results.Text = "  Scanning..."
+			results.Refresh()
+			data = nil
+			listData.Set(nil)
+		}
+
+		go func() {
+			entries := fetch(w)
+			logger.Printf("[History] %s: entries=%d height=%d\n", label, len(entries), w.Get_Height())
+
+			var final []string
+			if hit {
+				// Rows are already on screen: build silently, swap once below.
+				final = streamHistoryRows(entries, build, 0, nil)
+			} else {
+				final = streamHistoryRows(entries, build, 50, func(snap []string) {
+					fyne.Do(func() {
+						if gen != loadGen {
+							return
+						}
+						listData.Set(snap)
+					})
+				})
+			}
+			if engram.Disk != w { // wallet closed or switched mid-fetch:
+				return // do not re-populate the cache closeWallet just cleared
+			}
+			// Cache even a superseded fetch: it is still the freshest full
+			// build of this view and the cache is keyed per view.
+			histCache.put(addr, label, final)
+
+			m := make(map[string]rpc.Entry, len(entries))
+			for _, e := range entries {
+				// Keep the FIRST entry per TXID: multi-payload transactions
+				// repeat a TXID, and the old tap-time Get_Payments_TXID scan
+				// returned the first match in slice order.
+				if _, ok := m[e.TXID]; !ok {
+					m[e.TXID] = e
+				}
+			}
+
+			fyne.Do(func() {
+				if gen != loadGen {
+					return
+				}
+				byTXID = m
+				// After a cached paint, an identical rebuild is the common case;
+				// skipping the swap avoids flicker and keeps the scroll position.
+				if !hit || !slices.Equal(final, cached) {
+					listData.Set(final)
+					listBox.Refresh()
+				}
+				results.Text = fmt.Sprintf("  Results:  %d", len(final))
+				results.Refresh()
+				if !hit {
+					listBox.ScrollToTop()
+				}
+			})
+		}()
+	}
 
 	menu.OnChanged = func(s string) {
 		switch s {
 		case "Normal":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Show_Transfers(zeroscid, false, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
+			load("Normal",
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Show_Transfers(zeroscid, false, true, true, 0, w.Get_Height(), "", "", 0, 0)
+				},
+				historyRowNormal,
+				func(id widget.ListItemID) {
+					split := strings.Split(data[id], ";;;")
 
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var height string
-						var direction string
-						var stamp string
-
-						entries[e].ProcessPayload()
-
-						if !entries[e].Coinbase {
-							timefmt := entries[e].Time
-							//stamp = string(timefmt.Format(time.RFC822))
-							stamp = timefmt.Format("2006-01-02")
-							height = strconv.FormatUint(entries[e].Height, 10)
-							amount := ""
-							txid = entries[e].TXID
-
-							if !entries[e].Incoming {
-								direction = "Sent"
-								amount = "(" + globals.FormatMoney(entries[e].Amount) + ")"
-							} else {
-								direction = "Received"
-								amount = globals.FormatMoney(entries[e].Amount)
-							}
-
-							count += 1
-							data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-						}
+					overlay := session.Window.Canvas().Overlays()
+					overlay.Add(
+						container.NewStack(
+							&iframe{},
+							canvas.NewRectangle(colors.DarkMatter),
+						),
+					)
+					var entry *rpc.Entry
+					if e, ok := byTXID[split[4]]; ok {
+						entry = &e
 					}
-
-					results.Text = fmt.Sprintf("  Results:  %d", count)
-
-					listData.Set(data)
-
-					listBox.OnSelected = func(id widget.ListItemID) {
-						//var zeroscid crypto.Hash
-						split := strings.Split(data[id], ";;;")
-						var zeroscid crypto.Hash
-						_, result := engram.Disk.Get_Payments_TXID(zeroscid, split[4])
-
-						if result.TXID == "" {
-							label.Text = "---"
-						} else {
-							label.Text = result.TXID
-						}
-						label.Refresh()
-
-						overlay := session.Window.Canvas().Overlays()
-						overlay.Add(
-							container.NewStack(
-								&iframe{},
-								canvas.NewRectangle(colors.DarkMatter),
-							),
-						)
-						overlay.Add(layoutHistoryDetail(split[4]))
-						listBox.UnselectAll()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-				results.Refresh()
-			}
+					overlay.Add(layoutHistoryDetail(split[4], entry))
+					listBox.UnselectAll()
+				})
 		case "Coinbase":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Show_Transfers(zeroscid, true, true, true, 0, engram.Disk.Get_Height(), "", "", 0, 0)
-
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var height string
-						var direction string
-						var stamp string
-
-						entries[e].ProcessPayload()
-
-						if entries[e].Coinbase {
-							direction = "Network"
-							timefmt := entries[e].Time
-							stamp = timefmt.Format("2006-01-02")
-							height = strconv.FormatUint(entries[e].Height, 10)
-							amount := globals.FormatMoney(entries[e].Amount)
-							txid = entries[e].TXID
-
-							count += 1
-							data = append(data, direction+";;;"+amount+";;;"+height+";;;"+stamp+";;;"+txid)
-						}
-					}
-
-					results.Text = fmt.Sprintf("  Results:  %d", count)
-
-					listData.Set(data)
-
-					listBox.OnSelected = func(id widget.ListItemID) {
-						listBox.UnselectAll()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				fyne.Do(func() {
-					results.Refresh()
+			load("Coinbase",
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Show_Transfers(zeroscid, true, true, true, 0, w.Get_Height(), "", "", 0, 0)
+				},
+				historyRowCoinbase,
+				func(id widget.ListItemID) {
+					listBox.UnselectAll()
 				})
-			}
 		case "Messages":
-			listBox.UnselectAll()
-			results.Text = "  Scanning..."
-			results.Refresh()
-			count := 0
-			data = nil
-			listData.Set(nil)
-			entries = engram.Disk.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
-
-			if entries != nil {
-				go func() {
-					for e := range entries {
-						var stamp string
-						var direction string
-						var comment string
-
-						entries[e].ProcessPayload()
-
-						timefmt := entries[e].Time
-						//stamp = string(timefmt.Format(time.RFC822))
-						stamp = timefmt.Format("2006-01-02")
-
-						temp := entries[e].Incoming
-						if !temp {
-							direction = "Sent    "
-						} else {
-							direction = "Received"
-						}
-						if entries[e].Payload_RPC.HasValue(rpc.RPC_COMMENT, rpc.DataString) {
-							contact := ""
-							username := ""
-							if entries[e].Payload_RPC.HasValue(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString) {
-								contact = entries[e].Payload_RPC.Value(rpc.RPC_NEEDS_REPLYBACK_ADDRESS, rpc.DataString).(string)
-								if len(contact) > 10 {
-									username = contact[0:10] + ".."
-								} else {
-									username = contact
-								}
-							}
-
-							comment = entries[e].Payload_RPC.Value(rpc.RPC_COMMENT, rpc.DataString).(string)
-							if len(comment) > 10 {
-								comment = comment[0:10] + ".."
-							}
-
-							txid = entries[e].TXID
-							count += 1
-							data = append(data, direction+";;;"+username+";;;"+comment+";;;"+stamp+";;;"+txid+";;;"+contact)
-						}
+			load("Messages",
+				func(w *walletapi.Wallet_Disk) []rpc.Entry {
+					return w.Get_Payments_DestinationPort(zeroscid, uint64(1337), 0)
+				},
+				historyRowMessage,
+				func(id widget.ListItemID) {
+					split := strings.Split(data[id], ";;;")
+					overlay := session.Window.Canvas().Overlays()
+					overlay.Add(
+						container.NewStack(
+							&iframe{},
+							canvas.NewRectangle(colors.DarkMatter),
+						),
+					)
+					var entry *rpc.Entry
+					if e, ok := byTXID[split[4]]; ok {
+						entry = &e
 					}
-
-					results.Text = fmt.Sprintf("  Results:  %d", count)
-
-					listData.Set(data)
-
-					listBox.OnSelected = func(id widget.ListItemID) {
-						split := strings.Split(data[id], ";;;")
-						overlay := session.Window.Canvas().Overlays()
-						overlay.Add(
-							container.NewStack(
-								&iframe{},
-								canvas.NewRectangle(colors.DarkMatter),
-							),
-						)
-						overlay.Add(layoutHistoryDetail(split[4]))
-						listBox.UnselectAll()
-						listBox.Refresh()
-					}
-
-					fyne.Do(func() {
-						results.Refresh()
-						listBox.Refresh()
-						listBox.ScrollToBottom()
-					})
-				}()
-			} else {
-				results.Text = fmt.Sprintf("  Results:  %d", count)
-
-				fyne.Do(func() {
-					results.Refresh()
+					overlay.Add(layoutHistoryDetail(split[4], entry))
+					listBox.UnselectAll()
+					listBox.Refresh()
 				})
-			}
 		default:
 
 		}
@@ -9804,10 +9714,17 @@ func layoutHistory() fyne.CanvasObject {
 		),
 	)
 
+	menu.SetSelected("Normal")
+
 	return NewVScroll(layout)
 }
 
-func layoutHistoryDetail(txid string) fyne.CanvasObject {
+// layoutHistoryDetail renders the detail overlay for one transfer. The caller
+// passes the entry when it already holds it (the history list keeps a
+// TXID-indexed copy of the rows it shows); the nil fallback re-scans the
+// wallet by TXID and is only reachable while the list's first fetch is still
+// in flight.
+func layoutHistoryDetail(txid string, entry *rpc.Entry) fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
@@ -9947,8 +9864,18 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	var zeroscid crypto.Hash
-	_, details := engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	var details rpc.Entry
+	if entry != nil {
+		details = *entry
+		// Stored entries can carry an undecoded payload; decode the local
+		// copy before display (mirrors historyRowMessage).
+		if len(details.Payload) > 0 {
+			details.ProcessPayload()
+		}
+	} else {
+		var zeroscid crypto.Hash
+		_, details = engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	}
 
 	stamp := string(details.Time.Format(time.RFC822))
 	height := strconv.FormatUint(details.Height, 10)
