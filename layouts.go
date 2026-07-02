@@ -9410,21 +9410,18 @@ func layoutHistory() fyne.CanvasObject {
 	var data []string
 	var zeroscid crypto.Hash
 
-	view := ""
+	// TXID -> entry for the rows currently shown, published on the UI thread
+	// by load()'s final fyne.Do. Lets a row tap open the detail view without
+	// re-scanning the wallet under its exclusive lock.
+	var byTXID map[string]rpc.Entry
 
 	header := canvas.NewText("  Transaction History", colors.Green)
 	header.TextSize = 22
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	details_header := canvas.NewText("     Transaction Detail", colors.Green)
-	details_header.TextSize = 22
-	details_header.TextStyle = fyne.TextStyle{Bold: true}
-
 	frame := &iframe{}
 	rectWidth := canvas.NewRectangle(color.Transparent)
 	rectWidth.SetMinSize(fyne.NewSize(ui.MaxWidth, 10))
-	rectWidth90 := canvas.NewRectangle(color.Transparent)
-	rectWidth90.SetMinSize(fyne.NewSize(ui.Width, 10))
 
 	heading := canvas.NewText("H I S T O R Y", colors.Gray)
 	heading.TextSize = 16
@@ -9475,10 +9472,6 @@ func layoutHistory() fyne.CanvasObject {
 		removeOverlays()
 	}
 
-	label := canvas.NewText(view, colors.Account)
-	label.TextSize = 15
-	label.TextStyle = fyne.TextStyle{Bold: true}
-
 	// load runs the (potentially heavy) transfer scan OFF the UI goroutine and
 	// reveals rows newest-first in batches, so the first screenful paints almost
 	// immediately instead of blocking on the full history. Revisits skip even
@@ -9504,6 +9497,7 @@ func layoutHistory() fyne.CanvasObject {
 			return
 		}
 		addr := engram.Disk.GetAddress().String()
+		byTXID = nil
 
 		cached, hit := histCache.get(addr, label)
 		if hit {
@@ -9540,7 +9534,13 @@ func layoutHistory() fyne.CanvasObject {
 			}
 			histCache.put(addr, label, final)
 
+			m := make(map[string]rpc.Entry, len(entries))
+			for _, e := range entries {
+				m[e.TXID] = e
+			}
+
 			fyne.Do(func() {
+				byTXID = m
 				// After a cached paint, an identical rebuild is the common case;
 				// skipping the swap avoids flicker and keeps the scroll position.
 				if !hit || !slices.Equal(final, cached) {
@@ -9566,14 +9566,6 @@ func layoutHistory() fyne.CanvasObject {
 				historyRowNormal,
 				func(id widget.ListItemID) {
 					split := strings.Split(data[id], ";;;")
-					var zeroscid crypto.Hash
-					_, result := engram.Disk.Get_Payments_TXID(zeroscid, split[4])
-					if result.TXID == "" {
-						label.Text = "---"
-					} else {
-						label.Text = result.TXID
-					}
-					label.Refresh()
 
 					overlay := session.Window.Canvas().Overlays()
 					overlay.Add(
@@ -9582,7 +9574,11 @@ func layoutHistory() fyne.CanvasObject {
 							canvas.NewRectangle(colors.DarkMatter),
 						),
 					)
-					overlay.Add(layoutHistoryDetail(split[4]))
+					var entry *rpc.Entry
+					if e, ok := byTXID[split[4]]; ok {
+						entry = &e
+					}
+					overlay.Add(layoutHistoryDetail(split[4], entry))
 					listBox.UnselectAll()
 				})
 		case "Coinbase":
@@ -9609,7 +9605,11 @@ func layoutHistory() fyne.CanvasObject {
 							canvas.NewRectangle(colors.DarkMatter),
 						),
 					)
-					overlay.Add(layoutHistoryDetail(split[4]))
+					var entry *rpc.Entry
+					if e, ok := byTXID[split[4]]; ok {
+						entry = &e
+					}
+					overlay.Add(layoutHistoryDetail(split[4], entry))
 					listBox.UnselectAll()
 					listBox.Refresh()
 				})
@@ -9692,7 +9692,12 @@ func layoutHistory() fyne.CanvasObject {
 	return NewVScroll(layout)
 }
 
-func layoutHistoryDetail(txid string) fyne.CanvasObject {
+// layoutHistoryDetail renders the detail overlay for one transfer. The caller
+// passes the entry when it already holds it (the history list keeps a
+// TXID-indexed copy of the rows it shows); the nil fallback re-scans the
+// wallet by TXID and is only reachable while the list's first fetch is still
+// in flight.
+func layoutHistoryDetail(txid string, entry *rpc.Entry) fyne.CanvasObject {
 	wSpacer := widget.NewLabel(" ")
 
 	rectWidth := canvas.NewRectangle(color.Transparent)
@@ -9832,8 +9837,18 @@ func layoutHistoryDetail(txid string) fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	var zeroscid crypto.Hash
-	_, details := engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	var details rpc.Entry
+	if entry != nil {
+		details = *entry
+		// Stored entries can carry an undecoded payload; decode the local
+		// copy before display (mirrors historyRowMessage).
+		if len(details.Payload) > 0 {
+			details.ProcessPayload()
+		}
+	} else {
+		var zeroscid crypto.Hash
+		_, details = engram.Disk.Get_Payments_TXID(zeroscid, txid)
+	}
 
 	stamp := string(details.Time.Format(time.RFC822))
 	height := strconv.FormatUint(details.Height, 10)
