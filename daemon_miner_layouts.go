@@ -42,6 +42,11 @@ type daemonMinerState struct {
 
 var dmState = daemonMinerState{daemonState: 0, minerState: 0}
 
+var (
+	daemonToggle *toggleSwitch
+	minerToggle  *toggleSwitch
+)
+
 const (
 	dmStateStopped = iota
 	dmStateRunning
@@ -80,6 +85,25 @@ func stateLabelDM(s int) string {
 		return i18n.T("daemon_miner.state_corrupt")
 	default:
 		return i18n.T("daemon_miner.state_stopped")
+	}
+}
+
+func daemonIsRunning() bool {
+	return dmState.daemonState == dmStateRunning ||
+		dmState.daemonState == dmStateExternal ||
+		dmState.daemonState == dmStateSyncing
+}
+
+func minerIsRunning() bool {
+	return dmState.minerState == dmStateRunning
+}
+
+func syncToggleStates() {
+	if daemonToggle != nil {
+		daemonToggle.setChecked(daemonIsRunning())
+	}
+	if minerToggle != nil {
+		minerToggle.setChecked(minerIsRunning())
 	}
 }
 
@@ -206,6 +230,7 @@ func startBackgroundDaemonRefresh() {
 				if err == nil && infoUI.status != nil {
 					uiDo(func() { updateInfoUILabels(info) })
 				}
+				uiDo(syncToggleStates)
 				time.Sleep(5 * time.Second)
 			}
 		}()
@@ -287,11 +312,39 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		}
 	}
 
+	daemonToggle = newToggleSwitch(daemonIsRunning(), func(checked bool) {
+		go func() {
+			if checked {
+				startDaemon()
+			} else {
+				stopDaemon()
+			}
+			uiDo(syncToggleStates)
+		}()
+	})
+
+	minerToggle = newToggleSwitch(minerIsRunning(), func(checked bool) {
+		go func() {
+			if checked {
+				startMiner()
+			} else {
+				stopMiner()
+			}
+			uiDo(syncToggleStates)
+		}()
+	})
+
 	indicatorRow := container.NewHBox(
 		layout.NewSpacer(),
-		newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
+		container.NewVBox(
+			newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
+			container.NewCenter(daemonToggle),
+		),
 		gap,
-		newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
+		container.NewVBox(
+			newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
+			container.NewCenter(minerToggle),
+		),
 		layout.NewSpacer(),
 	)
 
@@ -427,6 +480,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	)
 
 	if isMobile() {
+		daemonToggle.Disable()
+		minerToggle.Disable()
+
 		mobileLabel := canvas.NewText(i18n.T("daemon_miner.unavailable"), apptheme.C.Gray)
 		mobileLabel.TextSize = scaleFont(10)
 		mobileLabel.Alignment = fyne.TextAlignCenter
@@ -437,9 +493,21 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 		indicators := container.NewHBox(
 			layout.NewSpacer(),
-			container.NewStack(newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth), mobileOverlay),
+			container.NewStack(
+				container.NewVBox(
+					newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
+					container.NewCenter(daemonToggle),
+				),
+				mobileOverlay,
+			),
 			mobileGap,
-			container.NewStack(newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth), mobileOverlay),
+			container.NewStack(
+				container.NewVBox(
+					newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
+					container.NewCenter(minerToggle),
+				),
+				mobileOverlay,
+			),
 			layout.NewSpacer(),
 		)
 		topSection = container.NewVBox(
