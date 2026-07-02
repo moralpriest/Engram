@@ -817,8 +817,8 @@ type downloadBinarySource struct {
 }
 
 var (
-	daemonDownloadSource  = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
-	minerDownloadSource   = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
+	daemonDownloadSource    = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
+	minerDownloadSource     = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
 	dirtybirdDownloadSource = downloadBinarySource{Owner: "", Repo: ""} // set to your fork when available
 )
 
@@ -830,6 +830,10 @@ func updateDaemonStateFromDetection() {
 			dmState.daemonState = dmStateRunning
 			if detectChainCorruption() {
 				dmState.daemonState = dmStateCorrupt
+			}
+		} else {
+			if _, err := fetchDaemonInfo(); err == nil {
+				dmState.daemonState = dmStateExternal
 			}
 		}
 	} else {

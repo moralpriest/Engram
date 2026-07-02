@@ -1809,7 +1809,7 @@ func getDaemon() (r string) {
 }
 
 func checkLocalNode() bool {
-	conn, err := net.DialTimeout("tcp", "127.0.0.1:10102", 500*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", daemonRPCAddress(), 500*time.Millisecond)
 	if err != nil {
 		return false
 	}

@@ -395,7 +395,7 @@ func layoutDashboard() fyne.CanvasObject {
 	var (
 		cSettings  color.Color
 		cMessages  color.Color
-		cContracts   color.Color
+		cContracts color.Color
 	)
 	switch apptheme.ThemeMode {
 	case apptheme.ThemeDerotopia:

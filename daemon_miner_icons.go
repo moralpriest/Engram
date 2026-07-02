@@ -3,11 +3,28 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"image"
+	"image/color"
+	"image/png"
+	"sync"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/theme"
 
 	apptheme "github.com/DEROFDN/engram/internal/theme"
+)
+
+type coloredIcon struct {
+	resource fyne.Resource
+	tint     color.Color
+}
+
+var (
+	daemonColoredMu sync.Mutex
+	daemonColored   = make(map[int]*coloredIcon)
+	minerColoredMu  sync.Mutex
+	minerColored    = make(map[int]*coloredIcon)
 )
 
 //go:embed assets/DaemonON.svg
@@ -16,16 +33,12 @@ var daemonSvgData []byte
 //go:embed assets/MinerON.svg
 var minerSvgData []byte
 
-//go:embed assets/MinerOFF.svg
-var minerOffSvgData []byte
-
 //go:embed assets/MinerOFF.png
 var minerOffPngData []byte
 
 //go:embed assets/green-cyberdeck.svg
 var cyberdeckSvgData []byte
 
-// Login-page palette — main matches C.Green, dark matches C.DarkGreen.
 const (
 	cyberdeckMainEngram      = "#13ca69"
 	cyberdeckDarkEngram      = "#015a2c"
@@ -39,7 +52,6 @@ const (
 	cyberdeckDarkAtlantis    = "#136c7a"
 )
 
-// Dashboard palette — main matches cDaemonMiner, dark matches C.DarkGreen.
 const (
 	cyberdeckDashMainEngram      = "#13ca69"
 	cyberdeckDashDarkEngram      = "#015a2c"
@@ -70,8 +82,78 @@ func minerOffIconResource() fyne.Resource {
 	return &fyne.StaticResource{StaticName: "MinerOFF.png", StaticContent: minerOffPngData}
 }
 
-// cyberdeckIconResource returns the cyberdeck icon with the login-page palette
-// (C.Green main + C.DarkGreen inner).
+func daemonIconForState(state int) fyne.Resource {
+	tint := stateColorDM(state)
+	daemonColoredMu.Lock()
+	defer daemonColoredMu.Unlock()
+	if entry, ok := daemonColored[state]; ok && colorsEqual(entry.tint, tint) {
+		return entry.resource
+	}
+	res := recolorSVGResource("daemon", daemonSvgData, tint)
+	daemonColored[state] = &coloredIcon{resource: res, tint: tint}
+	return res
+}
+
+func minerIconForState(state int) fyne.Resource {
+	tint := stateColorDM(state)
+	minerColoredMu.Lock()
+	defer minerColoredMu.Unlock()
+	if entry, ok := minerColored[state]; ok && colorsEqual(entry.tint, tint) {
+		return entry.resource
+	}
+
+	src, _, err := image.Decode(bytes.NewReader(minerOffPngData))
+	if err != nil {
+		return fyne.NewStaticResource("miner.png", minerOffPngData)
+	}
+
+	bounds := src.Bounds()
+	dst := image.NewNRGBA(bounds)
+
+	tr, tg, tb, _ := tint.RGBA()
+	tnr := float64(tr) / 65535.0
+	tng := float64(tg) / 65535.0
+	tnb := float64(tb) / 65535.0
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := src.At(x, y).RGBA()
+			na := uint8(a / 257)
+			if na > 0 {
+				dst.SetNRGBA(x, y, color.NRGBA{
+					R: uint8(tnr * 255),
+					G: uint8(tng * 255),
+					B: uint8(tnb * 255),
+					A: na,
+				})
+			}
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, dst); err != nil {
+		return fyne.NewStaticResource("miner.png", minerOffPngData)
+	}
+
+	res := fyne.NewStaticResource("miner_tinted.png", buf.Bytes())
+	minerColored[state] = &coloredIcon{resource: res, tint: tint}
+	return res
+}
+
+func recolorSVGResource(name string, svg []byte, tint color.Color) fyne.Resource {
+	colored, err := canvas.RecolorSVG(svg, tint)
+	if err != nil {
+		return fyne.NewStaticResource(name+"_fallback.svg", svg)
+	}
+	return fyne.NewStaticResource(name+"_colored.svg", colored)
+}
+
+func colorsEqual(a, b color.Color) bool {
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
 func cyberdeckIconResource() fyne.Resource {
 	main, dark := cyberdeckMainEngram, cyberdeckDarkEngram
 	switch apptheme.ThemeMode {
@@ -89,14 +171,11 @@ func cyberdeckIconResource() fyne.Resource {
 	return &fyne.StaticResource{StaticName: "green-cyberdeck.svg", StaticContent: data}
 }
 
-// cyberdeck hover constants — outer/main becomes highlight, inner/dark keeps normal.
 const (
 	cyberdeckHoverMain      = "#ffffff"
 	cyberdeckHoverMainCryst = "#38384a"
 )
 
-// cyberdeckDashboardIconResource returns the cyberdeck icon with the dashboard
-// palette (cDaemonMiner main + C.DarkGreen inner).
 func cyberdeckDashboardIconResource() fyne.Resource {
 	main, dark := cyberdeckDashMainEngram, cyberdeckDashDarkEngram
 	switch apptheme.ThemeMode {
@@ -114,10 +193,6 @@ func cyberdeckDashboardIconResource() fyne.Resource {
 	return &fyne.StaticResource{StaticName: "green-cyberdeck.svg", StaticContent: data}
 }
 
-// cyberdeckDashboardIconHoverResource returns the cyberdeck icon for the
-// dashboard hover state.  The outer/main body becomes the highlight colour
-// (white on dark themes, dark slate on Crystallina) while the inner/dark
-// shade keeps its normal dashboard value — see Theme.md §XIII.
 func cyberdeckDashboardIconHoverResource() fyne.Resource {
 	var main string
 	switch apptheme.ThemeMode {
@@ -143,4 +218,3 @@ func cyberdeckDashboardIconHoverResource() fyne.Resource {
 	data = bytes.ReplaceAll(data, cyberdeckBaseDark, []byte(dark))
 	return &fyne.StaticResource{StaticName: "green-cyberdeck.svg", StaticContent: data}
 }
-

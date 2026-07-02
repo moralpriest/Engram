@@ -182,12 +182,12 @@ func showBinaryDownloadProgress(binaryType string, onComplete func()) {
 	}()
 }
 
-func newDaemonMinerToggleButton(label string, iconResource fyne.Resource, state *int, onToggle func()) *fyne.Container {
-	iconWidget := widget.NewIcon(iconResource)
-	themedIcon := container.NewThemeOverride(iconWidget, apptheme.NewTintTheme(apptheme.Main, stateColorDM(*state)))
-	iconSizer := container.NewGridWrap(scalePoint(100, 100), themedIcon)
+func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWidth float32) fyne.CanvasObject {
+	img := canvas.NewImageFromResource(res)
+	img.FillMode = canvas.ImageFillContain
+	img.SetMinSize(fyne.NewSize(40, 40))
 
-	stateLabel := canvas.NewText(stateLabelDM(*state), buttonTextColor())
+	stateLabel := canvas.NewText(stateLabelDM(*state), stateColorDM(*state))
 	stateLabel.TextSize = scaleFont(9)
 	stateLabel.Alignment = fyne.TextAlignCenter
 
@@ -196,21 +196,21 @@ func newDaemonMinerToggleButton(label string, iconResource fyne.Resource, state 
 	labelText.TextStyle = fyne.TextStyle{Bold: true}
 	labelText.Alignment = fyne.TextAlignCenter
 
-	content := container.NewVBox(
-		container.NewCenter(iconSizer),
+	widthAnchor := canvas.NewRectangle(color.Transparent)
+	widthAnchor.SetMinSize(fyne.NewSize(indicatorWidth, 1))
+
+	return container.NewVBox(
+		widthAnchor,
+		container.NewCenter(container.NewGridWrap(fyne.NewSize(50, 50), img)),
 		stateLabel,
 		labelText,
 	)
+}
 
-	btn := newHoverButton(onToggle, func() {
-	}, func() {
-	})
-	btn.Importance = widget.LowImportance
-
-	sizeEnforcer := canvas.NewRectangle(color.Transparent)
-	sizeEnforcer.SetMinSize(fyne.NewSize(ui.Width*0.47, content.MinSize().Height))
-
-	return container.NewStack(sizeEnforcer, content, container.NewMax(btn))
+func newRectSpacer() *canvas.Rectangle {
+	r := canvas.NewRectangle(color.Transparent)
+	r.SetMinSize(fyne.NewSize(10, 4))
+	return r
 }
 
 var refreshDaemonInfoOnce sync.Once
@@ -286,41 +286,33 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	heading.TextStyle = fyne.TextStyle{Bold: true}
 	heading.Alignment = fyne.TextAlignCenter
 
-	daemonBtn := newDaemonMinerToggleButton(i18n.T("daemon_miner.daemon"), daemonIconResource(), &dmState.daemonState, func() {
-		switch dmState.daemonState {
-		case dmStateStopped, dmStateError:
-			if findBinary(daemonBinary()) == "" {
-				showBinaryDownloadConfirm("daemon", func() { go startDaemon() })
-				return
-			}
-			go startDaemon()
-		default:
-			go stopDaemon()
-		}
-	})
-	minerBtn := newDaemonMinerToggleButton(i18n.T("daemon_miner.miner"), minerOffIconResource(), &dmState.minerState, func() {
-		switch dmState.minerState {
-		case dmStateStopped, dmStateError:
-			if findBinary(minerBinary()) == "" {
-				showBinaryDownloadConfirm("miner", func() { go startMiner() })
-				return
-			}
-			go startMiner()
-		default:
-			go stopMiner()
-		}
-	})
+	gap := canvas.NewRectangle(color.Transparent)
+	gap.SetMinSize(fyne.NewSize(60, 1))
 
-	toggleRow := container.NewHBox(
+	indicatorWidth := float32(80)
+	for _, s := range []int{dmState.daemonState, dmState.minerState} {
+		t := canvas.NewText(stateLabelDM(s), color.Black)
+		t.TextSize = scaleFont(9)
+		if w := t.MinSize().Width; w > indicatorWidth {
+			indicatorWidth = w
+		}
+	}
+	for _, l := range []string{i18n.T("daemon_miner.daemon"), i18n.T("daemon_miner.miner")} {
+		t := canvas.NewText(l, color.Black)
+		t.TextSize = scaleFont(11)
+		t.TextStyle = fyne.TextStyle{Bold: true}
+		if w := t.MinSize().Width; w > indicatorWidth {
+			indicatorWidth = w
+		}
+	}
+
+	indicatorRow := container.NewHBox(
 		layout.NewSpacer(),
-		daemonBtn,
-		layout.NewSpacer(),
-		minerBtn,
+		newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
+		gap,
+		newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
 		layout.NewSpacer(),
 	)
-
-	rectSpacer := canvas.NewRectangle(color.Transparent)
-	rectSpacer.SetMinSize(fyne.NewSize(10, 4))
 
 	baseFontSize := float32(14)
 	makeStatRow := func(label string, valueObj fyne.CanvasObject) *fyne.Container {
@@ -336,7 +328,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Fetch daemon info (non-blocking, uses cached on error)
 	info, infoErr := fetchDaemonInfo()
-	if infoErr == nil && dmState.daemonState == dmStateExternal {
+	if infoErr == nil && dmState.daemonState != dmStateRunning && dmState.daemonState != dmStateCorrupt {
 		dmState.daemonState = dmStateRunning
 	}
 
@@ -442,12 +434,12 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	topSection := container.NewVBox(
-		container.NewCenter(toggleRow),
-		rectSpacer,
+		indicatorRow,
+		newRectSpacer(),
 		container.NewCenter(btnToggleDaemonDetails),
 		container.NewCenter(daemonSeparator),
 		daemonInfoContainer,
-		rectSpacer,
+		newRectSpacer(),
 		container.NewCenter(btnToggleMinerDetails),
 		container.NewCenter(minerSeparator),
 		minerInfoContainer,
@@ -459,22 +451,23 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		mobileLabel.Alignment = fyne.TextAlignCenter
 		mobileOverlay := container.NewCenter(mobileLabel)
 
-		daemonBtn = container.NewStack(daemonBtn, mobileOverlay)
-		minerBtn = container.NewStack(minerBtn, mobileOverlay)
-		toggleRow = container.NewHBox(
+		mobileGap := canvas.NewRectangle(color.Transparent)
+		mobileGap.SetMinSize(fyne.NewSize(40, 1))
+
+		indicators := container.NewHBox(
 			layout.NewSpacer(),
-			daemonBtn,
-			layout.NewSpacer(),
-			minerBtn,
+			container.NewStack(newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth), mobileOverlay),
+			mobileGap,
+			container.NewStack(newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth), mobileOverlay),
 			layout.NewSpacer(),
 		)
 		topSection = container.NewVBox(
-			container.NewCenter(toggleRow),
-			rectSpacer,
+			indicators,
+			newRectSpacer(),
 			container.NewCenter(btnToggleDaemonDetails),
 			container.NewCenter(daemonSeparator),
 			daemonInfoContainer,
-			rectSpacer,
+			newRectSpacer(),
 			container.NewCenter(btnToggleMinerDetails),
 			container.NewCenter(minerSeparator),
 			minerInfoContainer,
@@ -502,19 +495,19 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
 
 	top := container.NewVBox(
-		rectSpacer,
-		rectSpacer,
+		newRectSpacer(),
+		newRectSpacer(),
 		container.NewCenter(heading),
-		rectSpacer,
+		newRectSpacer(),
 	)
 
 	footer := container.NewStack(
 		container.NewVBox(
-			rectSpacer,
+			newRectSpacer(),
 			container.NewCenter(
 				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
 			),
-			rectSpacer,
+			newRectSpacer(),
 		),
 	)
 
