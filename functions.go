@@ -728,6 +728,7 @@ func closeWallet() {
 		session.LastBalance = 0
 		engram.Disk = nil
 		tx = Transfers{}
+		histCache.clear()
 
 		if gnomon.Index != nil {
 			logger.Printf("[Gnomon] Shutting down indexers...\n")
@@ -993,6 +994,8 @@ func login() {
 	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
 	session.ID = shard
 	session.LimitMessages = true
+
+	go warmHistoryCache()
 }
 
 // Remove all overlays
