@@ -423,7 +423,7 @@ func layoutDashboard() fyne.CanvasObject {
 		cContracts = color.RGBA{19, 202, 105, 255}
 	}
 
-	btnSettings := newIconLabelButtonWithColor(i18n.T("dashboard.settings"), theme.SettingsIcon(), cSettings, color.White, func() {
+	btnSettings := newIconLabelButtonWithColor(i18n.T("dashboard.settings"), theme.SettingsIcon(), cSettings, buttonTextColor(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutAppSettings())
@@ -437,14 +437,14 @@ func layoutDashboard() fyne.CanvasObject {
 		removeOverlays()
 	}, buttonWidth)
 
-	btnMessages := newIconLabelButtonWithColor(i18n.T("dashboard.messages"), theme.MailComposeIcon(), cMessages, color.White, func() {
+	btnMessages := newIconLabelButtonWithColor(i18n.T("dashboard.messages"), theme.MailComposeIcon(), cMessages, buttonTextColor(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		removeOverlays()
 		session.Window.SetContent(layoutMessages())
 	}, buttonWidth)
 
-	btnContracts := newIconLabelButtonWithColor(i18n.T("dashboard.contracts"), theme.FolderIcon(), cContracts, color.White, func() {
+	btnContracts := newIconLabelButtonWithColor(i18n.T("dashboard.contracts"), theme.FolderIcon(), cContracts, buttonTextColor(), func() {
 		session.LastDomain = session.Window.Content()
 		session.Window.SetContent(layoutTransition())
 		session.Window.SetContent(layoutFilesAndContracts())

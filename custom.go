@@ -646,25 +646,34 @@ func scaleSpacer(w float32) *canvas.Rectangle {
 }
 
 func newTELAButton(onTap func(), width float32) *fyne.Container {
-	btn := widget.NewButton("", onTap)
-	btn.Importance = widget.LowImportance
+	imgNormal := canvas.NewImageFromResource(telaTextIconResource())
+	imgNormal.FillMode = canvas.ImageFillContain
+	imgSizerNormal := container.NewGridWrap(fyne.NewSize(scaleSize(48), scaleSize(28)), imgNormal)
 
-	img := canvas.NewImageFromResource(resourceTelaPng)
-	img.FillMode = canvas.ImageFillContain
+	imgHover := canvas.NewImageFromResource(telaTextIconHoverResource())
+	imgHover.FillMode = canvas.ImageFillContain
+	imgSizerHover := container.NewGridWrap(fyne.NewSize(scaleSize(48), scaleSize(28)), imgHover)
+	imgSizerHover.Hide()
 
-	imgWidth := scaleSize(70)
-	imgHeight := scaleSize(26)
-
-	imgSizer := container.NewGridWrap(fyne.NewSize(imgWidth, imgHeight), img)
+	imgStack := container.NewStack(imgSizerNormal, imgSizerHover)
 
 	labelText := canvas.NewText("Web", buttonTextColor())
 	labelText.TextSize = scaleFont(11)
 	labelText.Alignment = fyne.TextAlignCenter
 
 	content := container.NewVBox(
-		container.NewCenter(imgSizer),
+		container.NewCenter(imgStack),
 		labelText,
 	)
+
+	btn := newHoverButton(onTap, func() {
+		imgSizerNormal.Hide()
+		imgSizerHover.Show()
+	}, func() {
+		imgSizerHover.Hide()
+		imgSizerNormal.Show()
+	})
+	btn.Importance = widget.LowImportance
 
 	h := float32(60)
 	if isMobile() {

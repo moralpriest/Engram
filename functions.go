@@ -2797,7 +2797,7 @@ func loadResources() {
 	res.mainBg = canvas.NewImageFromResource(resourceEngramMainPng)
 	res.mainBg.FillMode = canvas.ImageFillContain
 
-	res.telaBg = canvas.NewImageFromResource(resourceTelaPng)
+	res.telaBg = canvas.NewImageFromResource(telaTextIconResource())
 	res.telaBg.FillMode = canvas.ImageFillContain
 
 }
