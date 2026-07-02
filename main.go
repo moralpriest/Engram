@@ -169,12 +169,10 @@ func main() {
 				session.Window.SetContent(session.LastDomain)
 			} else {
 				if engram.Disk != nil {
-					session.LastDomain = layoutDashboard()
 					session.LastDomain = session.Window.Content()
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutDashboard())
 				} else {
-					session.LastDomain = layoutMain()
 					session.LastDomain = session.Window.Content()
 					session.Window.SetContent(layoutTransition())
 					session.Window.SetContent(layoutMain())
