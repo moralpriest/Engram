@@ -552,7 +552,9 @@ func layoutDashboard() fyne.CanvasObject {
 	linkHistory := widget.NewHyperlinkWithStyle("View History", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkHistory.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
+		// No layoutTransition here: both SetContent calls run in this event
+		// handler, so the transition frame never paints — it was only a GIF
+		// re-decode on the tap path.
 		session.Window.SetContent(layoutHistory())
 		removeOverlays()
 	}
@@ -9467,7 +9469,7 @@ func layoutHistory() fyne.CanvasObject {
 	linkBack := widget.NewHyperlinkWithStyle("Back to Dashboard", nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkBack.OnTapped = func() {
 		session.LastDomain = session.Window.Content()
-		session.Window.SetContent(layoutTransition())
+		// No layoutTransition: it never paints (see linkHistory in layoutDashboard).
 		session.Window.SetContent(layoutDashboard())
 		removeOverlays()
 	}
