@@ -29,6 +29,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -66,6 +67,10 @@ var (
 	minerThreads    int
 	minerWalletAddr string
 	minerDaemonAddr string
+
+	// Flags to prevent wait goroutines from overwriting state after clean shutdown.
+	daemonStopRequested atomic.Bool
+	minerStopRequested  atomic.Bool
 )
 
 func init() {
@@ -120,24 +125,27 @@ func (rb *ringBuffer) Lines() []string {
 	return result
 }
 
-// daemonBinary returns the binary name for the current OS.
-func daemonBinary() string {
-	if runtime.GOOS == "windows" {
-		return "derod.exe"
-	}
-	return "derod"
-}
-
-// minerBinary returns the miner binary name for the current OS.
-func minerBinary() string {
+// archiveBinaryName returns the platform-suffixed binary name used inside DEROHE
+// release archives (e.g. derod-linux-amd64, derod-darwin, derod-windows-amd64.exe).
+func archiveBinaryName(name string) string {
 	switch runtime.GOOS {
 	case "darwin":
-		return "dero-miner"
+		return fmt.Sprintf("%s-%s", name, runtime.GOOS)
 	case "windows":
-		return "dirtybird.exe"
+		return fmt.Sprintf("%s-%s-%s.exe", name, runtime.GOOS, runtime.GOARCH)
 	default:
-		return "dirtybird"
+		return fmt.Sprintf("%s-%s-%s", name, runtime.GOOS, runtime.GOARCH)
 	}
+}
+
+// daemonBinary returns the DEROHE daemon binary name for the current platform.
+func daemonBinary() string {
+	return archiveBinaryName("derod")
+}
+
+// minerBinary returns the DEROHE miner binary name for the current platform.
+func minerBinary() string {
+	return archiveBinaryName("dero-miner")
 }
 
 // findBinary locates a binary: first in AppPath()/bin, then system PATH.
@@ -247,17 +255,27 @@ func startDaemon() {
 	go func() {
 		err := cmd.Wait()
 		daemonMu.Lock()
-		daemonCmd = nil
+		wasStopped := daemonCmd == nil
+		if !wasStopped {
+			daemonCmd = nil
+		}
 		daemonMu.Unlock()
+
+		if daemonStopRequested.Load() {
+			daemonStopRequested.Store(false)
+			return
+		}
 
 		if err != nil {
 			logger.Printf("[Daemon] Exited: %v", err)
+			dmState.daemonState = dmStateError
 		} else {
 			logger.Printf("[Daemon] Stopped")
+			if dmState.daemonState != dmStateStopped {
+				dmState.daemonState = dmStateStopped
+			}
 		}
-		if dmState.daemonState != dmStateStopped {
-			dmState.daemonState = dmStateStopped
-		}
+		uiDo(syncToggleStates)
 	}()
 }
 
@@ -270,6 +288,8 @@ func stopDaemon() {
 		logger.Printf("[Daemon] Not running")
 		return
 	}
+
+	daemonStopRequested.Store(true)
 
 	pid := daemonCmd.Process.Pid
 	logger.Printf("[Daemon] Stopping pid %d", pid)
@@ -341,46 +361,37 @@ func startMiner() {
 	go func() {
 		err := cmd.Wait()
 		minerMu.Lock()
-		minerCmd = nil
+		wasStopped := minerCmd == nil
+		if !wasStopped {
+			minerCmd = nil
+		}
 		minerMu.Unlock()
+
+		if minerStopRequested.Load() {
+			minerStopRequested.Store(false)
+			return
+		}
 
 		if err != nil {
 			logger.Printf("[Miner] Exited: %v", err)
+			dmState.minerState = dmStateError
 		} else {
 			logger.Printf("[Miner] Stopped")
+			if dmState.minerState != dmStateStopped {
+				dmState.minerState = dmStateStopped
+			}
 		}
-		if dmState.minerState != dmStateStopped {
-			dmState.minerState = dmStateStopped
-		}
+		uiDo(syncToggleStates)
 	}()
 }
 
-// getMinerArgs builds CLI arguments for the miner.
-func getMinerArgs(binary string) []string {
-	if runtime.GOOS == "darwin" {
-		return []string{
-			"--daemon-address", minerDaemonAddr,
-			"--wallet-address", minerWalletAddr,
-			"--threads", fmt.Sprintf("%d", minerThreads),
-			"--mine-on-worker", "true",
-		}
+// getMinerArgs builds CLI arguments for dero-miner.
+func getMinerArgs(_ string) []string {
+	return []string{
+		fmt.Sprintf("--wallet-address=%s", minerWalletAddr),
+		fmt.Sprintf("--daemon-rpc-address=%s", minerDaemonAddr),
+		fmt.Sprintf("--mining-threads=%d", minerThreads),
 	}
-	// Dirtybird on Linux / Windows
-	args := []string{
-		"--daemon-rpc-address", minerDaemonAddr,
-		"--wallet-address", minerWalletAddr,
-		"--threads", fmt.Sprintf("%d", minerThreads),
-		"--mine-on-worker", "true",
-	}
-	if strings.Contains(binary, "dirtybird") || strings.Contains(binary, "DirtyBird") {
-		args = []string{
-			"--daemon-rpc-address", minerDaemonAddr,
-			"--address", minerWalletAddr,
-			"--threads", fmt.Sprintf("%d", minerThreads),
-			"--mine-on-worker", "true",
-		}
-	}
-	return args
 }
 
 // stopMiner gracefully stops the miner process.
@@ -392,6 +403,8 @@ func stopMiner() {
 		logger.Printf("[Miner] Not running")
 		return
 	}
+
+	minerStopRequested.Store(true)
 
 	pid := minerCmd.Process.Pid
 	logger.Printf("[Miner] Stopping pid %d", pid)
@@ -631,6 +644,23 @@ func platformAssetKeywords() (osKeyword, archKeyword, ext string) {
 	return
 }
 
+// matchAssetName checks whether an asset name matches the platform keywords.
+// It also accepts "universal" as an arch keyword for cross-platform builds (e.g. dero_darwin_universal).
+func matchAssetName(name, osKeyword, archKeyword, ext string) bool {
+	lower := strings.ToLower(name)
+	if !strings.Contains(lower, osKeyword) || !strings.HasSuffix(lower, ext) {
+		return false
+	}
+	if strings.Contains(lower, archKeyword) {
+		return true
+	}
+	// Accept "universal" as a fallback (macOS universal binaries)
+	if strings.Contains(lower, "universal") {
+		return true
+	}
+	return false
+}
+
 // extractTarGzBinary pulls a single named binary out of a .tar.gz archive.
 func extractTarGzBinary(archivePath, binaryName, destPath string) error {
 	f, err := os.Open(archivePath)
@@ -723,8 +753,7 @@ func downloadLatestBinary(owner, repo, binaryName, destDir string, progress func
 	var assetSize int64
 
 	for _, asset := range release.Assets {
-		name := strings.ToLower(asset.Name)
-		if strings.Contains(name, osKeyword) && strings.Contains(name, archKeyword) && strings.HasSuffix(name, ext) {
+		if matchAssetName(asset.Name, osKeyword, archKeyword, ext) {
 			assetURL = asset.BrowserDownloadURL
 			assetName = asset.Name
 			assetSize = int64(asset.Size)
@@ -817,9 +846,8 @@ type downloadBinarySource struct {
 }
 
 var (
-	daemonDownloadSource    = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
-	minerDownloadSource     = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
-	dirtybirdDownloadSource = downloadBinarySource{Owner: "", Repo: ""} // set to your fork when available
+	daemonDownloadSource = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
+	minerDownloadSource  = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
 )
 
 // updateDaemonStateFromDetection refreshes dmState based on live checks.

@@ -18,9 +18,11 @@ type toggleSwitch struct {
 	disabled bool
 	onChange func(bool)
 
-	animMu  sync.Mutex
-	anim    *fyne.Animation
-	knobPos float32
+	animMu    sync.Mutex
+	anim      *fyne.Animation
+	knobPos   float32
+	trackRect *canvas.Rectangle
+	knobRect  *canvas.Rectangle
 }
 
 func newToggleSwitch(checked bool, onChange func(bool)) *toggleSwitch {
@@ -36,9 +38,9 @@ func newToggleSwitch(checked bool, onChange func(bool)) *toggleSwitch {
 }
 
 func (t *toggleSwitch) CreateRenderer() fyne.WidgetRenderer {
-	track := canvas.NewRectangle(trackColor(t.checked, t.disabled))
-	knob := canvas.NewRectangle(knobColor(t.disabled))
-	return &toggleSwitchRenderer{t: t, track: track, knob: knob}
+	t.trackRect = canvas.NewRectangle(trackColor(t.checked, t.disabled))
+	t.knobRect = canvas.NewRectangle(knobColor(t.disabled))
+	return &toggleSwitchRenderer{t: t, track: t.trackRect, knob: t.knobRect}
 }
 
 func (t *toggleSwitch) MinSize() fyne.Size {
@@ -51,7 +53,13 @@ func (t *toggleSwitch) Tapped(_ *fyne.PointEvent) {
 		return
 	}
 	t.checked = !t.checked
+
+	// Immediate visual update: track/knob colors, knob snaps to current knobPos
+	t.Refresh()
+
+	// Smooth animation of the knob from its current position to target
 	t.animate()
+
 	if t.onChange != nil {
 		t.onChange(t.checked)
 	}
@@ -62,18 +70,23 @@ func (t *toggleSwitch) setChecked(v bool) {
 		return
 	}
 	t.checked = v
+
 	t.animMu.Lock()
 	if t.anim != nil {
 		t.anim.Stop()
 		t.anim = nil
 	}
 	t.animMu.Unlock()
+
 	if v {
 		t.knobPos = 1
 	} else {
 		t.knobPos = 0
 	}
+
+	// Force synchronous refresh: update renderer state AND redraw
 	t.Refresh()
+	canvas.Refresh(t)
 }
 
 func (t *toggleSwitch) Disable() {
@@ -99,7 +112,20 @@ func (t *toggleSwitch) animate() {
 	}
 	t.anim = fyne.NewAnimation(150*time.Millisecond, func(progress float32) {
 		t.knobPos = start + (target-start)*progress
-		canvas.Refresh(t)
+		// Directly reposition knob on each tick
+		if t.knobRect != nil && t.trackRect != nil {
+			knobDiam := t.trackRect.Size().Height - 4
+			if knobDiam < 4 {
+				knobDiam = 4
+			}
+			maxX := t.trackRect.Size().Width - knobDiam - 2
+			if maxX < 0 {
+				maxX = 0
+			}
+			t.knobRect.Move(fyne.NewPos(float32(2)+maxX*t.knobPos, 2))
+			canvas.Refresh(t.knobRect)
+			canvas.Refresh(t.trackRect)
+		}
 	})
 	t.anim.Start()
 }

@@ -10,6 +10,7 @@ replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-202606
 
 require (
 	fyne.io/fyne/v2 v2.7.4
+	fyne.io/systray v1.12.1
 	fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/civilware/Gnomon v0.0.0-20240403103529-8b2fdb2b3106
@@ -29,7 +30,6 @@ require (
 )
 
 require (
-	fyne.io/systray v1.12.1 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/VictoriaMetrics/metrics v1.41.2 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect

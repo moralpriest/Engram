@@ -1,6 +1,6 @@
 [Details]
-Icon = "assets/Icon.png"
-Name = "Engram"
-ID = "com.engram.wallet"
-Version = "0.6.9"
-Build = 577
+  Icon = "assets/Icon.png"
+  Name = "Engram"
+  ID = "com.engram.wallet"
+  Version = "0.6.9"
+  Build = 578

@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,8 +45,12 @@ type daemonMinerState struct {
 var dmState = daemonMinerState{daemonState: 0, minerState: 0}
 
 var (
-	daemonToggle *toggleSwitch
-	minerToggle  *toggleSwitch
+	daemonToggle   *toggleSwitch
+	minerToggle    *toggleSwitch
+	daemonStateImg *canvas.Image
+	minerStateImg  *canvas.Image
+	daemonStateLbl *canvas.Text
+	minerStateLbl  *canvas.Text
 )
 
 const (
@@ -105,6 +111,30 @@ func syncToggleStates() {
 	if minerToggle != nil {
 		minerToggle.setChecked(minerIsRunning())
 	}
+	syncStateIndicators()
+}
+
+// syncStateIndicators updates the state indicator icons and labels to match
+// the current dmState values. Must be called on the UI goroutine.
+func syncStateIndicators() {
+	if daemonStateLbl != nil {
+		daemonStateLbl.Text = stateLabelDM(dmState.daemonState)
+		daemonStateLbl.Color = stateColorDM(dmState.daemonState)
+		daemonStateLbl.Refresh()
+	}
+	if daemonStateImg != nil {
+		daemonStateImg.Resource = daemonIconForState(dmState.daemonState)
+		daemonStateImg.Refresh()
+	}
+	if minerStateLbl != nil {
+		minerStateLbl.Text = stateLabelDM(dmState.minerState)
+		minerStateLbl.Color = stateColorDM(dmState.minerState)
+		minerStateLbl.Refresh()
+	}
+	if minerStateImg != nil {
+		minerStateImg.Resource = minerIconForState(dmState.minerState)
+		minerStateImg.Refresh()
+	}
 }
 
 func openDownloadURL(urlStr string) {
@@ -119,43 +149,34 @@ func openDownloadURL(urlStr string) {
 // then launches the download progress dialog.  onComplete is called on success.
 func showBinaryDownloadConfirm(binaryType string, onComplete func()) {
 	name := daemonBinary()
-	source := daemonDownloadSource
 	if binaryType == "miner" {
 		name = minerBinary()
-		if runtime.GOOS == "darwin" {
-			source = minerDownloadSource
-		} else {
-			source = dirtybirdDownloadSource
-		}
-	}
-
-	// No auto-download source configured (e.g. DirtyBird) – open browser instead.
-	if source.Owner == "" || source.Repo == "" {
-		openDownloadURL("https://github.com/deroproject/derohe/releases")
-		return
 	}
 
 	msg := fmt.Sprintf(i18n.T("daemon_miner.download_prompt"), name)
 	dlg := dialog.NewConfirm(i18n.T("daemon_miner.download_title"), msg, func(confirmed bool) {
 		if confirmed {
-			showBinaryDownloadProgress(binaryType, onComplete)
+			showBinaryDownloadProgress(binaryType, onComplete, nil)
 		}
 	}, session.Window)
 	dlg.Show()
 }
 
 // showBinaryDownloadProgress displays a progress dialog and downloads the binary
-// in the background.  onComplete is called (on the UI goroutine) when finished.
-func showBinaryDownloadProgress(binaryType string, onComplete func()) {
+// in the background.  onComplete is called (on the UI goroutine) on success;
+// onError is called on failure (before the error dialog is shown).
+func showBinaryDownloadProgress(binaryType string, onComplete func(), onError func()) {
 	name := daemonBinary()
 	source := daemonDownloadSource
 	if binaryType == "miner" {
 		name = minerBinary()
-		if runtime.GOOS == "darwin" {
-			source = minerDownloadSource
-		} else {
-			source = dirtybirdDownloadSource
-		}
+		source = minerDownloadSource
+	}
+
+	// No auto-download source configured – open browser instead.
+	if source.Owner == "" || source.Repo == "" {
+		openDownloadURL("https://github.com/deroproject/derohe/releases")
+		return
 	}
 
 	progress := widget.NewProgressBar()
@@ -178,6 +199,9 @@ func showBinaryDownloadProgress(binaryType string, onComplete func()) {
 		uiDo(func() {
 			dlg.Hide()
 			if err != nil {
+				if onError != nil {
+					onError()
+				}
 				errDlg := dialog.NewError(fmt.Errorf(i18n.T("daemon_miner.download_failed")+": %v", err), session.Window)
 				errDlg.Show()
 			} else if onComplete != nil {
@@ -195,6 +219,15 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	stateLabel := canvas.NewText(stateLabelDM(*state), stateColorDM(*state))
 	stateLabel.TextSize = scaleFont(12)
 	stateLabel.Alignment = fyne.TextAlignCenter
+
+	// Store references for live updates via syncStateIndicators()
+	if label == i18n.T("daemon_miner.daemon") {
+		daemonStateImg = img
+		daemonStateLbl = stateLabel
+	} else if label == i18n.T("daemon_miner.miner") {
+		minerStateImg = img
+		minerStateLbl = stateLabel
+	}
 
 	labelText := canvas.NewText(label, buttonTextColor())
 	labelText.TextSize = scaleFont(14)
@@ -274,6 +307,8 @@ func updateInfoUILabels(info DaemonInfo) {
 }
 
 func layoutDaemonMiner() fyne.CanvasObject {
+	resizeWindow(ui.MaxWidth, ui.MaxHeight)
+
 	updateDaemonStateFromDetection()
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
@@ -324,6 +359,29 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	})
 
 	minerToggle = newToggleSwitch(minerIsRunning(), func(checked bool) {
+		if checked && findBinary(minerBinary()) == "" {
+			// Binary missing — show ON state immediately, download with progress, then start
+			dmState.minerState = dmStateRunning
+			showBinaryDownloadProgress("miner", func() {
+				go func() {
+					// Only start if user hasn't toggled OFF during the download
+					if minerIsRunning() {
+						startMiner()
+					}
+					uiDo(syncToggleStates)
+				}()
+			}, func() {
+				// Download failed — reset state back to stopped
+				dmState.minerState = dmStateStopped
+				uiDo(syncToggleStates)
+			})
+			return
+		}
+		// On UI goroutine — set state immediately so user sees toggle transition
+		if checked {
+			dmState.minerState = dmStateRunning
+			syncToggleStates()
+		}
 		go func() {
 			if checked {
 				startMiner()
@@ -447,10 +505,110 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	// ---- Miner Info Panel (basic state for now) ----
-	minerInfoBox := container.NewVBox(
-	// Miner-specific info will be added here in future
+	// ---- Miner Config Panel ----
+	cpus := runtime.NumCPU()
+
+	makeField := func(label string) *canvas.Text {
+		t := canvas.NewText(label, apptheme.C.Gray)
+		t.TextSize = scaleFont(13)
+		t.TextStyle = fyne.TextStyle{Bold: true}
+		return t
+	}
+
+	// Wallet Address
+	entryWallet := widget.NewEntry()
+	entryWallet.PlaceHolder = "Enter your DERO wallet address"
+	if engram.Disk != nil {
+		entryWallet.SetText(engram.Disk.GetAddress().String())
+	} else if minerWalletAddr != "" {
+		entryWallet.SetText(minerWalletAddr)
+	}
+	entryWallet.OnChanged = func(s string) {
+		minerWalletAddr = s
+	}
+
+	// Custom thread count entry (declared before radio group that references it)
+	entryCustomThreads := widget.NewEntry()
+	entryCustomThreads.PlaceHolder = "Thread count (e.g. 8)"
+	entryCustomThreads.Disable()
+	entryCustomThreads.OnChanged = func(s string) {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			minerThreads = n
+		}
+	}
+
+	// Thread Presets
+	lowThreads := max(1, cpus/2)
+	medThreads := max(1, cpus-4)
+	highThreads := max(1, cpus-2)
+
+	presetLabels := []string{
+		fmt.Sprintf("Low (%d threads)", lowThreads),
+		fmt.Sprintf("Medium (%d threads)", medThreads),
+		fmt.Sprintf("High (%d threads)", highThreads),
+		"Custom",
+	}
+
+	wThreadPreset := widget.NewRadioGroup(presetLabels, func(s string) {
+		switch {
+		case strings.HasPrefix(s, "Low"):
+			minerThreads = lowThreads
+		case strings.HasPrefix(s, "Medium"):
+			minerThreads = medThreads
+		case strings.HasPrefix(s, "High"):
+			minerThreads = highThreads
+		case s == "Custom":
+			if n, err := strconv.Atoi(entryCustomThreads.Text); err == nil && n > 0 {
+				minerThreads = n
+			}
+		}
+		if s == "Custom" {
+			entryCustomThreads.Enable()
+		} else {
+			entryCustomThreads.Disable()
+		}
+	})
+	wThreadPreset.Horizontal = false
+
+	// Determine which preset to select based on current minerThreads
+	selectedPreset := 0
+	if minerThreads == lowThreads {
+		selectedPreset = 0
+	} else if minerThreads == medThreads {
+		selectedPreset = 1
+	} else if minerThreads == highThreads {
+		selectedPreset = 2
+	} else {
+		selectedPreset = 3
+	}
+	wThreadPreset.SetSelected(presetLabels[selectedPreset])
+	if selectedPreset == 3 {
+		entryCustomThreads.SetText(fmt.Sprintf("%d", minerThreads))
+		entryCustomThreads.Enable()
+	}
+
+	// Build miner config section
+	minerConfigBox := container.NewVBox(
+		newRectSpacer(),
+		makeField("Wallet Address"),
+		entryWallet,
+		newRectSpacer(),
+		makeField("Threads"),
+		wThreadPreset,
+		entryCustomThreads,
 	)
+
+	// Low-thread warning (shown when system has ≤6 CPUs)
+	if cpus <= 6 {
+		warnLabel := widget.NewLabel(
+			fmt.Sprintf("⚠ Your system has only %d threads. Mining may impact system responsiveness.", cpus),
+		)
+		warnLabel.Wrapping = fyne.TextWrapWord
+		minerConfigBox.Add(newRectSpacer())
+		minerConfigBox.Add(warnLabel)
+	}
+
+	minerInfoBox := minerConfigBox
 
 	// Miner section header (Settings style)
 	minerSectionLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" INFO", apptheme.C.Gray)
@@ -478,18 +636,13 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Download links shown when binaries are missing
 	if findBinary(daemonBinary()) == "" {
 		linkDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
-			showBinaryDownloadProgress("daemon", nil)
+			showBinaryDownloadProgress("daemon", nil, nil)
 		})
 		linkDerod.Importance = widget.LowImportance
 		daemonInfoBox.Add(linkDerod)
 	}
-	if findBinary(minerBinary()) == "" {
-		linkMiner := widget.NewButton(i18n.T("daemon_miner.download_miner"), func() {
-			showBinaryDownloadProgress("miner", nil)
-		})
-		linkMiner.Importance = widget.LowImportance
-		minerInfoBox.Add(linkMiner)
-	}
+	// Miner binary auto-downloads when the toggle is switched ON (see minerToggle callback).
+	// No separate download button — the toggle handles it.
 
 	topSection := container.NewVBox(
 		indicatorRow,
@@ -546,18 +699,15 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Start global background refresh goroutine (runs once, forever)
 	startBackgroundDaemonRefresh()
 
-	rectScroll := canvas.NewRectangle(color.Transparent)
-	rectScroll.SetMinSize(fyne.NewSize(ui.Width, ui.Height*0.8))
-
 	scrollContent := container.NewVBox(topSection)
+
+	scrollWidthAnchor := canvas.NewRectangle(color.Transparent)
+	scrollWidthAnchor.SetMinSize(fyne.NewSize(ui.Width, 1))
 
 	scrollBox := container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
-			container.NewStack(
-				rectScroll,
-				scrollContent,
-			),
+			container.NewStack(scrollWidthAnchor, scrollContent),
 			layout.NewSpacer(),
 		),
 	)
