@@ -825,7 +825,14 @@ var (
 // updateDaemonStateFromDetection refreshes dmState based on live checks.
 // Called periodically and on page load.
 func updateDaemonStateFromDetection() {
-	if checkLocalNode() {
+	// Check if Engram itself started and manages the daemon process.
+	// checkLocalNode() only checks if *anything* is listening on the RPC port
+	// (including an external daemon), so we must use daemonCmd directly.
+	daemonMu.Lock()
+	ownDaemon := daemonCmd != nil && daemonCmd.Process != nil
+	daemonMu.Unlock()
+
+	if ownDaemon {
 		if isDaemonConnected() {
 			dmState.daemonState = dmStateRunning
 			if detectChainCorruption() {
@@ -837,6 +844,11 @@ func updateDaemonStateFromDetection() {
 			}
 		}
 	} else {
-		dmState.daemonState = dmStateStopped
+		// No Engram-managed daemon — check if an external daemon is reachable
+		if _, err := fetchDaemonInfo(); err == nil {
+			dmState.daemonState = dmStateExternal
+		} else {
+			dmState.daemonState = dmStateStopped
+		}
 	}
 }

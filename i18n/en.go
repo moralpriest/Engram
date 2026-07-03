@@ -78,7 +78,7 @@ var stringsEN = map[string]string{
 	"daemon_miner.state_syncing":    "Syncing",
 	"daemon_miner.state_stopped":    "Stopped",
 	"daemon_miner.state_error":      "Error",
-	"daemon_miner.state_external":   "External (Already Running)",
+	"daemon_miner.state_external":   "External",
 	"daemon_miner.state_corrupt":    "Corrupt — Rewind Needed",
 	"daemon_miner.details":          "Show Details",
 	"daemon_miner.live_output":      "Show Live Output",

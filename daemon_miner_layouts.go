@@ -193,11 +193,11 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	img.SetMinSize(fyne.NewSize(40, 40))
 
 	stateLabel := canvas.NewText(stateLabelDM(*state), stateColorDM(*state))
-	stateLabel.TextSize = scaleFont(9)
+	stateLabel.TextSize = scaleFont(12)
 	stateLabel.Alignment = fyne.TextAlignCenter
 
 	labelText := canvas.NewText(label, buttonTextColor())
-	labelText.TextSize = scaleFont(11)
+	labelText.TextSize = scaleFont(14)
 	labelText.TextStyle = fyne.TextStyle{Bold: true}
 	labelText.Alignment = fyne.TextAlignCenter
 
@@ -227,7 +227,7 @@ func startBackgroundDaemonRefresh() {
 		go func() {
 			for {
 				info, err := fetchDaemonInfo()
-				if err == nil && infoUI.status != nil {
+				if err == nil {
 					uiDo(func() { updateInfoUILabels(info) })
 				}
 				uiDo(syncToggleStates)
@@ -298,14 +298,14 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	indicatorWidth := float32(80)
 	for _, s := range []int{dmState.daemonState, dmState.minerState} {
 		t := canvas.NewText(stateLabelDM(s), color.Black)
-		t.TextSize = scaleFont(9)
+		t.TextSize = scaleFont(12)
 		if w := t.MinSize().Width; w > indicatorWidth {
 			indicatorWidth = w
 		}
 	}
 	for _, l := range []string{i18n.T("daemon_miner.daemon"), i18n.T("daemon_miner.miner")} {
 		t := canvas.NewText(l, color.Black)
-		t.TextSize = scaleFont(11)
+		t.TextSize = scaleFont(14)
 		t.TextStyle = fyne.TextStyle{Bold: true}
 		if w := t.MinSize().Width; w > indicatorWidth {
 			indicatorWidth = w
@@ -356,7 +356,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	makeStatField := func(label string, valueObj fyne.CanvasObject) fyne.CanvasObject {
 		lbl := canvas.NewText(label, apptheme.C.Gray)
-		lbl.TextSize = scaleFont(11)
+		lbl.TextSize = scaleFont(13)
 		lbl.TextStyle = fyne.TextStyle{Bold: true}
 		return container.NewVBox(
 			lbl,
@@ -365,15 +365,15 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 	makeStatValue := func(text string, c color.Color) *canvas.Text {
 		t := canvas.NewText(text, c)
-		t.TextSize = scaleFont(16)
+		t.TextSize = scaleFont(18)
 		t.TextStyle = fyne.TextStyle{Bold: true}
 		return t
 	}
 
 	// Fetch daemon info (non-blocking, uses cached on error)
 	info, infoErr := fetchDaemonInfo()
-	if infoErr == nil && dmState.daemonState != dmStateRunning && dmState.daemonState != dmStateCorrupt {
-		dmState.daemonState = dmStateRunning
+	if infoErr == nil && dmState.daemonState == dmStateStopped {
+		dmState.daemonState = dmStateExternal
 	}
 
 	// ---- Daemon Info Panel ----
@@ -426,7 +426,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Daemon section header (Settings style)
 	daemonSectionLabel := canvas.NewText(i18n.T("daemon_miner.daemon")+" INFO", apptheme.C.Gray)
-	daemonSectionLabel.TextSize = scaleFont(11)
+	daemonSectionLabel.TextSize = scaleFont(14)
 	daemonSectionLabel.Alignment = fyne.TextAlignCenter
 	daemonSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -454,7 +454,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Miner section header (Settings style)
 	minerSectionLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" INFO", apptheme.C.Gray)
-	minerSectionLabel.TextSize = scaleFont(11)
+	minerSectionLabel.TextSize = scaleFont(14)
 	minerSectionLabel.Alignment = fyne.TextAlignCenter
 	minerSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
 
