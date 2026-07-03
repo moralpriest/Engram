@@ -79,7 +79,7 @@ func init() {
 	if minerThreads < 1 {
 		minerThreads = 1
 	}
-	minerDaemonAddr = "127.0.0.1:10102"
+	minerDaemonAddr = "127.0.0.1:10100"
 }
 
 // ringBuffer is a circular buffer for capturing process output.
@@ -203,7 +203,7 @@ func getDaemonArgs() []string {
 		"--data-dir", dataDir,
 		"--rpc-bind", fmt.Sprintf("127.0.0.1:%d", rpcPort),
 		"--p2p-bind", fmt.Sprintf("0.0.0.0:%d", p2pPort),
-		"--work-bind", fmt.Sprintf("0.0.0.0:%d", workPort),
+		"--getwork-bind", fmt.Sprintf("0.0.0.0:%d", workPort),
 	}
 
 	for _, node := range prioritySeedNodes {

@@ -3,6 +3,18 @@
 # Phase 24.4: Mobile Optimizations
 
 echo "Building Engram with size optimization..."
+# Build miner from source (instead of bundling pre-compiled binary)
+echo "Building miner from source..."
+mkdir -p bin
+go build -ldflags="-s -w" -o bin/dero-miner-linux-amd64 github.com/deroproject/derohe/cmd/dero-miner
+if [ $? -eq 0 ]; then
+    echo "Miner build successful!"
+    ls -lh bin/dero-miner-linux-amd64
+else
+    echo "Miner build failed!"
+    exit 1
+fi
+
 echo ""
 
 # Build with stripped symbols for smaller binary

@@ -26,6 +26,16 @@ tasks:
 
   # ==================== Development ====================
 
+  build-miner:
+    desc: Build the miner binary from source
+    cmds:
+      - go build -v -ldflags "-s -w" -o bin/dero-miner-{{.OS}}-{{.ARCH}} github.com/deroproject/derohe/cmd/dero-miner
+    sources:
+      - go.mod
+      - go.sum
+    generates:
+      - bin/dero-miner-{{.OS}}-{{.ARCH}}
+
   build:
     desc: Build the application
     cmds:
