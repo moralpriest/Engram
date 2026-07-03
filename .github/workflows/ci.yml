@@ -101,6 +101,19 @@ jobs:
         run: echo "version=$(git describe --tags --always 2>/dev/null | sed 's/^v//' || echo '0.0.0-dev')" >> $GITHUB_OUTPUT
         shell: bash
 
+      - name: 🛏️ Build miner from source
+        shell: bash
+        run: |
+          GOOS=$(go env GOOS)
+          GOARCH=$(go env GOARCH)
+          MINER_BIN="bin/dero-miner-${GOOS}-${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            MINER_BIN="${MINER_BIN}.exe"
+          fi
+          echo "Building miner for ${GOOS}/${GOARCH}..."
+          go build -trimpath -o "${MINER_BIN}" github.com/deroproject/derohe/cmd/dero-miner
+          ls -la "${MINER_BIN}"
+
       - name: 🔨 Build
         run: go build -v -trimpath -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
 
