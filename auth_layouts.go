@@ -443,6 +443,10 @@ func layoutMain() fyne.CanvasObject {
 			container.New(layout.NewGridLayout(1),
 				btnConnectionSettings,
 			),
+			newSpacer(),
+			container.New(layout.NewGridLayout(1),
+				btnDaemonMiner,
+			),
 			footer,
 		)
 	}

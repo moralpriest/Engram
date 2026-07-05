@@ -30,7 +30,6 @@ import (
 	"fyne.io/fyne/v2/driver/mobile"
 	"fyne.io/fyne/v2/widget"
 
-	"fyne.io/systray"
 
 	_ "golang.org/x/image/webp"
 
@@ -92,7 +91,6 @@ var appExiting bool
 var previousDomain string
 var lastForegroundTime int64           // unix timestamp of last foreground event (for cooldown)
 var currentScrollBox *container.Scroll // tracks current page's scroll container for mobile input scrolling
-var trayStart, trayEnd func()
 
 func main() {
 	// Parse version from ldflags-injected string
@@ -197,35 +195,7 @@ func main() {
 
 	// System tray setup (desktop only)
 	if !a.Driver().Device().IsMobile() {
-		onReady := func() {
-			systray.SetIcon(resourceIconPng.Content())
-			systray.SetTitle("Engram")
-			systray.SetTooltip("Engram - DERO Wallet")
-
-			showItem := systray.AddMenuItem(i18n.T("system_tray.show_engram"), "")
-			systray.AddSeparator()
-			quitItem := systray.AddMenuItem(i18n.T("system_tray.quit"), "")
-
-			go func() {
-				for {
-					select {
-					case <-showItem.ClickedCh:
-						fyne.Do(func() {
-							session.Window.Show()
-						})
-					case <-quitItem.ClickedCh:
-						fyne.Do(func() {
-							if session.Window != nil {
-								showQuitConfirmation()
-							}
-						})
-					}
-				}
-			}()
-		}
-
-		trayStart, trayEnd = systray.RunWithExternalLoop(onReady, nil)
-		trayStart()
+		initSystemTray()
 	}
 
 	// Init objects

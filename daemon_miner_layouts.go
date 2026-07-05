@@ -899,48 +899,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	)
 
 	if isMobile() {
+		// Daemon toggle disabled on mobile (daemon binary not available yet)
+		// Miner toggle is enabled - it connects to the user's configured remote node
 		daemonToggle.Disable()
-		minerToggle.Disable()
-
-		mobileLabel := canvas.NewText(i18n.T("daemon_miner.unavailable"), apptheme.C.Gray)
-		mobileLabel.TextSize = scaleFont(10)
-		mobileLabel.Alignment = fyne.TextAlignCenter
-		mobileOverlay := container.NewCenter(mobileLabel)
-
-		mobileGap := canvas.NewRectangle(color.Transparent)
-		mobileGap.SetMinSize(fyne.NewSize(40, 1))
-
-		indicators := container.NewHBox(
-			layout.NewSpacer(),
-			container.NewStack(
-				container.NewVBox(
-					newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
-					container.NewCenter(daemonToggle),
-				),
-				mobileOverlay,
-			),
-			mobileGap,
-			container.NewStack(
-				container.NewVBox(
-					newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
-					container.NewCenter(minerToggle),
-				),
-				mobileOverlay,
-			),
-			layout.NewSpacer(),
-		)
-		topSection = container.NewVBox(
-			indicators,
-			newRectSpacer(),
-			daemonSectionHeader,
-			daemonInfoBox,
-			newRectSpacer(),
-			minerSectionHeader,
-			minerInfoBox,
-			newRectSpacer(),
-			statsSectionHeader,
-			minerStatsBox,
-		)
 	}
 
 	// Start global background refresh goroutine (runs once, forever)

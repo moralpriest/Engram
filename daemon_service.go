@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -75,7 +76,7 @@ func init() {
 	if minerThreads < 1 {
 		minerThreads = 1
 	}
-	minerDaemonAddr = "127.0.0.1:10100"
+	// minerDaemonAddr resolved dynamically in startMiner()
 }
 
 // ringBuffer is a circular buffer for capturing process output.
@@ -307,6 +308,33 @@ func stopDaemon() {
 	dmState.daemonState = dmStateStopped
 }
 
+func resolveMinerDaemonAddr() string {
+	// Get the current daemon address the user is connected to
+	daemonAddr := session.Daemon
+	if daemonAddr == "" {
+		daemonAddr = getDaemon()
+	}
+
+	// If it's localhost or empty, use default local work port
+	if daemonAddr == "" || strings.HasPrefix(daemonAddr, "127.0.0.1") || strings.HasPrefix(daemonAddr, "localhost") {
+		return fmt.Sprintf("127.0.0.1:%d", daemonWorkPort())
+	}
+
+	// Parse the host from the daemon address
+	host := daemonAddr
+	if strings.Contains(daemonAddr, ":") {
+		var err error
+		host, _, err = net.SplitHostPort(daemonAddr)
+		if err != nil {
+			logger.Printf("[Miner] Failed to parse daemon address %s: %v", daemonAddr, err)
+			return fmt.Sprintf("127.0.0.1:%d", daemonWorkPort())
+		}
+	}
+
+	// Use the work port for the current network
+	return fmt.Sprintf("%s:%d", host, daemonWorkPort())
+}
+
 // startMiner launches the in-process miner.
 func startMiner() {
 	if minerWalletAddr == "" && engram.Disk != nil {
@@ -318,6 +346,8 @@ func startMiner() {
 		uiDo(syncToggleStates)
 		return
 	}
+	// Resolve the miner daemon address from the connected node (supports remote nodes)
+	minerDaemonAddr = resolveMinerDaemonAddr()
 	go startEmbeddedMiner()
 }
 
