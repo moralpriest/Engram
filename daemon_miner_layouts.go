@@ -673,7 +673,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		return t
 	}
 
-	// Wallet Address
+	// Wallet Address (hidden by default for privacy)
 	entryWallet := widget.NewEntry()
 	entryWallet.PlaceHolder = "Enter your DERO wallet address"
 	if engram.Disk != nil {
@@ -683,6 +683,42 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 	entryWallet.OnChanged = func(s string) {
 		minerWalletAddr = s
+	}
+	entryWallet.Hide()
+
+	// Masked label shown instead of the raw address
+	addressHiddenLabel := canvas.NewText("● ● ● ● ● ● ● ● ● ●", apptheme.C.Gray)
+	addressHiddenLabel.TextSize = scaleFont(13)
+
+	// Visibility toggle (only from dashboard where wallet is open)
+	var addressBox *fyne.Container
+	if session.WalletOpen {
+		var addressToggleBtn *widget.Button
+		// Start hidden, set initial icon based on persisted state
+		if !session.AddressHidden {
+			entryWallet.Show()
+			addressHiddenLabel.Hide()
+		}
+		addressToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+			session.AddressHidden = !session.AddressHidden
+			if session.AddressHidden {
+				addressToggleBtn.SetIcon(theme.VisibilityIcon())
+				entryWallet.Hide()
+				addressHiddenLabel.Show()
+			} else {
+				addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+				entryWallet.Show()
+				addressHiddenLabel.Hide()
+			}
+		})
+	// Set initial icon based on persisted state
+	if !session.AddressHidden {
+		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+	}
+	addressToggleBtn.Importance = widget.LowImportance
+		addressBox = container.NewBorder(nil, nil, nil, addressToggleBtn, container.NewStack(addressHiddenLabel, entryWallet))
+	} else {
+		addressBox = container.NewHBox(addressHiddenLabel)
 	}
 
 	// Custom thread count entry (declared before radio group that references it)
@@ -749,7 +785,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	minerConfigBox := container.NewVBox(
 		newRectSpacer(),
 		makeField("Wallet Address"),
-		entryWallet,
+		addressBox,
 		newRectSpacer(),
 		makeField("Threads"),
 		wThreadPreset,
