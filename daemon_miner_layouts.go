@@ -37,6 +37,22 @@ type daemonInfoUI struct {
 
 var infoUI daemonInfoUI
 
+// minerStatsUI holds canvas.Text references for the miner statistics section.
+type minerStatsUI struct {
+	mu              sync.Mutex
+	hashrate        *canvas.Text
+	netHashrate     *canvas.Text
+	netShare        *canvas.Text
+	minisPerDay     *canvas.Text
+	eta             *canvas.Text
+	miniBlocks      *canvas.Text
+	lastReward      *canvas.Text
+	sessionDuration *canvas.Text
+	rejected        *canvas.Text
+}
+
+var minerStatsUIInstance minerStatsUI
+
 type daemonMinerState struct {
 	daemonState int
 	minerState  int
@@ -147,16 +163,13 @@ func openDownloadURL(urlStr string) {
 
 // showBinaryDownloadConfirm asks the user whether to download a missing binary,
 // then launches the download progress dialog.  onComplete is called on success.
-func showBinaryDownloadConfirm(binaryType string, onComplete func()) {
+func showBinaryDownloadConfirm(_ string, onComplete func()) {
 	name := daemonBinary()
-	if binaryType == "miner" {
-		name = minerBinary()
-	}
 
 	msg := fmt.Sprintf(i18n.T("daemon_miner.download_prompt"), name)
 	dlg := dialog.NewConfirm(i18n.T("daemon_miner.download_title"), msg, func(confirmed bool) {
 		if confirmed {
-			showBinaryDownloadProgress(binaryType, onComplete, nil)
+			showBinaryDownloadProgress(name, onComplete, nil)
 		}
 	}, session.Window)
 	dlg.Show()
@@ -165,13 +178,8 @@ func showBinaryDownloadConfirm(binaryType string, onComplete func()) {
 // showBinaryDownloadProgress displays a progress dialog and downloads the binary
 // in the background.  onComplete is called (on the UI goroutine) on success;
 // onError is called on failure (before the error dialog is shown).
-func showBinaryDownloadProgress(binaryType string, onComplete func(), onError func()) {
-	name := daemonBinary()
+func showBinaryDownloadProgress(name string, onComplete func(), onError func()) {
 	source := daemonDownloadSource
-	if binaryType == "miner" {
-		name = minerBinary()
-		source = minerDownloadSource
-	}
 
 	// No auto-download source configured – open browser instead.
 	if source.Owner == "" || source.Repo == "" {
@@ -306,6 +314,175 @@ func updateInfoUILabels(info DaemonInfo) {
 	}
 }
 
+var refreshMinerStatsOnce sync.Once
+
+// startMinerStatsRefresh starts a background goroutine that periodically
+// reads mining stats and refreshes the UI.
+func startMinerStatsRefresh() {
+	refreshMinerStatsOnce.Do(func() {
+		go func() {
+			for {
+				time.Sleep(2 * time.Second)
+				uiDo(func() {
+					updateMinerStatsUI()
+				})
+			}
+		}()
+	})
+}
+
+// updateMinerStatsUI updates the miner statistics canvas text elements with the latest stats.
+func updateMinerStatsUI() {
+	stats := GetMiningStats()
+
+	// Fallback: use daemon's direct hashrate estimate, or derive from difficulty
+	if stats.NetHashrate <= 0 {
+		info := getCachedDaemonInfo()
+		if info.Hashrate1hr > 0 {
+			stats.NetHashrate = info.Hashrate1hr
+			stats.NetHashStr = formatHashrate(stats.NetHashrate)
+		} else if info.Difficulty > 0 {
+			stats.NetHashrate = float64(info.Difficulty) / 1.8
+			stats.NetHashStr = formatHashrate(stats.NetHashrate)
+		}
+	}
+
+	minerStatsUIInstance.mu.Lock()
+	defer minerStatsUIInstance.mu.Unlock()
+
+	// Format session duration
+	var durationStr string
+	if d := stats.SessionDuration(); d > 0 {
+		h := int(d.Hours())
+		m := int(d.Minutes()) % 60
+		s := int(d.Seconds()) % 60
+		if h > 0 {
+			durationStr = fmt.Sprintf("%dh %dm", h, m)
+		} else if m > 0 {
+			durationStr = fmt.Sprintf("%dm %ds", m, s)
+		} else {
+			durationStr = fmt.Sprintf("%ds", s)
+		}
+	} else {
+		durationStr = "—"
+	}
+
+	// Format ETA
+	var etaStr string
+	if d := stats.ETA(); d > 0 {
+		if d < time.Hour {
+			m := int(d.Minutes())
+			s := int(d.Seconds()) % 60
+			etaStr = fmt.Sprintf("~%dm %ds", m, s)
+		} else if d < 24*time.Hour {
+			h := int(d.Hours())
+			m := int(d.Minutes()) % 60
+			etaStr = fmt.Sprintf("~%dh %dm", h, m)
+		} else {
+			days := int(d.Hours()) / 24
+			hours := int(d.Hours()) % 24
+			etaStr = fmt.Sprintf("~%dd %dh", days, hours)
+		}
+	} else {
+		etaStr = "—"
+	}
+
+	// Format last reward time
+	var rewardStr string
+	if !stats.LastRewardTime.IsZero() {
+		ago := time.Since(stats.LastRewardTime)
+		if ago < time.Minute {
+			rewardStr = fmt.Sprintf("%.0fs ago", ago.Seconds())
+		} else if ago < time.Hour {
+			rewardStr = fmt.Sprintf("%.0fm ago", ago.Minutes())
+		} else {
+			rewardStr = fmt.Sprintf("%.0fh ago", ago.Hours())
+		}
+	} else {
+		rewardStr = "—"
+	}
+
+	// Speed string
+	speedStr := stats.SpeedStr
+	if speedStr == "" {
+		speedStr = "—"
+	}
+
+	// Net hash string
+	netHashStr := stats.NetHashStr
+	if netHashStr == "" {
+		netHashStr = "—"
+	}
+
+	// Calculate net share and expected mini-blocks per day
+	shareStr := "—"
+	minisPerDayStr := "—"
+	if stats.CurrentHashrate > 0 && stats.NetHashrate > 0 {
+		shareVal := (stats.CurrentHashrate / stats.NetHashrate) * 100.0
+		if shareVal < 0.0001 {
+			shareStr = fmt.Sprintf("%.6f%%", shareVal)
+		} else if shareVal < 0.01 {
+			shareStr = fmt.Sprintf("%.4f%%", shareVal)
+		} else {
+			shareStr = fmt.Sprintf("%.3f%%", shareVal)
+		}
+
+		minisVal := 48000.0 * (stats.CurrentHashrate / stats.NetHashrate)
+		if minisVal < 0.01 {
+			minisPerDayStr = fmt.Sprintf("%.4f", minisVal)
+		} else {
+			minisPerDayStr = fmt.Sprintf("%.2f", minisVal)
+		}
+	}
+
+	// Mini blocks count
+	miniBlocksStr := fmt.Sprintf("%d", stats.MiniBlocks)
+	if stats.MiniBlocks == 0 {
+		miniBlocksStr = "0"
+	}
+
+	// Rejected count
+	rejectedStr := fmt.Sprintf("%d", stats.Rejected)
+
+	// Update the canvas text objects
+	if minerStatsUIInstance.hashrate != nil {
+		minerStatsUIInstance.hashrate.Text = speedStr
+		minerStatsUIInstance.hashrate.Refresh()
+	}
+	if minerStatsUIInstance.netHashrate != nil {
+		minerStatsUIInstance.netHashrate.Text = netHashStr
+		minerStatsUIInstance.netHashrate.Refresh()
+	}
+	if minerStatsUIInstance.netShare != nil {
+		minerStatsUIInstance.netShare.Text = shareStr
+		minerStatsUIInstance.netShare.Refresh()
+	}
+	if minerStatsUIInstance.minisPerDay != nil {
+		minerStatsUIInstance.minisPerDay.Text = minisPerDayStr
+		minerStatsUIInstance.minisPerDay.Refresh()
+	}
+	if minerStatsUIInstance.eta != nil {
+		minerStatsUIInstance.eta.Text = etaStr
+		minerStatsUIInstance.eta.Refresh()
+	}
+	if minerStatsUIInstance.miniBlocks != nil {
+		minerStatsUIInstance.miniBlocks.Text = miniBlocksStr
+		minerStatsUIInstance.miniBlocks.Refresh()
+	}
+	if minerStatsUIInstance.lastReward != nil {
+		minerStatsUIInstance.lastReward.Text = rewardStr
+		minerStatsUIInstance.lastReward.Refresh()
+	}
+	if minerStatsUIInstance.sessionDuration != nil {
+		minerStatsUIInstance.sessionDuration.Text = durationStr
+		minerStatsUIInstance.sessionDuration.Refresh()
+	}
+	if minerStatsUIInstance.rejected != nil {
+		minerStatsUIInstance.rejected.Text = rejectedStr
+		minerStatsUIInstance.rejected.Refresh()
+	}
+}
+
 func layoutDaemonMiner() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 
@@ -359,25 +536,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	})
 
 	minerToggle = newToggleSwitch(minerIsRunning(), func(checked bool) {
-		if checked && findBinary(minerBinary()) == "" {
-			// Binary missing — show ON state immediately, download with progress, then start
-			dmState.minerState = dmStateRunning
-			showBinaryDownloadProgress("miner", func() {
-				go func() {
-					// Only start if user hasn't toggled OFF during the download
-					if minerIsRunning() {
-						startMiner()
-					}
-					uiDo(syncToggleStates)
-				}()
-			}, func() {
-				// Download failed — reset state back to stopped
-				dmState.minerState = dmStateStopped
-				uiDo(syncToggleStates)
-			})
-			return
-		}
-		// On UI goroutine — set state immediately so user sees toggle transition
 		if checked {
 			dmState.minerState = dmStateRunning
 			syncToggleStates()
@@ -610,8 +768,91 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	minerInfoBox := minerConfigBox
 
+	// Miner statistics section
+	minerStatsLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" STATS", apptheme.C.Gray)
+	minerStatsLabel.TextSize = scaleFont(14)
+	minerStatsLabel.Alignment = fyne.TextAlignCenter
+	minerStatsLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	statsLine1 := canvas.NewRectangle(apptheme.C.Gray)
+	statsLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	statsLineBox1 := container.NewVBox(layout.NewSpacer(), statsLine1, layout.NewSpacer())
+	statsLine2 := canvas.NewRectangle(apptheme.C.Gray)
+	statsLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	statsLineBox2 := container.NewVBox(layout.NewSpacer(), statsLine2, layout.NewSpacer())
+
+	statsSectionHeader := container.NewHBox(
+		layout.NewSpacer(),
+		statsLineBox1,
+		layout.NewSpacer(),
+		minerStatsLabel,
+		layout.NewSpacer(),
+		statsLineBox2,
+		layout.NewSpacer(),
+	)
+
+	// Miner statistics fields
+	statColor := apptheme.C.Gray
+
+	hashrateVal := canvas.NewText("—", statColor)
+	hashrateVal.TextSize = scaleFont(16)
+	netHashVal := canvas.NewText("—", statColor)
+	netHashVal.TextSize = scaleFont(16)
+	netShareVal := canvas.NewText("—", statColor)
+	netShareVal.TextSize = scaleFont(16)
+	minisPerDayVal := canvas.NewText("—", statColor)
+	minisPerDayVal.TextSize = scaleFont(16)
+	etaVal := canvas.NewText("—", statColor)
+	etaVal.TextSize = scaleFont(16)
+	miniBlocksVal := canvas.NewText("0", statColor)
+	miniBlocksVal.TextSize = scaleFont(16)
+	lastRewardVal := canvas.NewText("—", statColor)
+	lastRewardVal.TextSize = scaleFont(16)
+	sessionDurVal := canvas.NewText("—", statColor)
+	sessionDurVal.TextSize = scaleFont(16)
+	rejectedVal := canvas.NewText("0", statColor)
+	rejectedVal.TextSize = scaleFont(16)
+
+	// Store canvas text references for live updates
+	minerStatsUIInstance.mu.Lock()
+	minerStatsUIInstance.hashrate = hashrateVal
+	minerStatsUIInstance.netHashrate = netHashVal
+	minerStatsUIInstance.netShare = netShareVal
+	minerStatsUIInstance.minisPerDay = minisPerDayVal
+	minerStatsUIInstance.eta = etaVal
+	minerStatsUIInstance.miniBlocks = miniBlocksVal
+	minerStatsUIInstance.lastReward = lastRewardVal
+	minerStatsUIInstance.sessionDuration = sessionDurVal
+	minerStatsUIInstance.rejected = rejectedVal
+	minerStatsUIInstance.mu.Unlock()
+
+	minerStatsBox := container.NewVBox(
+		newRectSpacer(),
+		makeStatField("Hashrate", hashrateVal),
+		tightSpacer(),
+		makeStatField("Network Hashrate", netHashVal),
+		tightSpacer(),
+		makeStatField("Your Share", netShareVal),
+		tightSpacer(),
+		makeStatField("Est. Minis / Day", minisPerDayVal),
+		tightSpacer(),
+		makeStatField("ETA to Next Reward", etaVal),
+		tightSpacer(),
+		makeStatField("Mini Blocks (Session)", miniBlocksVal),
+		tightSpacer(),
+		makeStatField("Last Reward", lastRewardVal),
+		tightSpacer(),
+		makeStatField("Session Duration", sessionDurVal),
+		tightSpacer(),
+		makeStatField("Rejected Shares", rejectedVal),
+		newRectSpacer(),
+	)
+
+	// Start the background stats refresh
+	startMinerStatsRefresh()
+
 	// Miner section header (Settings style)
-	minerSectionLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" INFO", apptheme.C.Gray)
+	minerSectionLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" CONFIG", apptheme.C.Gray)
 	minerSectionLabel.TextSize = scaleFont(14)
 	minerSectionLabel.Alignment = fyne.TextAlignCenter
 	minerSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -636,7 +877,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Download links shown when binaries are missing
 	if findBinary(daemonBinary()) == "" {
 		linkDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
-			showBinaryDownloadProgress("daemon", nil, nil)
+			showBinaryDownloadProgress(daemonBinary(), nil, nil)
 		})
 		linkDerod.Importance = widget.LowImportance
 		daemonInfoBox.Add(linkDerod)
@@ -652,6 +893,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		newRectSpacer(),
 		minerSectionHeader,
 		minerInfoBox,
+		newRectSpacer(),
+		statsSectionHeader,
+		minerStatsBox,
 	)
 
 	if isMobile() {
@@ -693,6 +937,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 			newRectSpacer(),
 			minerSectionHeader,
 			minerInfoBox,
+			newRectSpacer(),
+			statsSectionHeader,
+			minerStatsBox,
 		)
 	}
 

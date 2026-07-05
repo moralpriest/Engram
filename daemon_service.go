@@ -57,20 +57,16 @@ var prioritySeedNodes = []string{
 
 var (
 	daemonCmd *exec.Cmd
-	minerCmd  *exec.Cmd
 	daemonMu  sync.Mutex
-	minerMu   sync.Mutex
 
 	daemonLog = newRingBuffer(200)
-	minerLog  = newRingBuffer(200)
 
 	minerThreads    int
 	minerWalletAddr string
 	minerDaemonAddr string
 
-	// Flags to prevent wait goroutines from overwriting state after clean shutdown.
 	daemonStopRequested atomic.Bool
-	minerStopRequested  atomic.Bool
+	miningStats         MiningStats
 )
 
 func init() {
@@ -141,11 +137,6 @@ func archiveBinaryName(name string) string {
 // daemonBinary returns the DEROHE daemon binary name for the current platform.
 func daemonBinary() string {
 	return archiveBinaryName("derod")
-}
-
-// minerBinary returns the DEROHE miner binary name for the current platform.
-func minerBinary() string {
-	return archiveBinaryName("dero-miner")
 }
 
 // findBinary locates a binary: first in AppPath()/bin, then system PATH.
@@ -316,132 +307,106 @@ func stopDaemon() {
 	dmState.daemonState = dmStateStopped
 }
 
-// startMiner launches the miner process.
+// startMiner launches the in-process miner.
 func startMiner() {
-	minerMu.Lock()
-	defer minerMu.Unlock()
-
-	if minerCmd != nil && minerCmd.Process != nil {
-		logger.Printf("[Miner] Already running (pid %d)", minerCmd.Process.Pid)
-		return
-	}
-
-	binary := findBinary(minerBinary())
-	if binary == "" {
-		logger.Printf("[Miner] Binary not found: %s", minerBinary())
-		dmState.minerState = dmStateError
-		return
-	}
-
 	if minerWalletAddr == "" && engram.Disk != nil {
 		minerWalletAddr = engram.Disk.GetAddress().String()
 	}
 	if minerWalletAddr == "" {
 		logger.Printf("[Miner] No wallet address configured")
 		dmState.minerState = dmStateError
-		return
-	}
-
-	args := getMinerArgs(binary)
-
-	cmd := exec.Command(binary, args...)
-	cmd.Stdout = io.MultiWriter(os.Stdout, minerLog)
-	cmd.Stderr = io.MultiWriter(os.Stderr, minerLog)
-
-	if err := cmd.Start(); err != nil {
-		logger.Printf("[Miner] Failed to start: %v", err)
-		dmState.minerState = dmStateError
-		return
-	}
-
-	minerCmd = cmd
-	dmState.minerState = dmStateRunning
-	logger.Printf("[Miner] Started (pid %d, binary: %s, threads: %d)", cmd.Process.Pid, binary, minerThreads)
-
-	go func() {
-		err := cmd.Wait()
-		minerMu.Lock()
-		wasStopped := minerCmd == nil
-		if !wasStopped {
-			minerCmd = nil
-		}
-		minerMu.Unlock()
-
-		if minerStopRequested.Load() {
-			minerStopRequested.Store(false)
-			return
-		}
-
-		if err != nil {
-			logger.Printf("[Miner] Exited: %v", err)
-			dmState.minerState = dmStateError
-		} else {
-			logger.Printf("[Miner] Stopped")
-			if dmState.minerState != dmStateStopped {
-				dmState.minerState = dmStateStopped
-			}
-		}
 		uiDo(syncToggleStates)
-	}()
-}
-
-// getMinerArgs builds CLI arguments for dero-miner.
-func getMinerArgs(_ string) []string {
-	return []string{
-		fmt.Sprintf("--wallet-address=%s", minerWalletAddr),
-		fmt.Sprintf("--daemon-rpc-address=%s", minerDaemonAddr),
-		fmt.Sprintf("--mining-threads=%d", minerThreads),
-	}
-}
-
-// stopMiner gracefully stops the miner process.
-func stopMiner() {
-	minerMu.Lock()
-	defer minerMu.Unlock()
-
-	if minerCmd == nil || minerCmd.Process == nil {
-		logger.Printf("[Miner] Not running")
 		return
 	}
+	go startEmbeddedMiner()
+}
 
-	minerStopRequested.Store(true)
-
-	pid := minerCmd.Process.Pid
-	logger.Printf("[Miner] Stopping pid %d", pid)
-
-	if runtime.GOOS != "windows" {
-		minerCmd.Process.Signal(syscall.SIGTERM)
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- minerCmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		logger.Printf("[Miner] Stopped gracefully")
-	case <-time.After(5 * time.Second):
-		logger.Printf("[Miner] Force killing pid %d", pid)
-		minerCmd.Process.Kill()
-		<-done
-	}
-
-	minerCmd = nil
-	dmState.minerState = dmStateStopped
+// stopMiner stops the in-process miner.
+func stopMiner() {
+	stopEmbeddedMiner()
+	miningStats.mu.Lock()
+	miningStats.StartTime = time.Time{}
+	miningStats.CurrentHashrate = 0
+	miningStats.SpeedStr = ""
+	miningStats.LastRewardTime = time.Time{}
+	miningStats.mu.Unlock()
 }
 
 // DaemonInfo holds daemon status data fetched via get_info RPC.
 type DaemonInfo struct {
-	Height     uint64 `json:"height"`
-	Topoheight uint64 `json:"topoheight"`
-	Difficulty uint64 `json:"difficulty"`
-	Version    string `json:"version"`
-	Network    string `json:"network"`
-	InPeers    int    `json:"incoming_connections_count"`
-	OutPeers   int    `json:"outgoing_connections_count"`
-	TxPoolSize int    `json:"tx_pool_size"`
-	Status     string `json:"status"`
+	Height      uint64  `json:"height"`
+	Topoheight  uint64  `json:"topoheight"`
+	Difficulty  uint64  `json:"difficulty"`
+	Version     string  `json:"version"`
+	Network     string  `json:"network"`
+	InPeers     int     `json:"incoming_connections_count"`
+	OutPeers    int     `json:"outgoing_connections_count"`
+	TxPoolSize  int     `json:"tx_pool_size"`
+	Status      string  `json:"status"`
+	Hashrate1hr float64 `json:"hashrate_1hr"`
+	Hashrate1d  float64 `json:"hashrate_1d"`
+	Hashrate7d  float64 `json:"hashrate_7d"`
+}
+
+// MiningStats tracks real-time mining statistics.
+type MiningStats struct {
+	mu sync.Mutex
+
+	StartTime       time.Time // When the current mining session started
+	MiniBlocks      int64     // Total mini blocks found this session
+	Blocks          int64     // Total blocks found this session
+	Rejected        int64     // Total rejected shares
+	CurrentHashrate float64   // Local mining speed in H/s
+	NetHashrate     float64   // Network hashrate in H/s (from difficulty)
+	LastRewardTime  time.Time // When the last mini block was found
+	SpeedStr        string    // Formatted speed string (e.g. "20.0 KH/s")
+	NetHashStr      string    // Formatted network hashrate (e.g. "12.78 MH/s")
+}
+
+// ETA calculates the estimated time until the next mini-block reward.
+// Formula: (netHash / myHash) * 1.8 seconds per interval (10 mini-blocks per 18s block)
+func (ms *MiningStats) ETA() time.Duration {
+	if ms.CurrentHashrate <= 0 || ms.NetHashrate <= 0 {
+		return 0
+	}
+	ratio := ms.NetHashrate / ms.CurrentHashrate
+	expectedSeconds := ratio * 1.8
+	if expectedSeconds > 86400*7 { // cap at 1 week
+		expectedSeconds = 86400 * 7
+	}
+	return time.Duration(expectedSeconds) * time.Second
+}
+
+// SessionDuration returns how long the current mining session has been running.
+func (ms *MiningStats) SessionDuration() time.Duration {
+	if ms.StartTime.IsZero() {
+		return 0
+	}
+	return time.Since(ms.StartTime)
+}
+
+func formatHashrate(h float64) string {
+	switch {
+	case h >= 1e12:
+		return fmt.Sprintf("%.3f TH/s", h/1e12)
+	case h >= 1e9:
+		return fmt.Sprintf("%.3f GH/s", h/1e9)
+	case h >= 1e6:
+		return fmt.Sprintf("%.3f MH/s", h/1e6)
+	case h >= 1e3:
+		return fmt.Sprintf("%.3f KH/s", h/1e3)
+	default:
+		return fmt.Sprintf("%.0f H/s", h)
+	}
+}
+
+// GetMiningStats returns a thread-safe copy of the current mining stats.
+func GetMiningStats() MiningStats {
+	miningStats.mu.Lock()
+	defer miningStats.mu.Unlock()
+	cp := miningStats
+	cp.mu = sync.Mutex{}
+	return cp
 }
 
 type daemonInfoResponse struct {
@@ -845,10 +810,7 @@ type downloadBinarySource struct {
 	Repo  string
 }
 
-var (
-	daemonDownloadSource = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
-	minerDownloadSource  = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
-)
+var daemonDownloadSource = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
 
 // updateDaemonStateFromDetection refreshes dmState based on live checks.
 // Called periodically and on page load.
