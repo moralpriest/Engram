@@ -1442,41 +1442,6 @@ func refreshPermissionsAfterConnect() {
 	}()
 }
 
-// kickDaemonConnection forces a reconnect and sync without restarting the pulse loop.
-func kickDaemonConnection() {
-	// Wake any goroutine blocked on WaitNewHeightBlock (sync.Cond)
-	walletapi.NotifyHeightChange.Broadcast()
-	if err := walletapi.Connect(session.Daemon); err == nil {
-		setDaemonConnected(true)
-		if engram.Disk != nil {
-			engram.Disk.Sync_Wallet_Memory_With_Daemon()
-			refreshHistoryAsync(false)
-		}
-	}
-}
-
-// reconnectRPCClient closes any stale websocket-backed RPC connection and re-dials fresh.
-func reconnectRPCClient() {
-	// Close any stale connections
-	if rpc_client.RPC != nil {
-		rpc_client.RPC.Close()
-		rpc_client.RPC = nil
-	}
-	if rpc_client.WS != nil {
-		rpc_client.WS.Close()
-		rpc_client.WS = nil
-	}
-	ws, _, err := websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
-	if err != nil {
-		logger.Printf("[RPC] reconnectRPCClient failed: %v", err)
-		return
-	}
-	rpc_client.WS = ws
-	io := rwc.New(rpc_client.WS)
-	rpc_client.RPC = jrpc2.NewClient(channel.RawJSON(io, io), nil)
-	logger.Printf("[RPC] reconnectRPCClient succeeded")
-}
-
 func pulseReconnect(count int) (int, bool) {
 	logger.Printf("[Network] Attempting network connection to: %s\n", walletapi.Daemon_Endpoint)
 	err := walletapi.Connect(session.Daemon)
@@ -1735,8 +1700,6 @@ func StartPulse() {
 		sentNotifications := false
 		go func() {
 			count := 0
-			lastHeight := int64(-1)
-			heightStallSince := time.Now()
 			for isWalletGenerationActive(generation) {
 				if !session.WalletOpen {
 					break
@@ -1773,22 +1736,6 @@ func StartPulse() {
 
 					// heartbeat: track that the pulse loop is alive
 					lastPulseHeartbeat.Store(time.Now().UnixNano())
-
-					// 20s watchdog: if height hasn't changed for >20s while connected, kick
-					curHeight := int64(walletapi.Get_Daemon_Height())
-					if curHeight > 0 {
-						if curHeight == lastHeight {
-							if time.Since(heightStallSince) > 20*time.Second && isDaemonConnected() {
-								logger.Printf("[Watchdog] daemon height stuck at %d for >20s — kicking", curHeight)
-								kickDaemonConnection()
-								// reset to avoid repeated kicks
-								heightStallSince = time.Now()
-							}
-						} else {
-							lastHeight = curHeight
-							heightStallSince = time.Now()
-						}
-					}
 
 					time.Sleep(time.Second)
 				}

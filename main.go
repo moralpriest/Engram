@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	_ "image/gif"
@@ -87,6 +88,7 @@ var ui UI
 var appExiting bool
 var previousDomain string
 var lastForegroundTime int64           // unix timestamp of last foreground event (for cooldown)
+var foregroundActive atomic.Bool       // dedup foreground handler (mobile double-fire guard)
 var currentScrollBox *container.Scroll // tracks current page's scroll container for mobile input scrolling
 
 func main() {
@@ -253,6 +255,12 @@ func main() {
 	a.Lifecycle().SetOnEnteredForeground(func() {
 		isMobileDevice := a.Driver().Device().IsMobile()
 
+		if !foregroundActive.CompareAndSwap(false, true) {
+			logger.Printf("[Lifecycle] Foreground already active — skipping duplicate event")
+			return
+		}
+		defer foregroundActive.Store(false)
+
 		now := time.Now().Unix()
 		if telaViewActive.Load() {
 			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
@@ -291,33 +299,22 @@ func main() {
 					return
 				}
 
-				if !session.Offline {
-					reconnectRPCClient()
-				}
-
 				if isMobileDevice {
-					if pulseRunning && !pulseIsStalled() {
-						logger.Printf("[Lifecycle] Mobile foreground - pulse alive, light kick")
-						kickDaemonConnection()
-					} else if pulseRunning {
+					if pulseRunning && pulseIsStalled() {
 						logger.Printf("[Lifecycle] Mobile foreground - pulse stalled, force restart")
 						bumpPulseGeneration()
 						go StartPulse()
-					} else {
+					} else if !pulseRunning {
 						logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
 						go StartPulse()
+					} else {
+						logger.Printf("[Lifecycle] Mobile foreground - pulse alive, skipping restart")
 					}
 					refreshForegroundUI("[Lifecycle] UI refreshed after foreground (mobile)")
 					return
 				}
 
 				refreshForegroundUI("[Lifecycle] UI refreshed after foreground")
-
-				if !isWalletGenerationActive(generation) {
-					return
-				}
-				kickDaemonConnection()
-				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
 			fyne.Do(func() {
