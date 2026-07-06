@@ -256,7 +256,7 @@ func main() {
 		now := time.Now().Unix()
 		if telaViewActive.Load() {
 			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
-		} else if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+		} else if now-lastForegroundTime < 5 && lastForegroundTime > 0 {
 			return
 		}
 		lastForegroundTime = now
@@ -291,15 +291,18 @@ func main() {
 					return
 				}
 
-				if !session.Offline && rpc_client.RPC == nil {
-					logger.Printf("[Lifecycle] RPC connection lost, will reconnect naturally")
+				if !session.Offline {
+					reconnectRPCClient()
 				}
 
 				if isMobileDevice {
-					// Skip StartPulse if pulse is already running to avoid
-					// disrupting active XSWD/EPOCH connections during TELA use.
-					if pulseRunning {
-						logger.Printf("[Lifecycle] Mobile foreground - pulse already running, skipping reconnection")
+					if pulseRunning && !pulseIsStalled() {
+						logger.Printf("[Lifecycle] Mobile foreground - pulse alive, light kick")
+						kickDaemonConnection()
+					} else if pulseRunning {
+						logger.Printf("[Lifecycle] Mobile foreground - pulse stalled, force restart")
+						bumpPulseGeneration()
+						go StartPulse()
 					} else {
 						logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
 						go StartPulse()
@@ -313,6 +316,7 @@ func main() {
 				if !isWalletGenerationActive(generation) {
 					return
 				}
+				kickDaemonConnection()
 				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
