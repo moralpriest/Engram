@@ -300,16 +300,13 @@ func main() {
 				}
 
 				if isMobileDevice {
-					if pulseRunning && pulseIsStalled() {
-						logger.Printf("[Lifecycle] Mobile foreground - pulse stalled, force restart")
-						bumpPulseGeneration()
-						go StartPulse()
-					} else if !pulseRunning {
-						logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
-						go StartPulse()
-					} else {
-						logger.Printf("[Lifecycle] Mobile foreground - pulse alive, skipping restart")
-					}
+					// After backgrounding, the TCP connection is likely dead but the
+					// daemonConnected flag may still be true (Android kills sockets
+					// silently). Reset it and bump generation to force a fresh
+					// StartPulse that enters the reconnect block.
+					setDaemonConnected(false)
+					bumpPulseGeneration()
+					go StartPulse()
 					refreshForegroundUI("[Lifecycle] UI refreshed after foreground (mobile)")
 					return
 				}

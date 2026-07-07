@@ -389,6 +389,8 @@ func bumpPulseGeneration() {
 	pulseRunning = false
 	pulseSessionGeneration = 0
 	walletSessionMu.Unlock()
+	// Wake any push goroutines stuck on WaitNewHeightBlock
+	walletapi.NotifyHeightChange.Broadcast()
 }
 
 var appExitFlag atomic.Bool
@@ -1700,6 +1702,8 @@ func StartPulse() {
 		sentNotifications := false
 		go func() {
 			count := 0
+			lastDaemonHeight := int64(-1)
+			heightStallSince := time.Now()
 			for isWalletGenerationActive(generation) {
 				if !session.WalletOpen {
 					break
@@ -1736,6 +1740,25 @@ func StartPulse() {
 
 					// heartbeat: track that the pulse loop is alive
 					lastPulseHeartbeat.Store(time.Now().UnixNano())
+
+					// Dead-connection detection: if daemon height hasn't changed
+					// for 90s while "connected", the TCP socket is likely dead
+					// (Android killed it on background). Just flip the flag;
+					// the next iteration's reconnect check handles the rest.
+					if isDaemonConnected() {
+						curDaemonHeight := int64(walletapi.Get_Daemon_Height())
+						if curDaemonHeight > 0 {
+							if curDaemonHeight == lastDaemonHeight {
+								if time.Since(heightStallSince) > 90*time.Second {
+									logger.Printf("[Pulse] daemon height stalled at %d for >90s — marking connection dead", curDaemonHeight)
+									setDaemonConnected(false)
+								}
+							} else {
+								lastDaemonHeight = curDaemonHeight
+								heightStallSince = time.Now()
+							}
+						}
+					}
 
 					time.Sleep(time.Second)
 				}
