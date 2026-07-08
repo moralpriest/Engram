@@ -347,25 +347,25 @@ func minerStatsLoop() {
 			}
 		}
 
-		// Network hashrate from difficulty (job.Difficulty)
-		if minerDifficulty > 0 {
-			netHash := float64(minerDifficulty) / 1.8
-			if netHash > 0 {
-				miningStats.NetHashrate = netHash
-				switch {
-				case netHash > 1e12:
-					miningStats.NetHashStr = fmt.Sprintf("%.3f TH/s", netHash/1e12)
-				case netHash > 1e9:
-					miningStats.NetHashStr = fmt.Sprintf("%.3f GH/s", netHash/1e9)
-				case netHash > 1e6:
-					miningStats.NetHashStr = fmt.Sprintf("%.3f MH/s", netHash/1e6)
-				case netHash > 1000:
-					miningStats.NetHashStr = fmt.Sprintf("%.3f KH/s", netHash/1000)
-				default:
-					miningStats.NetHashStr = fmt.Sprintf("%.0f H/s", netHash)
-				}
+	// Network hashrate from difficulty (job.Difficulty)
+	if minerDifficulty > 0 {
+		netHash := float64(minerDifficulty) / 1.8
+		if netHash > 0 {
+			miningStats.NetHashrate = netHash
+			switch {
+			case netHash > 1e12:
+				miningStats.NetHashStr = fmt.Sprintf("%.3f TH/s", netHash/1e12)
+			case netHash > 1e9:
+				miningStats.NetHashStr = fmt.Sprintf("%.3f GH/s", netHash/1e9)
+			case netHash > 1e6:
+				miningStats.NetHashStr = fmt.Sprintf("%.3f MH/s", netHash/1e6)
+			case netHash > 1000:
+				miningStats.NetHashStr = fmt.Sprintf("%.3f KH/s", netHash/1000)
+			default:
+				miningStats.NetHashStr = fmt.Sprintf("%.0f H/s", netHash)
 			}
 		}
+	}
 
 		// Rejected shares from daemon's getwork
 		miningStats.Rejected = int64(atomic.LoadUint64(&rejectedCounter))

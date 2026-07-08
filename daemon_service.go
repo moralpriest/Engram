@@ -15,29 +15,31 @@
 package main
 
 import (
-	"archive/tar"
-	"archive/zip"
 	"bytes"
-	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/civilware/tela/logger"
+
+	// DERO HE embedded daemon
+	"github.com/deroproject/derohe/blockchain"
+	"github.com/deroproject/derohe/globals"
+	"github.com/deroproject/derohe/p2p"
 )
 
 // Priority seed nodes from user's start-derod.sh
+var embeddedHTTPServer *http.Server
+
 var prioritySeedNodes = []string{
 	"82.65.143.182:11011",
 	"204.12.199.25:11011",
@@ -57,17 +59,16 @@ var prioritySeedNodes = []string{
 }
 
 var (
-	daemonCmd *exec.Cmd
-	daemonMu  sync.Mutex
+	daemonMu sync.Mutex
 
-	daemonLog = newRingBuffer(200)
+	minerThreads            int
+	minerWalletAddr         string
+	minerDaemonAddr         string
+	daemonMode              string                 // "full" or "pruned" - persisted
+	daemonIntegratorAddress string                 // optional integrator reward address
+	globalChain             *blockchain.Blockchain // embedded daemon instance
 
-	minerThreads    int
-	minerWalletAddr string
-	minerDaemonAddr string
-
-	daemonStopRequested atomic.Bool
-	miningStats         MiningStats
+	miningStats MiningStats
 )
 
 func init() {
@@ -77,80 +78,8 @@ func init() {
 		minerThreads = 1
 	}
 	// minerDaemonAddr resolved dynamically in startMiner()
-}
 
-// ringBuffer is a circular buffer for capturing process output.
-type ringBuffer struct {
-	mu    sync.Mutex
-	lines []string
-	size  int
-	pos   int
-	full  bool
-}
-
-func newRingBuffer(size int) *ringBuffer {
-	return &ringBuffer{lines: make([]string, size), size: size}
-}
-
-func (rb *ringBuffer) Write(p []byte) (n int, err error) {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	for _, line := range strings.Split(string(p), "\n") {
-		if line == "" {
-			continue
-		}
-		rb.lines[rb.pos] = line
-		rb.pos = (rb.pos + 1) % rb.size
-		if rb.pos == 0 {
-			rb.full = true
-		}
-	}
-	return len(p), nil
-}
-
-func (rb *ringBuffer) Lines() []string {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	if !rb.full {
-		result := make([]string, rb.pos)
-		copy(result, rb.lines[:rb.pos])
-		return result
-	}
-	result := make([]string, rb.size)
-	copy(result, rb.lines[rb.pos:])
-	copy(result[rb.size-rb.pos:], rb.lines[:rb.pos])
-	return result
-}
-
-// archiveBinaryName returns the platform-suffixed binary name used inside DEROHE
-// release archives (e.g. derod-linux-amd64, derod-darwin, derod-windows-amd64.exe).
-func archiveBinaryName(name string) string {
-	switch runtime.GOOS {
-	case "darwin":
-		return fmt.Sprintf("%s-%s", name, runtime.GOOS)
-	case "windows":
-		return fmt.Sprintf("%s-%s-%s.exe", name, runtime.GOOS, runtime.GOARCH)
-	default:
-		return fmt.Sprintf("%s-%s-%s", name, runtime.GOOS, runtime.GOARCH)
-	}
-}
-
-// daemonBinary returns the DEROHE daemon binary name for the current platform.
-func daemonBinary() string {
-	return archiveBinaryName("derod")
-}
-
-// findBinary locates a binary: first in AppPath()/bin, then system PATH.
-func findBinary(name string) string {
-	local := filepath.Join(AppPath(), "bin", name)
-	if _, err := os.Stat(local); err == nil {
-		return local
-	}
-	path, err := exec.LookPath(name)
-	if err == nil {
-		return path
-	}
-	return ""
+	loadDaemonConfig()
 }
 
 // daemonDataDir returns the per-network data directory.
@@ -174,13 +103,227 @@ func daemonRPCAddress() string {
 	}
 }
 
-// getDaemonArgs builds CLI arguments for derod.
-func getDaemonArgs() []string {
+// startDaemon launches the embedded derod process (compiled from source).
+func startDaemon() {
+	daemonMu.Lock()
+	defer daemonMu.Unlock()
+
+	if globalChain != nil {
+		logger.Printf("[Daemon] Already running (embedded)")
+		return
+	}
+
 	dataDir := daemonDataDir()
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		logger.Printf("[Daemon] Failed to create data dir %s: %v", dataDir, err)
+		dmState.daemonState = dmStateError
+		return
+	}
+
+	// Always use embedded daemon (built from source) on all platforms
+	// No external binary download required
+	startEmbeddedDaemon(dataDir)
+}
+
+// stopDaemon gracefully stops the daemon process.
+func stopDaemon() {
+	daemonMu.Lock()
+	defer daemonMu.Unlock()
+
+	// Stop embedded daemon if running
+	if globalChain != nil {
+		logger.Printf("[Daemon] Stopping embedded daemon...")
+		// Stop the RPC server first
+		if embeddedHTTPServer != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			embeddedHTTPServer.Shutdown(ctx)
+			embeddedHTTPServer = nil
+		}
+		close(globalChain.Exit_Event)
+		globalChain = nil
+		dmState.daemonState = dmStateStopped
+		uiDo(syncToggleStates)
+		return
+	}
+
+	logger.Printf("[Daemon] Not running")
+}
+
+func loadDaemonConfig() {
+	// Load persisted daemon mode
+	if val, err := GetEncryptedValue("settings", []byte("daemon_mode")); err == nil && len(val) > 0 {
+		daemonMode = string(val)
+	}
+	if daemonMode == "" {
+		daemonMode = "pruned" // default to pruned
+	}
+
+	// Load persisted integrator address
+	if val, err := GetEncryptedValue("settings", []byte("daemon_integrator")); err == nil && len(val) > 0 {
+		daemonIntegratorAddress = string(val)
+	}
+
+	// Load force full mode preference
+	loadForceFullMode()
+}
+
+func saveDaemonMode(mode string) {
+	daemonMode = mode
+	StoreEncryptedValue("settings", []byte("daemon_mode"), []byte(mode))
+}
+
+func saveIntegratorAddress(addr string) {
+	daemonIntegratorAddress = addr
+	StoreEncryptedValue("settings", []byte("daemon_integrator"), []byte(addr))
+}
+
+var forceFullMode bool
+
+func loadForceFullMode() {
+	if val, err := GetEncryptedValue("settings", []byte("force_full_mode")); err == nil && len(val) > 0 {
+		forceFullMode = string(val) == "true"
+	}
+	logger.Printf("[Daemon] Force Full Mode: %v", forceFullMode)
+}
+
+func saveForceFullMode(force bool) {
+	forceFullMode = force
+	if force {
+		StoreEncryptedValue("settings", []byte("force_full_mode"), []byte("true"))
+	} else {
+		StoreEncryptedValue("settings", []byte("force_full_mode"), []byte("false"))
+	}
+}
+
+// startEmbeddedRPCServer starts a lightweight HTTP JSON-RPC server for the embedded daemon.
+// This allows fetchDaemonInfo() to reach the daemon for sync status detection.
+// We implement this ourselves because the derohe fork's cmd/derod/rpc package has build errors.
+func startEmbeddedRPCServer() {
+	// Determine RPC port based on network
+	rpcAddr := daemonRPCAddress()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json_rpc", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Read and parse the JSON-RPC request
+		var req struct {
+			JsonRPC string `json:"jsonrpc"`
+			Method  string `json:"method"`
+			ID      string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+
+		// Only handle get_info method
+		if req.Method != "get_info" {
+			resp := map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      req.ID,
+				"error":   map[string]interface{}{"code": -32601, "message": "Method not found"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		// Build daemon info from the embedded blockchain
+		chain := globalChain
+		info := DaemonInfo{
+			Height:       0,
+			Topoheight:   0,
+			Difficulty:   0,
+			Version:      "embedded",
+			Network:      "mainnet",
+			InPeers:      0,
+			OutPeers:     0,
+			TxPoolSize:   0,
+			Status:       "OK",
+			Synchronized: false,
+		}
+
+		if chain != nil {
+			chain.RLock()
+			height := chain.Get_Height()
+			topoHeight := chain.Load_TOPO_HEIGHT()
+			diff := chain.Get_Difficulty()
+			chain.RUnlock()
+
+			info.Height = uint64(height)
+			info.Topoheight = uint64(topoHeight)
+			info.Difficulty = uint64(diff)
+
+			// Determine if synced: height close to topoheight means caught up
+			if height > 0 && topoHeight > 0 && (topoHeight-height) <= 10 {
+				info.Synchronized = true
+				info.Status = "OK"
+			} else if height > 0 {
+				info.Status = "SYNCHRONIZING"
+			}
+
+			// Get peer counts
+			outCount, inCount := p2p.Peer_Direction_Count()
+			info.OutPeers = int(outCount)
+			info.InPeers = int(inCount)
+			logger.Printf("[Daemon RPC] Peer counts: InPeers=%d OutPeers=%d (height=%d topo=%d)", info.InPeers, info.OutPeers, info.Height, info.Topoheight)
+
+			// Get network name
+			info.Network = session.Network
+		}
+
+		resp := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      req.ID,
+			"result":  info,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	server := &http.Server{
+		Addr:    rpcAddr,
+		Handler: mux,
+	}
+
+	embeddedHTTPServer = server
+
+	logger.Printf("[Daemon] Starting embedded RPC server on %s", rpcAddr)
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Printf("[Daemon] RPC server error: %v", err)
+	}
+}
+
+// startEmbeddedDaemon starts the daemon in-process using the derohe library (mobile/fallback).
+func startEmbeddedDaemon(dataDir string) {
+	logger.Printf("[Daemon] Starting embedded daemon (data-dir: %s)", dataDir)
+	// Verify data directory is writable
+	testFile := filepath.Join(dataDir, ".engram_write_test")
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		logger.Printf("[Daemon] WARNING: Cannot create data directory %s: %v", dataDir, err)
+	} else if err := os.WriteFile(testFile, []byte("ok"), 0644); err != nil {
+		logger.Printf("[Daemon] WARNING: Data directory %s is NOT writable: %v", dataDir, err)
+	} else {
+		os.Remove(testFile)
+		logger.Printf("[Daemon] Data directory %s is writable", dataDir)
+	}
+
+	// Set globals.Arguments with our configuration (simulates CLI args)
+	// This is required by blockchain.Blockchain_Start which reads from globals.Arguments
+	if globals.Arguments == nil {
+		globals.Arguments = make(map[string]interface{})
+	}
+	globals.Arguments["--data-dir"] = dataDir
+
+	// Determine network-specific ports for the embedded daemon
 	rpcPort := DEFAULT_DAEMON_PORT
 	p2pPort := 10101
 	workPort := DEFAULT_WORK_PORT
-
 	if session.Network == NETWORK_TESTNET {
 		rpcPort = DEFAULT_TESTNET_DAEMON_PORT
 		p2pPort = 40401
@@ -191,121 +334,117 @@ func getDaemonArgs() []string {
 		workPort = 20000
 	}
 
-	args := []string{
-		"--data-dir", dataDir,
-		"--rpc-bind", fmt.Sprintf("127.0.0.1:%d", rpcPort),
-		"--p2p-bind", fmt.Sprintf("0.0.0.0:%d", p2pPort),
-		"--getwork-bind", fmt.Sprintf("0.0.0.0:%d", workPort),
-	}
+	// Bind RPC, P2P, and getwork servers so the daemon's RPC is reachable locally
+	globals.Arguments["--rpc-bind"] = fmt.Sprintf("127.0.0.1:%d", rpcPort)
+	globals.Arguments["--p2p-bind"] = fmt.Sprintf("127.0.0.1:%d", p2pPort)
+	globals.Arguments["--getwork-bind"] = fmt.Sprintf("0.0.0.0:%d", workPort)
 
+	// Add priority seed nodes for faster peer discovery (collect all into a slice)
+	var priorityNodes []string
 	for _, node := range prioritySeedNodes {
-		args = append(args, "--add-priority-node", node)
+		priorityNodes = append(priorityNodes, node)
+	}
+	if len(priorityNodes) > 0 {
+		globals.Arguments["--add-priority-node"] = priorityNodes
 	}
 
-	return args
-}
-
-// startDaemon launches the derod process.
-func startDaemon() {
-	daemonMu.Lock()
-	defer daemonMu.Unlock()
-
-	if daemonCmd != nil && daemonCmd.Process != nil {
-		logger.Printf("[Daemon] Already running (pid %d)", daemonCmd.Process.Pid)
-		return
+	// Time sync was already verified by checkSystemHealth - tell the daemon
+	globals.TimeIsInSync = true
+	if len(priorityNodes) > 0 {
+		logger.Printf("[Daemon] Using %d priority seed nodes: %v", len(priorityNodes), priorityNodes)
+	} else {
+		logger.Printf("[Daemon] No priority seed nodes configured")
 	}
 
-	binary := findBinary(daemonBinary())
-	if binary == "" {
-		logger.Printf("[Daemon] Binary not found: %s", daemonBinary())
+	// Initialize globals (logging, network mode)
+	globals.Initialize()
+
+	// Build params for Blockchain_Start (include RPC/P2P binds so the server starts)
+	params := map[string]interface{}{
+		"--data-dir": dataDir,
+		"--rpc-bind": fmt.Sprintf("127.0.0.1:%d", rpcPort),
+		"--p2p-bind": fmt.Sprintf("127.0.0.1:%d", p2pPort),
+	}
+	if session.Network == NETWORK_TESTNET {
+		params["--testnet"] = ""
+	}
+	if len(priorityNodes) > 0 {
+		params["--add-priority-node"] = priorityNodes
+	}
+	if daemonIntegratorAddress != "" {
+		params["--integrator-address"] = daemonIntegratorAddress
+	}
+
+	// Prune blockchain if configured
+	if daemonMode == "pruned" {
+		logger.Printf("[Daemon] Pruning blockchain history...")
+		if err := blockchain.Prune_Blockchain(50); err != nil {
+			logger.Printf("[Daemon] Pruning completed: %v", err)
+		}
+	}
+
+	// Start the blockchain
+	chain, err := blockchain.Blockchain_Start(params)
+	if err != nil {
+		logger.Printf("[Daemon] Failed to start blockchain: %v", err)
 		dmState.daemonState = dmStateError
 		return
 	}
+	globalChain = chain
 
-	args := getDaemonArgs()
-	dataDir := daemonDataDir()
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		logger.Printf("[Daemon] Failed to create data dir %s: %v", dataDir, err)
-		dmState.daemonState = dmStateError
-		return
+	// Initialize P2P networking (connects to peers for sync)
+	params["chain"] = chain
+	if err := p2p.P2P_Init(params); err != nil {
+		logger.Printf("[Daemon] P2P_Init FAILED: %v", err)
+	} else {
+		logger.Printf("[Daemon] P2P_Init succeeded")
 	}
 
-	cmd := exec.Command(binary, args...)
-	cmd.Stdout = io.MultiWriter(os.Stdout, daemonLog)
-	cmd.Stderr = io.MultiWriter(os.Stderr, daemonLog)
-
-	if err := cmd.Start(); err != nil {
-		logger.Printf("[Daemon] Failed to start: %v", err)
-		dmState.daemonState = dmStateError
-		return
-	}
-
-	daemonCmd = cmd
-	dmState.daemonState = dmStateRunning
-	logger.Printf("[Daemon] Started (pid %d, binary: %s)", cmd.Process.Pid, binary)
-
+	// Start verbose P2P debugging for mobile (logs peer connections periodically)
 	go func() {
-		err := cmd.Wait()
-		daemonMu.Lock()
-		wasStopped := daemonCmd == nil
-		if !wasStopped {
-			daemonCmd = nil
-		}
-		daemonMu.Unlock()
-
-		if daemonStopRequested.Load() {
-			daemonStopRequested.Store(false)
-			return
-		}
-
-		if err != nil {
-			logger.Printf("[Daemon] Exited: %v", err)
-			dmState.daemonState = dmStateError
-		} else {
-			logger.Printf("[Daemon] Stopped")
-			if dmState.daemonState != dmStateStopped {
-				dmState.daemonState = dmStateStopped
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if globalChain == nil {
+					return // Daemon stopped
+				}
+				outPeers, inPeers := p2p.Peer_Direction_Count()
+				globalChain.RLock()
+				height := globalChain.Get_Height()
+				topoHeight := globalChain.Load_TOPO_HEIGHT()
+				globalChain.RUnlock()
+				logger.Printf("[Daemon P2P Debug] Peers: Out=%d In=%d Height=%d TopoHeight=%d",
+					outPeers, inPeers, height, topoHeight)
+			case <-globalChain.Exit_Event:
+				return
 			}
 		}
+	}()
+
+	// Start the JSON-RPC server so fetchDaemonInfo() can reach this daemon
+	// We use a lightweight HTTP server instead of the broken derohe RPC package
+	go startEmbeddedRPCServer()
+
+	dmState.daemonState = dmStateConnecting // Start in connecting state since we need to sync
+	logger.Printf("[Daemon] Embedded daemon started successfully")
+
+	// Monitor for exit
+	go func() {
+		<-globalChain.Exit_Event
+		logger.Printf("[Daemon] Embedded daemon stopped")
+		// Stop the RPC server
+		if embeddedHTTPServer != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			embeddedHTTPServer.Shutdown(ctx)
+			embeddedHTTPServer = nil
+		}
+		globalChain = nil
+		dmState.daemonState = dmStateStopped
 		uiDo(syncToggleStates)
 	}()
-}
-
-// stopDaemon gracefully stops the daemon process.
-func stopDaemon() {
-	daemonMu.Lock()
-	defer daemonMu.Unlock()
-
-	if daemonCmd == nil || daemonCmd.Process == nil {
-		logger.Printf("[Daemon] Not running")
-		return
-	}
-
-	daemonStopRequested.Store(true)
-
-	pid := daemonCmd.Process.Pid
-	logger.Printf("[Daemon] Stopping pid %d", pid)
-
-	if runtime.GOOS != "windows" {
-		daemonCmd.Process.Signal(syscall.SIGTERM)
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- daemonCmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		logger.Printf("[Daemon] Stopped gracefully")
-	case <-time.After(10 * time.Second):
-		logger.Printf("[Daemon] Force killing pid %d", pid)
-		daemonCmd.Process.Kill()
-		<-done
-	}
-
-	daemonCmd = nil
-	dmState.daemonState = dmStateStopped
 }
 
 func resolveMinerDaemonAddr() string {
@@ -364,18 +503,19 @@ func stopMiner() {
 
 // DaemonInfo holds daemon status data fetched via get_info RPC.
 type DaemonInfo struct {
-	Height      uint64  `json:"height"`
-	Topoheight  uint64  `json:"topoheight"`
-	Difficulty  uint64  `json:"difficulty"`
-	Version     string  `json:"version"`
-	Network     string  `json:"network"`
-	InPeers     int     `json:"incoming_connections_count"`
-	OutPeers    int     `json:"outgoing_connections_count"`
-	TxPoolSize  int     `json:"tx_pool_size"`
-	Status      string  `json:"status"`
-	Hashrate1hr float64 `json:"hashrate_1hr"`
-	Hashrate1d  float64 `json:"hashrate_1d"`
-	Hashrate7d  float64 `json:"hashrate_7d"`
+	Height       uint64  `json:"height"`
+	Topoheight   uint64  `json:"topoheight"`
+	Difficulty   uint64  `json:"difficulty"`
+	Version      string  `json:"version"`
+	Network      string  `json:"network"`
+	InPeers      int     `json:"incoming_connections_count"`
+	OutPeers     int     `json:"outgoing_connections_count"`
+	TxPoolSize   int     `json:"tx_pool_size"`
+	Status       string  `json:"status"`
+	Hashrate1hr  float64 `json:"hashrate_1hr"`
+	Hashrate1d   float64 `json:"hashrate_1d"`
+	Hashrate7d   float64 `json:"hashrate_7d"`
+	Synchronized bool    `json:"synchronized"`
 }
 
 // MiningStats tracks real-time mining statistics.
@@ -473,20 +613,24 @@ func fetchDaemonInfo() (DaemonInfo, error) {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
+		logger.Printf("[Daemon RPC] fetchDaemonInfo ERROR - RPC call failed: %v", err)
 		return DaemonInfo{}, fmt.Errorf("RPC call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var result daemonInfoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Printf("[Daemon RPC] fetchDaemonInfo ERROR - decode error: %v", err)
 		return DaemonInfo{}, fmt.Errorf("decode error: %w", err)
 	}
 
 	if result.Error != nil {
+		logger.Printf("[Daemon RPC] fetchDaemonInfo ERROR - RPC error (code %d): %s", result.Error.Code, result.Error.Message)
 		return DaemonInfo{}, fmt.Errorf("RPC error (code %d): %s", result.Error.Code, result.Error.Message)
 	}
 
 	if result.Result == nil {
+		logger.Printf("[Daemon RPC] fetchDaemonInfo ERROR - empty RPC result")
 		return DaemonInfo{}, fmt.Errorf("empty RPC result")
 	}
 
@@ -494,6 +638,8 @@ func fetchDaemonInfo() (DaemonInfo, error) {
 	cachedDaemonInfo = *result.Result
 	daemonInfoMu.Unlock()
 
+	logger.Printf("[Daemon RPC] fetchDaemonInfo SUCCESS - height=%d topoheight=%d synced=%v",
+		result.Result.Height, result.Result.Topoheight, result.Result.Synchronized)
 	return *result.Result, nil
 }
 
@@ -600,275 +746,77 @@ func rewindChain(n int) error {
 	return nil
 }
 
-// githubReleaseAsset mirrors a GitHub release asset.
-type githubReleaseAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	Size               int    `json:"size"`
-}
-
-// githubReleaseResponse mirrors the GitHub latest-release API payload.
-type githubReleaseResponse struct {
-	TagName string               `json:"tag_name"`
-	Assets  []githubReleaseAsset `json:"assets"`
-}
-
-// platformAssetKeywords returns the OS keyword, arch keyword, and archive extension
-// used to identify the correct release asset for the current platform.
-func platformAssetKeywords() (osKeyword, archKeyword, ext string) {
-	switch runtime.GOOS {
-	case "darwin":
-		osKeyword = "darwin"
-		ext = ".tar.gz"
-	case "windows":
-		osKeyword = "windows"
-		ext = ".zip"
-	default:
-		osKeyword = "linux"
-		ext = ".tar.gz"
+// isDaemonSynced checks if the daemon is fully synced based on available info.
+// Returns true if synchronized field is true, or if height is close to topoheight.
+func isDaemonSynced(info DaemonInfo) bool {
+	if info.Synchronized {
+		return true
 	}
-
-	switch runtime.GOARCH {
-	case "amd64":
-		archKeyword = "amd64"
-	case "arm64":
-		archKeyword = "arm64"
-	default:
-		archKeyword = runtime.GOARCH
-	}
-	return
-}
-
-// matchAssetName checks whether an asset name matches the platform keywords.
-// It also accepts "universal" as an arch keyword for cross-platform builds (e.g. dero_darwin_universal).
-func matchAssetName(name, osKeyword, archKeyword, ext string) bool {
-	lower := strings.ToLower(name)
-	if !strings.Contains(lower, osKeyword) || !strings.HasSuffix(lower, ext) {
+	// If we have no meaningful height yet, we are definitely not synced
+	// This handles the case of a brand new chain (height=0, topoheight=0)
+	if info.Height == 0 || info.Topoheight == 0 {
 		return false
 	}
-	if strings.Contains(lower, archKeyword) {
-		return true
+	// When daemon is still syncing, height can be significantly lower than topoheight
+	// A fully synced daemon should have height very close to topoheight (within 10 blocks)
+	if info.Height < info.Topoheight && info.Topoheight-info.Height > 10 {
+		return false
 	}
-	// Accept "universal" as a fallback (macOS universal binaries)
-	if strings.Contains(lower, "universal") {
-		return true
-	}
-	return false
+	return true
 }
-
-// extractTarGzBinary pulls a single named binary out of a .tar.gz archive.
-func extractTarGzBinary(archivePath, binaryName, destPath string) error {
-	f, err := os.Open(archivePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if filepath.Base(hdr.Name) == binaryName && hdr.Typeflag == tar.TypeReg {
-			out, err := os.Create(destPath)
-			if err != nil {
-				return err
-			}
-			_, err = io.Copy(out, tr)
-			out.Close()
-			return err
-		}
-	}
-	return fmt.Errorf("binary %s not found in archive", binaryName)
-}
-
-// extractZipBinary pulls a single named binary out of a .zip archive.
-func extractZipBinary(archivePath, binaryName, destPath string) error {
-	r, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	for _, f := range r.File {
-		if filepath.Base(f.Name) == binaryName && !f.FileInfo().IsDir() {
-			rc, err := f.Open()
-			if err != nil {
-				return err
-			}
-			out, err := os.Create(destPath)
-			if err != nil {
-				rc.Close()
-				return err
-			}
-			_, err = io.Copy(out, rc)
-			out.Close()
-			rc.Close()
-			return err
-		}
-	}
-	return fmt.Errorf("binary %s not found in archive", binaryName)
-}
-
-// downloadLatestBinary fetches the latest GitHub release for owner/repo,
-// finds an asset matching the current platform, downloads it, extracts the
-// requested binary, and places it in destDir.  progress is called periodically
-// with (downloadedBytes, totalBytes).
-func downloadLatestBinary(owner, repo, binaryName, destDir string, progress func(downloaded, total int64)) error {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(apiURL)
-	if err != nil {
-		return fmt.Errorf("GitHub API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var release githubReleaseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return fmt.Errorf("failed to decode GitHub release: %w", err)
-	}
-
-	osKeyword, archKeyword, ext := platformAssetKeywords()
-	var assetURL, assetName string
-	var assetSize int64
-
-	for _, asset := range release.Assets {
-		if matchAssetName(asset.Name, osKeyword, archKeyword, ext) {
-			assetURL = asset.BrowserDownloadURL
-			assetName = asset.Name
-			assetSize = int64(asset.Size)
-			break
-		}
-	}
-
-	if assetURL == "" {
-		return fmt.Errorf("no release asset found for %s/%s (%s-%s)", owner, repo, runtime.GOOS, runtime.GOARCH)
-	}
-
-	// Download to a temp file
-	tmpFile, err := os.CreateTemp("", "engram-download-*"+ext)
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
-	downloadResp, err := client.Get(assetURL)
-	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
-	}
-	defer downloadResp.Body.Close()
-
-	if downloadResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download returned status %d", downloadResp.StatusCode)
-	}
-
-	if assetSize == 0 && downloadResp.ContentLength > 0 {
-		assetSize = downloadResp.ContentLength
-	}
-
-	var downloaded int64
-	buf := make([]byte, 32*1024)
-	for {
-		n, err := downloadResp.Body.Read(buf)
-		if n > 0 {
-			_, werr := tmpFile.Write(buf[:n])
-			if werr != nil {
-				tmpFile.Close()
-				return fmt.Errorf("failed to write download: %w", werr)
-			}
-			downloaded += int64(n)
-			if progress != nil {
-				progress(downloaded, assetSize)
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			tmpFile.Close()
-			return fmt.Errorf("failed to read download: %w", err)
-		}
-	}
-	tmpFile.Close()
-
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
-	}
-
-	destPath := filepath.Join(destDir, binaryName)
-
-	if strings.HasSuffix(assetName, ".tar.gz") {
-		if err := extractTarGzBinary(tmpPath, binaryName, destPath); err != nil {
-			return fmt.Errorf("extraction failed: %w", err)
-		}
-	} else if strings.HasSuffix(assetName, ".zip") {
-		if err := extractZipBinary(tmpPath, binaryName, destPath); err != nil {
-			return fmt.Errorf("extraction failed: %w", err)
-		}
-	} else {
-		return fmt.Errorf("unsupported archive format: %s", assetName)
-	}
-
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(destPath, 0755); err != nil {
-			return fmt.Errorf("failed to set binary permissions: %w", err)
-		}
-	}
-
-	return nil
-}
-
-// downloadBinarySource holds GitHub coordinates for a downloadable binary.
-type downloadBinarySource struct {
-	Owner string
-	Repo  string
-}
-
-var daemonDownloadSource = downloadBinarySource{Owner: "deroproject", Repo: "derohe"}
 
 // updateDaemonStateFromDetection refreshes dmState based on live checks.
 // Called periodically and on page load.
 func updateDaemonStateFromDetection() {
-	// Check if Engram itself started and manages the daemon process.
-	// checkLocalNode() only checks if *anything* is listening on the RPC port
-	// (including an external daemon), so we must use daemonCmd directly.
-	daemonMu.Lock()
-	ownDaemon := daemonCmd != nil && daemonCmd.Process != nil
-	daemonMu.Unlock()
+	// Check for embedded daemon (mobile) first — globalChain is set when running in-process.
+	if globalChain != nil {
+		// Check embedded daemon sync status (mobile)
+		if info, err := fetchDaemonInfo(); err == nil {
+			// Log peer counts for debugging P2P issues on mobile
+			logger.Printf("[Daemon RPC] State check: height=%d topo=%d synced=%v InPeers=%d OutPeers=%d",
+				info.Height, info.Topoheight, info.Synchronized, info.InPeers, info.OutPeers)
 
-	if ownDaemon {
-		if isDaemonConnected() {
-			dmState.daemonState = dmStateRunning
-			if detectChainCorruption() {
-				dmState.daemonState = dmStateCorrupt
+			// Determine state based on sync progress and peer connections
+			totalPeers := info.InPeers + info.OutPeers
+
+			if totalPeers == 0 && (info.Height == 0 || info.Topoheight == 0) {
+				// No peers and no blockchain data - still connecting to network
+				dmState.daemonState = dmStateConnecting
+				logger.Printf("[Daemon RPC] State detection: CONNECTING (no peers, no data)")
+			} else if !isDaemonSynced(info) {
+				dmState.daemonState = dmStateSyncing
+				logger.Printf("[Daemon RPC] State detection: SYNCING (height=%d topo=%d peers=%d)",
+					info.Height, info.Topoheight, totalPeers)
+			} else {
+				dmState.daemonState = dmStateRunning
+				logger.Printf("[Daemon RPC] State detection: RUNNING/SYNCED (height=%d topo=%d peers=%d)",
+					info.Height, info.Topoheight, totalPeers)
 			}
 		} else {
-			if _, err := fetchDaemonInfo(); err == nil {
-				dmState.daemonState = dmStateExternal
-			}
+			// RPC failed - daemon might still be starting or unreachable
+			dmState.daemonState = dmStateConnecting
+			logger.Printf("[Daemon RPC] State detection: CONNECTING (RPC failed: %v)", err)
+		}
+		if detectChainCorruption() {
+			dmState.daemonState = dmStateCorrupt
+		}
+		return
+	}
+
+	// Check if an external daemon is reachable (user configured remote node)
+	if info, err := fetchDaemonInfo(); err == nil {
+		totalPeers := info.InPeers + info.OutPeers
+		if totalPeers == 0 && (info.Height == 0 || info.Topoheight == 0) {
+			dmState.daemonState = dmStateConnecting
+		} else if !isDaemonSynced(info) {
+			dmState.daemonState = dmStateSyncing
+		} else {
+			dmState.daemonState = dmStateExternal
+		}
+		if detectChainCorruption() {
+			dmState.daemonState = dmStateCorrupt
 		}
 	} else {
-		// No Engram-managed daemon — check if an external daemon is reachable
-		if _, err := fetchDaemonInfo(); err == nil {
-			dmState.daemonState = dmStateExternal
-		} else {
-			dmState.daemonState = dmStateStopped
-		}
+		dmState.daemonState = dmStateStopped
 	}
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"image/color"
-	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -35,6 +35,23 @@ type daemonInfoUI struct {
 	txpool     *canvas.Text
 }
 
+// daemonPulseColor returns the color for the daemon sync pulse animation.
+// For Derotopia it uses Purple (per user preference), for other themes it matches
+// the balance color (Green for Engram, etc.)
+func daemonPulseColor() color.Color {
+	switch apptheme.ThemeMode {
+	case apptheme.ThemeDerotopia:
+		return apptheme.C.Purple
+	case apptheme.ThemeElDorado:
+		return apptheme.C.Yellow
+	case apptheme.ThemeCrystallina:
+		return apptheme.C.Purple
+	case apptheme.ThemeAtlantis:
+		return apptheme.C.Yellow
+	}
+	return apptheme.C.Green // Engram and default
+}
+
 var infoUI daemonInfoUI
 
 // minerStatsUI holds canvas.Text references for the miner statistics section.
@@ -61,12 +78,17 @@ type daemonMinerState struct {
 var dmState = daemonMinerState{daemonState: 0, minerState: 0}
 
 var (
-	daemonToggle   *toggleSwitch
-	minerToggle    *toggleSwitch
-	daemonStateImg *canvas.Image
-	minerStateImg  *canvas.Image
-	daemonStateLbl *canvas.Text
-	minerStateLbl  *canvas.Text
+	daemonToggle      *toggleSwitch
+	minerToggle       *toggleSwitch
+	daemonStateImg    *canvas.Image
+	minerStateImg     *canvas.Image
+	daemonStateLbl    *canvas.Text
+	minerStateLbl     *canvas.Text
+	daemonPulseCircle *canvas.Circle
+)
+
+var (
+	daemonSyncPulseStop chan struct{}
 )
 
 const (
@@ -76,13 +98,14 @@ const (
 	dmStateError
 	dmStateExternal
 	dmStateCorrupt
+	dmStateConnecting
 )
 
 func stateColorDM(s int) color.Color {
 	switch s {
 	case dmStateRunning:
 		return apptheme.C.Green
-	case dmStateSyncing:
+	case dmStateSyncing, dmStateConnecting:
 		return apptheme.C.Yellow
 	case dmStateError, dmStateCorrupt:
 		return apptheme.C.Red
@@ -99,6 +122,8 @@ func stateLabelDM(s int) string {
 		return i18n.T("daemon_miner.state_running")
 	case dmStateSyncing:
 		return i18n.T("daemon_miner.state_syncing")
+	case dmStateConnecting:
+		return i18n.T("daemon_miner.state_connecting")
 	case dmStateError:
 		return i18n.T("daemon_miner.state_error")
 	case dmStateExternal:
@@ -113,7 +138,8 @@ func stateLabelDM(s int) string {
 func daemonIsRunning() bool {
 	return dmState.daemonState == dmStateRunning ||
 		dmState.daemonState == dmStateExternal ||
-		dmState.daemonState == dmStateSyncing
+		dmState.daemonState == dmStateSyncing ||
+		dmState.daemonState == dmStateConnecting
 }
 
 func minerIsRunning() bool {
@@ -123,6 +149,11 @@ func minerIsRunning() bool {
 func syncToggleStates() {
 	if daemonToggle != nil {
 		daemonToggle.setChecked(daemonIsRunning())
+		if dmState.daemonState == dmStateExternal {
+			daemonToggle.Disable()
+		} else {
+			daemonToggle.Enable()
+		}
 	}
 	if minerToggle != nil {
 		minerToggle.setChecked(minerIsRunning())
@@ -130,18 +161,90 @@ func syncToggleStates() {
 	syncStateIndicators()
 }
 
+var previousDaemonState int = -1
+var daemonPulseAnim *fyne.Animation
+
+func stopDaemonSyncPulse() {
+	if daemonSyncPulseStop != nil {
+		close(daemonSyncPulseStop)
+		daemonSyncPulseStop = nil
+	}
+	if daemonPulseAnim != nil {
+		daemonPulseAnim.Stop()
+		daemonPulseAnim = nil
+	}
+	// Reset pulse circle to transparent when stopping
+	if daemonPulseCircle != nil {
+		daemonPulseCircle.FillColor = color.Transparent
+		daemonPulseCircle.Refresh()
+	}
+}
+
+func startDaemonSyncPulse() {
+	stopDaemonSyncPulse()
+	daemonSyncPulseStop = make(chan struct{})
+
+	// Create smooth pulse animation using ColorRGBAAnimation
+	pulseColor := daemonPulseColor()
+	daemonPulseAnim = canvas.NewColorRGBAAnimation(
+		color.Transparent,
+		pulseColor,
+		1500*time.Millisecond, // smooth 1.5s fade in/out cycle
+		func(c color.Color) {
+			if daemonPulseCircle != nil {
+				daemonPulseCircle.FillColor = c
+				daemonPulseCircle.Refresh()
+			}
+		})
+
+	daemonPulseAnim.RepeatCount = fyne.AnimationRepeatForever
+	daemonPulseAnim.AutoReverse = true
+	daemonPulseAnim.Start()
+
+	// Keep pulse active for up to 5 minutes, extend if still syncing
+	go func() {
+		timeout := time.After(5 * time.Minute)
+		for {
+			select {
+			case <-daemonSyncPulseStop:
+				return
+			case <-timeout:
+				syncCheck := make(chan bool, 1)
+				uiDo(func() {
+					syncCheck <- (dmState.daemonState == dmStateSyncing || dmState.daemonState == dmStateConnecting)
+				})
+				if <-syncCheck {
+					timeout = time.After(5 * time.Minute)
+					continue
+				}
+				return
+			}
+		}
+	}()
+}
+
 // syncStateIndicators updates the state indicator icons and labels to match
 // the current dmState values. Must be called on the UI goroutine.
 func syncStateIndicators() {
+	// Handle animation start/stop based on state transitions
+	// Pulse during both connecting and syncing states
+	wasActive := previousDaemonState == dmStateSyncing || previousDaemonState == dmStateConnecting
+	isActive := dmState.daemonState == dmStateSyncing || dmState.daemonState == dmStateConnecting
+
+	if wasActive && !isActive {
+		stopDaemonSyncPulse()
+	} else if !wasActive && isActive {
+		startDaemonSyncPulse()
+	}
+
+	previousDaemonState = dmState.daemonState
+
 	if daemonStateLbl != nil {
 		daemonStateLbl.Text = stateLabelDM(dmState.daemonState)
 		daemonStateLbl.Color = stateColorDM(dmState.daemonState)
 		daemonStateLbl.Refresh()
 	}
-	if daemonStateImg != nil {
-		daemonStateImg.Resource = daemonIconForState(dmState.daemonState)
-		daemonStateImg.Refresh()
-	}
+	// Pulse circle handles the visual feedback; no need to manipulate image translucency
 	if minerStateLbl != nil {
 		minerStateLbl.Text = stateLabelDM(dmState.minerState)
 		minerStateLbl.Color = stateColorDM(dmState.minerState)
@@ -153,71 +256,9 @@ func syncStateIndicators() {
 	}
 }
 
-func openDownloadURL(urlStr string) {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return
-	}
-	fyne.CurrentApp().OpenURL(u)
-}
-
-// showBinaryDownloadConfirm asks the user whether to download a missing binary,
-// then launches the download progress dialog.  onComplete is called on success.
-func showBinaryDownloadConfirm(_ string, onComplete func()) {
-	name := daemonBinary()
-
-	msg := fmt.Sprintf(i18n.T("daemon_miner.download_prompt"), name)
-	dlg := dialog.NewConfirm(i18n.T("daemon_miner.download_title"), msg, func(confirmed bool) {
-		if confirmed {
-			showBinaryDownloadProgress(name, onComplete, nil)
-		}
-	}, session.Window)
-	dlg.Show()
-}
-
-// showBinaryDownloadProgress displays a progress dialog and downloads the binary
-// in the background.  onComplete is called (on the UI goroutine) on success;
-// onError is called on failure (before the error dialog is shown).
-func showBinaryDownloadProgress(name string, onComplete func(), onError func()) {
-	source := daemonDownloadSource
-
-	// No auto-download source configured – open browser instead.
-	if source.Owner == "" || source.Repo == "" {
-		openDownloadURL("https://github.com/deroproject/derohe/releases")
-		return
-	}
-
-	progress := widget.NewProgressBar()
-	status := widget.NewLabel(i18n.T("common.loading"))
-
-	content := container.NewVBox(status, progress)
-	dlg := dialog.NewCustomWithoutButtons(i18n.T("daemon_miner.download_title"), content, session.Window)
-	dlg.Show()
-
-	go func() {
-		destDir := filepath.Join(AppPath(), "bin")
-		err := downloadLatestBinary(source.Owner, source.Repo, name, destDir, func(down, total int64) {
-			uiDo(func() {
-				if total > 0 {
-					progress.SetValue(float64(down) / float64(total))
-				}
-			})
-		})
-
-		uiDo(func() {
-			dlg.Hide()
-			if err != nil {
-				if onError != nil {
-					onError()
-				}
-				errDlg := dialog.NewError(fmt.Errorf(i18n.T("daemon_miner.download_failed")+": %v", err), session.Window)
-				errDlg.Show()
-			} else if onComplete != nil {
-				onComplete()
-			}
-		})
-	}()
-}
+// showBinaryDownloadConfirm and showBinaryDownloadProgress were removed.
+// The daemon and miner both run as embedded processes compiled from source.
+// No external binary downloads are needed.
 
 func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWidth float32) fyne.CanvasObject {
 	img := canvas.NewImageFromResource(res)
@@ -232,6 +273,10 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	if label == i18n.T("daemon_miner.daemon") {
 		daemonStateImg = img
 		daemonStateLbl = stateLabel
+		// Create pulse circle for smooth animation behind the daemon icon
+		daemonPulseCircle = canvas.NewCircle(color.Transparent)
+		daemonPulseCircle.StrokeWidth = 0
+		daemonPulseCircle.Hidden = false
 	} else if label == i18n.T("daemon_miner.miner") {
 		minerStateImg = img
 		minerStateLbl = stateLabel
@@ -245,9 +290,17 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	widthAnchor := canvas.NewRectangle(color.Transparent)
 	widthAnchor.SetMinSize(fyne.NewSize(indicatorWidth, 1))
 
+	// Build icon container: stack with pulse circle behind image
+	iconContainer := container.NewStack()
+	if label == i18n.T("daemon_miner.daemon") && daemonPulseCircle != nil {
+		iconContainer = container.NewStack(daemonPulseCircle, img)
+	} else {
+		iconContainer = container.NewStack(img)
+	}
+
 	return container.NewVBox(
 		widthAnchor,
-		container.NewCenter(container.NewGridWrap(fyne.NewSize(50, 50), img)),
+		container.NewCenter(container.NewGridWrap(fyne.NewSize(50, 50), iconContainer)),
 		stateLabel,
 		labelText,
 	)
@@ -269,8 +322,12 @@ func startBackgroundDaemonRefresh() {
 			for {
 				info, err := fetchDaemonInfo()
 				if err == nil {
+					fmt.Printf("[Daemon RPC] Background refresh: height=%d topo=%d synced=%v", info.Height, info.Topoheight, info.Synchronized)
 					uiDo(func() { updateInfoUILabels(info) })
+				} else {
+					fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
 				}
+				updateDaemonStateFromDetection()
 				uiDo(syncToggleStates)
 				time.Sleep(5 * time.Second)
 			}
@@ -284,7 +341,11 @@ func updateInfoUILabels(info DaemonInfo) {
 	infoUI.mu.Lock()
 	defer infoUI.mu.Unlock()
 	if infoUI.status != nil {
-		infoUI.status.Text = stateLabelDM(dmState.daemonState)
+		if dmState.daemonState == dmStateSyncing && info.Height > 0 && info.Topoheight > info.Height {
+			infoUI.status.Text = fmt.Sprintf("Syncing %d/%d", info.Height, info.Topoheight)
+		} else {
+			infoUI.status.Text = stateLabelDM(dmState.daemonState)
+		}
 		infoUI.status.Color = stateColorDM(dmState.daemonState)
 		infoUI.status.Refresh()
 	}
@@ -527,6 +588,28 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	daemonToggle = newToggleSwitch(daemonIsRunning(), func(checked bool) {
 		go func() {
 			if checked {
+				health := checkSystemHealth()
+				if !health.Passed {
+					uiDo(func() {
+						ShowHealthWarning(health)
+					})
+					return
+				}
+				// Check if user has a wallet before starting node (runs regardless of mode)
+				if engram.Disk == nil && daemonIntegratorAddress == "" {
+					uiDo(func() {
+						daemonToggle.setChecked(false)
+						ShowIntegratorInfoPopup()
+					})
+					return
+				}
+				if daemonMode == "" {
+					uiDo(func() {
+						ShowDaemonModeDialog(health, true)
+					})
+					return
+				}
+				// Start daemon (embedded, runs in-process from derohe library source)
 				startDaemon()
 			} else {
 				stopDaemon()
@@ -534,6 +617,11 @@ func layoutDaemonMiner() fyne.CanvasObject {
 			uiDo(syncToggleStates)
 		}()
 	})
+
+	// Disable daemon toggle immediately if an external node is detected on page load
+	if dmState.daemonState == dmStateExternal {
+		daemonToggle.Disable()
+	}
 
 	minerToggle = newToggleSwitch(minerIsRunning(), func(checked bool) {
 		if checked {
@@ -711,11 +799,11 @@ func layoutDaemonMiner() fyne.CanvasObject {
 				addressHiddenLabel.Hide()
 			}
 		})
-	// Set initial icon based on persisted state
-	if !session.AddressHidden {
-		addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
-	}
-	addressToggleBtn.Importance = widget.LowImportance
+		// Set initial icon based on persisted state
+		if !session.AddressHidden {
+			addressToggleBtn.SetIcon(theme.VisibilityOffIcon())
+		}
+		addressToggleBtn.Importance = widget.LowImportance
 		addressBox = container.NewBorder(nil, nil, nil, addressToggleBtn, container.NewStack(addressHiddenLabel, entryWallet))
 	} else {
 		addressBox = container.NewHBox(addressHiddenLabel)
@@ -910,19 +998,113 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	// Download links shown when binaries are missing
-	if findBinary(daemonBinary()) == "" {
-		linkDerod := widget.NewButton(i18n.T("daemon_miner.download_derod"), func() {
-			showBinaryDownloadProgress(daemonBinary(), nil, nil)
-		})
-		linkDerod.Importance = widget.LowImportance
-		daemonInfoBox.Add(linkDerod)
+	// ---- DAEMON CONFIG ----
+	daemonConfigSectionLabel := canvas.NewText(i18n.T("daemon_miner.daemon")+" CONFIG", apptheme.C.Gray)
+	daemonConfigSectionLabel.TextSize = scaleFont(14)
+	daemonConfigSectionLabel.Alignment = fyne.TextAlignCenter
+	daemonConfigSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	daemonConfigLine1 := canvas.NewRectangle(apptheme.C.Gray)
+	daemonConfigLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	daemonConfigLineBox1 := container.NewVBox(layout.NewSpacer(), daemonConfigLine1, layout.NewSpacer())
+	daemonConfigLine2 := canvas.NewRectangle(apptheme.C.Gray)
+	daemonConfigLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	daemonConfigLineBox2 := container.NewVBox(layout.NewSpacer(), daemonConfigLine2, layout.NewSpacer())
+
+	daemonConfigSectionHeader := container.NewHBox(
+		layout.NewSpacer(),
+		daemonConfigLineBox1,
+		layout.NewSpacer(),
+		daemonConfigSectionLabel,
+		layout.NewSpacer(),
+		daemonConfigLineBox2,
+		layout.NewSpacer(),
+	)
+
+	// Mode display (clickable to change)
+	var modeDisplay string
+	if daemonMode == "" {
+		modeDisplay = "NOT CONFIGURED"
+	} else {
+		modeDisplay = strings.ToUpper(daemonMode)
 	}
-	// Miner binary auto-downloads when the toggle is switched ON (see minerToggle callback).
-	// No separate download button — the toggle handles it.
+	modeLabel := canvas.NewText("Mode: "+modeDisplay, apptheme.C.Green)
+	modeLabel.TextSize = scaleFont(12)
+
+	changeModeBtn := widget.NewButton("Change", func() {
+		// Recompute health in background goroutine to avoid blocking the UI
+		go func() {
+			modeHealth := checkSystemHealth()
+			uiDo(func() {
+				ShowDaemonModeDialog(modeHealth, false)
+			})
+		}()
+	})
+	changeModeBtn.Importance = widget.LowImportance
+
+	// Integrator address entry
+	entryIntegrator := widget.NewEntry()
+	entryIntegrator.PlaceHolder = "Integrator address (optional)"
+	entryIntegrator.SetText(daemonIntegratorAddress)
+
+	// Auto-populate from wallet if no integrator set yet
+	if daemonIntegratorAddress == "" && engram.Disk != nil {
+		addr := engram.Disk.GetAddress().String()
+		entryIntegrator.SetText(addr)
+		saveIntegratorAddress(addr)
+	}
+
+	entryIntegrator.OnChanged = func(s string) {
+		saveIntegratorAddress(s)
+	}
+
+	// Delete node data button
+	deleteNodeBtn := widget.NewButton("Delete Node Data", func() {
+		confirmDlg := dialog.NewConfirm(
+			"Delete Node Data",
+			"This will stop the daemon and remove all downloaded blockchain data. The app will need to re-sync from scratch. Continue?",
+			func(confirmed bool) {
+				if !confirmed {
+					return
+				}
+				go func() {
+					stopDaemon()
+					nodePath := filepath.Join(AppPath(), "node")
+					if err := os.RemoveAll(nodePath); err != nil {
+						fmt.Printf("[Daemon] Failed to delete node data: %v", err)
+						uiDo(func() {
+							dialog.NewError(fmt.Errorf("Failed to delete node data: %v", err), session.Window).Show()
+						})
+						return
+					}
+					fmt.Printf("[Daemon] Node data deleted: %s", nodePath)
+					dmState.daemonState = dmStateStopped
+					uiDo(func() {
+						syncToggleStates()
+						dialog.NewInformation("Node Data Deleted", "Blockchain data has been removed. Toggle the daemon ON to start a fresh sync.", session.Window).Show()
+					})
+				}()
+			},
+			session.Window,
+		)
+		confirmDlg.Show()
+	})
+	deleteNodeBtn.Importance = widget.DangerImportance
+
+	daemonConfigBox := container.NewVBox(
+		daemonConfigSectionHeader,
+		newRectSpacer(),
+		container.NewBorder(nil, nil, modeLabel, changeModeBtn),
+		newRectSpacer(),
+		makeField("Integrator Address"),
+		entryIntegrator,
+		newRectSpacer(),
+		deleteNodeBtn,
+	)
 
 	topSection := container.NewVBox(
 		indicatorRow,
+		daemonConfigBox,
 		newRectSpacer(),
 		daemonSectionHeader,
 		daemonInfoBox,
@@ -935,9 +1117,8 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	)
 
 	if isMobile() {
-		// Daemon toggle disabled on mobile (daemon binary not available yet)
-		// Miner toggle is enabled - it connects to the user's configured remote node
-		daemonToggle.Disable()
+		// Mobile: daemon runs embedded via derohe library (no external binary needed).
+		// Miner toggle connects to the user's configured remote node.
 	}
 
 	// Start global background refresh goroutine (runs once, forever)
@@ -981,4 +1162,260 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		nil,
 		scrollBox,
 	)
+}
+
+// ShowHealthWarning displays a dialog when system health checks fail.
+func ShowHealthWarning(health SystemHealth) {
+	var warnDialog *widget.PopUp
+	warnDialog = widget.NewModalPopUp(
+		container.NewVBox(
+			canvas.NewText("System Health Warning", apptheme.C.Red),
+			widget.NewLabel(formatHealthMessage(health)),
+			widget.NewButton("OK", func() {
+				warnDialog.Hide()
+			}),
+		),
+		session.Window.Canvas(),
+	)
+	warnDialog.Show()
+}
+
+// ShowDaemonModeDialog prompts the user to choose Full or Pruned node mode.
+// If autoStart is true, the daemon will start automatically after saving the mode.
+// If autoStart is false, only the mode is saved and the dialog closes.
+func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
+	var modeDialog *widget.PopUp
+
+	modeContent := container.NewVBox(
+		canvas.NewText("Node Mode Selection", apptheme.C.Green),
+		widget.NewLabel("Choose how to run this node:"),
+		widget.NewSeparator(),
+	)
+
+	afterSave := func() {
+		if autoStart {
+			startDaemon()
+		}
+		uiDo(syncToggleStates)
+	}
+
+	prunedBtn := widget.NewButton("Pruned Node (~5-10 GB)", func() {
+		saveDaemonMode("pruned")
+		modeDialog.Hide()
+		afterSave()
+	})
+	modeContent.Add(prunedBtn)
+
+	fullLabel := "Full Node (~250 GB)"
+	if !health.HasSpaceForFull && !forceFullMode {
+		fullLabel += " (insufficient disk space)"
+	}
+	fullBtn := widget.NewButton(fullLabel, func() {
+		if !health.HasSpaceForFull && !forceFullMode {
+			return
+		}
+		modeDialog.Hide()
+		// Show warning confirmation dialog for force full mode
+		if forceFullMode {
+			showForceFullWarningDialog(func() {
+				saveDaemonMode("full")
+				afterSave()
+			}, nil)
+		} else {
+			saveDaemonMode("full")
+			afterSave()
+		}
+	})
+	if !health.HasSpaceForFull && !forceFullMode {
+		fullBtn.Disable()
+	}
+	modeContent.Add(fullBtn)
+
+	// Add Force Full Mode checkbox when space check fails
+	if !health.HasSpaceForFull {
+		forceCheck := widget.NewCheck("Force Full Mode (I have 250GB+ available)", func(checked bool) {
+			saveForceFullMode(checked)
+			if checked {
+				fullBtn.SetText("Full Node (~250 GB) [FORCED]")
+				fullBtn.Enable()
+			} else {
+				fullBtn.SetText("Full Node (~250 GB) (insufficient disk space)")
+				fullBtn.Disable()
+			}
+		})
+		if forceFullMode {
+			forceCheck.SetChecked(true)
+			fullBtn.SetText("Full Node (~250 GB) [FORCED]")
+			fullBtn.Enable()
+		}
+		modeContent.Add(forceCheck)
+	}
+
+	// If not auto-starting, just close the dialog; if auto-starting,
+	// also reset the toggle since the user chose not to proceed
+	if autoStart {
+		modeContent.Add(widget.NewButton("Cancel", func() {
+			daemonToggle.setChecked(false)
+			uiDo(syncToggleStates)
+			modeDialog.Hide()
+		}))
+	} else {
+		modeContent.Add(widget.NewButton("Close", func() {
+			modeDialog.Hide()
+		}))
+	}
+
+	modeDialog = widget.NewModalPopUp(modeContent, session.Window.Canvas())
+	modeDialog.Show()
+}
+
+// showForceFullWarningDialog shows a warning before forcing full mode.
+func showForceFullWarningDialog(onConfirm, onCancel func()) {
+	warningDialog := dialog.NewConfirm(
+		"Warning: Force Full Mode",
+		"You have enabled Force Full Mode. This will ONLY work if you actually have 250GB+ available on your disk.\n\nIf you don't have enough space, the daemon will fail to start.\n\nContinue?",
+		func(confirmed bool) {
+			if confirmed {
+				onConfirm()
+			} else if onCancel != nil {
+				onCancel()
+			}
+		},
+		session.Window,
+	)
+	warningDialog.Show()
+}
+
+// ShowIntegratorInfoPopup displays info about integrator rewards when no wallet exists.
+func ShowIntegratorInfoPopup() {
+	if session.Window == nil {
+		return
+	}
+
+	header := canvas.NewText("Wallet Required", apptheme.C.Green)
+	header.TextSize = 18
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	msg1 := widget.NewLabel("Get 10% extra mining rewards when running a node with your wallet address.")
+	msg1.Alignment = fyne.TextAlignCenter
+	msg1.Wrapping = fyne.TextWrapWord
+
+	msg2 := widget.NewLabel("Create or recover a wallet first, then enable the node.")
+	msg2.Alignment = fyne.TextAlignCenter
+	msg2.Wrapping = fyne.TextWrapWord
+
+	msg3 := widget.NewLabel("You can also run the node without an integrator address.")
+	msg3.Alignment = fyne.TextAlignCenter
+	msg3.Wrapping = fyne.TextWrapWord
+
+	rectBox := canvas.NewRectangle(color.Transparent)
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.48))
+
+	rectSpacer1 := canvas.NewRectangle(color.Transparent)
+	rectSpacer1.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer2 := canvas.NewRectangle(color.Transparent)
+	rectSpacer2.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer3 := canvas.NewRectangle(color.Transparent)
+	rectSpacer3.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer4 := canvas.NewRectangle(color.Transparent)
+	rectSpacer4.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer5 := canvas.NewRectangle(color.Transparent)
+	rectSpacer5.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer6 := canvas.NewRectangle(color.Transparent)
+	rectSpacer6.SetMinSize(fyne.NewSize(0, 10))
+	rectSpacer7 := canvas.NewRectangle(color.Transparent)
+	rectSpacer7.SetMinSize(fyne.NewSize(0, 10))
+
+	var overlay *fyne.Container
+	var blocker *fyne.Container
+
+	btnOk := widget.NewButton("OK", func() {
+		uiDo(func() {
+			overlays := session.Window.Canvas().Overlays()
+			overlays.Remove(overlay)
+			overlays.Remove(blocker)
+		})
+	})
+	btnOk.Importance = widget.MediumImportance
+
+	btnRow := container.NewHBox(layout.NewSpacer(), btnOk, layout.NewSpacer())
+
+	content := container.NewStack(
+		container.NewBorder(
+			nil,
+			container.NewVBox(
+				rectSpacer1,
+				rectSpacer2,
+				btnRow,
+				rectSpacer3,
+				rectSpacer4,
+			),
+			nil,
+			nil,
+			container.NewStack(
+				rectBox,
+				container.NewVScroll(
+					container.NewVBox(
+						msg1,
+						rectSpacer5,
+						msg2,
+						rectSpacer5,
+						msg3,
+						rectSpacer5,
+					),
+				),
+			),
+		),
+	)
+
+	span1 := canvas.NewRectangle(color.Transparent)
+	span1.SetMinSize(fyne.NewSize(ui.Width, 10))
+
+	blocker = container.NewStack(
+		&iframe{},
+		canvas.NewRectangle(apptheme.C.DarkMatter),
+	)
+
+	overlay = container.NewStack(
+		&iframe{},
+		container.NewCenter(
+			container.NewVBox(
+				span1,
+				container.NewCenter(
+					header,
+				),
+				rectSpacer6,
+				rectSpacer7,
+				content,
+			),
+		),
+	)
+
+	uiDo(func() {
+		overlays := session.Window.Canvas().Overlays()
+		overlays.Add(blocker)
+		overlays.Add(overlay)
+	})
+}
+
+// formatHealthMessage formats the health check results into a readable message.
+func formatHealthMessage(health SystemHealth) string {
+	var parts []string
+	if !health.TimeSynced {
+		parts = append(parts, "Time sync: FAILED - "+health.TimeSyncError)
+	}
+	if health.DiskSpaceGB >= 0 && health.DiskSpaceGB < 5 {
+		parts = append(parts, fmt.Sprintf("Disk space: %.0f GB available (need at least 5 GB)", health.DiskSpaceGB))
+	}
+	if health.DiskIOError != "" {
+		parts = append(parts, "Disk I/O: "+health.DiskIOError)
+	}
+	if health.InodeError != "" {
+		parts = append(parts, "Inodes: "+health.InodeError)
+	}
+	if len(parts) == 0 {
+		return "System health check failed for an unknown reason."
+	}
+	return strings.Join(parts, "\n")
 }
