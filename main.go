@@ -256,6 +256,13 @@ func main() {
 		}
 	})
 
+	// Set up CLI log viewer toggle with backtick/tilde key
+	session.Window.Canvas().SetOnTypedRune(func(r rune) {
+		if r == '`' || r == '~' {
+			toggleLogViewer()
+		}
+	})
+
 	// Set up mobile lifecycle handling - handle app background/foreground transitions
 	// This prevents crashes when switching apps on mobile
 	a.Lifecycle().SetOnExitedForeground(func() {
