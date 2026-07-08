@@ -8,6 +8,8 @@ fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34/go.mod h1:TyPwb4pDTB8+btHM20AJ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
+github.com/DEROFDN/derohe v0.0.0-20260705204633-6f9bd2ca1209 h1:dEG2LVzgFdLbUXZOrd3Nfc8qmjO5w5NuznAxOnFcecY=
+github.com/DEROFDN/derohe v0.0.0-20260705204633-6f9bd2ca1209/go.mod h1:EWHh1VkXRnCHvyGML98kXhngDFYebmOhk/9kZ1ATJ1c=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/VictoriaMetrics/metrics v1.41.2 h1:pLQ4Mw9TqXFq3ZsZVJkz88JHpjL9LY5NHTY3v2gBNAw=
@@ -48,8 +50,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dchest/siphash v1.2.3 h1:QXwFc8cFOR2dSa/gE6o/HokBMWtLUaNDVd+22aKHeEA=
 github.com/dchest/siphash v1.2.3/go.mod h1:0NvQU092bT0ipiFN++/rXm69QG9tVxLAlQHIXMPAkHc=
-github.com/deroproject/derohe v0.0.0-20250813215012-9b6a8b82c839 h1:RWh3dbb/Z29Non+otA9su7AfYpHPpadHzY6v5JNforg=
-github.com/deroproject/derohe v0.0.0-20250813215012-9b6a8b82c839/go.mod h1:EWHh1VkXRnCHvyGML98kXhngDFYebmOhk/9kZ1ATJ1c=
 github.com/deroproject/graviton v0.0.0-20220130070622-2c248a53b2e1 h1:nsiNx83HYmRmYpYO37pUzSTmB7p9PFtGBl4FyD+a0jg=
 github.com/deroproject/graviton v0.0.0-20220130070622-2c248a53b2e1/go.mod h1:a4u6QJtGGIADg1JwujD77UtaAyhIxg14+I0C7xjyQcc=
 github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815 h1:bWDMxwH3px2JBh6AyO7hdCn/PkvCZXii8TGj7sbtEbQ=

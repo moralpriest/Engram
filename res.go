@@ -70,13 +70,24 @@ func AppPath() (result string) {
 		}
 
 		// Fallback for Android - internal files dir
+		// Use MkdirAll to CREATE the directory if it doesn't exist (os.Stat only checks)
 		if runtime.GOOS == "android" {
-			// Try common Android internal paths as fallback
-			if _, err := os.Stat("/data/user/0/com.engram.wallet/files"); err == nil {
-				return "/data/user/0/com.engram.wallet/files"
+			// Try common Android internal paths, creating them if needed
+			candidates := []string{
+				"/data/user/0/com.engram.wallet/files",
+				"/data/user/0/org.dero.engram/files",
 			}
-			if _, err := os.Stat("/data/user/0/org.dero.engram/files"); err == nil {
-				return "/data/user/0/org.dero.engram/files"
+			for _, candidate := range candidates {
+				if err := os.MkdirAll(candidate, 0700); err == nil {
+					return candidate
+				}
+			}
+			// Last resort: create a data directory in TempDir (should be writable)
+			if result == "" || result == "/" {
+				tmpDir := filepath.Join(os.TempDir(), "engram-data")
+				if err := os.MkdirAll(tmpDir, 0700); err == nil {
+					return tmpDir
+				}
 			}
 		}
 	}
