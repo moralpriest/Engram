@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image/color"
 	"os"
@@ -564,10 +565,181 @@ func refreshDaemonModeLabel() {
 	daemonModeLabel.Refresh()
 }
 
+// UIState holds non-sensitive UI preferences that persist across sessions
+// in a plain JSON file (not wallet-encrypted, so they survive wallet resets).
+type UIState struct {
+	DaemonConfigCollapsed bool `json:"daemon_config_collapsed"`
+	DaemonInfoCollapsed   bool `json:"daemon_info_collapsed"`
+	MinerConfigCollapsed  bool `json:"miner_config_collapsed"`
+	MinerStatsCollapsed   bool `json:"miner_stats_collapsed"`
+}
+
+var (
+	uiState        UIState
+	uiStateMu      sync.Mutex
+	uiStateLoaded  bool   // true after a valid file was read from disk
+)
+
+// uiStatePath returns the path to the UI state JSON file.
+func uiStatePath() string {
+	return filepath.Join(AppPath(), "ui_state.json")
+}
+
+// loadUIState reads the UI state from disk. Missing or corrupt files are silently
+// treated as defaults (zero-value struct -> all sections expanded).
+func loadUIState() {
+	uiStateMu.Lock()
+	defer uiStateMu.Unlock()
+
+	data, err := os.ReadFile(uiStatePath())
+	if err != nil {
+		uiState = UIState{}
+		uiStateLoaded = false
+		return
+	}
+	if err := json.Unmarshal(data, &uiState); err != nil {
+		uiState = UIState{}
+		uiStateLoaded = false
+		return
+	}
+	uiStateLoaded = true
+}
+
+// Section persistence keys for collapsible section state.
+const (
+	sectionKeyDaemonConfig = "daemon_config"
+	sectionKeyDaemonInfo   = "daemon_info"
+	sectionKeyMinerConfig  = "miner_config"
+	sectionKeyMinerStats   = "miner_stats"
+)
+
+// loadSectionCollapsed reads the persisted collapsed state for a section.
+// On first run (no saved file yet) returns defaultCollapsed, preserving the
+// external-daemon auto-collapse for DAEMON CONFIG. Once the user has saved
+// a preference, that preference is always returned.
+func loadSectionCollapsed(key string, defaultCollapsed bool) bool {
+	uiStateMu.Lock()
+	defer uiStateMu.Unlock()
+
+	if !uiStateLoaded {
+		return defaultCollapsed
+	}
+
+	switch key {
+	case sectionKeyDaemonConfig:
+		return uiState.DaemonConfigCollapsed
+	case sectionKeyDaemonInfo:
+		return uiState.DaemonInfoCollapsed
+	case sectionKeyMinerConfig:
+		return uiState.MinerConfigCollapsed
+	case sectionKeyMinerStats:
+		return uiState.MinerStatsCollapsed
+	default:
+		return defaultCollapsed
+	}
+}
+
+// saveSectionCollapsed persists the collapsed state for a section to the JSON file.
+func saveSectionCollapsed(key string, collapsed bool) {
+	uiStateMu.Lock()
+	switch key {
+	case sectionKeyDaemonConfig:
+		uiState.DaemonConfigCollapsed = collapsed
+	case sectionKeyDaemonInfo:
+		uiState.DaemonInfoCollapsed = collapsed
+	case sectionKeyMinerConfig:
+		uiState.MinerConfigCollapsed = collapsed
+	case sectionKeyMinerStats:
+		uiState.MinerStatsCollapsed = collapsed
+	}
+	data, err := json.MarshalIndent(uiState, "", "  ")
+	uiStateMu.Unlock()
+
+	if err != nil {
+		return
+	}
+	// Async write — non-blocking for UI responsiveness
+	go func() {
+		_ = os.WriteFile(uiStatePath(), data, 0644)
+	}()
+}
+
+// newCollapsibleSection creates a section header that acts as a toggle button.
+// Clicking the header collapses/expands the content below.
+// The arrow icon points down when collapsed and up when expanded.
+// If persistKey is non-empty, the collapsed state is saved across sessions.
+func newCollapsibleSection(title string, content fyne.CanvasObject, startCollapsed bool, persistKey string) *fyne.Container {
+	arrowIcon := widget.NewIcon(theme.MenuDropDownIcon())
+
+	label := canvas.NewText(title, apptheme.C.Gray)
+	label.TextSize = scaleFont(14)
+	label.Alignment = fyne.TextAlignCenter
+	label.TextStyle = fyne.TextStyle{Bold: true}
+
+	// Decorative lines
+	line1 := canvas.NewRectangle(apptheme.C.Gray)
+	line1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	lineBox1 := container.NewVBox(layout.NewSpacer(), line1, layout.NewSpacer())
+	line2 := canvas.NewRectangle(apptheme.C.Gray)
+	line2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	lineBox2 := container.NewVBox(layout.NewSpacer(), line2, layout.NewSpacer())
+
+	// Build header row with arrow icon + label in center
+	headerRow := container.NewHBox(
+		layout.NewSpacer(),
+		lineBox1,
+		layout.NewSpacer(),
+		arrowIcon,
+		label,
+		layout.NewSpacer(),
+		lineBox2,
+		layout.NewSpacer(),
+	)
+
+	collapsed := startCollapsed
+	if collapsed {
+		content.Hide()
+		// Icon already initialized with MenuDropDownIcon above
+	} else {
+		content.Show()
+		arrowIcon.SetResource(theme.MenuDropUpIcon())
+	}
+
+	// Clickable transparent button over the header row
+	headerBtn := widget.NewButton("", func() {
+		collapsed = !collapsed
+		if persistKey != "" {
+			saveSectionCollapsed(persistKey, collapsed)
+		}
+		if collapsed {
+			content.Hide()
+			arrowIcon.SetResource(theme.MenuDropDownIcon())
+		} else {
+			content.Show()
+			arrowIcon.SetResource(theme.MenuDropUpIcon())
+		}
+	})
+	headerBtn.Importance = widget.LowImportance
+
+	// Stack the button over the header visuals so clicks are captured
+	header := container.NewStack(headerBtn, headerRow)
+
+	return container.NewVBox(header, content)
+}
+
 func layoutDaemonMiner() fyne.CanvasObject {
 	resizeWindow(ui.MaxWidth, ui.MaxHeight)
 
 	updateDaemonStateFromDetection()
+
+	// Load UI state from disk (survives across sessions, independent of wallet)
+	loadUIState()
+
+	// Load persisted collapsed states for collapsible sections
+	daemonConfigCollapsed := loadSectionCollapsed(sectionKeyDaemonConfig, dmState.daemonState == dmStateExternal)
+	daemonInfoCollapsed := loadSectionCollapsed(sectionKeyDaemonInfo, false)
+	minerConfigCollapsed := loadSectionCollapsed(sectionKeyMinerConfig, false)
+	minerStatsCollapsed := loadSectionCollapsed(sectionKeyMinerStats, false)
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -748,28 +920,8 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	infoUI.txpool = daemonTxPoolText
 	infoUI.mu.Unlock()
 
-	// Daemon section header (Settings style)
-	daemonSectionLabel := canvas.NewText(i18n.T("daemon_miner.daemon")+" INFO", apptheme.C.Gray)
-	daemonSectionLabel.TextSize = scaleFont(14)
-	daemonSectionLabel.Alignment = fyne.TextAlignCenter
-	daemonSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	daemonLine1 := canvas.NewRectangle(apptheme.C.Gray)
-	daemonLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	daemonLineBox1 := container.NewVBox(layout.NewSpacer(), daemonLine1, layout.NewSpacer())
-	daemonLine2 := canvas.NewRectangle(apptheme.C.Gray)
-	daemonLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	daemonLineBox2 := container.NewVBox(layout.NewSpacer(), daemonLine2, layout.NewSpacer())
-
-	daemonSectionHeader := container.NewHBox(
-		layout.NewSpacer(),
-		daemonLineBox1,
-		layout.NewSpacer(),
-		daemonSectionLabel,
-		layout.NewSpacer(),
-		daemonLineBox2,
-		layout.NewSpacer(),
-	)
+	// Wrap daemon info in a collapsible section
+	daemonInfoBox = newCollapsibleSection(i18n.T("daemon_miner.daemon")+" INFO", daemonInfoBox, daemonInfoCollapsed, sectionKeyDaemonInfo)
 
 	// ---- Miner Config Panel ----
 	cpus := runtime.NumCPU()
@@ -912,29 +1064,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	minerInfoBox := minerConfigBox
 
-	// Miner statistics section
-	minerStatsLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" STATS", apptheme.C.Gray)
-	minerStatsLabel.TextSize = scaleFont(14)
-	minerStatsLabel.Alignment = fyne.TextAlignCenter
-	minerStatsLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	statsLine1 := canvas.NewRectangle(apptheme.C.Gray)
-	statsLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	statsLineBox1 := container.NewVBox(layout.NewSpacer(), statsLine1, layout.NewSpacer())
-	statsLine2 := canvas.NewRectangle(apptheme.C.Gray)
-	statsLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	statsLineBox2 := container.NewVBox(layout.NewSpacer(), statsLine2, layout.NewSpacer())
-
-	statsSectionHeader := container.NewHBox(
-		layout.NewSpacer(),
-		statsLineBox1,
-		layout.NewSpacer(),
-		minerStatsLabel,
-		layout.NewSpacer(),
-		statsLineBox2,
-		layout.NewSpacer(),
-	)
-
 	// Miner statistics fields
 	statColor := apptheme.C.Gray
 
@@ -995,51 +1124,11 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Start the background stats refresh
 	startMinerStatsRefresh()
 
-	// Miner section header (Settings style)
-	minerSectionLabel := canvas.NewText(i18n.T("daemon_miner.miner")+" CONFIG", apptheme.C.Gray)
-	minerSectionLabel.TextSize = scaleFont(14)
-	minerSectionLabel.Alignment = fyne.TextAlignCenter
-	minerSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
+	// Wrap miner stats in a collapsible section
+	minerStatsBox = newCollapsibleSection(i18n.T("daemon_miner.miner")+" STATS", minerStatsBox, minerStatsCollapsed, sectionKeyMinerStats)
 
-	minerLine1 := canvas.NewRectangle(apptheme.C.Gray)
-	minerLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	minerLineBox1 := container.NewVBox(layout.NewSpacer(), minerLine1, layout.NewSpacer())
-	minerLine2 := canvas.NewRectangle(apptheme.C.Gray)
-	minerLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	minerLineBox2 := container.NewVBox(layout.NewSpacer(), minerLine2, layout.NewSpacer())
-
-	minerSectionHeader := container.NewHBox(
-		layout.NewSpacer(),
-		minerLineBox1,
-		layout.NewSpacer(),
-		minerSectionLabel,
-		layout.NewSpacer(),
-		minerLineBox2,
-		layout.NewSpacer(),
-	)
-
-	// ---- DAEMON CONFIG ----
-	daemonConfigSectionLabel := canvas.NewText(i18n.T("daemon_miner.daemon")+" CONFIG", apptheme.C.Gray)
-	daemonConfigSectionLabel.TextSize = scaleFont(14)
-	daemonConfigSectionLabel.Alignment = fyne.TextAlignCenter
-	daemonConfigSectionLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-	daemonConfigLine1 := canvas.NewRectangle(apptheme.C.Gray)
-	daemonConfigLine1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	daemonConfigLineBox1 := container.NewVBox(layout.NewSpacer(), daemonConfigLine1, layout.NewSpacer())
-	daemonConfigLine2 := canvas.NewRectangle(apptheme.C.Gray)
-	daemonConfigLine2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
-	daemonConfigLineBox2 := container.NewVBox(layout.NewSpacer(), daemonConfigLine2, layout.NewSpacer())
-
-	daemonConfigSectionHeader := container.NewHBox(
-		layout.NewSpacer(),
-		daemonConfigLineBox1,
-		layout.NewSpacer(),
-		daemonConfigSectionLabel,
-		layout.NewSpacer(),
-		daemonConfigLineBox2,
-		layout.NewSpacer(),
-	)
+	// Wrap miner config in a collapsible section
+	minerInfoBox = newCollapsibleSection(i18n.T("daemon_miner.miner")+" CONFIG", minerInfoBox, minerConfigCollapsed, sectionKeyMinerConfig)
 
 	// Mode display (clickable to change) — stored in global so dialogs can refresh it live
 	daemonModeLabel = canvas.NewText("Mode: ", apptheme.C.Green)
@@ -1106,8 +1195,8 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	})
 	deleteNodeBtn.Importance = widget.DangerImportance
 
-	daemonConfigBox := container.NewVBox(
-		daemonConfigSectionHeader,
+	// DAEMON CONFIG (collapsible — starts collapsed when external daemon is detected)
+	daemonConfigContent := container.NewVBox(
 		newRectSpacer(),
 		container.NewBorder(nil, nil, daemonModeLabel, changeModeBtn),
 		newRectSpacer(),
@@ -1116,18 +1205,17 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		newRectSpacer(),
 		deleteNodeBtn,
 	)
+	daemonConfigBox := newCollapsibleSection(i18n.T("daemon_miner.daemon")+" CONFIG", daemonConfigContent, daemonConfigCollapsed, sectionKeyDaemonConfig)
 
 	topSection := container.NewVBox(
 		indicatorRow,
+		newRectSpacer(),
 		daemonConfigBox,
 		newRectSpacer(),
-		daemonSectionHeader,
 		daemonInfoBox,
 		newRectSpacer(),
-		minerSectionHeader,
 		minerInfoBox,
 		newRectSpacer(),
-		statsSectionHeader,
 		minerStatsBox,
 	)
 
