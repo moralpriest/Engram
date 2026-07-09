@@ -1680,23 +1680,6 @@ func StartPulse() {
 		// Start Gnomon indexing as soon as daemon is connected
 		go startGnomon()
 
-		// Push-based sync: listen for daemon height notifications and sync immediately.
-		// The daemon sends "Height" notifications via WebSocket on every new block.
-		// walletapi's sync_loop only polls every 5s; this goroutine provides instant
-		// sync by reacting to the same notifications. The existing 5s fallback remains.
-		go func() {
-			for isWalletGenerationActive(generation) && session.WalletOpen {
-				walletapi.WaitNewHeightBlock()
-				if !isWalletGenerationActive(generation) || !session.WalletOpen {
-					break
-				}
-				if engram.Disk != nil && isDaemonConnected() {
-					engram.Disk.Sync_Wallet_Memory_With_Daemon()
-					refreshHistoryAsync(false)
-				}
-			}
-		}()
-
 		refreshPermissionsAfterConnect()
 
 		sentNotifications := false
