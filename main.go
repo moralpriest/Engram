@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"runtime"
 	"time"
@@ -455,7 +456,8 @@ func handleBackNavigation() {
 	}
 }
 
-// showQuitConfirmation displays a popup with stop-options before exiting.
+// showQuitConfirmation displays a full-screen overlay with stop-options before exiting.
+// Matches the style of the DATASHARD DELETION REQUESTED dialog.
 func showQuitConfirmation() {
 	fyne.Do(func() {
 		session.Window.Show()
@@ -463,31 +465,33 @@ func showQuitConfirmation() {
 		stopDaemonCB := widget.NewCheck(i18n.T("system_tray.stop_daemon"), nil)
 		stopMinerCB := widget.NewCheck(i18n.T("system_tray.stop_miner"), nil)
 
-		var popUp *widget.PopUp
+		hasRunningServices := globalChain != nil || minerIsRunning()
 
-		cancelBtn := widget.NewButton(i18n.T("system_tray.cancel"), func() {
-			popUp.Hide()
-		})
+		// "Quit Engram?" styled like "Are you sure?" in the datashard dialog
+		quitHeader := canvas.NewText(i18n.T("system_tray.quit_title")+"?", apptheme.C.Account)
+		quitHeader.TextSize = scaleFont(22)
+		quitHeader.Alignment = fyne.TextAlignCenter
+		quitHeader.TextStyle = fyne.TextStyle{Bold: true}
 
-		quitBtn := widget.NewButton(i18n.T("system_tray.quit"), func() {
+		// Cancel hyperlink (below Quit button, same spacing as datashard dialog)
+		linkClose := widget.NewHyperlinkWithStyle(i18n.T("system_tray.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkClose.OnTapped = func() {
+			removeOverlays()
+		}
+
+		// Large Quit button (same size as "Delete Datashard")
+		btnQuit := widget.NewButton(i18n.T("system_tray.quit"), func() {
 			if stopDaemonCB.Checked {
 				stopDaemon()
 			}
 			if stopMinerCB.Checked {
 				stopMiner()
 			}
-			popUp.Hide()
+			removeOverlays()
 			performAppExit()
 		})
 
-		hasRunningServices := globalChain != nil || minerIsRunning()
-
-		// Title
-		titleLabel := widget.NewLabel(i18n.T("system_tray.quit_title"))
-		titleLabel.TextStyle = fyne.TextStyle{Bold: true}
-		titleLabel.Alignment = fyne.TextAlignCenter
-
-		// Build center content
+		// Build center content (message + optional checkboxes)
 		var contentItems []fyne.CanvasObject
 		if hasRunningServices {
 			msgLabel := widget.NewLabel(i18n.T("system_tray.quit_message"))
@@ -506,15 +510,47 @@ func showQuitConfirmation() {
 
 		contentVBox := container.NewVBox(contentItems...)
 
-		cardContent := container.NewBorder(
-			titleLabel,
-			container.NewCenter(container.NewHBox(cancelBtn, quitBtn)),
-			nil, nil,
-			contentVBox,
+		// Spacers matching the datashard dialog's rectSpacer pattern
+		spacer := canvas.NewRectangle(color.Transparent)
+		spacer.SetMinSize(standardSpacerSize())
+
+		// Top padding (matching datashard's span)
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+
+		overlay := session.Window.Canvas().Overlays()
+
+		// Layer 1: Dark background
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(apptheme.C.DarkMatter),
+			),
 		)
 
-		popUp = widget.NewModalPopUp(cardContent, session.Window.Canvas())
-		popUp.Show()
+		// Layer 2: Centered content (matching datashard dialog spacing)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						spacer,
+						spacer,
+						container.NewCenter(quitHeader),
+						spacer,
+						contentVBox,
+						spacer,
+						wrapMobileButton(btnQuit),
+						spacer,
+						spacer,
+						container.NewCenter(linkClose),
+						spacer,
+						spacer,
+					),
+				),
+			),
+		)
 	})
 }
 
