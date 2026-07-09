@@ -739,8 +739,6 @@ var stringsTemplate = map[string]string{
 	"system_tray.quit":                "",
 	"system_tray.quit_title":          "",
 	"system_tray.quit_message":        "",
-	"system_tray.stop_daemon":         "",
-	"system_tray.stop_miner":          "",
 	"system_tray.cancel":              "",
 
 	"log_viewer.title":           "",

@@ -709,9 +709,7 @@ var stringsEN = map[string]string{
 	"system_tray.settings":            "Settings",
 	"system_tray.quit":                "Quit",
 	"system_tray.quit_title":          "Quit Engram",
-	"system_tray.quit_message":        "Stop running services before quitting?",
-	"system_tray.stop_daemon":         "Stop daemon",
-	"system_tray.stop_miner":          "Stop miner",
+	"system_tray.quit_message":        "Services still running:",
 	"system_tray.cancel":              "Cancel",
 
 	"log_viewer.title":           "⚡ CLI Log Viewer",

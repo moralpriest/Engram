@@ -91,6 +91,10 @@ var (
 	daemonSyncPulseStop chan struct{}
 )
 
+// daemonModeLabel is the UI text showing the current daemon mode (FULL / PRUNED).
+// It is refreshed live when the mode changes via the mode dialog.
+var daemonModeLabel *canvas.Text
+
 const (
 	dmStateStopped = iota
 	dmStateRunning
@@ -542,6 +546,22 @@ func updateMinerStatsUI() {
 		minerStatsUIInstance.rejected.Text = rejectedStr
 		minerStatsUIInstance.rejected.Refresh()
 	}
+}
+
+// refreshDaemonModeLabel updates the mode label text to reflect the current
+// daemonMode. Must be called on the UI goroutine.
+func refreshDaemonModeLabel() {
+	if daemonModeLabel == nil {
+		return
+	}
+	var modeDisplay string
+	if daemonMode == "" {
+		modeDisplay = "NOT CONFIGURED"
+	} else {
+		modeDisplay = strings.ToUpper(daemonMode)
+	}
+	daemonModeLabel.Text = "Mode: " + modeDisplay
+	daemonModeLabel.Refresh()
 }
 
 func layoutDaemonMiner() fyne.CanvasObject {
@@ -1021,15 +1041,10 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
-	// Mode display (clickable to change)
-	var modeDisplay string
-	if daemonMode == "" {
-		modeDisplay = "NOT CONFIGURED"
-	} else {
-		modeDisplay = strings.ToUpper(daemonMode)
-	}
-	modeLabel := canvas.NewText("Mode: "+modeDisplay, apptheme.C.Green)
-	modeLabel.TextSize = scaleFont(12)
+	// Mode display (clickable to change) — stored in global so dialogs can refresh it live
+	daemonModeLabel = canvas.NewText("Mode: ", apptheme.C.Green)
+	daemonModeLabel.TextSize = scaleFont(12)
+	refreshDaemonModeLabel()
 
 	changeModeBtn := widget.NewButton("Change", func() {
 		// Recompute health in background goroutine to avoid blocking the UI
@@ -1094,7 +1109,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	daemonConfigBox := container.NewVBox(
 		daemonConfigSectionHeader,
 		newRectSpacer(),
-		container.NewBorder(nil, nil, modeLabel, changeModeBtn),
+		container.NewBorder(nil, nil, daemonModeLabel, changeModeBtn),
 		newRectSpacer(),
 		makeField("Integrator Address"),
 		entryIntegrator,
@@ -1201,6 +1216,7 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 
 	prunedBtn := widget.NewButton("Pruned Node (~5-10 GB)", func() {
 		saveDaemonMode("pruned")
+		refreshDaemonModeLabel()
 		modeDialog.Hide()
 		afterSave()
 	})
@@ -1219,10 +1235,12 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 		if forceFullMode {
 			showForceFullWarningDialog(func() {
 				saveDaemonMode("full")
+				refreshDaemonModeLabel()
 				afterSave()
 			}, nil)
 		} else {
 			saveDaemonMode("full")
+			refreshDaemonModeLabel()
 			afterSave()
 		}
 	})
@@ -1235,6 +1253,7 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	if !health.HasSpaceForFull {
 		forceCheck := widget.NewCheck("Force Full Mode (I have 250GB+ available)", func(checked bool) {
 			saveForceFullMode(checked)
+			refreshDaemonModeLabel()
 			if checked {
 				fullBtn.SetText("Full Node (~250 GB) [FORCED]")
 				fullBtn.Enable()

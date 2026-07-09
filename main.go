@@ -462,10 +462,16 @@ func showQuitConfirmation() {
 	fyne.Do(func() {
 		session.Window.Show()
 
-		stopDaemonCB := widget.NewCheck(i18n.T("system_tray.stop_daemon"), nil)
-		stopMinerCB := widget.NewCheck(i18n.T("system_tray.stop_miner"), nil)
+		daemonStatus := ""
+		minerStatus := ""
+		if globalChain != nil {
+			daemonStatus = "Daemon"
+		}
+		if minerIsRunning() {
+			minerStatus = "Miner"
+		}
 
-		hasRunningServices := globalChain != nil || minerIsRunning()
+		hasRunningServices := daemonStatus != "" || minerStatus != ""
 
 		// "Quit Engram?" styled like "Are you sure?" in the datashard dialog
 		quitHeader := canvas.NewText(i18n.T("system_tray.quit_title")+"?", apptheme.C.Account)
@@ -481,17 +487,11 @@ func showQuitConfirmation() {
 
 		// Large Quit button (same size as "Delete Datashard")
 		btnQuit := widget.NewButton(i18n.T("system_tray.quit"), func() {
-			if stopDaemonCB.Checked {
-				stopDaemon()
-			}
-			if stopMinerCB.Checked {
-				stopMiner()
-			}
 			removeOverlays()
 			performAppExit()
 		})
 
-		// Build center content (message + optional checkboxes)
+		// Build center content (message + status labels)
 		var contentItems []fyne.CanvasObject
 		if hasRunningServices {
 			msgLabel := widget.NewLabel(i18n.T("system_tray.quit_message"))
@@ -501,11 +501,15 @@ func showQuitConfirmation() {
 				widget.NewSeparator(),
 			)
 		}
-		if globalChain != nil {
-			contentItems = append(contentItems, stopDaemonCB)
+		if daemonStatus != "" {
+			statusLabel := widget.NewLabel(daemonStatus)
+			statusLabel.Alignment = fyne.TextAlignCenter
+			contentItems = append(contentItems, statusLabel)
 		}
-		if minerIsRunning() {
-			contentItems = append(contentItems, stopMinerCB)
+		if minerStatus != "" {
+			statusLabel := widget.NewLabel(minerStatus)
+			statusLabel.Alignment = fyne.TextAlignCenter
+			contentItems = append(contentItems, statusLabel)
 		}
 
 		contentVBox := container.NewVBox(contentItems...)
