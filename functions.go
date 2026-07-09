@@ -2177,6 +2177,7 @@ func closeWallet() {
 		// Immediate state reset
 		engram.Disk = nil
 		session.WalletOpen = false
+		updateTrayMenu()
 		introShownThisSession = false
 		session.Domain = "app.main"
 		session.BalanceUSD = ""
@@ -2356,6 +2357,7 @@ func login() {
 		session.WalletOpen = true
 
 		initSettings()
+		updateTrayMenu()
 	}
 
 	switch session.Network {
@@ -2547,6 +2549,7 @@ func login() {
 	shard := fmt.Sprintf("%x", sha1.Sum([]byte(address)))
 	session.ID = shard
 	session.LimitMessages = true
+	updateTrayMenu()
 }
 
 // waitForConnectionWithTimeout waits for daemon connection with a timeout
