@@ -19,6 +19,7 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	_ "image/gif"
@@ -89,6 +90,7 @@ var ui UI
 var appExiting bool
 var previousDomain string
 var lastForegroundTime int64           // unix timestamp of last foreground event (for cooldown)
+var foregroundActive atomic.Bool       // dedup foreground handler (mobile double-fire guard)
 var currentScrollBox *container.Scroll // tracks current page's scroll container for mobile input scrolling
 
 func main() {
@@ -273,10 +275,16 @@ func main() {
 	a.Lifecycle().SetOnEnteredForeground(func() {
 		isMobileDevice := a.Driver().Device().IsMobile()
 
+		if !foregroundActive.CompareAndSwap(false, true) {
+			logger.Printf("[Lifecycle] Foreground already active — skipping duplicate event")
+			return
+		}
+		defer foregroundActive.Store(false)
+
 		now := time.Now().Unix()
 		if telaViewActive.Load() {
 			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
-		} else if now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+		} else if now-lastForegroundTime < 5 && lastForegroundTime > 0 {
 			return
 		}
 		lastForegroundTime = now
@@ -311,29 +319,19 @@ func main() {
 					return
 				}
 
-				if !session.Offline && rpc_client.RPC == nil {
-					logger.Printf("[Lifecycle] RPC connection lost, will reconnect naturally")
-				}
-
 				if isMobileDevice {
-					// Skip StartPulse if pulse is already running to avoid
-					// disrupting active XSWD/EPOCH connections during TELA use.
-					if pulseRunning {
-						logger.Printf("[Lifecycle] Mobile foreground - pulse already running, skipping reconnection")
-					} else {
-						logger.Printf("[Lifecycle] Mobile foreground - triggering reconnection")
-						go StartPulse()
-					}
+					// After backgrounding, the TCP connection is likely dead but the
+					// daemonConnected flag may still be true (Android kills sockets
+					// silently). Reset it and bump generation to force a fresh
+					// StartPulse that enters the reconnect block.
+					setDaemonConnected(false)
+					bumpPulseGeneration()
+					go StartPulse()
 					refreshForegroundUI("[Lifecycle] UI refreshed after foreground (mobile)")
 					return
 				}
 
 				refreshForegroundUI("[Lifecycle] UI refreshed after foreground")
-
-				if !isWalletGenerationActive(generation) {
-					return
-				}
-				refreshMessageHistoryAsync(false)
 			}()
 		} else if previousDomain != "" {
 			fyne.Do(func() {

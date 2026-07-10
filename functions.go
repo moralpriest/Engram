@@ -313,6 +313,10 @@ var walletSessionGeneration uint64
 var pulseSessionGeneration uint64
 var pulseRunning bool
 
+// lastPulseHeartbeat is updated by the main pulse loop each iteration.
+// Used to detect stalled sync when the app returns from background.
+var lastPulseHeartbeat atomic.Int64
+
 func currentWalletGeneration() uint64 {
 	walletSessionMu.RLock()
 	defer walletSessionMu.RUnlock()
@@ -367,6 +371,26 @@ func finishPulseForGeneration(generation uint64) {
 		pulseRunning = false
 		pulseSessionGeneration = 0
 	}
+}
+
+// pulseIsStalled returns true if we haven't recorded a heartbeat in >8s.
+func pulseIsStalled() bool {
+	last := lastPulseHeartbeat.Load()
+	if last == 0 {
+		return false
+	}
+	return time.Since(time.Unix(0, last)) > 8*time.Second
+}
+
+// bumpPulseGeneration invalidates old pulse goroutines and resets state.
+func bumpPulseGeneration() {
+	walletSessionMu.Lock()
+	walletSessionGeneration++
+	pulseRunning = false
+	pulseSessionGeneration = 0
+	walletSessionMu.Unlock()
+	// Wake any push goroutines stuck on WaitNewHeightBlock
+	walletapi.NotifyHeightChange.Broadcast()
 }
 
 var appExitFlag atomic.Bool
@@ -1656,28 +1680,13 @@ func StartPulse() {
 		// Start Gnomon indexing as soon as daemon is connected
 		go startGnomon()
 
-		// Push-based sync: listen for daemon height notifications and sync immediately.
-		// The daemon sends "Height" notifications via WebSocket on every new block.
-		// walletapi's sync_loop only polls every 5s; this goroutine provides instant
-		// sync by reacting to the same notifications. The existing 5s fallback remains.
-		go func() {
-			for isWalletGenerationActive(generation) && session.WalletOpen {
-				walletapi.WaitNewHeightBlock()
-				if !isWalletGenerationActive(generation) || !session.WalletOpen {
-					break
-				}
-				if engram.Disk != nil && isDaemonConnected() {
-					engram.Disk.Sync_Wallet_Memory_With_Daemon()
-					refreshHistoryAsync(false)
-				}
-			}
-		}()
-
 		refreshPermissionsAfterConnect()
 
 		sentNotifications := false
 		go func() {
 			count := 0
+			lastDaemonHeight := int64(-1)
+			heightStallSince := time.Now()
 			for isWalletGenerationActive(generation) {
 				if !session.WalletOpen {
 					break
@@ -1711,6 +1720,28 @@ func StartPulse() {
 					}
 
 					refreshPulseWalletState(&sentNotifications)
+
+					// heartbeat: track that the pulse loop is alive
+					lastPulseHeartbeat.Store(time.Now().UnixNano())
+
+					// Dead-connection detection: if daemon height hasn't changed
+					// for 90s while "connected", the TCP socket is likely dead
+					// (Android killed it on background). Just flip the flag;
+					// the next iteration's reconnect check handles the rest.
+					if isDaemonConnected() {
+						curDaemonHeight := int64(walletapi.Get_Daemon_Height())
+						if curDaemonHeight > 0 {
+							if curDaemonHeight == lastDaemonHeight {
+								if time.Since(heightStallSince) > 90*time.Second {
+									logger.Printf("[Pulse] daemon height stalled at %d for >90s — marking connection dead", curDaemonHeight)
+									setDaemonConnected(false)
+								}
+							} else {
+								lastDaemonHeight = curDaemonHeight
+								heightStallSince = time.Now()
+							}
+						}
+					}
 
 					time.Sleep(time.Second)
 				}
