@@ -3,14 +3,14 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
+	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
-	"fyne.io/fyne/v2/theme"
 
 	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
@@ -70,26 +70,24 @@ var (
 	cyberdeckBaseDark = []byte("#015a2c")
 )
 
-func daemonIconResource() fyne.Resource {
-	return theme.NewThemedResource(&fyne.StaticResource{StaticName: "DaemonON.svg", StaticContent: daemonSvgData})
-}
-
-func minerIconResource() fyne.Resource {
-	return theme.NewThemedResource(&fyne.StaticResource{StaticName: "MinerON.svg", StaticContent: minerSvgData})
-}
-
-func minerOffIconResource() fyne.Resource {
-	return &fyne.StaticResource{StaticName: "MinerOFF.png", StaticContent: minerOffPngData}
+// daemonIconColor returns the tint color for the daemon icon based on state.
+// Syncing and connecting use green instead of yellow so the pulse animation
+// breathes in the theme's active color rather than the warning color.
+func daemonIconColor(state int) color.Color {
+	if state == dmStateSyncing || state == dmStateConnecting {
+		return apptheme.C.Green
+	}
+	return stateColorDM(state)
 }
 
 func daemonIconForState(state int) fyne.Resource {
-	tint := stateColorDM(state)
+	tint := daemonIconColor(state)
 	daemonColoredMu.Lock()
 	defer daemonColoredMu.Unlock()
 	if entry, ok := daemonColored[state]; ok && colorsEqual(entry.tint, tint) {
 		return entry.resource
 	}
-	res := recolorSVGResource("daemon", daemonSvgData, tint)
+	res := daemonSvgForColor(tint)
 	daemonColored[state] = &coloredIcon{resource: res, tint: tint}
 	return res
 }
@@ -140,18 +138,41 @@ func minerIconForState(state int) fyne.Resource {
 	return res
 }
 
-func recolorSVGResource(name string, svg []byte, tint color.Color) fyne.Resource {
-	colored, err := canvas.RecolorSVG(svg, tint)
-	if err != nil {
-		return fyne.NewStaticResource(name+"_fallback.svg", svg)
+// daemonSvgForColor builds a tinted daemon SVG by replacing "currentColor"
+// in the source with the hex representation of tint. This avoids
+// canvas.RecolorSVG (which relies on XML marshal/unmarshal of the SVG dom
+// and can silently fail) and matches the approach used by cyberdeckIconResource.
+func daemonSvgForColor(tint color.Color) fyne.Resource {
+	r, g, b, _ := tint.RGBA()
+	hexStr := fmt.Sprintf("#%02x%02x%02x", uint8(r>>8), uint8(g>>8), uint8(b>>8))
+	data := strings.ReplaceAll(string(daemonSvgData), "currentColor", hexStr)
+	return &fyne.StaticResource{
+		StaticName:    "daemon_tinted.svg",
+		StaticContent: []byte(data),
 	}
-	return fyne.NewStaticResource(name+"_colored.svg", colored)
 }
 
 func colorsEqual(a, b color.Color) bool {
 	ar, ag, ab, aa := a.RGBA()
 	br, bg, bb, ba := b.RGBA()
 	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+// clearDaemonColoredCache empties the daemon icon tint cache so the next
+// call to daemonIconForState re-tints the SVG with the current theme colors.
+// Must be called when the theme changes.
+func clearDaemonColoredCache() {
+	daemonColoredMu.Lock()
+	daemonColored = make(map[int]*coloredIcon)
+	daemonColoredMu.Unlock()
+}
+
+// clearMinerColoredCache empties the miner icon tint cache so the next
+// call to minerIconForState re-tints with the current theme colors.
+func clearMinerColoredCache() {
+	minerColoredMu.Lock()
+	minerColored = make(map[int]*coloredIcon)
+	minerColoredMu.Unlock()
 }
 
 func cyberdeckIconResource() fyne.Resource {

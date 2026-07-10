@@ -371,8 +371,12 @@ func startEmbeddedDaemon(dataDir string) {
 		globals.Arguments["--add-priority-node"] = priorityNodes
 	}
 
-	// Apply fastsync flag for state-bootstrap on initial sync
-	globals.Arguments["--fastsync"] = daemonFastSync
+	// NOTE: --fastsync is intentionally NOT set for embedded mode.
+	// In the derohe library, fastsync triggers a snapshot download that
+	// stalls at height=0 when started via Blockchain_Start/P2P_Init
+	// instead of the standalone derod binary. The chain connects to peers
+	// but never advances height/topoheight past 0. Standard block-by-block
+	// sync works correctly in embedded mode.
 
 	// Time sync was already verified by checkSystemHealth - tell the daemon
 	globals.TimeIsInSync = true
@@ -425,8 +429,12 @@ func startEmbeddedDaemon(dataDir string) {
 		logger.Printf("[Daemon] P2P_Init FAILED: %v", err)
 	} else {
 		logger.Printf("[Daemon] P2P_Init succeeded")
+		// Start cron jobs (required! P2P_Init registers syncroniser @every 4s,
+		// ping_loop @every 10s, etc. via globals.Cron.AddFunc, but they never
+		// fire unless globals.Cron.Start() is called. Without this the chain
+		// connects to peers but never requests blocks — height stays at 0.)
+		globals.Cron.Start()
 	}
-
 	// Start verbose P2P debugging for mobile (logs peer connections periodically)
 	go func() {
 		ticker := time.NewTicker(15 * time.Second)
@@ -456,6 +464,26 @@ func startEmbeddedDaemon(dataDir string) {
 
 	dmState.daemonState = dmStateConnecting // Start in connecting state since we need to sync
 	logger.Printf("[Daemon] Embedded daemon started successfully")
+
+	// Poll for RPC availability and eagerly populate the UI when the daemon
+	// becomes reachable. After this initial catch-up the 5-second background
+	// refresh loop (started by startBackgroundDaemonRefresh) takes over.
+	go func() {
+		for i := 0; i < 30; i++ { // up to ~30 seconds
+			time.Sleep(1 * time.Second)
+			if globalChain == nil {
+				return // daemon stopped while we were waiting
+			}
+			if info, err := fetchDaemonInfo(); err == nil {
+				uiDo(func() {
+					updateInfoUILabels(info)
+					updateDaemonStateFromDetection()
+					syncToggleStates()
+				})
+				return
+			}
+		}
+	}()
 
 	// Monitor for exit
 	go func() {

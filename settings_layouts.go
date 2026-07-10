@@ -1905,6 +1905,11 @@ func layoutAppSettings() fyne.CanvasObject {
 				}
 				StoreValue("settings", []byte("theme"), []byte(key))
 				apptheme.Activate(key)
+				// Clear daemon/miner icon tint caches so the next
+				// syncStateIndicators tick re-tints SVGs with the new
+				// theme palette.
+				clearDaemonColoredCache()
+				clearMinerColoredCache()
 				a.Settings().SetTheme(apptheme.Main)
 				UpdateThemeLogo()
 				RasterizeEnigmaLogo()

@@ -36,23 +36,6 @@ type daemonInfoUI struct {
 	txpool     *canvas.Text
 }
 
-// daemonPulseColor returns the color for the daemon sync pulse animation.
-// For Derotopia it uses Purple (per user preference), for other themes it matches
-// the balance color (Green for Engram, etc.)
-func daemonPulseColor() color.Color {
-	switch apptheme.ThemeMode {
-	case apptheme.ThemeDerotopia:
-		return apptheme.C.Purple
-	case apptheme.ThemeElDorado:
-		return apptheme.C.Yellow
-	case apptheme.ThemeCrystallina:
-		return apptheme.C.Purple
-	case apptheme.ThemeAtlantis:
-		return apptheme.C.Yellow
-	}
-	return apptheme.C.Green // Engram and default
-}
-
 var infoUI daemonInfoUI
 
 // minerStatsUI holds canvas.Text references for the miner statistics section.
@@ -79,17 +62,13 @@ type daemonMinerState struct {
 var dmState = daemonMinerState{daemonState: 0, minerState: 0}
 
 var (
-	daemonToggle      *toggleSwitch
-	minerToggle       *toggleSwitch
-	daemonStateImg    *canvas.Image
-	minerStateImg     *canvas.Image
-	daemonStateLbl    *canvas.Text
-	minerStateLbl     *canvas.Text
-	daemonPulseCircle *canvas.Circle
-)
-
-var (
-	daemonSyncPulseStop chan struct{}
+	daemonToggle   *toggleSwitch
+	minerToggle    *toggleSwitch
+	daemonStateImg *canvas.Image
+	daemonStateImgParent *fyne.Container // stack container holding the daemon icon; used to swap images
+	minerStateImg  *canvas.Image
+	daemonStateLbl  *canvas.Text
+	minerStateLbl  *canvas.Text
 )
 
 // daemonModeLabel is the UI text showing the current daemon mode (FULL / PRUNED).
@@ -111,7 +90,7 @@ func stateColorDM(s int) color.Color {
 	case dmStateRunning:
 		return apptheme.C.Green
 	case dmStateSyncing, dmStateConnecting:
-		return apptheme.C.Yellow
+		return apptheme.C.Green
 	case dmStateError, dmStateCorrupt:
 		return apptheme.C.Red
 	case dmStateExternal:
@@ -166,90 +145,31 @@ func syncToggleStates() {
 	syncStateIndicators()
 }
 
-var previousDaemonState int = -1
-var daemonPulseAnim *fyne.Animation
-
-func stopDaemonSyncPulse() {
-	if daemonSyncPulseStop != nil {
-		close(daemonSyncPulseStop)
-		daemonSyncPulseStop = nil
-	}
-	if daemonPulseAnim != nil {
-		daemonPulseAnim.Stop()
-		daemonPulseAnim = nil
-	}
-	// Reset pulse circle to transparent when stopping
-	if daemonPulseCircle != nil {
-		daemonPulseCircle.FillColor = color.Transparent
-		daemonPulseCircle.Refresh()
-	}
-}
-
-func startDaemonSyncPulse() {
-	stopDaemonSyncPulse()
-	daemonSyncPulseStop = make(chan struct{})
-
-	// Create smooth pulse animation using ColorRGBAAnimation
-	pulseColor := daemonPulseColor()
-	daemonPulseAnim = canvas.NewColorRGBAAnimation(
-		color.Transparent,
-		pulseColor,
-		1500*time.Millisecond, // smooth 1.5s fade in/out cycle
-		func(c color.Color) {
-			if daemonPulseCircle != nil {
-				daemonPulseCircle.FillColor = c
-				daemonPulseCircle.Refresh()
-			}
-		})
-
-	daemonPulseAnim.RepeatCount = fyne.AnimationRepeatForever
-	daemonPulseAnim.AutoReverse = true
-	daemonPulseAnim.Start()
-
-	// Keep pulse active for up to 5 minutes, extend if still syncing
-	go func() {
-		timeout := time.After(5 * time.Minute)
-		for {
-			select {
-			case <-daemonSyncPulseStop:
-				return
-			case <-timeout:
-				syncCheck := make(chan bool, 1)
-				uiDo(func() {
-					syncCheck <- (dmState.daemonState == dmStateSyncing || dmState.daemonState == dmStateConnecting)
-				})
-				if <-syncCheck {
-					timeout = time.After(5 * time.Minute)
-					continue
-				}
-				return
-			}
-		}
-	}()
-}
-
 // syncStateIndicators updates the state indicator icons and labels to match
 // the current dmState values. Must be called on the UI goroutine.
 func syncStateIndicators() {
-	// Handle animation start/stop based on state transitions
-	// Pulse during both connecting and syncing states
-	wasActive := previousDaemonState == dmStateSyncing || previousDaemonState == dmStateConnecting
-	isActive := dmState.daemonState == dmStateSyncing || dmState.daemonState == dmStateConnecting
-
-	if wasActive && !isActive {
-		stopDaemonSyncPulse()
-	} else if !wasActive && isActive {
-		startDaemonSyncPulse()
-	}
-
-	previousDaemonState = dmState.daemonState
-
 	if daemonStateLbl != nil {
 		daemonStateLbl.Text = stateLabelDM(dmState.daemonState)
 		daemonStateLbl.Color = stateColorDM(dmState.daemonState)
 		daemonStateLbl.Refresh()
 	}
-	// Pulse circle handles the visual feedback; no need to manipulate image translucency
+	if daemonStateImg != nil {
+		// Build a fresh image with the correct tint. Using a new canvas.Image
+		// object bypasses Fyne's SVG rasterizer cache (the old workaround
+		// stacked a translucent green icon on top of a gray one, but that
+		// prevented theme-color updates from taking effect).
+		tinted := daemonIconForState(dmState.daemonState)
+		fresh := canvas.NewImageFromResource(tinted)
+		fresh.FillMode = canvas.ImageFillContain
+		fresh.SetMinSize(daemonStateImg.MinSize())
+		// Swap into the parent stack so the old image is replaced.
+		if p := daemonStateImgParent; p != nil {
+			p.Remove(daemonStateImg)
+			p.Add(fresh)
+		}
+		daemonStateImg = fresh
+		canvas.Refresh(fresh)
+	}
 	if minerStateLbl != nil {
 		minerStateLbl.Text = stateLabelDM(dmState.minerState)
 		minerStateLbl.Color = stateColorDM(dmState.minerState)
@@ -274,19 +194,6 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	stateLabel.TextSize = scaleFont(12)
 	stateLabel.Alignment = fyne.TextAlignCenter
 
-	// Store references for live updates via syncStateIndicators()
-	if label == i18n.T("daemon_miner.daemon") {
-		daemonStateImg = img
-		daemonStateLbl = stateLabel
-		// Create pulse circle for smooth animation behind the daemon icon
-		daemonPulseCircle = canvas.NewCircle(color.Transparent)
-		daemonPulseCircle.StrokeWidth = 0
-		daemonPulseCircle.Hidden = false
-	} else if label == i18n.T("daemon_miner.miner") {
-		minerStateImg = img
-		minerStateLbl = stateLabel
-	}
-
 	labelText := canvas.NewText(label, buttonTextColor())
 	labelText.TextSize = scaleFont(14)
 	labelText.TextStyle = fyne.TextStyle{Bold: true}
@@ -295,11 +202,22 @@ func newStateIndicator(state *int, label string, res fyne.Resource, indicatorWid
 	widthAnchor := canvas.NewRectangle(color.Transparent)
 	widthAnchor.SetMinSize(fyne.NewSize(indicatorWidth, 1))
 
-	// Build icon container: stack with pulse circle behind image
-	iconContainer := container.NewStack()
-	if label == i18n.T("daemon_miner.daemon") && daemonPulseCircle != nil {
-		iconContainer = container.NewStack(daemonPulseCircle, img)
+	// Store references for live updates via syncStateIndicators()
+	var iconContainer *fyne.Container
+	if label == i18n.T("daemon_miner.daemon") {
+		// Single image — the resource is swapped on every syncStateIndicators
+		// tick via a fresh canvas.Image to force Fyne to re-rasterize the
+		// tinted SVG with the current theme color.
+		single := canvas.NewImageFromResource(daemonIconForState(dmState.daemonState))
+		single.FillMode = canvas.ImageFillContain
+		single.SetMinSize(fyne.NewSize(40, 40))
+		daemonStateImg = single
+		daemonStateImgParent = container.NewStack(single)
+		daemonStateLbl = stateLabel
+		iconContainer = daemonStateImgParent
 	} else {
+		minerStateImg = img
+		minerStateLbl = stateLabel
 		iconContainer = container.NewStack(img)
 	}
 
@@ -328,13 +246,13 @@ func startBackgroundDaemonRefresh() {
 				info, err := fetchDaemonInfo()
 				if err == nil {
 					fmt.Printf("[Daemon RPC] Background refresh: height=%d topo=%d synced=%v", info.Height, info.Topoheight, info.Synchronized)
-					uiDo(func() { updateInfoUILabels(info) })
-				} else {
-					fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
-				}
-				updateDaemonStateFromDetection()
-				uiDo(syncToggleStates)
-				time.Sleep(5 * time.Second)
+				uiDo(func() { updateInfoUILabels(info) })
+			} else {
+				fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
+			}
+			updateDaemonStateFromDetection()
+			uiDo(syncToggleStates)
+			time.Sleep(3 * time.Second)
 			}
 		}()
 	})
@@ -345,37 +263,53 @@ func startBackgroundDaemonRefresh() {
 func updateInfoUILabels(info DaemonInfo) {
 	infoUI.mu.Lock()
 	defer infoUI.mu.Unlock()
+	// Use the daemon state to pick the right text color — green when active,
+	// gray when stopped, red on error. This color was set once at page-build
+	// time but needs to be reapplied on every update or it stays gray forever.
+	textColor := stateColorDM(dmState.daemonState)
+
 	if infoUI.status != nil {
-		if dmState.daemonState == dmStateSyncing && info.Height > 0 && info.Topoheight > info.Height {
+		switch {
+		case dmState.daemonState == dmStateSyncing && info.Height == 0:
+			// Chain initializing — fastsync was disabled, so sync starts
+			// from scratch. "0/0" is misleading; show a friendlier message.
+			infoUI.status.Text = "Initializing sync..."
+		case dmState.daemonState == dmStateSyncing && info.Height > 0 && info.Topoheight > info.Height:
 			infoUI.status.Text = fmt.Sprintf("Syncing %d/%d", info.Height, info.Topoheight)
-		} else {
+		default:
 			infoUI.status.Text = stateLabelDM(dmState.daemonState)
 		}
-		infoUI.status.Color = stateColorDM(dmState.daemonState)
+		infoUI.status.Color = textColor
 		infoUI.status.Refresh()
 	}
 	if infoUI.height != nil {
 		infoUI.height.Text = fmt.Sprintf("%d", info.Height)
+		infoUI.height.Color = textColor
 		infoUI.height.Refresh()
 	}
 	if infoUI.topo != nil {
 		infoUI.topo.Text = fmt.Sprintf("%d", info.Topoheight)
+		infoUI.topo.Color = textColor
 		infoUI.topo.Refresh()
 	}
 	if infoUI.difficulty != nil {
 		infoUI.difficulty.Text = fmt.Sprintf("%d", info.Difficulty)
+		infoUI.difficulty.Color = textColor
 		infoUI.difficulty.Refresh()
 	}
 	if infoUI.peers != nil {
 		infoUI.peers.Text = fmt.Sprintf("%d in / %d out", info.InPeers, info.OutPeers)
+		infoUI.peers.Color = textColor
 		infoUI.peers.Refresh()
 	}
 	if infoUI.version != nil {
 		infoUI.version.Text = info.Version
+		infoUI.version.Color = textColor
 		infoUI.version.Refresh()
 	}
 	if infoUI.txpool != nil {
 		infoUI.txpool.Text = fmt.Sprintf("%d", info.TxPoolSize)
+		infoUI.txpool.Color = textColor
 		infoUI.txpool.Refresh()
 	}
 }
@@ -808,7 +742,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 					})
 					return
 				}
-				// Start daemon (embedded, runs in-process from derohe library source)
+				// Start daemon (embedded, runs in-process from derohe library source).
+				// The eager polling for RPC availability is handled inside
+				// startEmbeddedDaemon().
 				startDaemon()
 			} else {
 				stopDaemon()
@@ -876,27 +812,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Fetch daemon info (non-blocking, uses cached on error)
 	info, infoErr := fetchDaemonInfo()
 
-	// If the embedded daemon is running but the RPC server goroutine
-	// hasn't started listening yet, retry in the background so the UI
-	// populates as soon as the daemon is reachable (without blocking the
-	// UI thread for seconds). Also sync state indicators so the state
-	// label and pulse animation match the live data immediately.
-	if infoErr != nil && globalChain != nil {
-		go func() {
-			for i := 0; i < 12; i++ {
-				time.Sleep(500 * time.Millisecond)
-				if info, err := fetchDaemonInfo(); err == nil {
-					uiDo(func() {
-						updateInfoUILabels(info)
-						updateDaemonStateFromDetection()
-						syncToggleStates()
-					})
-					return
-				}
-			}
-		}()
-	}
-
 	if infoErr == nil && dmState.daemonState == dmStateStopped {
 		dmState.daemonState = dmStateExternal
 	}
@@ -912,9 +827,15 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		daemonVersionText = makeStatValue(info.Version, apptheme.C.Green)
 		daemonTxPoolText = makeStatValue(fmt.Sprintf("%d", info.TxPoolSize), apptheme.C.Green)
 	} else {
-		unavail := makeStatValue("—", apptheme.C.Gray)
-		daemonHeightText, daemonTopoText, daemonDiffText = unavail, unavail, unavail
-		daemonPeersText, daemonVersionText, daemonTxPoolText = unavail, unavail, unavail
+		// Create separate canvas.Text for each info field — they must NOT share
+		// the same object, or updateInfoUILabels would overwrite all fields with
+		// whichever value was written last, making the display appear stuck.
+		daemonHeightText = makeStatValue("—", apptheme.C.Gray)
+		daemonTopoText = makeStatValue("—", apptheme.C.Gray)
+		daemonDiffText = makeStatValue("—", apptheme.C.Gray)
+		daemonPeersText = makeStatValue("—", apptheme.C.Gray)
+		daemonVersionText = makeStatValue("—", apptheme.C.Gray)
+		daemonTxPoolText = makeStatValue("—", apptheme.C.Gray)
 	}
 
 	daemonInfoBox := container.NewVBox(
@@ -948,6 +869,25 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	infoUI.version = daemonVersionText
 	infoUI.txpool = daemonTxPoolText
 	infoUI.mu.Unlock()
+
+	// If the daemon is already running (e.g. auto-started) but fetchDaemonInfo()
+	// failed at page-build time (RPC not ready yet), eagerly poll for it so
+	// the user sees data immediately instead of waiting for background refresh.
+	if globalChain != nil && infoErr != nil {
+		go func() {
+			for i := 0; i < 10; i++ {
+				time.Sleep(500 * time.Millisecond)
+				if info, err := fetchDaemonInfo(); err == nil {
+					uiDo(func() {
+						updateInfoUILabels(info)
+						updateDaemonStateFromDetection()
+						syncToggleStates()
+					})
+					return
+				}
+			}
+		}()
+	}
 
 	// Wrap daemon info in a collapsible section
 	daemonInfoBox = newCollapsibleSection(i18n.T("daemon_miner.daemon")+" INFO", daemonInfoBox, daemonInfoCollapsed, sectionKeyDaemonInfo)
