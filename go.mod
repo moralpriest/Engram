@@ -8,8 +8,6 @@ replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.1-wait
 
 replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-20260607210939-1bb1734a8874
 
-replace github.com/deroproject/derohe => github.com/DEROFDN/derohe v0.0.0-20260705204633-6f9bd2ca1209
-
 require (
 	fyne.io/fyne/v2 v2.7.4
 	fyne.io/systray v1.12.1

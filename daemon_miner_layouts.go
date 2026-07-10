@@ -875,6 +875,28 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Fetch daemon info (non-blocking, uses cached on error)
 	info, infoErr := fetchDaemonInfo()
+
+	// If the embedded daemon is running but the RPC server goroutine
+	// hasn't started listening yet, retry in the background so the UI
+	// populates as soon as the daemon is reachable (without blocking the
+	// UI thread for seconds). Also sync state indicators so the state
+	// label and pulse animation match the live data immediately.
+	if infoErr != nil && globalChain != nil {
+		go func() {
+			for i := 0; i < 12; i++ {
+				time.Sleep(500 * time.Millisecond)
+				if info, err := fetchDaemonInfo(); err == nil {
+					uiDo(func() {
+						updateInfoUILabels(info)
+						updateDaemonStateFromDetection()
+						syncToggleStates()
+					})
+					return
+				}
+			}
+		}()
+	}
+
 	if infoErr == nil && dmState.daemonState == dmStateStopped {
 		dmState.daemonState = dmStateExternal
 	}

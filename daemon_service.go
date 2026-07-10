@@ -41,6 +41,10 @@ import (
 var embeddedHTTPServer *http.Server
 
 var prioritySeedNodes = []string{
+	"78.159.118.236:11011",
+	"209.58.186.186:11011",
+	"23.81.165.146:11011",
+	"85.17.52.28:11011",
 	"82.65.143.182:11011",
 	"204.12.199.25:11011",
 	"154.26.138.136:11011",
@@ -354,8 +358,9 @@ func startEmbeddedDaemon(dataDir string) {
 
 	// Bind RPC, P2P, and getwork servers so the daemon's RPC is reachable locally
 	globals.Arguments["--rpc-bind"] = fmt.Sprintf("127.0.0.1:%d", rpcPort)
-	globals.Arguments["--p2p-bind"] = fmt.Sprintf("127.0.0.1:%d", p2pPort)
+	globals.Arguments["--p2p-bind"] = fmt.Sprintf("0.0.0.0:%d", p2pPort)
 	globals.Arguments["--getwork-bind"] = fmt.Sprintf("0.0.0.0:%d", workPort)
+	globals.Arguments["--max-peers"] = 101
 
 	// Add priority seed nodes for faster peer discovery (collect all into a slice)
 	var priorityNodes []string
@@ -382,9 +387,10 @@ func startEmbeddedDaemon(dataDir string) {
 
 	// Build params for Blockchain_Start (include RPC/P2P binds so the server starts)
 	params := map[string]interface{}{
-		"--data-dir": dataDir,
-		"--rpc-bind": fmt.Sprintf("127.0.0.1:%d", rpcPort),
-		"--p2p-bind": fmt.Sprintf("127.0.0.1:%d", p2pPort),
+		"--data-dir":  dataDir,
+		"--rpc-bind":  fmt.Sprintf("127.0.0.1:%d", rpcPort),
+		"--p2p-bind":  fmt.Sprintf("0.0.0.0:%d", p2pPort),
+		"--max-peers": 101,
 	}
 	if session.Network == NETWORK_TESTNET {
 		params["--testnet"] = ""

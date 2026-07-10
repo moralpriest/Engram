@@ -233,7 +233,7 @@ func main() {
 	globals.Arguments["--debug"] = false
 	globals.Arguments["--testnet"] = false
 	globals.Arguments["--daemon-address"] = "127.0.0.1:10102"
-	globals.Arguments["--p2p-bind"] = "127.0.0.1:10101"
+	globals.Arguments["--p2p-bind"] = "0.0.0.0:10101"
 	globals.Arguments["--rpc-server"] = true
 	globals.Arguments["--rpc-bind"] = "127.0.0.1:10103"
 	globals.Arguments["--allow-rpc-password-change"] = true
