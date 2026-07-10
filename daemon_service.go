@@ -65,6 +65,7 @@ var (
 	minerWalletAddr         string
 	minerDaemonAddr         string
 	daemonMode              string                 // "full" or "pruned" - persisted
+	daemonFastSync          bool                   // use --fastsync flag on startup - persisted
 	daemonIntegratorAddress string                 // optional integrator reward address
 	globalChain             *blockchain.Blockchain // embedded daemon instance
 
@@ -159,6 +160,14 @@ func loadDaemonConfig() {
 		daemonMode = "pruned" // default to pruned
 	}
 
+	// Load persisted fastsync flag
+	if val, err := GetEncryptedValue("settings", []byte("daemon_fastsync")); err == nil && len(val) > 0 {
+		daemonFastSync = string(val) == "true"
+	} else {
+		// Migrate: default fastsync to true when pruned, false for full
+		daemonFastSync = daemonMode == "pruned"
+	}
+
 	// Load persisted integrator address
 	if val, err := GetEncryptedValue("settings", []byte("daemon_integrator")); err == nil && len(val) > 0 {
 		daemonIntegratorAddress = string(val)
@@ -171,6 +180,15 @@ func loadDaemonConfig() {
 func saveDaemonMode(mode string) {
 	daemonMode = mode
 	StoreEncryptedValue("settings", []byte("daemon_mode"), []byte(mode))
+}
+
+func saveDaemonFastSync(fastSync bool) {
+	daemonFastSync = fastSync
+	if fastSync {
+		StoreEncryptedValue("settings", []byte("daemon_fastsync"), []byte("true"))
+	} else {
+		StoreEncryptedValue("settings", []byte("daemon_fastsync"), []byte("false"))
+	}
 }
 
 func saveIntegratorAddress(addr string) {
@@ -347,6 +365,9 @@ func startEmbeddedDaemon(dataDir string) {
 	if len(priorityNodes) > 0 {
 		globals.Arguments["--add-priority-node"] = priorityNodes
 	}
+
+	// Apply fastsync flag for state-bootstrap on initial sync
+	globals.Arguments["--fastsync"] = daemonFastSync
 
 	// Time sync was already verified by checkSystemHealth - tell the daemon
 	globals.TimeIsInSync = true

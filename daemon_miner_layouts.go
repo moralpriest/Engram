@@ -550,7 +550,7 @@ func updateMinerStatsUI() {
 }
 
 // refreshDaemonModeLabel updates the mode label text to reflect the current
-// daemonMode. Must be called on the UI goroutine.
+// daemonMode and daemonFastSync. Must be called on the UI goroutine.
 func refreshDaemonModeLabel() {
 	if daemonModeLabel == nil {
 		return
@@ -559,7 +559,14 @@ func refreshDaemonModeLabel() {
 	if daemonMode == "" {
 		modeDisplay = "NOT CONFIGURED"
 	} else {
-		modeDisplay = strings.ToUpper(daemonMode)
+		switch {
+		case daemonMode == "pruned":
+			modeDisplay = "PRUNED (FS)"
+		case daemonMode == "full" && daemonFastSync:
+			modeDisplay = "FULL (FS)"
+		default:
+			modeDisplay = "FULL"
+		}
 	}
 	daemonModeLabel.Text = "Mode: " + modeDisplay
 	daemonModeLabel.Refresh()
@@ -1283,16 +1290,197 @@ func ShowHealthWarning(health SystemHealth) {
 	warnDialog.Show()
 }
 
-// ShowDaemonModeDialog prompts the user to choose Full or Pruned node mode.
-// If autoStart is true, the daemon will start automatically after saving the mode.
+type modeOption struct {
+	label    string
+	mode     string
+	fastSync bool
+}
+
+var modeOptions = []modeOption{
+	{i18n.T("daemon_miner.pruned_fastsync"), "pruned", true},
+	{i18n.T("daemon_miner.full_fastsync"), "full", true},
+	{i18n.T("daemon_miner.full_standard"), "full", false},
+}
+
+func modeDisclaimer(opt modeOption) string {
+	switch {
+	case opt.mode == "pruned":
+		return i18n.T("daemon_miner.pruned_fastsync_desc")
+	case opt.mode == "full" && opt.fastSync:
+		return i18n.T("daemon_miner.fastsync_desc")
+	default:
+		return i18n.T("daemon_miner.standard_desc")
+	}
+}
+
+func currentModeIndex() int {
+	for i, opt := range modeOptions {
+		if opt.mode == daemonMode && opt.fastSync == daemonFastSync {
+			return i
+		}
+	}
+	// Fallback to pruned
+	return 0
+}
+
+// fixedWidthBox is a widget that presents a canvas.Text without resizing it,
+// exposing only a fixed MinSize width. The text is clipped to the widget's
+// allocated area, making it suitable for marquee-style animations.
+type fixedWidthBox struct {
+	widget.BaseWidget
+	text     *canvas.Text
+	boxWidth float32
+}
+
+func newFixedWidthBox(text string, width float32, textColor color.Color) *fixedWidthBox {
+	t := canvas.NewText(text, textColor)
+	t.TextSize = scaleFont(11)
+	w := &fixedWidthBox{text: t, boxWidth: width}
+	w.ExtendBaseWidget(w)
+	return w
+}
+
+func (w *fixedWidthBox) SetText(s string) {
+	w.text.Text = s
+	w.text.Move(fyne.NewPos(0, 0))
+	w.text.Refresh()
+}
+
+func (w *fixedWidthBox) TextObject() *canvas.Text {
+	return w.text
+}
+
+func (w *fixedWidthBox) MinSize() fyne.Size {
+	return fyne.NewSize(w.boxWidth, w.text.MinSize().Height)
+}
+
+func (w *fixedWidthBox) CreateRenderer() fyne.WidgetRenderer {
+	return &fixedWidthRenderer{text: w.text, widget: w}
+}
+
+type fixedWidthRenderer struct {
+	text   *canvas.Text
+	widget *fixedWidthBox
+}
+
+func (r *fixedWidthRenderer) Layout(_ fyne.Size) {
+	// Intentionally empty — canvas.Text keeps its natural size; the widget
+	// clips to its own allocated bounds in the standard Fyne paint pass.
+}
+func (r *fixedWidthRenderer) MinSize() fyne.Size        { return r.widget.MinSize() }
+func (r *fixedWidthRenderer) Refresh()                   { canvas.Refresh(r.text) }
+func (r *fixedWidthRenderer) Objects() []fyne.CanvasObject { return []fyne.CanvasObject{r.text} }
+func (r *fixedWidthRenderer) Destroy()                   {}
+
+// marqueeDisclaimer auto-scrolls a fixedWidthBox horizontally (marquee / news
+// ticker). Text enters from the right and scrolls left so the user can read
+// the full disclosure sequentially.
+type marqueeDisclaimer struct {
+	box   *fixedWidthBox
+	width float32
+	done  chan struct{}
+}
+
+func newMarqueeDisclaimer(initial string, width float32) *marqueeDisclaimer {
+	m := &marqueeDisclaimer{
+		box:   newFixedWidthBox(initial, width, apptheme.C.Gray),
+		width: width,
+		done:  make(chan struct{}),
+	}
+	go m.animate()
+	return m
+}
+
+func (m *marqueeDisclaimer) SetText(s string) {
+	m.box.SetText(s)
+}
+
+func (m *marqueeDisclaimer) animate() {
+	// Let the dialog finish laying out before starting
+	time.Sleep(800 * time.Millisecond)
+
+	tick := time.NewTicker(30 * time.Millisecond)
+	defer tick.Stop()
+
+	text := m.box.TextObject()
+	offset := m.width // start fully off-screen to the right
+
+	for {
+		select {
+		case <-m.done:
+			return
+		case <-tick.C:
+			tw := text.MinSize().Width
+			if tw <= m.width {
+				// Text fits — no scrolling needed, static position
+				continue
+			}
+
+			offset--
+
+			if offset+tw < 0 {
+				offset = m.width
+			}
+
+			pos := offset
+			fyne.Do(func() {
+				text.Move(fyne.NewPos(pos, 0))
+				canvas.Refresh(text)
+			})
+		}
+	}
+}
+
+func (m *marqueeDisclaimer) stop() {
+	close(m.done)
+}
+
+// ShowDaemonModeDialog prompts the user to choose a node mode.
+// If autoStart is true, the daemon will start automatically after saving.
 // If autoStart is false, only the mode is saved and the dialog closes.
 func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	var modeDialog *widget.PopUp
+
+	const disclaimerWidth = float32(300)
+
+	selIdx := currentModeIndex()
+	disclaimer := newMarqueeDisclaimer(modeDisclaimer(modeOptions[selIdx]), disclaimerWidth)
+
+	var modeBtns []*widget.Button
+	refreshBtnStyles := func() {
+		for i, btn := range modeBtns {
+			if i == selIdx {
+				btn.Importance = widget.HighImportance
+			} else {
+				btn.Importance = widget.LowImportance
+			}
+			btn.Refresh()
+		}
+	}
+
+	for i, opt := range modeOptions {
+		idx := i
+		btn := widget.NewButton(opt.label, func() {
+			selIdx = idx
+			refreshBtnStyles()
+			disclaimer.SetText(modeDisclaimer(opt))
+		})
+		modeBtns = append(modeBtns, btn)
+	}
+	refreshBtnStyles()
+
+	var objs []fyne.CanvasObject
+	for _, b := range modeBtns {
+		objs = append(objs, b)
+	}
+	rows := container.NewVBox(objs...)
 
 	modeContent := container.NewVBox(
 		canvas.NewText("Node Mode Selection", apptheme.C.Green),
 		widget.NewLabel("Choose how to run this node:"),
 		widget.NewSeparator(),
+		rows,
+		container.NewHBox(layout.NewSpacer(), disclaimer.box, layout.NewSpacer()),
 	)
 
 	afterSave := func() {
@@ -1302,75 +1490,74 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 		uiDo(syncToggleStates)
 	}
 
-	prunedBtn := widget.NewButton("Pruned Node (~5-10 GB)", func() {
-		saveDaemonMode("pruned")
+	saveSelectedMode := func() {
+		opt := modeOptions[selIdx]
+		saveDaemonMode(opt.mode)
+		saveDaemonFastSync(opt.fastSync)
 		refreshDaemonModeLabel()
+		disclaimer.stop()
 		modeDialog.Hide()
 		afterSave()
-	})
-	modeContent.Add(prunedBtn)
-
-	fullLabel := "Full Node (~250 GB)"
-	if !health.HasSpaceForFull && !forceFullMode {
-		fullLabel += " (insufficient disk space)"
 	}
-	fullBtn := widget.NewButton(fullLabel, func() {
-		if !health.HasSpaceForFull && !forceFullMode {
+
+	// Save button
+	saveBtn := widget.NewButton("Save", func() {
+		opt := modeOptions[selIdx]
+		if opt.mode == "full" && !health.HasSpaceForFull && !forceFullMode {
+			showForceFullWarningDialog(func() {
+				saveSelectedMode()
+			}, nil)
 			return
 		}
-		modeDialog.Hide()
-		// Show warning confirmation dialog for force full mode
-		if forceFullMode {
-			showForceFullWarningDialog(func() {
-				saveDaemonMode("full")
-				refreshDaemonModeLabel()
-				afterSave()
-			}, nil)
-		} else {
-			saveDaemonMode("full")
-			refreshDaemonModeLabel()
-			afterSave()
-		}
+		saveSelectedMode()
 	})
-	if !health.HasSpaceForFull && !forceFullMode {
-		fullBtn.Disable()
-	}
-	modeContent.Add(fullBtn)
+	saveBtn.Importance = widget.HighImportance
 
-	// Add Force Full Mode checkbox when space check fails
+	// Force Full Mode checkbox when space check fails
 	if !health.HasSpaceForFull {
 		forceCheck := widget.NewCheck("Force Full Mode (I have 250GB+ available)", func(checked bool) {
 			saveForceFullMode(checked)
-			refreshDaemonModeLabel()
 			if checked {
-				fullBtn.SetText("Full Node (~250 GB) [FORCED]")
-				fullBtn.Enable()
-			} else {
-				fullBtn.SetText("Full Node (~250 GB) (insufficient disk space)")
-				fullBtn.Disable()
+				saveBtn.Enable()
 			}
 		})
 		if forceFullMode {
 			forceCheck.SetChecked(true)
-			fullBtn.SetText("Full Node (~250 GB) [FORCED]")
-			fullBtn.Enable()
 		}
 		modeContent.Add(forceCheck)
 	}
 
-	// If not auto-starting, just close the dialog; if auto-starting,
-	// also reset the toggle since the user chose not to proceed
+	modeContent.Add(saveBtn)
+
+	// Cancel / Close button
 	if autoStart {
 		modeContent.Add(widget.NewButton("Cancel", func() {
+			disclaimer.stop()
 			daemonToggle.setChecked(false)
 			uiDo(syncToggleStates)
 			modeDialog.Hide()
 		}))
 	} else {
 		modeContent.Add(widget.NewButton("Close", func() {
+			disclaimer.stop()
 			modeDialog.Hide()
 		}))
 	}
+
+	modeContent.Add(widget.NewSeparator())
+	restoreBtn := widget.NewButton("Restore Defaults (Pruned + Fast Sync)", func() {
+		saveDaemonMode("pruned")
+		saveDaemonFastSync(true)
+		refreshDaemonModeLabel()
+		disclaimer.stop()
+		modeDialog.Hide()
+		if autoStart {
+			startDaemon()
+		}
+		uiDo(syncToggleStates)
+	})
+	restoreBtn.Importance = widget.LowImportance
+	modeContent.Add(restoreBtn)
 
 	modeDialog = widget.NewModalPopUp(modeContent, session.Window.Canvas())
 	modeDialog.Show()

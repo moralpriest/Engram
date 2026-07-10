@@ -53,7 +53,7 @@ func checkSystemHealth() SystemHealth {
 
 	// Passed = time synced AND enough space for at least pruned node
 	// Passed if time synced AND (enough disk OR disk space unknown)
-	health.Passed = health.TimeSynced && (health.DiskSpaceGB >= 5 || health.DiskSpaceGB == -1)
+	health.Passed = health.TimeSynced && (health.DiskSpaceGB >= 10 || health.DiskSpaceGB == -1)
 
 	return health
 }
