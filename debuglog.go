@@ -29,7 +29,16 @@ var (
 )
 
 func getDebugLogPath() string {
-	return filepath.Join(AppPath(), debugLogFileName)
+	dir := AppPath()
+	// On macOS the CWD may be read-only (e.g. when launched from the .app bundle).
+	// Fall back to ~/Library/Caches/Engram/ which is always writable.
+	if runtime.GOOS == "darwin" {
+		cacheDir, err := os.UserCacheDir()
+		if err == nil {
+			dir = filepath.Join(cacheDir, "Engram")
+		}
+	}
+	return filepath.Join(dir, debugLogFileName)
 }
 
 func initDebugLog() error {
