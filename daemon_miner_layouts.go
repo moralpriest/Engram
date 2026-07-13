@@ -506,6 +506,10 @@ func refreshDaemonModeLabel() {
 	daemonModeLabel.Refresh()
 }
 
+// experimentalMiner enables the GPU miner (Dirtybird) on desktop.
+// Set via UI checkbox; only effective on non-mobile builds.
+var experimentalMiner bool
+
 // UIState holds non-sensitive UI preferences that persist across sessions
 // in a plain JSON file (not wallet-encrypted, so they survive wallet resets).
 type UIState struct {
@@ -773,19 +777,21 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		}()
 	})
 
-	indicatorRow := container.NewHBox(
+	iconRow := container.NewHBox(
 		layout.NewSpacer(),
-		container.NewVBox(
-			newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
-			container.NewCenter(daemonToggle),
-		),
+		newStateIndicator(&dmState.daemonState, i18n.T("daemon_miner.daemon"), daemonIconForState(dmState.daemonState), indicatorWidth),
 		gap,
-		container.NewVBox(
-			newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
-			container.NewCenter(minerToggle),
-		),
+		newStateIndicator(&dmState.minerState, i18n.T("daemon_miner.miner"), minerIconForState(dmState.minerState), indicatorWidth),
 		layout.NewSpacer(),
 	)
+	toggleRow := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewCenter(daemonToggle),
+		gap,
+		container.NewCenter(minerToggle),
+		layout.NewSpacer(),
+	)
+	indicatorRow := container.NewVBox(iconRow, newRectSpacer(), toggleRow)
 
 	tightSpacer := func() *canvas.Rectangle {
 		r := canvas.NewRectangle(color.Transparent)
@@ -1010,6 +1016,12 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		entryCustomThreads.Enable()
 	}
 
+	// Load experimental GPU miner preference
+	experimentalMiner = false
+	if val, err := GetValue("settings", []byte("experimental_miner")); err == nil && len(val) > 0 {
+		experimentalMiner = string(val) == "true"
+	}
+
 	// Build miner config section
 	minerConfigBox := container.NewVBox(
 		newRectSpacer(),
@@ -1029,6 +1041,23 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		warnLabel.Wrapping = fyne.TextWrapWord
 		minerConfigBox.Add(newRectSpacer())
 		minerConfigBox.Add(warnLabel)
+	}
+
+	// Experimental GPU miner checkbox — Desktop only, hidden on Android/iOS
+	if !isMobile() {
+		minerConfigBox.Add(newRectSpacer())
+		expCheck := widget.NewCheck("Experimental GPU Miner", func(checked bool) {
+			experimentalMiner = checked
+			go func() {
+				if checked {
+					StoreValue("settings", []byte("experimental_miner"), []byte("true"))
+				} else {
+					StoreValue("settings", []byte("experimental_miner"), []byte("false"))
+				}
+			}()
+		})
+		expCheck.SetChecked(experimentalMiner)
+		minerConfigBox.Add(expCheck)
 	}
 
 	minerInfoBox := minerConfigBox
