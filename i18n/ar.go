@@ -656,4 +656,19 @@ var stringsAR = map[string]string{
 	"settings.status_area":            "منطقة الحالة",
 
 	"messages.warning_daemon": "المراسلة تتطلب اتصالاً بالخادم.",
+
+	"system_tray.show_engram":         "",
+	"system_tray.connect":             "",
+	"system_tray.connection_settings": "",
+	"system_tray.daemon_miner":        "",
+	"system_tray.exit":                "",
+	"system_tray.dashboard":           "",
+	"system_tray.tela":                "",
+	"system_tray.messages":            "",
+	"system_tray.contracts":           "",
+	"system_tray.settings":            "",
+	"system_tray.quit":                "",
+	"system_tray.quit_title":          "",
+	"system_tray.quit_message":        "",
+	"system_tray.cancel":              "",
 }

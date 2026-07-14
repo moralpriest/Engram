@@ -655,4 +655,19 @@ var stringsEO = map[string]string{
 	"settings.status_area":            "Stata areo",
 
 	"messages.warning_daemon": "Ruli de via propra demono donas pli fidindan sperton\n\nĈiuj mesaĝoj estas konstante skribitaj al la blokĉeno\n\nDaŭrigu nur se vi akceptas tiujn riskojn",
+
+	"system_tray.show_engram":         "",
+	"system_tray.connect":             "",
+	"system_tray.connection_settings": "",
+	"system_tray.daemon_miner":        "",
+	"system_tray.exit":                "",
+	"system_tray.dashboard":           "",
+	"system_tray.tela":                "",
+	"system_tray.messages":            "",
+	"system_tray.contracts":           "",
+	"system_tray.settings":            "",
+	"system_tray.quit":                "",
+	"system_tray.quit_title":          "",
+	"system_tray.quit_message":        "",
+	"system_tray.cancel":              "",
 }

@@ -655,4 +655,19 @@ var stringsPT = map[string]string{
 	"settings.status_area":            "Área de status",
 
 	"messages.warning_daemon": "Rodar a partir de seu próprio daemon oferece uma experiência mais confiável\n\nTodas as mensagens são gravadas permanentemente no blockchain\n\nProssiga apenas se você aceitar esses riscos",
+
+	"system_tray.show_engram":         "Mostrar Engram",
+	"system_tray.connect":             "Conectar",
+	"system_tray.connection_settings": "Configurações de Conexão",
+	"system_tray.daemon_miner":        "Daemon & Minerador",
+	"system_tray.exit":                "Sair",
+	"system_tray.dashboard":           "Painel",
+	"system_tray.tela":                "TELA",
+	"system_tray.messages":            "Mensagens",
+	"system_tray.contracts":           "Contratos+",
+	"system_tray.settings":            "Configurações",
+	"system_tray.quit":                "Sair",
+	"system_tray.quit_title":          "Sair do Engram",
+	"system_tray.quit_message":        "Serviços em execução:",
+	"system_tray.cancel":              "Cancelar",
 }

@@ -655,4 +655,19 @@ var stringsDE = map[string]string{
 	"settings.status_area":            "Statusbereich",
 
 	"messages.warning_daemon": "Der Betrieb Ihres eigenen Daemons bietet ein zuverlässigeres Erlebnis\n\nAlle Nachrichten werden dauerhaft in der Blockchain gespeichert\n\nFahren Sie nur fort, wenn Sie diese Risiken akzeptieren",
+
+	"system_tray.show_engram":         "Engram anzeigen",
+	"system_tray.connect":             "Verbinden",
+	"system_tray.connection_settings": "Verbindungseinstellungen",
+	"system_tray.daemon_miner":        "Daemon & Miner",
+	"system_tray.exit":                "Beenden",
+	"system_tray.dashboard":           "Dashboard",
+	"system_tray.tela":                "TELA",
+	"system_tray.messages":            "Nachrichten",
+	"system_tray.contracts":           "Verträge+",
+	"system_tray.settings":            "Einstellungen",
+	"system_tray.quit":                "Verlassen",
+	"system_tray.quit_title":          "Engram verlassen",
+	"system_tray.quit_message":        "Aktive Dienste:",
+	"system_tray.cancel":              "Abbrechen",
 }

@@ -655,4 +655,19 @@ var stringsFR = map[string]string{
 	"settings.status_area":            "Zone de statut",
 
 	"messages.warning_daemon": "Utiliser votre propre daemon offre une expérience plus fiable\n\nTous les messages sont écrits en permanence sur la blockchain\n\nContinuez seulement si vous acceptez ces risques",
+
+	"system_tray.show_engram":         "Afficher Engram",
+	"system_tray.connect":             "Connecter",
+	"system_tray.connection_settings": "Paramètres Connexion",
+	"system_tray.daemon_miner":        "Daemon & Mineur",
+	"system_tray.exit":                "Sortir",
+	"system_tray.dashboard":           "Tableau de bord",
+	"system_tray.tela":                "TELA",
+	"system_tray.messages":            "Messages",
+	"system_tray.contracts":           "Contrats+",
+	"system_tray.settings":            "Paramètres",
+	"system_tray.quit":                "Quitter",
+	"system_tray.quit_title":          "Quitter Engram",
+	"system_tray.quit_message":        "Services encore actifs :",
+	"system_tray.cancel":              "Annuler",
 }
