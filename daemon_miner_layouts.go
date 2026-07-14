@@ -22,6 +22,9 @@ import (
 
 	"github.com/DEROFDN/engram/i18n"
 	apptheme "github.com/DEROFDN/engram/internal/theme"
+
+	"github.com/DEROFDN/engram/internal/dirtybird"
+	"github.com/DEROFDN/engram/internal/dirtybird-gpu"
 )
 
 // daemonInfoUI holds refreshable canvas text references for the daemon info panel.
@@ -62,13 +65,13 @@ type daemonMinerState struct {
 var dmState = daemonMinerState{daemonState: 0, minerState: 0}
 
 var (
-	daemonToggle   *toggleSwitch
-	minerToggle    *toggleSwitch
-	daemonStateImg *canvas.Image
+	daemonToggle         *toggleSwitch
+	minerToggle          *toggleSwitch
+	daemonStateImg       *canvas.Image
 	daemonStateImgParent *fyne.Container // stack container holding the daemon icon; used to swap images
-	minerStateImg  *canvas.Image
-	daemonStateLbl  *canvas.Text
-	minerStateLbl  *canvas.Text
+	minerStateImg        *canvas.Image
+	daemonStateLbl       *canvas.Text
+	minerStateLbl        *canvas.Text
 )
 
 // daemonModeLabel is the UI text showing the current daemon mode (FULL / PRUNED).
@@ -246,13 +249,13 @@ func startBackgroundDaemonRefresh() {
 				info, err := fetchDaemonInfo()
 				if err == nil {
 					fmt.Printf("[Daemon RPC] Background refresh: height=%d topo=%d synced=%v", info.Height, info.Topoheight, info.Synchronized)
-				uiDo(func() { updateInfoUILabels(info) })
-			} else {
-				fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
-			}
-			updateDaemonStateFromDetection()
-			uiDo(syncToggleStates)
-			time.Sleep(3 * time.Second)
+					uiDo(func() { updateInfoUILabels(info) })
+				} else {
+					fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
+				}
+				updateDaemonStateFromDetection()
+				uiDo(syncToggleStates)
+				time.Sleep(3 * time.Second)
 			}
 		}()
 	})
@@ -333,6 +336,81 @@ func startMinerStatsRefresh() {
 
 // updateMinerStatsUI updates the miner statistics canvas text elements with the latest stats.
 func updateMinerStatsUI() {
+	// Gather stats from alternative miner backends (experimental CPU + GPU).
+	// When any external miner is active, reset miningStats fields first so
+	// the GPU += accumulation never doubles up on stale embedded-miner values,
+	// and old external stats are cleared when both miners stop.
+	cpuExt := dirtybird.IsRunning()
+	gpuExt := dirtybird_gpu.IsRunning()
+
+	if cpuExt || gpuExt {
+		// Reset all relevant fields before accumulating external contributions
+		miningStats.mu.Lock()
+		miningStats.CurrentHashrate = 0
+		miningStats.SpeedStr = ""
+		miningStats.MiniBlocks = 0
+		miningStats.Rejected = 0
+		miningStats.LastRewardTime = time.Time{}
+		miningStats.StartTime = time.Time{}
+		miningStats.NetHashrate = 0
+		miningStats.NetHashStr = ""
+		miningStats.mu.Unlock()
+	}
+
+	// Bridge dirtybird experimental CPU miner stats
+	if cpuExt {
+		db := dirtybird.Snapshot()
+
+		miningStats.mu.Lock()
+		miningStats.CurrentHashrate += db.Hashrate
+		if db.Hashrate > 0 {
+			miningStats.SpeedStr = formatHashrate(db.Hashrate)
+		} else {
+			miningStats.SpeedStr = "—"
+		}
+		miningStats.MiniBlocks += int64(db.MiniBlocks)
+		miningStats.Rejected += int64(db.Rejected)
+		miningStats.LastRewardTime = db.LastReward
+		if miningStats.StartTime.IsZero() || db.SessionStart.Before(miningStats.StartTime) {
+			miningStats.StartTime = db.SessionStart
+		}
+		if db.Difficulty > 0 {
+			netHash := float64(db.Difficulty) / 1.8
+			miningStats.NetHashrate = netHash
+			miningStats.NetHashStr = formatHashrate(netHash)
+		}
+		miningStats.mu.Unlock()
+	}
+
+	// Bridge dirtybird GPU miner stats (runs alongside any CPU miner)
+	if gpuExt {
+		dbg := dirtybird_gpu.Snapshot()
+
+		miningStats.mu.Lock()
+		miningStats.CurrentHashrate += dbg.Hashrate
+		// Combine CPU and GPU into a single speed string
+		combined := miningStats.CurrentHashrate
+		if combined > 0 {
+			miningStats.SpeedStr = formatHashrate(combined)
+		} else {
+			miningStats.SpeedStr = "—"
+		}
+		miningStats.MiniBlocks += int64(dbg.MiniBlocks)
+		miningStats.Rejected += int64(dbg.Rejected)
+		if dbg.LastReward.After(miningStats.LastRewardTime) {
+			miningStats.LastRewardTime = dbg.LastReward
+		}
+		if miningStats.StartTime.IsZero() || dbg.SessionStart.Before(miningStats.StartTime) {
+			miningStats.StartTime = dbg.SessionStart
+		}
+		if dbg.Difficulty > 0 && miningStats.NetHashrate <= 0 {
+			netHash := float64(dbg.Difficulty) / 1.8
+			miningStats.NetHashrate = netHash
+			miningStats.NetHashStr = formatHashrate(netHash)
+		}
+		miningStats.mu.Unlock()
+	}
+
 	stats := GetMiningStats()
 
 	// Fallback: use daemon's direct hashrate estimate, or derive from difficulty
@@ -506,23 +584,28 @@ func refreshDaemonModeLabel() {
 	daemonModeLabel.Refresh()
 }
 
-// experimentalMiner enables the GPU miner (Dirtybird) on desktop.
-// Set via UI checkbox; only effective on non-mobile builds.
+// experimentalMiner enables the Dirtybird experimental CPU miner on desktop.
+// Set via the CPU Mode radio group; only effective on non-mobile builds.
 var experimentalMiner bool
+
+// gpuMiner enables the Dirtybird GPU miner on desktop (runs alongside CPU miner).
+// Set via the GPU Miner checkbox; only effective on non-mobile builds.
+var gpuMiner bool
 
 // UIState holds non-sensitive UI preferences that persist across sessions
 // in a plain JSON file (not wallet-encrypted, so they survive wallet resets).
 type UIState struct {
-	DaemonConfigCollapsed bool `json:"daemon_config_collapsed"`
-	DaemonInfoCollapsed   bool `json:"daemon_info_collapsed"`
-	MinerConfigCollapsed  bool `json:"miner_config_collapsed"`
-	MinerStatsCollapsed   bool `json:"miner_stats_collapsed"`
+	DaemonConfigCollapsed bool     `json:"daemon_config_collapsed"`
+	DaemonInfoCollapsed   bool     `json:"daemon_info_collapsed"`
+	MinerConfigCollapsed  bool     `json:"miner_config_collapsed"`
+	MinerStatsCollapsed   bool     `json:"miner_stats_collapsed"`
+	SectionOrder          []string `json:"section_order"`
 }
 
 var (
-	uiState        UIState
-	uiStateMu      sync.Mutex
-	uiStateLoaded  bool   // true after a valid file was read from disk
+	uiState       UIState
+	uiStateMu     sync.Mutex
+	uiStateLoaded bool // true after a valid file was read from disk
 )
 
 // uiStatePath returns the path to the UI state JSON file.
@@ -538,16 +621,27 @@ func loadUIState() {
 
 	data, err := os.ReadFile(uiStatePath())
 	if err != nil {
-		uiState = UIState{}
+		uiState = UIState{SectionOrder: cloneSlice(defaultSectionOrder)}
 		uiStateLoaded = false
 		return
 	}
 	if err := json.Unmarshal(data, &uiState); err != nil {
-		uiState = UIState{}
+		uiState = UIState{SectionOrder: cloneSlice(defaultSectionOrder)}
 		uiStateLoaded = false
 		return
 	}
+	// Ensure section order is initialized, even when loading from an older file
+	if len(uiState.SectionOrder) == 0 {
+		uiState.SectionOrder = cloneSlice(defaultSectionOrder)
+	}
 	uiStateLoaded = true
+}
+
+// cloneSlice returns a fresh copy of a string slice.
+func cloneSlice(s []string) []string {
+	out := make([]string, len(s))
+	copy(out, s)
+	return out
 }
 
 // Section persistence keys for collapsible section state.
@@ -557,6 +651,14 @@ const (
 	sectionKeyMinerConfig  = "miner_config"
 	sectionKeyMinerStats   = "miner_stats"
 )
+
+// defaultSectionOrder is the initial order sections appear in.
+var defaultSectionOrder = []string{
+	sectionKeyDaemonConfig,
+	sectionKeyDaemonInfo,
+	sectionKeyMinerConfig,
+	sectionKeyMinerStats,
+}
 
 // loadSectionCollapsed reads the persisted collapsed state for a section.
 // On first run (no saved file yet) returns defaultCollapsed, preserving the
@@ -609,11 +711,66 @@ func saveSectionCollapsed(key string, collapsed bool) {
 	}()
 }
 
+// sectionDragHandle is a hamburger-menu icon widget that functions as a drag handle
+// for reordering collapsible sections. Hold-and-drag vertically to swap sections
+// when the threshold (~60px) is exceeded.
+type sectionDragHandle struct {
+	widget.Button
+	onMoveUp   func()
+	onMoveDown func()
+	dragAccum  float32
+}
+
+var _ fyne.Draggable = (*sectionDragHandle)(nil)
+
+func newSectionDragHandle(onMoveUp, onMoveDown func()) *sectionDragHandle {
+	h := &sectionDragHandle{onMoveUp: onMoveUp, onMoveDown: onMoveDown}
+	h.Icon = theme.MenuIcon()
+	h.Importance = widget.LowImportance
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+func (h *sectionDragHandle) Tapped(e *fyne.PointEvent) {
+	menu := fyne.NewMenu("")
+	if h.onMoveUp != nil {
+		item := fyne.NewMenuItem("", h.onMoveUp)
+		item.Icon = theme.MoveUpIcon()
+		menu.Items = append(menu.Items, item)
+	}
+	if h.onMoveDown != nil {
+		item := fyne.NewMenuItem("", h.onMoveDown)
+		item.Icon = theme.MoveDownIcon()
+		menu.Items = append(menu.Items, item)
+	}
+	if len(menu.Items) > 0 && session.Window != nil {
+		widget.ShowPopUpMenuAtPosition(menu, session.Window.Canvas(), e.AbsolutePosition)
+	}
+}
+
+func (h *sectionDragHandle) Dragged(e *fyne.DragEvent) {
+	h.dragAccum += e.Dragged.DY
+	const threshold float32 = 60
+	if h.dragAccum > threshold && h.onMoveDown != nil {
+		h.dragAccum = 0
+		h.onMoveDown()
+	} else if h.dragAccum < -threshold && h.onMoveUp != nil {
+		h.dragAccum = 0
+		h.onMoveUp()
+	}
+}
+
+func (h *sectionDragHandle) DragEnd() {
+	h.dragAccum = 0
+}
+
 // newCollapsibleSection creates a section header that acts as a toggle button.
 // Clicking the header collapses/expands the content below.
 // The arrow icon points down when collapsed and up when expanded.
 // If persistKey is non-empty, the collapsed state is saved across sessions.
-func newCollapsibleSection(title string, content fyne.CanvasObject, startCollapsed bool, persistKey string) *fyne.Container {
+// If onMoveUp/onMoveDown are non-nil, a MenuIcon drag handle appears on the
+// left of the header. Pass nil to omit the handle.
+func newCollapsibleSection(title string, content fyne.CanvasObject, startCollapsed bool, persistKey string, onMoveUp, onMoveDown func()) *fyne.Container {
 	arrowIcon := widget.NewIcon(theme.MenuDropDownIcon())
 
 	label := canvas.NewText(title, apptheme.C.Gray)
@@ -623,14 +780,21 @@ func newCollapsibleSection(title string, content fyne.CanvasObject, startCollaps
 
 	// Decorative lines
 	line1 := canvas.NewRectangle(apptheme.C.Gray)
-	line1.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	line1.SetMinSize(fyne.NewSize(ui.Width*0.18, 2))
 	lineBox1 := container.NewVBox(layout.NewSpacer(), line1, layout.NewSpacer())
 	line2 := canvas.NewRectangle(apptheme.C.Gray)
-	line2.SetMinSize(fyne.NewSize(ui.Width*0.2, 2))
+	line2.SetMinSize(fyne.NewSize(ui.Width*0.18, 2))
 	lineBox2 := container.NewVBox(layout.NewSpacer(), line2, layout.NewSpacer())
 
-	// Build header row with arrow icon + label in center
-	headerRow := container.NewHBox(
+	// Build header components — drag handle on the left, then centered label
+	var components []fyne.CanvasObject
+
+	if onMoveUp != nil || onMoveDown != nil {
+		handle := newSectionDragHandle(onMoveUp, onMoveDown)
+		components = append(components, handle)
+	}
+
+	components = append(components,
 		layout.NewSpacer(),
 		lineBox1,
 		layout.NewSpacer(),
@@ -640,6 +804,8 @@ func newCollapsibleSection(title string, content fyne.CanvasObject, startCollaps
 		lineBox2,
 		layout.NewSpacer(),
 	)
+
+	headerRow := container.NewHBox(components...)
 
 	collapsed := startCollapsed
 	if collapsed {
@@ -895,9 +1061,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		}()
 	}
 
-	// Wrap daemon info in a collapsible section
-	daemonInfoBox = newCollapsibleSection(i18n.T("daemon_miner.daemon")+" INFO", daemonInfoBox, daemonInfoCollapsed, sectionKeyDaemonInfo)
-
 	// ---- Miner Config Panel ----
 	cpus := runtime.NumCPU()
 
@@ -1016,10 +1179,14 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		entryCustomThreads.Enable()
 	}
 
-	// Load experimental GPU miner preference
+	// Load miner mode preferences
 	experimentalMiner = false
 	if val, err := GetValue("settings", []byte("experimental_miner")); err == nil && len(val) > 0 {
 		experimentalMiner = string(val) == "true"
+	}
+	gpuMiner = false
+	if val, err := GetValue("settings", []byte("gpu_miner")); err == nil && len(val) > 0 {
+		gpuMiner = string(val) == "true"
 	}
 
 	// Build miner config section
@@ -1043,21 +1210,38 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		minerConfigBox.Add(warnLabel)
 	}
 
-	// Experimental GPU miner checkbox — Desktop only, hidden on Android/iOS
+	// Miner mode selector — Desktop only, hidden on Android/iOS
 	if !isMobile() {
 		minerConfigBox.Add(newRectSpacer())
-		expCheck := widget.NewCheck("Experimental GPU Miner", func(checked bool) {
-			experimentalMiner = checked
+		modeLabel := canvas.NewText("CPU Mode", apptheme.C.Gray)
+		modeLabel.TextSize = scaleFont(13)
+		modeLabel.TextStyle = fyne.TextStyle{Bold: true}
+		minerConfigBox.Add(modeLabel)
+
+		cpuRadio := widget.NewRadioGroup([]string{"Normal", "Experimental"}, func(s string) {
+			experimentalMiner = s == "Experimental"
 			go func() {
-				if checked {
-					StoreValue("settings", []byte("experimental_miner"), []byte("true"))
-				} else {
-					StoreValue("settings", []byte("experimental_miner"), []byte("false"))
-				}
+				StoreValue("settings", []byte("experimental_miner"), []byte(fmt.Sprintf("%t", experimentalMiner)))
 			}()
 		})
-		expCheck.SetChecked(experimentalMiner)
-		minerConfigBox.Add(expCheck)
+		cpuRadio.Horizontal = true
+		if experimentalMiner {
+			cpuRadio.SetSelected("Experimental")
+		} else {
+			cpuRadio.SetSelected("Normal")
+		}
+		minerConfigBox.Add(cpuRadio)
+
+		// GPU Miner checkbox (independent — runs alongside whichever CPU mode is selected)
+		minerConfigBox.Add(newRectSpacer())
+		gpuCheck := widget.NewCheck("GPU Miner", func(checked bool) {
+			gpuMiner = checked
+			go func() {
+				StoreValue("settings", []byte("gpu_miner"), []byte(fmt.Sprintf("%t", checked)))
+			}()
+		})
+		gpuCheck.SetChecked(gpuMiner)
+		minerConfigBox.Add(gpuCheck)
 	}
 
 	minerInfoBox := minerConfigBox
@@ -1121,12 +1305,6 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Start the background stats refresh
 	startMinerStatsRefresh()
-
-	// Wrap miner stats in a collapsible section
-	minerStatsBox = newCollapsibleSection(i18n.T("daemon_miner.miner")+" STATS", minerStatsBox, minerStatsCollapsed, sectionKeyMinerStats)
-
-	// Wrap miner config in a collapsible section
-	minerInfoBox = newCollapsibleSection(i18n.T("daemon_miner.miner")+" CONFIG", minerInfoBox, minerConfigCollapsed, sectionKeyMinerConfig)
 
 	// Mode display (clickable to change) — stored in global so dialogs can refresh it live
 	daemonModeLabel = canvas.NewText("Mode: ", apptheme.C.Green)
@@ -1203,18 +1381,136 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		newRectSpacer(),
 		deleteNodeBtn,
 	)
-	daemonConfigBox := newCollapsibleSection(i18n.T("daemon_miner.daemon")+" CONFIG", daemonConfigContent, daemonConfigCollapsed, sectionKeyDaemonConfig)
+	// Build section order from persisted state
+	sectionOrder := cloneSlice(uiState.SectionOrder)
+	if len(sectionOrder) == 0 {
+		sectionOrder = cloneSlice(defaultSectionOrder)
+	}
+
+	// Build name/label map for section titles
+	sectionTitles := map[string]string{
+		sectionKeyDaemonConfig: i18n.T("daemon_miner.daemon") + " CONFIG",
+		sectionKeyDaemonInfo:   i18n.T("daemon_miner.daemon") + " INFO",
+		sectionKeyMinerConfig:  i18n.T("daemon_miner.miner") + " CONFIG",
+		sectionKeyMinerStats:   i18n.T("daemon_miner.miner") + " STATS",
+	}
+
+	// Build content map for each section key
+	sectionContents := map[string]fyne.CanvasObject{
+		sectionKeyDaemonConfig: daemonConfigContent,
+		sectionKeyDaemonInfo:   daemonInfoBox,
+		sectionKeyMinerConfig:  minerInfoBox,
+		sectionKeyMinerStats:   minerStatsBox,
+	}
+
+	// Build collapsed state map
+	sectionCollapsed := map[string]bool{
+		sectionKeyDaemonConfig: daemonConfigCollapsed,
+		sectionKeyDaemonInfo:   daemonInfoCollapsed,
+		sectionKeyMinerConfig:  minerConfigCollapsed,
+		sectionKeyMinerStats:   minerStatsCollapsed,
+	}
+
+	// Dynamic section container — declared before closures so move callbacks can reference it
+	sectionContainer := container.NewVBox()
+
+	// Declare rebuildSectionOrder before the section-building loop so move callbacks
+	// within the loop can reference it (Go scope starts at the var declaration).
+	var rebuildSectionOrder func()
+
+	// Build wrapped sections (collapsible with drag handles)
+	type sectionEntry struct {
+		obj fyne.CanvasObject
+	}
+	sectionWraps := make(map[string]*sectionEntry)
+
+	for _, key := range sectionOrder {
+		// Always create both callbacks so the popup menu always shows both
+		// Move Up and Move Down items. The callbacks check the current position
+		// at runtime and are no-ops when at the boundary.
+		k := key
+		onMoveUp := func() {
+			uiStateMu.Lock()
+			// Find current position (may have changed since build)
+			cur := -1
+			for ci, v := range uiState.SectionOrder {
+				if v == k {
+					cur = ci
+					break
+				}
+			}
+			if cur > 0 {
+				uiState.SectionOrder[cur], uiState.SectionOrder[cur-1] = uiState.SectionOrder[cur-1], uiState.SectionOrder[cur]
+				data, _ := json.MarshalIndent(uiState, "", "  ")
+				uiStateMu.Unlock()
+				go func() { _ = os.WriteFile(uiStatePath(), data, 0644) }()
+				uiDo(func() { rebuildSectionOrder() })
+				return
+			}
+			uiStateMu.Unlock()
+		}
+		onMoveDown := func() {
+			uiStateMu.Lock()
+			cur := -1
+			for ci, v := range uiState.SectionOrder {
+				if v == k {
+					cur = ci
+					break
+				}
+			}
+			if cur >= 0 && cur < len(uiState.SectionOrder)-1 {
+				uiState.SectionOrder[cur], uiState.SectionOrder[cur+1] = uiState.SectionOrder[cur+1], uiState.SectionOrder[cur]
+				data, _ := json.MarshalIndent(uiState, "", "  ")
+				uiStateMu.Unlock()
+				go func() { _ = os.WriteFile(uiStatePath(), data, 0644) }()
+				uiDo(func() { rebuildSectionOrder() })
+				return
+			}
+			uiStateMu.Unlock()
+		}
+
+		content := sectionContents[key]
+		collapsed := sectionCollapsed[key]
+		title := sectionTitles[key]
+		wrapped := newCollapsibleSection(title, content, collapsed, key, onMoveUp, onMoveDown)
+		sectionWraps[key] = &sectionEntry{obj: wrapped}
+
+		// Assign to the named variables so legacy references still work
+		switch key {
+		case sectionKeyDaemonInfo:
+			daemonInfoBox = wrapped
+		case sectionKeyMinerConfig:
+			minerInfoBox = wrapped
+		case sectionKeyMinerStats:
+			minerStatsBox = wrapped
+		}
+	}
+
+	// rebuildSectionOrder arranges the sections in the sectionContainer according to
+	// the current uiState.SectionOrder.
+	rebuildSectionOrder = func() {
+		sectionContainer.RemoveAll()
+		uiStateMu.Lock()
+		order := cloneSlice(uiState.SectionOrder)
+		uiStateMu.Unlock()
+
+		for i, key := range order {
+			if i > 0 {
+				sectionContainer.Add(newRectSpacer())
+			}
+			if entry, ok := sectionWraps[key]; ok && entry.obj != nil {
+				sectionContainer.Add(entry.obj)
+			}
+		}
+	}
+
+	// Initial build of the section container
+	rebuildSectionOrder()
 
 	topSection := container.NewVBox(
 		indicatorRow,
 		newRectSpacer(),
-		daemonConfigBox,
-		newRectSpacer(),
-		daemonInfoBox,
-		newRectSpacer(),
-		minerInfoBox,
-		newRectSpacer(),
-		minerStatsBox,
+		sectionContainer,
 	)
 
 	if isMobile() {
@@ -1358,10 +1654,10 @@ func (r *fixedWidthRenderer) Layout(_ fyne.Size) {
 	// Intentionally empty — canvas.Text keeps its natural size; the widget
 	// clips to its own allocated bounds in the standard Fyne paint pass.
 }
-func (r *fixedWidthRenderer) MinSize() fyne.Size        { return r.widget.MinSize() }
-func (r *fixedWidthRenderer) Refresh()                   { canvas.Refresh(r.text) }
+func (r *fixedWidthRenderer) MinSize() fyne.Size           { return r.widget.MinSize() }
+func (r *fixedWidthRenderer) Refresh()                     { canvas.Refresh(r.text) }
 func (r *fixedWidthRenderer) Objects() []fyne.CanvasObject { return []fyne.CanvasObject{r.text} }
-func (r *fixedWidthRenderer) Destroy()                   {}
+func (r *fixedWidthRenderer) Destroy()                     {}
 
 // marqueeDisclaimer auto-scrolls a fixedWidthBox horizontally (marquee / news
 // ticker). Text enters from the right and scrolls left so the user can read
