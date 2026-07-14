@@ -36,33 +36,41 @@ var (
 // Called from main() after the app and session are initialized.
 func initSystemTray() {
 	onReady := func() {
-		systray.SetIcon(resourceIconPng.Content())
+		systray.SetIcon(resourceEngramWhitePng.Content())
 		systray.SetTitle("Engram")
 		systray.SetTooltip("Engram - DERO Wallet")
 
 		// Menu order (top to bottom):
 		//   wallet connected: Exit, Contracts+, Messages, TELA, Dashboard, Settings, Daemon & Miner, —, Quit
-		//   no wallet:        Connect, Connection Settings, Daemon & Miner, —, Quit
-
-		// --- Connected-wallet items ---
+		//   no wallet:        Connect, Connection Settings, Daemon & Miner, —, Quit		// --- Connected-wallet items ---
 		trayExit = systray.AddMenuItem(i18n.T("system_tray.exit"), "")
+		trayExit.SetIcon(trayIconExitSvg.Content())
 		trayContracts = systray.AddMenuItem(i18n.T("system_tray.contracts"), "")
+		trayContracts.SetIcon(trayIconContractsSvg.Content())
 		trayMessages = systray.AddMenuItem(i18n.T("system_tray.messages"), "")
+		trayMessages.SetIcon(trayIconMessagesSvg.Content())
 		trayTELA = systray.AddMenuItem(i18n.T("system_tray.tela"), "")
+		trayTELA.SetIcon(trayIconTelaSvg.Content())
 		trayDashboard = systray.AddMenuItem(i18n.T("system_tray.dashboard"), "")
+		trayDashboard.SetIcon(trayIconDashboardSvg.Content())
 
 		// --- Not-logged-in items (same position) ---
 		trayConnect = systray.AddMenuItem(i18n.T("system_tray.connect"), "")
+		trayConnect.SetIcon(trayIconConnectSvg.Content())
 		trayConnectionSettings = systray.AddMenuItem(i18n.T("system_tray.connection_settings"), "")
+		trayConnectionSettings.SetIcon(trayIconConnectionSettingsSvg.Content())
 
 		// --- Wallet-settings item ---
 		traySettings = systray.AddMenuItem(i18n.T("system_tray.settings"), "")
+		traySettings.SetIcon(trayIconSettingsSvg.Content())
 
 		// --- Always-visible items ---
 		trayDaemonMiner = systray.AddMenuItem(i18n.T("system_tray.daemon_miner"), "")
+		trayDaemonMiner.SetIcon(trayIconDaemonMinerSvg.Content())
 		traySeparator = systray.AddMenuItem("-", "")
 		traySeparator.Disable()
 		trayQuit = systray.AddMenuItem(i18n.T("system_tray.quit"), "")
+		trayQuit.SetIcon(trayIconQuitSvg.Content())
 
 		// Set initial visibility based on current wallet state
 		applyTrayVisibility()
