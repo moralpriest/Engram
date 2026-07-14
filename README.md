@@ -43,6 +43,14 @@ Platform installation guides:
 
 ## Development
 
+### Asset Regeneration
+
+The white tray icon (`assets/Icon-white.png`) is generated from `assets/Engram-basic.svg`. To regenerate it (e.g. after updating the SVG):
+```bash
+convert -background none -density 288 assets/Engram-basic.svg -resize 100x106 assets/Icon-white.png
+```
+Requires [ImageMagick](https://imagemagick.org/script/convert.php) (`convert`).
+
 ### Using Taskfile (Recommended)
 
 We provide a [Taskfile](https://taskfile.dev/) to automate development, testing, and packaging:
