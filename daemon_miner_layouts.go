@@ -22,9 +22,6 @@ import (
 
 	"github.com/DEROFDN/engram/i18n"
 	apptheme "github.com/DEROFDN/engram/internal/theme"
-
-	"github.com/DEROFDN/engram/internal/dirtybird"
-	"github.com/DEROFDN/engram/internal/dirtybird-gpu"
 )
 
 // daemonInfoUI holds refreshable canvas text references for the daemon info panel.
@@ -276,9 +273,9 @@ func updateInfoUILabels(info DaemonInfo) {
 		case dmState.daemonState == dmStateSyncing && info.Height == 0:
 			// Chain initializing — fastsync was disabled, so sync starts
 			// from scratch. "0/0" is misleading; show a friendlier message.
-			infoUI.status.Text = "Initializing sync..."
+			infoUI.status.Text = i18n.T("daemon_miner.initializing_sync")
 		case dmState.daemonState == dmStateSyncing && info.Height > 0 && info.Topoheight > info.Height:
-			infoUI.status.Text = fmt.Sprintf("Syncing %d/%d", info.Height, info.Topoheight)
+			infoUI.status.Text = fmt.Sprintf(i18n.T("daemon_miner.syncing_progress"), info.Height, info.Topoheight)
 		default:
 			infoUI.status.Text = stateLabelDM(dmState.daemonState)
 		}
@@ -336,81 +333,6 @@ func startMinerStatsRefresh() {
 
 // updateMinerStatsUI updates the miner statistics canvas text elements with the latest stats.
 func updateMinerStatsUI() {
-	// Gather stats from alternative miner backends (experimental CPU + GPU).
-	// When any external miner is active, reset miningStats fields first so
-	// the GPU += accumulation never doubles up on stale embedded-miner values,
-	// and old external stats are cleared when both miners stop.
-	cpuExt := dirtybird.IsRunning()
-	gpuExt := dirtybird_gpu.IsRunning()
-
-	if cpuExt || gpuExt {
-		// Reset all relevant fields before accumulating external contributions
-		miningStats.mu.Lock()
-		miningStats.CurrentHashrate = 0
-		miningStats.SpeedStr = ""
-		miningStats.MiniBlocks = 0
-		miningStats.Rejected = 0
-		miningStats.LastRewardTime = time.Time{}
-		miningStats.StartTime = time.Time{}
-		miningStats.NetHashrate = 0
-		miningStats.NetHashStr = ""
-		miningStats.mu.Unlock()
-	}
-
-	// Bridge dirtybird experimental CPU miner stats
-	if cpuExt {
-		db := dirtybird.Snapshot()
-
-		miningStats.mu.Lock()
-		miningStats.CurrentHashrate += db.Hashrate
-		if db.Hashrate > 0 {
-			miningStats.SpeedStr = formatHashrate(db.Hashrate)
-		} else {
-			miningStats.SpeedStr = "—"
-		}
-		miningStats.MiniBlocks += int64(db.MiniBlocks)
-		miningStats.Rejected += int64(db.Rejected)
-		miningStats.LastRewardTime = db.LastReward
-		if miningStats.StartTime.IsZero() || db.SessionStart.Before(miningStats.StartTime) {
-			miningStats.StartTime = db.SessionStart
-		}
-		if db.Difficulty > 0 {
-			netHash := float64(db.Difficulty) / 1.8
-			miningStats.NetHashrate = netHash
-			miningStats.NetHashStr = formatHashrate(netHash)
-		}
-		miningStats.mu.Unlock()
-	}
-
-	// Bridge dirtybird GPU miner stats (runs alongside any CPU miner)
-	if gpuExt {
-		dbg := dirtybird_gpu.Snapshot()
-
-		miningStats.mu.Lock()
-		miningStats.CurrentHashrate += dbg.Hashrate
-		// Combine CPU and GPU into a single speed string
-		combined := miningStats.CurrentHashrate
-		if combined > 0 {
-			miningStats.SpeedStr = formatHashrate(combined)
-		} else {
-			miningStats.SpeedStr = "—"
-		}
-		miningStats.MiniBlocks += int64(dbg.MiniBlocks)
-		miningStats.Rejected += int64(dbg.Rejected)
-		if dbg.LastReward.After(miningStats.LastRewardTime) {
-			miningStats.LastRewardTime = dbg.LastReward
-		}
-		if miningStats.StartTime.IsZero() || dbg.SessionStart.Before(miningStats.StartTime) {
-			miningStats.StartTime = dbg.SessionStart
-		}
-		if dbg.Difficulty > 0 && miningStats.NetHashrate <= 0 {
-			netHash := float64(dbg.Difficulty) / 1.8
-			miningStats.NetHashrate = netHash
-			miningStats.NetHashStr = formatHashrate(netHash)
-		}
-		miningStats.mu.Unlock()
-	}
-
 	stats := GetMiningStats()
 
 	// Fallback: use daemon's direct hashrate estimate, or derive from difficulty
@@ -569,28 +491,20 @@ func refreshDaemonModeLabel() {
 	}
 	var modeDisplay string
 	if daemonMode == "" {
-		modeDisplay = "NOT CONFIGURED"
+		modeDisplay = i18n.T("daemon_miner.mode_not_configured")
 	} else {
 		switch {
 		case daemonMode == "pruned":
-			modeDisplay = "PRUNED (FS)"
+			modeDisplay = i18n.T("daemon_miner.mode_pruned_fs")
 		case daemonMode == "full" && daemonFastSync:
-			modeDisplay = "FULL (FS)"
+			modeDisplay = i18n.T("daemon_miner.mode_full_fs")
 		default:
-			modeDisplay = "FULL"
+			modeDisplay = i18n.T("daemon_miner.mode_full")
 		}
 	}
-	daemonModeLabel.Text = "Mode: " + modeDisplay
+	daemonModeLabel.Text = i18n.T("daemon_miner.mode_prefix") + modeDisplay
 	daemonModeLabel.Refresh()
 }
-
-// experimentalMiner enables the Dirtybird experimental CPU miner on desktop.
-// Set via the CPU Mode radio group; only effective on non-mobile builds.
-var experimentalMiner bool
-
-// gpuMiner enables the Dirtybird GPU miner on desktop (runs alongside CPU miner).
-// Set via the GPU Miner checkbox; only effective on non-mobile builds.
-var gpuMiner bool
 
 // UIState holds non-sensitive UI preferences that persist across sessions
 // in a plain JSON file (not wallet-encrypted, so they survive wallet resets).
@@ -1015,21 +929,21 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		tightSpacer(),
 		makeStatField("Topoheight", daemonTopoText),
 		tightSpacer(),
-		makeStatField("Difficulty", daemonDiffText),
+		makeStatField(i18n.T("daemon_miner.difficulty"), daemonDiffText),
 		tightSpacer(),
-		makeStatField("Peers", daemonPeersText),
+		makeStatField(i18n.T("daemon_miner.peers"), daemonPeersText),
 		tightSpacer(),
 		func() fyne.CanvasObject {
 			v := daemonVersionText
 			if infoErr == nil && len(info.Version) > 20 {
 				s := container.NewScroll(v)
 				s.SetMinSize(fyne.NewSize(ui.Width*0.35, v.MinSize().Height))
-				return makeStatField("Version", s)
+				return makeStatField(i18n.T("daemon_miner.version"), s)
 			}
-			return makeStatField("Version", v)
+			return makeStatField(i18n.T("daemon_miner.version"), v)
 		}(),
 		tightSpacer(),
-		makeStatField("Tx Pool", daemonTxPoolText),
+		makeStatField(i18n.T("daemon_miner.tx_pool"), daemonTxPoolText),
 	)
 
 	infoUI.mu.Lock()
@@ -1073,7 +987,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Wallet Address (hidden by default for privacy)
 	entryWallet := widget.NewEntry()
-	entryWallet.PlaceHolder = "Enter your DERO wallet address"
+	entryWallet.PlaceHolder = i18n.T("daemon_miner.wallet_address_ph")
 	if engram.Disk != nil {
 		entryWallet.SetText(engram.Disk.GetAddress().String())
 	} else if minerWalletAddr != "" {
@@ -1121,7 +1035,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Custom thread count entry (declared before radio group that references it)
 	entryCustomThreads := widget.NewEntry()
-	entryCustomThreads.PlaceHolder = "Thread count (e.g. 8)"
+	entryCustomThreads.PlaceHolder = i18n.T("daemon_miner.threads_count_ph")
 	entryCustomThreads.Disable()
 	entryCustomThreads.OnChanged = func(s string) {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
@@ -1135,26 +1049,26 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	highThreads := max(1, cpus-2)
 
 	presetLabels := []string{
-		fmt.Sprintf("Low (%d threads)", lowThreads),
-		fmt.Sprintf("Medium (%d threads)", medThreads),
-		fmt.Sprintf("High (%d threads)", highThreads),
-		"Custom",
+		fmt.Sprintf("%s (%d %s)", i18n.T("daemon_miner.threads_low"), lowThreads, i18n.T("daemon_miner.threads")),
+		fmt.Sprintf("%s (%d %s)", i18n.T("daemon_miner.threads_medium"), medThreads, i18n.T("daemon_miner.threads")),
+		fmt.Sprintf("%s (%d %s)", i18n.T("daemon_miner.threads_high"), highThreads, i18n.T("daemon_miner.threads")),
+		i18n.T("daemon_miner.threads_custom"),
 	}
 
 	wThreadPreset := widget.NewRadioGroup(presetLabels, func(s string) {
 		switch {
-		case strings.HasPrefix(s, "Low"):
+		case strings.HasPrefix(s, i18n.T("daemon_miner.threads_low")):
 			minerThreads = lowThreads
-		case strings.HasPrefix(s, "Medium"):
+		case strings.HasPrefix(s, i18n.T("daemon_miner.threads_medium")):
 			minerThreads = medThreads
-		case strings.HasPrefix(s, "High"):
+		case strings.HasPrefix(s, i18n.T("daemon_miner.threads_high")):
 			minerThreads = highThreads
-		case s == "Custom":
+		case s == i18n.T("daemon_miner.threads_custom"):
 			if n, err := strconv.Atoi(entryCustomThreads.Text); err == nil && n > 0 {
 				minerThreads = n
 			}
 		}
-		if s == "Custom" {
+		if s == i18n.T("daemon_miner.threads_custom") {
 			entryCustomThreads.Enable()
 		} else {
 			entryCustomThreads.Disable()
@@ -1179,69 +1093,25 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		entryCustomThreads.Enable()
 	}
 
-	// Load miner mode preferences
-	experimentalMiner = false
-	if val, err := GetValue("settings", []byte("experimental_miner")); err == nil && len(val) > 0 {
-		experimentalMiner = string(val) == "true"
-	}
-	gpuMiner = false
-	if val, err := GetValue("settings", []byte("gpu_miner")); err == nil && len(val) > 0 {
-		gpuMiner = string(val) == "true"
-	}
-
 	// Build miner config section
 	minerConfigBox := container.NewVBox(
 		newRectSpacer(),
-		makeField("Wallet Address"),
+		makeField(i18n.T("daemon_miner.wallet_address_label")),
 		addressBox,
 		newRectSpacer(),
-		makeField("Threads"),
+		makeField(i18n.T("daemon_miner.threads_label")),
 		wThreadPreset,
 		entryCustomThreads,
 	)
 
 	// Low-thread warning (shown when system has ≤6 CPUs)
-	if cpus <= 6 {
+	if cpus <= 8 {
 		warnLabel := widget.NewLabel(
-			fmt.Sprintf("⚠ Your system has only %d threads. Mining may impact system responsiveness.", cpus),
+			fmt.Sprintf(i18n.T("daemon_miner.thread_low_warning"), cpus),
 		)
 		warnLabel.Wrapping = fyne.TextWrapWord
 		minerConfigBox.Add(newRectSpacer())
 		minerConfigBox.Add(warnLabel)
-	}
-
-	// Miner mode selector — Desktop only, hidden on Android/iOS
-	if !isMobile() {
-		minerConfigBox.Add(newRectSpacer())
-		modeLabel := canvas.NewText("CPU Mode", apptheme.C.Gray)
-		modeLabel.TextSize = scaleFont(13)
-		modeLabel.TextStyle = fyne.TextStyle{Bold: true}
-		minerConfigBox.Add(modeLabel)
-
-		cpuRadio := widget.NewRadioGroup([]string{"Normal", "Experimental"}, func(s string) {
-			experimentalMiner = s == "Experimental"
-			go func() {
-				StoreValue("settings", []byte("experimental_miner"), []byte(fmt.Sprintf("%t", experimentalMiner)))
-			}()
-		})
-		cpuRadio.Horizontal = true
-		if experimentalMiner {
-			cpuRadio.SetSelected("Experimental")
-		} else {
-			cpuRadio.SetSelected("Normal")
-		}
-		minerConfigBox.Add(cpuRadio)
-
-		// GPU Miner checkbox (independent — runs alongside whichever CPU mode is selected)
-		minerConfigBox.Add(newRectSpacer())
-		gpuCheck := widget.NewCheck("GPU Miner", func(checked bool) {
-			gpuMiner = checked
-			go func() {
-				StoreValue("settings", []byte("gpu_miner"), []byte(fmt.Sprintf("%t", checked)))
-			}()
-		})
-		gpuCheck.SetChecked(gpuMiner)
-		minerConfigBox.Add(gpuCheck)
 	}
 
 	minerInfoBox := minerConfigBox
@@ -1283,23 +1153,23 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	minerStatsBox := container.NewVBox(
 		newRectSpacer(),
-		makeStatField("Hashrate", hashrateVal),
+		makeStatField(i18n.T("daemon_miner.miner")+" Hashrate", hashrateVal),
 		tightSpacer(),
-		makeStatField("Network Hashrate", netHashVal),
+		makeStatField(i18n.T("daemon_miner.network_hashrate"), netHashVal),
 		tightSpacer(),
-		makeStatField("Your Share", netShareVal),
+		makeStatField(i18n.T("daemon_miner.your_share"), netShareVal),
 		tightSpacer(),
-		makeStatField("Est. Minis / Day", minisPerDayVal),
+		makeStatField(i18n.T("daemon_miner.est_minis_day"), minisPerDayVal),
 		tightSpacer(),
-		makeStatField("ETA to Next Reward", etaVal),
+		makeStatField(i18n.T("daemon_miner.eta_next_reward"), etaVal),
 		tightSpacer(),
 		makeStatField("Mini Blocks (Session)", miniBlocksVal),
 		tightSpacer(),
-		makeStatField("Last Reward", lastRewardVal),
+		makeStatField(i18n.T("daemon_miner.last_reward"), lastRewardVal),
 		tightSpacer(),
-		makeStatField("Session Duration", sessionDurVal),
+		makeStatField(i18n.T("daemon_miner.session_duration"), sessionDurVal),
 		tightSpacer(),
-		makeStatField("Rejected Shares", rejectedVal),
+		makeStatField(i18n.T("daemon_miner.rejected_shares"), rejectedVal),
 		newRectSpacer(),
 	)
 
@@ -1307,11 +1177,11 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	startMinerStatsRefresh()
 
 	// Mode display (clickable to change) — stored in global so dialogs can refresh it live
-	daemonModeLabel = canvas.NewText("Mode: ", apptheme.C.Green)
+	daemonModeLabel = canvas.NewText(i18n.T("daemon_miner.mode_prefix"), apptheme.C.Green)
 	daemonModeLabel.TextSize = scaleFont(12)
 	refreshDaemonModeLabel()
 
-	changeModeBtn := widget.NewButton("Change", func() {
+	changeModeBtn := widget.NewButton(i18n.T("daemon_miner.change"), func() {
 		// Recompute health in background goroutine to avoid blocking the UI
 		go func() {
 			modeHealth := checkSystemHealth()
@@ -1324,7 +1194,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Integrator address entry
 	entryIntegrator := widget.NewEntry()
-	entryIntegrator.PlaceHolder = "Integrator address (optional)"
+	entryIntegrator.PlaceHolder = i18n.T("daemon_miner.integrator_address_ph")
 	entryIntegrator.SetText(daemonIntegratorAddress)
 
 	// Auto-populate from wallet if no integrator set yet
@@ -1339,10 +1209,10 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	// Delete node data button
-	deleteNodeBtn := widget.NewButton("Delete Node Data", func() {
+	deleteNodeBtn := widget.NewButton(i18n.T("daemon_miner.delete_node_data"), func() {
 		confirmDlg := dialog.NewConfirm(
-			"Delete Node Data",
-			"This will stop the daemon and remove all downloaded blockchain data. The app will need to re-sync from scratch. Continue?",
+			i18n.T("daemon_miner.delete_node_confirm_title"),
+			i18n.T("daemon_miner.delete_node_confirm_body"),
 			func(confirmed bool) {
 				if !confirmed {
 					return
@@ -1361,7 +1231,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 					dmState.daemonState = dmStateStopped
 					uiDo(func() {
 						syncToggleStates()
-						dialog.NewInformation("Node Data Deleted", "Blockchain data has been removed. Toggle the daemon ON to start a fresh sync.", session.Window).Show()
+						dialog.NewInformation(i18n.T("daemon_miner.node_data_deleted"), i18n.T("daemon_miner.node_data_deleted_body"), session.Window).Show()
 					})
 				}()
 			},
@@ -1376,7 +1246,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		newRectSpacer(),
 		container.NewBorder(nil, nil, daemonModeLabel, changeModeBtn),
 		newRectSpacer(),
-		makeField("Integrator Address"),
+		makeField(i18n.T("daemon_miner.integrator_address_label")),
 		entryIntegrator,
 		newRectSpacer(),
 		deleteNodeBtn,
@@ -1389,10 +1259,10 @@ func layoutDaemonMiner() fyne.CanvasObject {
 
 	// Build name/label map for section titles
 	sectionTitles := map[string]string{
-		sectionKeyDaemonConfig: i18n.T("daemon_miner.daemon") + " CONFIG",
-		sectionKeyDaemonInfo:   i18n.T("daemon_miner.daemon") + " INFO",
-		sectionKeyMinerConfig:  i18n.T("daemon_miner.miner") + " CONFIG",
-		sectionKeyMinerStats:   i18n.T("daemon_miner.miner") + " STATS",
+		sectionKeyDaemonConfig: i18n.T("daemon_miner.section_daemon_config"),
+		sectionKeyDaemonInfo:   i18n.T("daemon_miner.section_daemon_info"),
+		sectionKeyMinerConfig:  i18n.T("daemon_miner.section_miner_config"),
+		sectionKeyMinerStats:   i18n.T("daemon_miner.section_miner_stats"),
 	}
 
 	// Build content map for each section key
@@ -1763,8 +1633,8 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	rows := container.NewVBox(objs...)
 
 	modeContent := container.NewVBox(
-		canvas.NewText("Node Mode Selection", apptheme.C.Green),
-		widget.NewLabel("Choose how to run this node:"),
+		canvas.NewText(i18n.T("daemon_miner.node_mode_selection"), apptheme.C.Green),
+		widget.NewLabel(i18n.T("daemon_miner.choose_how_node")),
 		widget.NewSeparator(),
 		rows,
 		container.NewHBox(layout.NewSpacer(), disclaimer.box, layout.NewSpacer()),
@@ -1788,7 +1658,7 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	}
 
 	// Save button
-	saveBtn := widget.NewButton("Save", func() {
+	saveBtn := widget.NewButton(i18n.T("common.save"), func() {
 		opt := modeOptions[selIdx]
 		if opt.mode == "full" && !health.HasSpaceForFull && !forceFullMode {
 			showForceFullWarningDialog(func() {
@@ -1802,7 +1672,7 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 
 	// Force Full Mode checkbox when space check fails
 	if !health.HasSpaceForFull {
-		forceCheck := widget.NewCheck("Force Full Mode (I have 250GB+ available)", func(checked bool) {
+		forceCheck := widget.NewCheck(i18n.T("daemon_miner.force_full_mode"), func(checked bool) {
 			saveForceFullMode(checked)
 			if checked {
 				saveBtn.Enable()
@@ -1818,21 +1688,21 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 
 	// Cancel / Close button
 	if autoStart {
-		modeContent.Add(widget.NewButton("Cancel", func() {
+		modeContent.Add(widget.NewButton(i18n.T("common.cancel"), func() {
 			disclaimer.stop()
 			daemonToggle.setChecked(false)
 			uiDo(syncToggleStates)
 			modeDialog.Hide()
 		}))
 	} else {
-		modeContent.Add(widget.NewButton("Close", func() {
+		modeContent.Add(widget.NewButton(i18n.T("common.close"), func() {
 			disclaimer.stop()
 			modeDialog.Hide()
 		}))
 	}
 
 	modeContent.Add(widget.NewSeparator())
-	restoreBtn := widget.NewButton("Restore Defaults (Pruned + Fast Sync)", func() {
+	restoreBtn := widget.NewButton(i18n.T("daemon_miner.restore_defaults"), func() {
 		saveDaemonMode("pruned")
 		saveDaemonFastSync(true)
 		refreshDaemonModeLabel()
@@ -1853,8 +1723,8 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 // showForceFullWarningDialog shows a warning before forcing full mode.
 func showForceFullWarningDialog(onConfirm, onCancel func()) {
 	warningDialog := dialog.NewConfirm(
-		"Warning: Force Full Mode",
-		"You have enabled Force Full Mode. This will ONLY work if you actually have 250GB+ available on your disk.\n\nIf you don't have enough space, the daemon will fail to start.\n\nContinue?",
+		i18n.T("daemon_miner.force_full_warning_title"),
+		i18n.T("daemon_miner.force_full_warning_body"),
 		func(confirmed bool) {
 			if confirmed {
 				onConfirm()
@@ -1873,20 +1743,20 @@ func ShowIntegratorInfoPopup() {
 		return
 	}
 
-	header := canvas.NewText("Wallet Required", apptheme.C.Green)
+	header := canvas.NewText(i18n.T("daemon_miner.wallet_required"), apptheme.C.Green)
 	header.TextSize = 18
 	header.Alignment = fyne.TextAlignCenter
 	header.TextStyle = fyne.TextStyle{Bold: true}
 
-	msg1 := widget.NewLabel("Get 10% extra mining rewards when running a node with your wallet address.")
+	msg1 := widget.NewLabel(i18n.T("daemon_miner.integrator_reward_info"))
 	msg1.Alignment = fyne.TextAlignCenter
 	msg1.Wrapping = fyne.TextWrapWord
 
-	msg2 := widget.NewLabel("Create or recover a wallet first, then enable the node.")
+	msg2 := widget.NewLabel(i18n.T("daemon_miner.create_wallet_first"))
 	msg2.Alignment = fyne.TextAlignCenter
 	msg2.Wrapping = fyne.TextWrapWord
 
-	msg3 := widget.NewLabel("You can also run the node without an integrator address.")
+	msg3 := widget.NewLabel(i18n.T("daemon_miner.run_without_integrator"))
 	msg3.Alignment = fyne.TextAlignCenter
 	msg3.Wrapping = fyne.TextWrapWord
 
@@ -1911,7 +1781,7 @@ func ShowIntegratorInfoPopup() {
 	var overlay *fyne.Container
 	var blocker *fyne.Container
 
-	btnOk := widget.NewButton("OK", func() {
+	btnOk := widget.NewButton(i18n.T("common.ok"), func() {
 		uiDo(func() {
 			overlays := session.Window.Canvas().Overlays()
 			overlays.Remove(overlay)
