@@ -186,6 +186,7 @@ var stringsTemplate = map[string]string{
 	"daemon_miner.node_data_deleted":         "",
 	"daemon_miner.node_data_deleted_body":    "",
 	"daemon_miner.node_mode_selection":       "",
+	"daemon_miner.discard_mode_title":        "",
 	"daemon_miner.choose_how_node":           "",
 	"daemon_miner.force_full_mode":           "",
 	"daemon_miner.force_full_warning_title":  "",

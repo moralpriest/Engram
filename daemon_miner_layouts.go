@@ -75,6 +75,11 @@ var (
 // It is refreshed live when the mode changes via the mode dialog.
 var daemonModeLabel *canvas.Text
 
+// pendingNodeModeHealth and pendingNodeModeAutoStart carry state into the
+// layoutNodeModeSelection page, since LayoutFunc takes no parameters.
+var pendingNodeModeHealth SystemHealth
+var pendingNodeModeAutoStart bool
+
 const (
 	dmStateStopped = iota
 	dmStateRunning
@@ -822,7 +827,12 @@ func layoutDaemonMiner() fyne.CanvasObject {
 				}
 				if daemonMode == "" {
 					uiDo(func() {
-						ShowDaemonModeDialog(health, true)
+						pendingNodeModeHealth = health
+						pendingNodeModeAutoStart = true
+						session.LastDomain = session.Window.Content()
+						session.Window.SetContent(layoutTransition())
+						session.Window.SetContent(layoutNodeModeSelection())
+						removeOverlays()
 					})
 					return
 				}
@@ -1186,7 +1196,12 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		go func() {
 			modeHealth := checkSystemHealth()
 			uiDo(func() {
-				ShowDaemonModeDialog(modeHealth, false)
+				pendingNodeModeHealth = modeHealth
+				pendingNodeModeAutoStart = false
+				session.LastDomain = session.Window.Content()
+				session.Window.SetContent(layoutTransition())
+				session.Window.SetContent(layoutNodeModeSelection())
+				removeOverlays()
 			})
 		}()
 	})
@@ -1209,6 +1224,11 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	// Delete node data button
+	nodeDataPath := filepath.Join(AppPath(), "node")
+	hasNodeData := false
+	if fi, err := os.Stat(nodeDataPath); err == nil && fi.IsDir() {
+		hasNodeData = true
+	}
 	deleteNodeBtn := widget.NewButton(i18n.T("daemon_miner.delete_node_data"), func() {
 		confirmDlg := dialog.NewConfirm(
 			i18n.T("daemon_miner.delete_node_confirm_title"),
@@ -1240,6 +1260,9 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		confirmDlg.Show()
 	})
 	deleteNodeBtn.Importance = widget.DangerImportance
+	if !hasNodeData {
+		deleteNodeBtn.Disable()
+	}
 
 	// DAEMON CONFIG (collapsible — starts collapsed when external daemon is detected)
 	daemonConfigContent := container.NewVBox(
@@ -1533,9 +1556,10 @@ func (r *fixedWidthRenderer) Destroy()                     {}
 // ticker). Text enters from the right and scrolls left so the user can read
 // the full disclosure sequentially.
 type marqueeDisclaimer struct {
-	box   *fixedWidthBox
-	width float32
-	done  chan struct{}
+	box      *fixedWidthBox
+	width    float32
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
 func newMarqueeDisclaimer(initial string, width float32) *marqueeDisclaimer {
@@ -1589,18 +1613,22 @@ func (m *marqueeDisclaimer) animate() {
 }
 
 func (m *marqueeDisclaimer) stop() {
-	close(m.done)
+	m.stopOnce.Do(func() {
+		close(m.done)
+	})
 }
 
-// ShowDaemonModeDialog prompts the user to choose a node mode.
-// If autoStart is true, the daemon will start automatically after saving.
-// If autoStart is false, only the mode is saved and the dialog closes.
-func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
-	var modeDialog *widget.PopUp
+// layoutNodeModeSelection is a full page for choosing the node mode.
+// It reads pendingNodeModeHealth and pendingNodeModeAutoStart set by the caller
+// before navigating here, since LayoutFunc takes no parameters.
+func layoutNodeModeSelection() fyne.CanvasObject {
+	health := pendingNodeModeHealth
+	autoStart := pendingNodeModeAutoStart
 
-	const disclaimerWidth = float32(300)
+	disclaimerWidth := ui.Width * 0.9
 
 	selIdx := currentModeIndex()
+	startIdx := selIdx
 	disclaimer := newMarqueeDisclaimer(modeDisclaimer(modeOptions[selIdx]), disclaimerWidth)
 
 	var modeBtns []*widget.Button
@@ -1632,13 +1660,12 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	}
 	rows := container.NewVBox(objs...)
 
-	modeContent := container.NewVBox(
-		canvas.NewText(i18n.T("daemon_miner.node_mode_selection"), apptheme.C.Green),
-		widget.NewLabel(i18n.T("daemon_miner.choose_how_node")),
-		widget.NewSeparator(),
-		rows,
-		container.NewHBox(layout.NewSpacer(), disclaimer.box, layout.NewSpacer()),
-	)
+	navigateBack := func() {
+		session.LastDomain = session.Window.Content()
+		session.Window.SetContent(layoutTransition())
+		session.Window.SetContent(layoutDaemonMiner())
+		removeOverlays()
+	}
 
 	afterSave := func() {
 		if autoStart {
@@ -1653,7 +1680,7 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 		saveDaemonFastSync(opt.fastSync)
 		refreshDaemonModeLabel()
 		disclaimer.stop()
-		modeDialog.Hide()
+		navigateBack()
 		afterSave()
 	}
 
@@ -1668,7 +1695,91 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 		}
 		saveSelectedMode()
 	})
-	saveBtn.Importance = widget.HighImportance
+
+	restoreBtn := widget.NewButton(i18n.T("daemon_miner.restore_defaults"), func() {
+		saveDaemonMode("pruned")
+		saveDaemonFastSync(true)
+		refreshDaemonModeLabel()
+		disclaimer.stop()
+		navigateBack()
+		if autoStart {
+			startDaemon()
+		}
+		uiDo(syncToggleStates)
+	})
+	restoreBtn.Importance = widget.LowImportance
+
+	// showDiscardPopup shows a confirmation overlay when the user presses back
+	// without saving.
+	showDiscardPopup := func() {
+		header := canvas.NewText(i18n.T("daemon_miner.discard_mode_title"), apptheme.C.Gray)
+		header.TextSize = scaleFont(14)
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+
+		subHeader := canvas.NewText(i18n.T("settings.are_you_sure"), apptheme.C.Account)
+		subHeader.TextSize = scaleFont(22)
+		subHeader.Alignment = fyne.TextAlignCenter
+		subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		linkCancel := widget.NewHyperlinkWithStyle(i18n.T("common.cancel"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		linkCancel.OnTapped = func() {
+			removeOverlays()
+		}
+
+		btnDiscard := widget.NewButton(i18n.T("datapad.discard"), func() {
+			disclaimer.stop()
+			if autoStart {
+				daemonToggle.setChecked(false)
+				uiDo(syncToggleStates)
+			}
+			removeOverlays()
+			navigateBack()
+		})
+		btnDiscard.Importance = widget.DangerImportance
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(apptheme.C.DarkMatter),
+			),
+		)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				container.NewCenter(
+					container.NewVBox(
+						span,
+						container.NewCenter(header),
+						newRectSpacer(),
+						newRectSpacer(),
+						subHeader,
+						widget.NewLabel(""),
+						wrapMobileButton(btnDiscard),
+						newRectSpacer(),
+						newRectSpacer(),
+						container.NewHBox(
+							layout.NewSpacer(),
+							linkCancel,
+							layout.NewSpacer(),
+						),
+						newRectSpacer(),
+						newRectSpacer(),
+					),
+				),
+			),
+		)
+	}
+
+	modeContent := container.NewVBox(
+		widget.NewLabel(i18n.T("daemon_miner.choose_how_node")),
+		rows,
+		container.NewHBox(layout.NewSpacer(), disclaimer.box, layout.NewSpacer()),
+	)
 
 	// Force Full Mode checkbox when space check fails
 	if !health.HasSpaceForFull {
@@ -1685,39 +1796,64 @@ func ShowDaemonModeDialog(health SystemHealth, autoStart bool) {
 	}
 
 	modeContent.Add(saveBtn)
-
-	// Cancel / Close button
-	if autoStart {
-		modeContent.Add(widget.NewButton(i18n.T("common.cancel"), func() {
-			disclaimer.stop()
-			daemonToggle.setChecked(false)
-			uiDo(syncToggleStates)
-			modeDialog.Hide()
-		}))
-	} else {
-		modeContent.Add(widget.NewButton(i18n.T("common.close"), func() {
-			disclaimer.stop()
-			modeDialog.Hide()
-		}))
-	}
-
-	modeContent.Add(widget.NewSeparator())
-	restoreBtn := widget.NewButton(i18n.T("daemon_miner.restore_defaults"), func() {
-		saveDaemonMode("pruned")
-		saveDaemonFastSync(true)
-		refreshDaemonModeLabel()
-		disclaimer.stop()
-		modeDialog.Hide()
-		if autoStart {
-			startDaemon()
-		}
-		uiDo(syncToggleStates)
-	})
-	restoreBtn.Importance = widget.LowImportance
 	modeContent.Add(restoreBtn)
 
-	modeDialog = widget.NewModalPopUp(modeContent, session.Window.Canvas())
-	modeDialog.Show()
+	scrollContent := container.NewVBox(modeContent)
+
+	scrollWidthAnchor := canvas.NewRectangle(color.Transparent)
+	scrollWidthAnchor.SetMinSize(fyne.NewSize(ui.Width, 1))
+
+	scrollBox := container.NewVScroll(
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(scrollWidthAnchor, scrollContent),
+			layout.NewSpacer(),
+		),
+	)
+	scrollBox.SetMinSize(fyne.NewSize(ui.MaxWidth, ui.Height*0.8))
+
+	heading := canvas.NewText(i18n.T("daemon_miner.node_mode_selection"), color.White)
+	heading.TextSize = scaleFont(22)
+	heading.TextStyle = fyne.TextStyle{Bold: true}
+	heading.Alignment = fyne.TextAlignCenter
+
+	top := container.NewVBox(
+		newRectSpacer(),
+		newRectSpacer(),
+		container.NewCenter(heading),
+		newRectSpacer(),
+	)
+
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		if selIdx != startIdx {
+			showDiscardPopup()
+			return
+		}
+		disclaimer.stop()
+		if autoStart {
+			daemonToggle.setChecked(false)
+			uiDo(syncToggleStates)
+		}
+		navigateBack()
+	})
+
+	footer := container.NewStack(
+		container.NewVBox(
+			newRectSpacer(),
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			newRectSpacer(),
+		),
+	)
+
+	return container.NewBorder(
+		top,
+		footer,
+		nil,
+		nil,
+		scrollBox,
+	)
 }
 
 // showForceFullWarningDialog shows a warning before forcing full mode.

@@ -148,6 +148,7 @@ var stringsEN = map[string]string{
 	"daemon_miner.node_data_deleted":         "Node Data Deleted",
 	"daemon_miner.node_data_deleted_body":    "Blockchain data has been removed. Toggle the daemon ON to start a fresh sync.",
 	"daemon_miner.node_mode_selection":       "Node Mode Selection",
+	"daemon_miner.discard_mode_title":        "Discard node mode changes?",
 	"daemon_miner.choose_how_node":           "Choose how to run this node:",
 	"daemon_miner.force_full_mode":           "Force Full Mode (I have 250GB+ available)",
 	"daemon_miner.force_full_warning_title":  "Warning: Force Full Mode",

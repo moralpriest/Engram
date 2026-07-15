@@ -153,6 +153,7 @@ var layoutRegistry = map[string]LayoutFunc{
 	"app.remoteaccess":     layoutRemoteAccess,
 	"app.register":         layoutNewAccount,
 	"app.nodeminer":        layoutDaemonMiner,
+	"app.nodemode":         layoutNodeModeSelection,
 }
 
 // getLayoutForDomain returns the layout function for a given domain
