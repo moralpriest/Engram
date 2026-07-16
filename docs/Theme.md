@@ -385,6 +385,11 @@ Same as existing document — unchanged across themes.
 | `NewSpacer` | `custom.go:711` | Sized empty spacer | Precise layout gaps |
 | `verticalSeparator` | `custom.go` | Thin vertical line | Dividing sections |
 | `circularIcon` | `custom.go` | Icon in a circle | Profile, status badges |
+| `toggleSwitch` | `daemon_miner_layouts.go` | Animated slide toggle | On/off controls |
+| `stateIndicator` | `daemon_miner_layouts.go` | Icon + label + status dot | Daemon/miner state display |
+| `collapsibleSection` | `daemon_miner_layouts.go` | Expandable section with drag handle | Grouped settings panels |
+| `marqueeDisclaimer` | `daemon_miner_layouts.go` | Horizontal scrolling text | Long disclaimers in tight spaces |
+| `cyberdeckDashboardIconResource` | `daemon_miner_icons.go` | Theme-aware SVG icon | Dashboard Daemon/Miner nav button |
 
 ---
 
@@ -577,6 +582,7 @@ Same as existing document — unchanged across themes.
 - Fade animations for marquee text (`wallet_layouts.go:82–126`)
 - `pulseButton`: 2-second green stroke animation on rectangles
 - `NewColorRGBAAnimation` for fade transitions (400ms)
+- Toggle switch slide animation (`daemon_miner_layouts.go`)
 
 ---
 
@@ -651,7 +657,7 @@ Used for the DERO balance amount on the dashboard.
 
 Source: `wallet_layouts.go:395–424`
 
-Used for the Settings, Notes, Messages, and Contracts buttons on the main dashboard.
+Used for the Settings, Messages, Contracts, and Daemon/Miner buttons on the main dashboard.
 
 | Theme | Color | Hex | RGBA |
 |-------|-------|-----|------|
@@ -744,6 +750,29 @@ Two separate icon functions for different contexts:
 | El Dorado | `#FFFFFF` (white) |
 | Crystallina | `#38384A` (dark slate) |
 
+### Dashboard Daemon/Miner Status Icons
+
+Source: `wallet_layouts.go`
+
+Two small `canvas.Image` icons (32×32) positioned left (daemon) and right (miner) of the DERO logo/villager on the dashboard. They reuse the same icons from the Daemon/Miner page, tinted according to the current daemon/miner state (running, stopped, syncing, external, error, connecting, corrupt).
+
+**Visibility rules:**
+- Only visible when the respective service is running (daemonIsRunning() / minerIsRunning())
+- Hidden when stopped/off
+- Do NOT show "off" state icons — unlike the Daemon/Miner page where gray stopped icons are always visible
+
+**State detection:**
+- `dmState` (global `daemonMinerState`) is kept up-to-date by `startBackgroundDaemonRefresh()` — a background goroutine that runs every 3s and uses `sync.Once` to prevent duplicate RPC calls
+- The dashboard goroutine only reads `dmState` for UI updates; it does NOT make RPC calls
+
+**Refresh:**
+- Icon visibility and tint are updated every 3s while `session.Domain == "app.wallet"`
+- The goroutine exits when the user navigates away from the dashboard
+
+**Positioning:**
+- Icons sit inside a Stack overlaid on the logo container, positioned via transparent padding rectangles at 6% from each edge (`ui.Width * 0.06`)
+- Behind the transparent `logoBtn` so clicks on the logo area still work
+
 ---
 
 ## XIV. Architecture: Per-Theme Color System
@@ -793,7 +822,175 @@ The Fyne theme providers (`ETheme` and `ETheme2`) in `theme.go` return colors vi
 
 ---
 
-## XV. Appendix: Complete Screen Map
+## XV. Daemon/Miner Management Page
+
+Source: `daemon_miner_layouts.go` — `layoutDaemonMiner()`
+
+### Page Structure
+
+The Daemon/Miner management page is the control center for running an embedded node and miner. It is composed of:
+
+1. **State indicator row** — Two columns (Daemon / Miner) each showing:
+   - A 40×40 tinted SVG icon (`daemonIconForState()` / `minerIconForState()`)
+   - A state label (Running, Stopped, Syncing, External, Error, Connecting, Corrupt)
+   - A bold name label (DAEMON / MINER)
+
+2. **Toggle switch row** — Two custom animated `toggleSwitch` widgets below the indicators
+
+3. **Collapsible sections** (user-reorderable via drag handles):
+   - **DAEMON CONFIG** — mode display + change button, integrator address, delete node data
+   - **DAEMON INFO** — live daemon stats (height, topoheight, difficulty, peers, version, txpool)
+   - **MINER CONFIG** — wallet address (hidden by default), thread presets (Low/Medium/High/Custom)
+   - **MINER STATS** — live mining statistics with 2-second refresh
+
+### Daemon State Machine
+
+Source: `daemon_miner_layouts.go:84–90`
+
+```go
+const (
+    dmStateStopped    = iota  // 0 — not running
+    dmStateRunning            // 1 — fully synced and active
+    dmStateSyncing            // 2 — chain sync in progress
+    dmStateError              // 3 — RPC or process error
+    dmStateExternal           // 4 — external daemon detected (not managed)
+    dmStateCorrupt            // 5 — chain data corrupt
+    dmStateConnecting         // 6 — initial connection attempt
+)
+```
+
+**State colors** (`stateColorDM()`):
+- Running / Syncing / External / Connecting → `C.Green`
+- Error / Corrupt → `C.Red`
+- Stopped → `C.Gray`
+
+**daemonIsRunning()** returns true when the daemon state is Running, External, Syncing, or Connecting — not just Running. This controls the toggle switch checked state and the dashboard status icon visibility.
+
+**minerIsRunning()** returns true only when the miner state is `dmStateRunning`.
+
+### State Detection
+
+Source: `daemon_service.go` — `updateDaemonStateFromDetection()`
+
+Called by `startBackgroundDaemonRefresh()` every 3 seconds. This function:
+
+1. If `globalChain != nil` → daemon is embedded and running → sets `dmState.daemonState = dmStateRunning`
+2. Otherwise → tries `fetchDaemonInfo()` RPC call to the configured daemon endpoint
+   - If RPC succeeds → `dmState.daemonState = dmStateExternal`
+   - If RPC fails → leaves state unchanged
+
+The `startBackgroundDaemonRefresh()` function uses `sync.Once` via `refreshDaemonInfoOnce` to ensure exactly one background goroutine runs, regardless of how many pages call it. It updates `dmState` and calls `syncToggleStates()` via `uiDo` to refresh any visible toggle switches and state indicators.
+
+### Toggle Switch Widget
+
+Source: `daemon_miner_layouts.go`
+
+The `toggleSwitch` is a custom widget that provides an on/off slide animation. It is used for the Daemon and Miner start/stop controls.
+
+**Key properties:**
+- Animated slide transition between on (right) and off (left) positions
+- `setChecked(bool)` — programmatic state change with animation
+- `Enable()` / `Disable()` — state-controlled interactivity (external daemon detection disables the daemon toggle)
+- Keyboard accessible via tab + enter/space
+
+**Usage:** Embedded daemon toggle runs `startDaemon()` / `stopDaemon()` with system health checks and integrator address validation before starting. Miner toggle runs `startMiner()` / `stopMiner()`.
+
+### Collapsible Sections with Drag Handle
+
+Source: `daemon_miner_layouts.go` — `newCollapsibleSection()`, `sectionDragHandle`
+
+Each section has:
+- A header with a MenuIcon drag handle (left), arrow icon, and title
+- Click anywhere on the header to collapse/expand
+- Long-press and drag vertically on the drag handle to reorder sections
+- 60px drag threshold before swap triggers
+- Section order and collapsed state persist via `ui_state.json`
+
+### Background Refresh
+
+| Function | Interval | What it updates |
+|----------|----------|-----------------|
+| `startBackgroundDaemonRefresh()` | 3s | Daemon info, state detection, toggle states |
+| `startMinerStatsRefresh()` | 2s | Mining statistics (hashrate, share, ETA, etc.) |
+
+---
+
+## XVI. System Tray
+
+Source: `tray.go`
+
+### Tray Icon Resources
+
+The system tray uses pre-rendered white tray icons generated via ImageMagick from the app icon:
+
+```bash
+convert assets/icon.png -resize 22x22 -negate assets/tray_white.png
+convert assets/icon.png -resize 44x44 -negate assets/tray_white_2x.png
+```
+
+### Context Menu Structure
+
+The system tray provides a context-aware menu with the following items:
+
+| Item | Behavior |
+|------|----------|
+| **Show/Hide** | Toggle window visibility |
+| **Lock Wallet** | Lock the wallet and return to login screen |
+| **Daemon** (submenu shown when running) | Quick access to daemon actions |
+| **Miner** (submenu shown when running) | Quick access to miner actions |
+| **Quit** | Confirmation dialog before exit |
+
+The quit dialog uses a styled overlay matching the app's design system (DarkMatter iframe, centered content, green/red buttons).
+
+Quit behavior varies by platform:
+- **macOS**: App remains in dock; tray icon stays visible
+- **Linux/Windows**: App exits entirely
+
+---
+
+## XVII. Datapad Tab Integration
+
+Source: `file_layouts.go` — `layoutFilesAndContracts()`
+
+The Datapad (formerly Notes) tab has been integrated into the Files & Contracts browse page as a combined tab alongside Assets, Sign File, and Verify File.
+
+### Combined Tab Layout
+
+The Files & Contracts page uses a `widget.TabItem` arrangement:
+
+| Tab Index | Tab Name | Content |
+|-----------|----------|---------|
+| 0 | Assets | Asset list (SCIDs, transfers) |
+| 1 | Datapad | Encrypted notes entry + note list + signed/verified files |
+| 2 | Sign File | File selection → sign with wallet |
+| 3 | Verify File | File selection → verify against SC |
+
+**Tab persistence:** The `session.FilesContractTab` field stores which tab to select when the page reloads. Setting it before calling `layoutFilesAndContracts()` navigates to the desired tab after construction.
+
+### Datapad Content Layout
+
+The Datapad tab content (`combinedNotesBrowseContent`) is arranged vertically:
+
+1. **Notes entry** — text entry for creating/editing notes (scrollable)
+2. **Notes list** — `widget.List` of stored notes from Graviton
+3. **Separator** — visual divider
+4. **Signed files** — list of files signed by the user
+5. **Verified files** — list of files verified against SC
+
+**Scroll behavior:** The minimum height of the notes list is constrained to `ui.MaxHeight * 0.1` to ensure the back button stays visible without scrolling when the page is empty. Additional notes expand the list naturally via the VBox layout.
+
+### Delete Navigation
+
+When a Datapad note is deleted, the delete handler:
+1. Sets `session.FilesContractTab = 1` (Datapad tab)
+2. Calls `layoutFilesAndContracts()` to rebuild the page
+3. The fresh page selects tab index 1 and resets the field to 0
+
+This ensures the user stays on the Datapad tab after deletion, rather than being redirected to the Assets tab.
+
+---
+
+## XVIII. Appendix: Complete Screen Map
 
 | # | Layout Function | File | Domain | Back-Nav | Notes |
 |---|----------------|------|--------|----------|-------|
@@ -813,13 +1010,14 @@ The Fyne theme providers (`ETheme` and `ETheme2`) in `theme.go` return colors vi
 | 14 | `layoutMyAssets()` | `asset_layouts.go` | `app.myassets` | Yes | User's owned assets |
 | 15 | `layoutSettings()` | `settings_layouts.go` | `app.settings` | Yes | Network, node, language |
 | 16 | `layoutAppSettings()` | `settings_layouts.go` | `app.appsettings` | Yes | App preferences |
-| 17 | `layoutDatapad()` | `datapad_layouts.go` | — | Yes | Encrypted notepad |
-| 18 | `layoutFileStorage()` | `file_layouts.go` | — | Yes | File explorer/storage |
-| 19 | `layoutIdentity()` | `identity_layouts.go` | — | Yes | DID management |
-| 20 | `layoutTELA()` | `tela_layouts.go` | — | Yes | TELA app marketplace |
-| 21 | `layoutTelaAppDetails()` | `tela_layouts.go` | — | Yes | TELA app detail view |
-| 22 | `layoutXSWD()` | `xswd_layouts.go` | — | Yes | xswd daemon interface |
-| 23 | `layoutRemoteAccess()` | `xswd_layouts.go` / `functions.go` | `app.remoteaccess` | Yes | Remote access settings |
-| 24 | `layoutTransition()` | `shared_layouts.go` | — | — | Loading interstitial |
-| 25 | `layoutAlert(t)` | `shared_layouts.go` | — | — | Error/warning modals |
-| 26 | `layoutWaiting()` | `shared_layouts.go` | — | — | PoW registration wait |
+| 17 | `layoutDaemonMiner()` | `daemon_miner_layouts.go` | — | Yes | Embedded daemon/miner management |
+| 18 | `layoutNodeModeSelection()` | `daemon_miner_layouts.go` | — | Yes | Choose pruned/fast-sync/standard node mode |
+| 19 | `layoutFilesAndContracts()` | `file_layouts.go` | — | Yes | Combined browse + Datapad + sign/verify |
+| 20 | `layoutIdentity()` | `identity_layouts.go` | — | Yes | DID management |
+| 21 | `layoutTELA()` | `tela_layouts.go` | — | Yes | TELA app marketplace |
+| 22 | `layoutTelaAppDetails()` | `tela_layouts.go` | — | Yes | TELA app detail view |
+| 23 | `layoutXSWD()` | `xswd_layouts.go` | — | Yes | xswd daemon interface |
+| 24 | `layoutRemoteAccess()` | `xswd_layouts.go` / `functions.go` | `app.remoteaccess` | Yes | Remote access settings |
+| 25 | `layoutTransition()` | `shared_layouts.go` | — | — | Loading interstitial |
+| 26 | `layoutAlert(t)` | `shared_layouts.go` | — | — | Error/warning modals |
+| 27 | `layoutWaiting()` | `shared_layouts.go` | — | — | PoW registration wait |
