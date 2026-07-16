@@ -1707,7 +1707,6 @@ func layoutNodeModeSelection() fyne.CanvasObject {
 		}
 		uiDo(syncToggleStates)
 	})
-	restoreBtn.Importance = widget.LowImportance
 
 	// showDiscardPopup shows a confirmation overlay when the user presses back
 	// without saving.

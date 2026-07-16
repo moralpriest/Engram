@@ -529,7 +529,7 @@ func resolveMinerDaemonAddr() string {
 	return fmt.Sprintf("%s:%d", host, daemonWorkPort())
 }
 
-// startMiner launches the in-process miner.
+// startMiner launches the embedded CPU miner.
 func startMiner() {
 	if minerWalletAddr == "" && engram.Disk != nil {
 		minerWalletAddr = engram.Disk.GetAddress().String()
@@ -540,12 +540,16 @@ func startMiner() {
 		uiDo(syncToggleStates)
 		return
 	}
+
 	// Resolve the miner daemon address from the connected node (supports remote nodes)
 	minerDaemonAddr = resolveMinerDaemonAddr()
+
+	// Start embedded CPU miner
+	logger.Printf("[Miner] Starting embedded CPU miner")
 	go startEmbeddedMiner()
 }
 
-// stopMiner stops the in-process miner.
+// stopMiner stops the embedded CPU miner.
 func stopMiner() {
 	stopEmbeddedMiner()
 	miningStats.mu.Lock()
@@ -553,6 +557,10 @@ func stopMiner() {
 	miningStats.CurrentHashrate = 0
 	miningStats.SpeedStr = ""
 	miningStats.LastRewardTime = time.Time{}
+	miningStats.NetHashrate = 0
+	miningStats.NetHashStr = ""
+	miningStats.MiniBlocks = 0
+	miningStats.Rejected = 0
 	miningStats.mu.Unlock()
 }
 
@@ -579,7 +587,6 @@ type MiningStats struct {
 
 	StartTime       time.Time // When the current mining session started
 	MiniBlocks      int64     // Total mini blocks found this session
-	Blocks          int64     // Total blocks found this session
 	Rejected        int64     // Total rejected shares
 	CurrentHashrate float64   // Local mining speed in H/s
 	NetHashrate     float64   // Network hashrate in H/s (from difficulty)

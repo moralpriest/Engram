@@ -6,7 +6,7 @@ ifeq ($(GOOS),windows)
 MINER_BINARY := $(MINER_BINARY).exe
 endif
 
-.PHONY: all build-miner build-engram clean
+.PHONY: all build-miner build-engram run-engram clean
 
 all: build-miner build-engram
 
@@ -20,6 +20,11 @@ build-engram:
 	@echo "Building Engram..."
 	go build -ldflags="-s -w" -o engram .
 	@echo "Engram built: engram"
+
+# Run targets — compile and execute from source in one step.
+run-engram:
+	@echo "Running Engram from source..."
+	go run -ldflags="-s -w" .
 
 clean:
 	rm -f bin/dero-miner-*

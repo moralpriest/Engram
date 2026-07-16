@@ -26,7 +26,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/svanichkin/gocam v0.1.0
 	golang.org/x/image v0.36.0
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.47.0
 	mvdan.cc/xurls/v2 v2.6.0
 )
 
