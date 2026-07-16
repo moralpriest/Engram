@@ -12,6 +12,9 @@ bin/
 dist/
 .task/
 
+# macOS .app bundle (fyne package output)
+*.app/
+
 # Test artifacts
 coverage.out
 coverage.html
