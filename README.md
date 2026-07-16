@@ -11,7 +11,11 @@
 - [x]  Native asset tracking
 - [x]  Register and transfer user-friendly addresses (usernames)
 - [x]  [Gnomon](https://github.com/civilware/Gnomon) integration for blockchain indexing
-- [x]  Encrypted Notepad
+- [x]  Encrypted **Datapad** — notes + file signing integrated into the Browse page
+- [x]  **Embedded node (daemon)** — run a DERO node directly from the wallet
+- [x]  **Embedded miner** — mine DERO directly from the wallet with toggle controls
+- [x]  **System tray** — minimize to tray with context menu for quick access
+- [x]  **Daemon/Miner dashboard icons** — live status indicators on the main dashboard
 - [x]  Websocket support for dApp/web3 connections
 - [x]  Sign files using your wallet to guarantee authenticity
 - [x]  **Instant TELA discovery (~2s)** using three-layer cache (Embedded, DB, JSON)
