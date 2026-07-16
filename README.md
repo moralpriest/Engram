@@ -24,6 +24,23 @@
 - [x]  **Multi-language support** (English, Français, Español, Deutsch, Italiano, Português, Русский, 日本語, 中文, Esperanto)
 - [x]  **5 built-in themes** with customizable palette — see [docs/Theme.md](docs/Theme.md)
 
+### Network / Firewall
+
+When running the embedded daemon or miner, the following ports are used:
+
+| Port | Protocol | Purpose | Direction |
+|------|----------|---------|-----------|
+| `10101` | TCP | DERO P2P — blockchain sync & peer discovery | Inbound + Outbound |
+| `40401` | TCP | Testnet P2P | Inbound + Outbound |
+| `20001` | TCP | Devnet / Regtest P2P | Inbound + Outbound |
+| `10102` | TCP | Daemon RPC — wallet & miner communicate locally | Localhost only |
+
+**If Engram can't sync or the daemon won't connect:**
+- **Firewall** — ensure outbound TCP to port **10101** is allowed. If you want to contribute as a public node, also allow inbound on 10101.
+- **VPN** — some VPN providers restrict P2P traffic. Check your provider's policy, or try switching to a non-P2P-blocked server.
+- **Corporate network** — IT policies may block P2P ports. Try running Engram on a home network instead.
+- **Manual override** — if your network blocks the default P2P port, you can start the daemon with a custom port via `--p2p-bind` (advanced).
+
 ### Upcoming Features
 - [ ]  Mobile QR Scanning (iOS)
 
