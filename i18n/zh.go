@@ -139,6 +139,8 @@ var stringsZH = map[string]string{
 	"settings.language_label":                        "应用语言",
 	"settings.theme_section":                         "主题",
 	"settings.theme_label":                           "选择主题",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "选择用于显示实时调试日志的按键",
 	"settings.language_desc":                         "选择应用程序的显示语言。",
 	"settings.global_permissions_heading":            "全 局 权 限",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

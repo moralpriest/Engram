@@ -139,6 +139,8 @@ var stringsJA = map[string]string{
 	"settings.language_label":                        "アプリの言語",
 	"settings.theme_section":                         "テーマ",
 	"settings.theme_label":                           "テーマ選択",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "ライブデバッグログを表示するキーを選択",
 	"settings.language_desc":                         "アプリケーションの表示言語を選択します。",
 	"settings.global_permissions_heading":            "グローバル権限",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

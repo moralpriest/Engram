@@ -257,9 +257,14 @@ func main() {
 		}
 	})
 
-	// Set up CLI log viewer toggle with backtick/tilde key
+	// Set up CLI log viewer toggle with user-configurable key (default: backtick)
 	session.Window.Canvas().SetOnTypedRune(func(r rune) {
-		if r == '`' || r == '~' {
+		// Read the saved key (single rune), default to backtick
+		logKey := rune('`')
+		if data, err := GetValue("settings", []byte("log_viewer_key")); err == nil && len(data) > 0 {
+			logKey = rune(data[0])
+		}
+		if r == logKey {
 			toggleLogViewer()
 		}
 	})

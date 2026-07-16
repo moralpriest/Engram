@@ -144,6 +144,8 @@ var stringsRU = map[string]string{
 	"settings.language_label":                        "Язык приложения",
 	"settings.theme_section":                         "ТЕМЫ",
 	"settings.theme_label":                           "Выбрать тему",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Выберите клавишу для показа журнала отладки в реальном времени",
 	"settings.language_desc":                         "Выберите язык отображения приложения.",
 	"settings.global_permissions_heading":            "Г Л О Б А Л Ь Н Ы Е   Р А З Р Е Ш Е Н И Я",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

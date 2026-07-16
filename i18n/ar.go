@@ -145,6 +145,8 @@ var stringsAR = map[string]string{
 	"settings.language_desc":                         "تغيير لغة الواجهة. لا حاجة لإعادة التشغيل.",
 	"settings.theme_section":                         "المظهر",
 	"settings.theme_label":                           "المظهر",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "حدد المفتاح لعرض سجلات التصحيح المباشرة",
 	"settings.global_permissions_heading":            "الأذونات العامة",
 	"settings.web_sockets_heading":                   "WebSockets",
 	"settings.methods_label":                         "الطرق",

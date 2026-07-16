@@ -144,6 +144,8 @@ var stringsFR = map[string]string{
 	"settings.language_label":                        "Langue de l'application",
 	"settings.theme_section":                         "THÈMES",
 	"settings.theme_label":                           "Choisir le thème",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Sélectionnez la touche pour afficher les journaux de débogage en direct",
 	"settings.language_desc":                         "Choisissez la langue d'affichage de l'application.",
 	"settings.global_permissions_heading":            "A U T O R I S A T I O N S   G L O B A L E S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

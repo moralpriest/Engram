@@ -144,6 +144,8 @@ var stringsEO = map[string]string{
 	"settings.language_label":                        "Apliklingvo",
 	"settings.theme_section":                         "TEMOJ",
 	"settings.theme_label":                           "Elektu temon",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Elektu klavon por montri vivajn sencimigajn protokolojn",
 	"settings.language_desc":                         "Elektu montran lingvon por la aplikaĵo.",
 	"settings.global_permissions_heading":            "G L O B A L A J   P E R M E S O J",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

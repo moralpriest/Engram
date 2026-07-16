@@ -145,6 +145,8 @@ var stringsNL = map[string]string{
 	"settings.language_desc":                         "Selecteer uw voorkeurstaal voor de Engram-interface.",
 	"settings.theme_section":                         "THEMA",
 	"settings.theme_label":                           "Thema",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Selecteer de toets om live debug-logboeken weer te geven",
 	"settings.global_permissions_heading":            "ALGEMENE RECHTEN",
 	"settings.web_sockets_heading":                   "WEBSOCKETS",
 	"settings.methods_label":                         "Methoden",

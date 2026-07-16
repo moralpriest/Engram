@@ -144,6 +144,8 @@ var stringsDE = map[string]string{
 	"settings.language_label":                        "App-Sprache",
 	"settings.theme_section":                         "THEMEN",
 	"settings.theme_label":                           "Design auswählen",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Taste zum Anzeigen der Live-Debug-Logs auswählen",
 	"settings.language_desc":                         "Wählen Sie Ihre bevorzugte Sprache für die Anzeige in der App.",
 	"settings.global_permissions_heading":            "G L O B A L E   B E R E C H T I G U N G E N",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",

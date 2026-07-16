@@ -242,6 +242,8 @@ var stringsEN = map[string]string{
 	"settings.language_desc":                         "Choose the display language for the application.",
 	"settings.theme_section":                         "THEMES",
 	"settings.theme_label":                           "Select Theme",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Select the key to press for showing live debug logs.",
 	"settings.global_permissions_heading":            "G L O B A L   P E R M I S S I O N S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",
 	"settings.methods_label":                         "  METHODS",

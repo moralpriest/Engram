@@ -280,6 +280,8 @@ var stringsTemplate = map[string]string{
 	"settings.language_desc":                         "",
 	"settings.theme_section":                         "",
 	"settings.theme_label":                           "",
+	"settings.log_viewer_section":                    "",
+	"settings.log_viewer_desc":                       "",
 	"settings.global_permissions_heading":            "",
 	"settings.web_sockets_heading":                   "",
 	"settings.methods_label":                         "",

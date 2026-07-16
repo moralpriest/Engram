@@ -144,6 +144,8 @@ var stringsPT = map[string]string{
 	"settings.language_label":                        "Idioma do App",
 	"settings.theme_section":                         "TEMAS",
 	"settings.theme_label":                           "Selecionar tema",
+	"settings.log_viewer_section":                    "LOG VIEWER KEY",
+	"settings.log_viewer_desc":                       "Selecione a tecla para exibir logs de depuração ao vivo",
 	"settings.language_desc":                         "Escolha o idioma de exibição do aplicativo.",
 	"settings.global_permissions_heading":            "P E R M I S S Õ E S   G L O B A I S",
 	"settings.web_sockets_heading":                   "W E B   S O C K E T S",
