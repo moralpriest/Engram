@@ -162,6 +162,10 @@ type Session struct {
 	PendingSendDest     string
 	BalancePulseStop    chan struct{}
 	LastSeenTxIDs       map[string]bool
+
+	// FilesContractTab stores which tab index to select when layoutFilesAndContracts() is reloaded.
+	// Set before calling layoutFilesAndContracts() to land on the desired tab.
+	FilesContractTab int
 }
 
 type RemoteAccess struct {
@@ -1275,7 +1279,6 @@ func batchFetchINDEXes(ctx context.Context, scids []string, batchSize int) (map[
 // Get the Engram settings from the local Graviton tree
 func initSettings() {
 	getNetwork()
-	getMode()
 	getDaemon()
 	getRPCCredentials()
 
@@ -1976,60 +1979,10 @@ func setRemoteAccessDual(port, key string) {
 }
 
 // Get mode (online, offline) setting from local Graviton tree
-func getMode() {
+// This feature was disabled; the function is kept as a no-op for call-site compatibility.
+func getMode() {}
 
-	/*
-		if globals.Arguments["--offline"].(bool) == true {
-			session.Mode = "Offline"
-			return
-		}
 
-		s := "mode"
-		t := "settings"
-		key := []byte(s)
-		result, err := GetValue(t, key)
-		if err != nil {
-			session.Mode = "Online"
-			err := setMode("Online")
-			globals.Arguments["--offline"] = false
-			if err != nil {
-				fmt.Printf("[Engram] Error: %s\n", err)
-				return
-			}
-		} else {
-			if result == nil {
-				session.Mode = "Online"
-				err := setMode("Online")
-				globals.Arguments["--offline"] = false
-				if err != nil {
-					fmt.Printf("[Engram] Error: %s\n", err)
-					return
-				}
-			} else {
-				if string(result) == "Offline" {
-					globals.Arguments["--offline"] = true
-					session.Mode = "Offline"
-				} else {
-					globals.Arguments["--offline"] = false
-					session.Mode = "Online"
-				}
-			}
-		}
-	*/
-}
-
-// Set the default Offline Mode settings to the local Graviton tree
-/*
-func setMode(s string) (err error) {
-	err = StoreValue("settings", []byte("mode"), []byte(s))
-	if s == "Offline" {
-		globals.Arguments["--offline"] = true
-	} else {
-		globals.Arguments["--offline"] = false
-	}
-	return
-}
-*/
 
 // Get the default Gnomon settings from local Graviton tree
 func getGnomon() (r string, err error) {

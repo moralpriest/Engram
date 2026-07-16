@@ -36,6 +36,16 @@ import (
 	"github.com/deroproject/graviton"
 )
 
+// newWidth90Rect returns a fresh transparent rectangle with width enforced to ui.Width*0.9.
+// Each Stack that needs a width enforcer must get its own rectangle; sharing a single
+// rectWidth90 across multiple Stacks causes only the last Stack to keep the enforcer
+// (Fyne CanvasObject single-parent restriction).
+func newWidth90Rect() *canvas.Rectangle {
+	r := canvas.NewRectangle(color.Transparent)
+	r.SetMinSize(fyne.NewSize(ui.Width*0.9, 10))
+	return r
+}
+
 func layoutDatapad() fyne.CanvasObject {
 	session.Domain = "app.datapad"
 
@@ -719,7 +729,8 @@ func layoutPad() fyne.CanvasObject {
 						session.DatapadChanged = false
 						removeOverlays()
 						session.Window.SetContent(layoutTransition())
-						session.Window.SetContent(layoutDatapad())
+						session.FilesContractTab = 1
+						session.Window.SetContent(layoutFilesAndContracts())
 					}
 				}
 			}

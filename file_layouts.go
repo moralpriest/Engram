@@ -41,6 +41,7 @@ import (
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/rpc"
+	"github.com/deroproject/graviton"
 )
 
 func layoutFileManager() fyne.CanvasObject {
@@ -1152,7 +1153,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	frame := &iframe{}
 
 	rectBox := canvas.NewRectangle(color.Transparent)
-	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.35))
+	rectBox.SetMinSize(fyne.NewSize(ui.MaxWidth*0.9, ui.MaxHeight*0.12))
 
 	rectWidth100 := canvas.NewRectangle(color.Transparent)
 	rectWidth100.SetMinSize(fyne.NewSize(ui.Width*0.99, 10))
@@ -1561,14 +1562,173 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		dialogVerify.Show()
 	}
 
-	browseTabContent := container.NewVBox(
+	// ==================== NOTES TAB: Inline notes entry & list ====================
+	notesEntry := widget.NewEntry()
+	notesEntry.MultiLine = false
+	notesEntry.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	notesEntry.PlaceHolder = i18n.T("datapad.note_name")
+	notesEntry.SetIcon(theme.SearchIcon())
+
+	btnAddNote := widget.NewButton(i18n.T("datapad.create"), nil)
+	btnAddNote.Disable()
+
+	notesEntry.Validator = func(s string) error {
+		session.Datapad = s
+		if len(s) > 0 {
+			_, err := GetEncryptedValue("Datapads", []byte(s))
+			if err == nil {
+				btnAddNote.Text = i18n.T("datapad.err_exists")
+				btnAddNote.Disable()
+				btnAddNote.Refresh()
+				err2 := errors.New("datapad already exists")
+				notesEntry.SetValidationError(err2)
+				return err2
+			} else {
+				btnAddNote.Text = i18n.T("datapad.create")
+				btnAddNote.Enable()
+				btnAddNote.Refresh()
+				return nil
+			}
+		} else {
+			btnAddNote.Text = i18n.T("datapad.create")
+			btnAddNote.Disable()
+			err2 := errors.New("datapad name required")
+			notesEntry.SetValidationError(err2)
+			btnAddNote.Refresh()
+			return err2
+		}
+	}
+	notesEntry.OnChanged = func(s string) {
+		notesEntry.Validate()
+	}
+	notesEntry.OnSubmitted = func(_ string) {
+		if notesEntry.Validate() == nil {
+			btnAddNote.OnTapped()
+		}
+	}
+
+	var padData []string
+
+	shard, err := GetShard()
+	if err == nil {
+		store, err2 := graviton.NewDiskStore(shard)
+		if err2 == nil {
+			ss, err3 := store.LoadSnapshot(0)
+			if err3 == nil {
+				tree, err4 := ss.GetTree("Datapads")
+				if err4 == nil {
+					cursor := tree.Cursor()
+					for k, _, err5 := cursor.First(); err5 == nil; k, _, err5 = cursor.Next() {
+						if string(k) != "" {
+							padData = append(padData, string(k))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	padList := binding.BindStringList(&padData)
+
+	padBox := widget.NewListWithData(padList,
+		func() fyne.CanvasObject {
+			return container.NewVBox(
+				widget.NewLabel(""),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			dat := di.(binding.String)
+			str, err := dat.Get()
+			if err != nil {
+				return
+			}
+			co.(*fyne.Container).Objects[0].(*widget.Label).SetText(str)
+			co.(*fyne.Container).Objects[0].(*widget.Label).Wrapping = fyne.TextWrapWord
+			co.(*fyne.Container).Objects[0].(*widget.Label).TextStyle.Bold = false
+			co.(*fyne.Container).Objects[0].(*widget.Label).Alignment = fyne.TextAlignLeading
+		})
+
+	padBox.OnSelected = func(id widget.ListItemID) {
+		session.Datapad = padData[id]
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(apptheme.C.DarkMatter),
+			),
+		)
+		overlay.Add(
+			container.NewStack(
+				&iframe{},
+				layoutPad(),
+			),
+		)
+		overlay.Top().Show()
+		padBox.UnselectAll()
+		padBox.Refresh()
+	}
+
+	btnAddNote.OnTapped = func() {
+		err := StoreEncryptedValue("Datapads", []byte(notesEntry.Text), []byte(""))
+		if err != nil {
+			btnAddNote.Text = i18n.T("datapad.err_create")
+			btnAddNote.Disable()
+			btnAddNote.Refresh()
+		} else {
+			padData = append(padData, notesEntry.Text)
+			padList.Set(padData)
+			notesEntry.SetText("")
+			padBox.Refresh()
+		}
+	}
+
+	// Build combined tab content: Notes entry/list + Browse sign/verify
+	notesTop := container.NewVBox(
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewStack(
+				newWidth90Rect(),
+				container.NewVBox(
+					notesEntry,
+					rectSpacer,
+					wrapMobileButton(btnAddNote),
+				),
+			),
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+	)
+
+	// Ensure the notes list has visible height even with few items
+	notesRect := canvas.NewRectangle(color.Transparent)
+	notesRect.SetMinSize(fyne.NewSize(ui.Width*0.9, ui.MaxHeight*0.1))
+
+	notesListContent := container.NewHBox(
+		layout.NewSpacer(),
+		container.NewStack(
+			notesRect,
+			padBox,
+		),
+		layout.NewSpacer(),
+	)
+
+	separator := widget.NewRichTextFromMarkdown("")
+	separator.Wrapping = fyne.TextWrapOff
+	separator.ParseMarkdown("---")
+
+	// Merge notes and browse into one combined view
+	combinedNotesBrowseContent := container.NewVBox(
+		notesTop,
+		notesListContent,
+		rectSpacer,
+		separator,
 		rectSpacer,
 		wrapMobileButton(btnSignFile),
 		rectSpacer,
 		wrapMobileButton(btnVerifyFile),
 		rectSpacer,
 		browseErrorText,
-		rectSpacer,
 		rectSpacer,
 		labelResults,
 		rectSpacer,
@@ -1731,14 +1891,18 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	assetTabContent := createAssetExplorerTabContent()
 
 	assetTab := container.NewTabItem(i18n.T("files.tab_assets"), assetTabContent)
-	notesTabContent := createDatapadTabContent()
 	tabs := container.NewAppTabs(
 		assetTab,
-		container.NewTabItem(i18n.T("files.tab_browse"), browseTabContent),
+		container.NewTabItem(i18n.T("files.tab_notes"), combinedNotesBrowseContent),
 		container.NewTabItem(i18n.T("files.tab_scids"), contractsTabContent),
-		container.NewTabItem(i18n.T("files.tab_notes"), notesTabContent),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
+
+	// Restore previously selected tab (e.g. Datapad tab after delete)
+	if session.FilesContractTab > 0 {
+		tabs.SelectIndex(session.FilesContractTab)
+		session.FilesContractTab = 0
+	}
 
 	// Handle drag & drop for both tabs
 	session.Window.SetOnDropped(func(p fyne.Position, files []fyne.URI) {
@@ -1798,8 +1962,8 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			labelResults.Text = fmt.Sprintf("   "+i18n.T("files.results_count"), verifiedLen, verifiedLen)
 			labelResults.Refresh()
 
-			// Switch to Browse Files tab
-			tabs.SelectIndex(0)
+			// Switch to Notes tab (index 1)
+			tabs.SelectIndex(1)
 
 		} else if ext == ".bas" {
 			// Open contract editor
