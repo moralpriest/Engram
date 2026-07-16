@@ -53,7 +53,7 @@ var stringsRU = map[string]string{
 	"dashboard.settings":         "Настройки",
 	"dashboard.notes":            "Заметки",
 	"dashboard.messages":         "Сообщения",
-	"dashboard.contracts":        "Контракты",
+	"dashboard.contracts":        "Контракты+",
 	"dashboard.history":          "История",
 	"dashboard.my_account":       "Мой аккаунт",
 	"dashboard.balance":          "Б А Л А Н С",

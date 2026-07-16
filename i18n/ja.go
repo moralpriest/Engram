@@ -49,7 +49,7 @@ var stringsJA = map[string]string{
 	"dashboard.settings":                             "設定",
 	"dashboard.notes":                                "メモ",
 	"dashboard.messages":                             "メッセージ",
-	"dashboard.contracts":                            "コントラクト",
+	"dashboard.contracts":                            "コントラクト+",
 	"dashboard.history":                              "履歴",
 	"dashboard.my_account":                           "マイアカウント",
 	"dashboard.balance":                              "残 高",

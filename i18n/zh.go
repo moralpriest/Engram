@@ -49,7 +49,7 @@ var stringsZH = map[string]string{
 	"dashboard.settings":                             "设置",
 	"dashboard.notes":                                "笔记",
 	"dashboard.messages":                             "消息",
-	"dashboard.contracts":                            "合约",
+	"dashboard.contracts":                            "合约+",
 	"dashboard.history":                              "历史",
 	"dashboard.my_account":                           "我的帐户",
 	"dashboard.balance":                              "余 额",

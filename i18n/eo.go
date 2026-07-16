@@ -53,7 +53,7 @@ var stringsEO = map[string]string{
 	"dashboard.settings":         "Agordoj",
 	"dashboard.notes":            "Notoj",
 	"dashboard.messages":         "Mesaĝoj",
-	"dashboard.contracts":        "Kontraktoj",
+	"dashboard.contracts":        "Kontraktoj+",
 	"dashboard.history":          "Historio",
 	"dashboard.my_account":       "Mia Konto",
 	"dashboard.balance":          "S A L D O",

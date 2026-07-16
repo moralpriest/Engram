@@ -53,7 +53,7 @@ var stringsAR = map[string]string{
 	"dashboard.settings":         "الإعدادات",
 	"dashboard.notes":            "ملاحظات",
 	"dashboard.messages":         "الرسائل",
-	"dashboard.contracts":        "العقود",
+	"dashboard.contracts":        "العقود+",
 	"dashboard.history":          "السجل",
 	"dashboard.my_account":       "حسابي",
 	"dashboard.balance":          "الرصيد",

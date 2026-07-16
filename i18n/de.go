@@ -53,7 +53,7 @@ var stringsDE = map[string]string{
 	"dashboard.settings":         "Einstellungen",
 	"dashboard.notes":            "Notizen",
 	"dashboard.messages":         "Nachrichten",
-	"dashboard.contracts":        "Verträge",
+	"dashboard.contracts":        "Verträge+",
 	"dashboard.history":          "Verlauf",
 	"dashboard.my_account":       "Mein Konto",
 	"dashboard.balance":          "S A L D O",
