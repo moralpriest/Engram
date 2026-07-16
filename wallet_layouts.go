@@ -505,7 +505,73 @@ func layoutDashboard() fyne.CanvasObject {
 	})
 	logoBtn.Importance = widget.LowImportance
 
-	logoStack := container.NewStack(res.logoContainer, logoBtn)
+	// Dashboard status icons — daemon (left) and miner (right) next to the logo.
+	// Only visible when the respective service is running.
+	dashDaemonIcon := canvas.NewImageFromResource(daemonIconForState(dmState.daemonState))
+	dashDaemonIcon.FillMode = canvas.ImageFillContain
+	dashDaemonIcon.SetMinSize(fyne.NewSize(32, 32))
+	if !daemonIsRunning() {
+		dashDaemonIcon.Hide()
+	}
+
+	dashMinerIcon := canvas.NewImageFromResource(minerIconForState(dmState.minerState))
+	dashMinerIcon.FillMode = canvas.ImageFillContain
+	dashMinerIcon.SetMinSize(fyne.NewSize(32, 32))
+	if !minerIsRunning() {
+		dashMinerIcon.Hide()
+	}
+
+	// Start the global background daemon/miner state detection (safe via sync.Once —
+	// only one goroutine runs regardless of how many pages call this).
+	startBackgroundDaemonRefresh()
+
+	// Periodically refresh icon visibility while on the dashboard.
+	// The dmState is kept updated by startBackgroundDaemonRefresh() — we
+	// just read it here; no duplicate RPC calls.
+	go func() {
+		for {
+			time.Sleep(3 * time.Second)
+			uiDo(func() {
+				if session.Domain != "app.wallet" || session.Window == nil {
+					return
+				}
+				if daemonIsRunning() {
+					dashDaemonIcon.Resource = daemonIconForState(dmState.daemonState)
+					dashDaemonIcon.Show()
+				} else {
+					dashDaemonIcon.Hide()
+				}
+				if minerIsRunning() {
+					dashMinerIcon.Resource = minerIconForState(dmState.minerState)
+					dashMinerIcon.Show()
+				} else {
+					dashMinerIcon.Hide()
+				}
+				canvas.Refresh(dashDaemonIcon)
+				canvas.Refresh(dashMinerIcon)
+			})
+		}
+	}()
+
+	// Position icons close to the edges with fixed padding from each side.
+	iconPad := ui.Width * 0.06
+	padLeft := canvas.NewRectangle(color.Transparent)
+	padLeft.SetMinSize(fyne.NewSize(iconPad, 1))
+	padRight := canvas.NewRectangle(color.Transparent)
+	padRight.SetMinSize(fyne.NewSize(iconPad, 1))
+
+	logoWithIcons := container.NewStack(
+		res.logoContainer,
+		container.NewHBox(
+			padLeft,
+			dashDaemonIcon,
+			layout.NewSpacer(),
+			dashMinerIcon,
+			padRight,
+		),
+	)
+
+	logoStack := container.NewStack(logoWithIcons, logoBtn)
 
 	res.villagerMu.Lock()
 	noVillager := res.villager == nil
