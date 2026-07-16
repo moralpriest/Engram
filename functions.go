@@ -1982,8 +1982,6 @@ func setRemoteAccessDual(port, key string) {
 // This feature was disabled; the function is kept as a no-op for call-site compatibility.
 func getMode() {}
 
-
-
 // Get the default Gnomon settings from local Graviton tree
 func getGnomon() (r string, err error) {
 	v, err := GetValue("settings", []byte("gnomon"))
@@ -4897,6 +4895,11 @@ func refreshMessageHistoryAsync(force bool) {
 
 	go func() {
 		defer func() {
+			// Recover from nil-pointer panics in Gnomon RPC calls after
+			// the daemon disconnects; the next refresh will retry.
+			if r := recover(); r != nil {
+				logger.Printf("[Messages] Recovered from panic in message scan: %v\n", r)
+			}
 			messageRefreshState.Lock()
 			messageRefreshState.running = false
 			messageRefreshState.Unlock()
@@ -6062,8 +6065,8 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 	rectSpacer.SetMinSize(fyne.NewSize(10, 5))
 
 	if password {
-		headerText = "ACCOUNT  VERIFICATION  REQUIRED"
-		dismiss = "Submit"
+		headerText = i18n.T("account.verification")
+		dismiss = i18n.T("account.submit")
 	}
 
 	header := canvas.NewText(headerText, apptheme.C.Gray)
@@ -6076,7 +6079,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 
 	entryPassword := NewReturnEntry()
 	entryPassword.Password = true
-	entryPassword.PlaceHolder = "Password"
+	entryPassword.PlaceHolder = i18n.T("account.password")
 	entryPassword.OnChanged = func(s string) {
 		if s == "" {
 			btnConfirm.Text = dismiss
@@ -6093,7 +6096,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 	subHeader.Wrapping = fyne.TextWrapWord
 
 	if password {
-		subText = "Confirm Password"
+		subText = i18n.T("account.confirm_password")
 	} else {
 		entryPassword.Hide()
 		btnConfirm.Enable()
@@ -6128,7 +6131,7 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 				overlay.Remove(overlay.Top())
 				overlay.Remove(overlay.Top())
 			} else {
-				btnConfirm.Text = "Invalid Password..."
+				btnConfirm.Text = i18n.T("account.invalid_password")
 				btnConfirm.Refresh()
 			}
 		} else {

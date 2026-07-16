@@ -568,7 +568,7 @@ func layoutAccount() fyne.CanvasObject {
 							if err != nil {
 								logger.Errorf("[Engram] File dialog: %s\n", err)
 								fyne.Do(func() {
-									errorText.Text = "could not export wallet file"
+									errorText.Text = i18n.T("account.export_error")
 									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
@@ -583,7 +583,7 @@ func layoutAccount() fyne.CanvasObject {
 							if err != nil {
 								logger.Errorf("[Engram] Reading wallet file %s: %s\n", session.Path, err)
 								fyne.Do(func() {
-									errorText.Text = "error reading wallet file"
+									errorText.Text = i18n.T("account.read_error")
 									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
@@ -594,7 +594,7 @@ func layoutAccount() fyne.CanvasObject {
 							if err != nil {
 								logger.Errorf("[Engram] Exporting %s: %s\n", session.Path, err)
 								fyne.Do(func() {
-									errorText.Text = "error exporting wallet file"
+									errorText.Text = i18n.T("account.export_error_saving")
 									errorText.Color = apptheme.C.Red
 									errorText.Refresh()
 								})
@@ -602,7 +602,7 @@ func layoutAccount() fyne.CanvasObject {
 							}
 
 							fyne.Do(func() {
-								errorText.Text = "exported wallet file successfully"
+								errorText.Text = i18n.T("account.export_success")
 								errorText.Color = apptheme.C.Green
 								errorText.Refresh()
 							})
@@ -622,7 +622,7 @@ func layoutAccount() fyne.CanvasObject {
 							dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
 							dialogFileSave.SetView(dialog.ListView)
 							dialogFileSave.SetFileName(filepath.Base(session.Path))
-							dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+						dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 							dialogFileSave.Show()
 						})
 					}()
