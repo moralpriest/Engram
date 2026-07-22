@@ -751,7 +751,7 @@ var stringsEN = map[string]string{
 	"notification.incoming":           "Received %s DERO",
 	"settings.enable_notifications":   "Enable Notifications",
 	"settings.notifications_desc":     "Show alerts for incoming and outgoing transfers",
-	"settings.prioritise_status":      "Prioritise Status",
+	"settings.prioritise_status":      "Prioritize Status",
 	"settings.prioritise_status_desc": "When enabled, the status indicators appear in the middle; when disabled, they are positioned at the bottom.",
 	"settings.status_area":            "Status Area",
 

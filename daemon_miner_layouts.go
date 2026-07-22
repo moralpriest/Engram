@@ -1054,9 +1054,12 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	}
 
 	// Thread Presets
-	lowThreads := max(1, cpus/2)
-	medThreads := max(1, cpus-4)
-	highThreads := max(1, cpus-2)
+	// Thread presets: proportional to CPU count so low < med < high always holds.
+	// Original formulas (cpus/2, cpus-4, cpus-2) produced equal low/medium values
+	// on systems with 8 CPUs or fewer.
+	lowThreads := max(1, cpus/3)  // ~1/3 of cores
+	medThreads := max(2, cpus/2)  // ~1/2 of cores
+	highThreads := max(2, cpus-2) // reserve 2 threads for the system
 
 	presetLabels := []string{
 		fmt.Sprintf("%s (%d %s)", i18n.T("daemon_miner.threads_low"), lowThreads, i18n.T("daemon_miner.threads")),
