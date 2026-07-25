@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"net/url"
 	"runtime"
 	"sync"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/deroproject/derohe/astrobwt/astrobwt_fast"
 	"github.com/deroproject/derohe/astrobwt/astrobwtv3"
+	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/block"
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/rpc"
@@ -26,6 +26,12 @@ import (
 const (
 	minerStopped = iota
 	minerActive
+
+	// randomBufRefreshInterval controls how often each thread refreshes its
+	// random data prefix.  A fresh prefix changes the hash function's input
+	// subspace, reducing the chance that multiple threads explore the same
+	// nonce range.  ~1M hashes is a good balance (<0.01% overhead at 10 MH/s).
+	randomBufRefreshInterval = 1_000_000
 )
 
 var (
@@ -205,12 +211,12 @@ func getworkEmbedded() {
 }
 
 func mineblockEmbedded(tid int) {
-	var diff big.Int
 	var work [block.MINIBLOCK_SIZE]byte
 	var random_buf [12]byte
 
 	rand.Read(random_buf[:])
 	scratch := astrobwt_fast.Pool.Get().(*astrobwt_fast.ScratchData)
+	defer astrobwt_fast.Pool.Put(scratch)
 
 	time.Sleep(5 * time.Second)
 
@@ -218,7 +224,13 @@ func mineblockEmbedded(tid int) {
 	runtime.LockOSThread()
 	threadaffinity()
 
-	var localJobCounter int64
+	var (
+		localJobCounter int64
+		lastJobCounter  int64
+		cachedTarget    CachedTarget
+		useV3           bool
+		hashCount       uint64 // tracks hashes for periodic random_buf refresh
+	)
 	i := uint32(0)
 
 	for minerIsActive() {
@@ -232,19 +244,30 @@ func mineblockEmbedded(tid int) {
 			continue
 		}
 
-		n, err := hex.Decode(work[:], []byte(myjob.Blockhashing_blob))
-		if err != nil || n != block.MINIBLOCK_SIZE {
-			logger.Printf("[Miner] Thread %d: blockwork decode error: %v (n=%d)", tid, err, n)
-			time.Sleep(time.Second)
-			continue
+		// Only decode the blob and re-parse the difficulty when the job changes.
+		// This avoids expensive hex.Decode and big.Int.SetString calls on every
+		// outer-loop iteration when the same job is being mined for millions of hashes.
+		if localJobCounter != lastJobCounter {
+			n, err := hex.Decode(work[:], []byte(myjob.Blockhashing_blob))
+			if err != nil || n != block.MINIBLOCK_SIZE {
+				logger.Printf("[Miner] Thread %d: blockwork decode error: %v (n=%d)", tid, err, n)
+				time.Sleep(time.Second)
+				continue
+			}
+
+			copy(work[block.MINIBLOCK_SIZE-12:], random_buf[:])
+			work[block.MINIBLOCK_SIZE-1] = byte(tid)
+
+			// Pre-compute the difficulty target so the hot path only does
+			// a big-endian comparison — no big.Int.Div per hash.
+			cachedTarget.UpdateTarget(myjob.Difficulty)
+
+			height := binary.BigEndian.Uint64(work[0:]) & 0x000000ffffffffff
+			useV3 = int64(height) >= globals.Config.MAJOR_HF2_HEIGHT
+
+			lastJobCounter = localJobCounter
+			i = 0 // reset nonce so every new job starts from 0
 		}
-
-		height := binary.BigEndian.Uint64(work[0:]) & 0x000000ffffffffff
-
-		copy(work[block.MINIBLOCK_SIZE-12:], random_buf[:])
-		work[block.MINIBLOCK_SIZE-1] = byte(tid)
-
-		diff.SetString(myjob.Difficulty, 10)
 
 		if work[0]&0xf != 1 {
 			logger.Printf("[Miner] Thread %d: unknown block version %d", tid, work[0]&0x1f)
@@ -252,65 +275,60 @@ func mineblockEmbedded(tid int) {
 			continue
 		}
 
-		if int64(height) < globals.Config.MAJOR_HF2_HEIGHT {
-			for localJobCounter == jobCounter && minerIsActive() {
-				i++
-				binary.BigEndian.PutUint32(nonce_buf, i)
-				powhash := astrobwt_fast.POW_optimized(work[:], scratch)
-				atomic.AddUint64(&minerCounter, 1)
-
-				if checkPowHashBig(powhash, &diff) {
-					logger.Printf("[Miner] Found miniblock (astrobwt_fast)! difficulty=%s height=%d", myjob.Difficulty, myjob.Height)
-					func() {
-						defer globals.Recover(1)
-						wsConnMu.Lock()
-						defer wsConnMu.Unlock()
-						if wsConn != nil && job.JobID == myjob.JobID {
-							err := wsConn.WriteJSON(rpc.SubmitBlock_Params{
-								JobID:                 myjob.JobID,
-								MiniBlockhashing_blob: fmt.Sprintf("%x", work[:]),
-							})
-							if err != nil {
-								logger.Printf("[Miner] Submit error: %v", err)
-							}
-						}
-					}()
-					miningStats.mu.Lock()
-					miningStats.LastRewardTime = time.Now()
-					miningStats.MiniBlocks++
-					miningStats.mu.Unlock()
-					time.Sleep(500 * time.Millisecond)
-				}
+		// Set up the hash function for this job once, so the hot loop
+		// avoids a branch on useV3 every iteration.
+		// Select the hash function for this job so the hot loop avoids
+		// branching on useV3 every iteration.
+		var hf func([]byte) crypto.Hash
+		var algoName string
+		if useV3 {
+			hf = func(b []byte) crypto.Hash {
+				return astrobwtv3.AstroBWTv3(b)
 			}
+			algoName = "astrobwtv3"
 		} else {
-			for localJobCounter == jobCounter && minerIsActive() {
-				i++
-				binary.BigEndian.PutUint32(nonce_buf, i)
-				powhash := astrobwtv3.AstroBWTv3(work[:])
-				atomic.AddUint64(&minerCounter, 1)
+			hf = func(b []byte) crypto.Hash {
+				return astrobwt_fast.POW_optimized(b, scratch)
+			}
+			algoName = "astrobwt_fast"
+		}
 
-				if checkPowHashBig(powhash, &diff) {
-					logger.Printf("[Miner] Found miniblock (astrobwtv3)! difficulty=%s height=%d", myjob.Difficulty, myjob.Height)
-					func() {
-						defer globals.Recover(1)
-						wsConnMu.Lock()
-						defer wsConnMu.Unlock()
-						if wsConn != nil && job.JobID == myjob.JobID {
-							err := wsConn.WriteJSON(rpc.SubmitBlock_Params{
-								JobID:                 myjob.JobID,
-								MiniBlockhashing_blob: fmt.Sprintf("%x", work[:]),
-							})
-							if err != nil {
-								logger.Printf("[Miner] Submit error: %v", err)
-							}
+		for localJobCounter == jobCounter && minerIsActive() {
+			i++
+			binary.BigEndian.PutUint32(nonce_buf, i)
+			powhash := hf(work[:])
+			atomic.AddUint64(&minerCounter, 1)
+
+			// Periodically refresh the 12-byte random prefix so that threads
+			// naturally diverge into different hash-space subspaces.
+			hashCount++
+			if hashCount%randomBufRefreshInterval == 0 {
+				rand.Read(random_buf[:])
+				copy(work[block.MINIBLOCK_SIZE-12:], random_buf[:])
+				work[block.MINIBLOCK_SIZE-1] = byte(tid)
+			}
+
+			if cachedTarget.CheckHash(powhash) {
+				logger.Printf("[Miner] Found miniblock (%s)! difficulty=%s height=%d", algoName, myjob.Difficulty, myjob.Height)
+				func() {
+					defer globals.Recover(1)
+					wsConnMu.Lock()
+					defer wsConnMu.Unlock()
+					if wsConn != nil && job.JobID == myjob.JobID {
+						err := wsConn.WriteJSON(rpc.SubmitBlock_Params{
+							JobID:                 myjob.JobID,
+							MiniBlockhashing_blob: fmt.Sprintf("%x", work[:]),
+						})
+						if err != nil {
+							logger.Printf("[Miner] Submit error: %v", err)
 						}
-					}()
-					miningStats.mu.Lock()
-					miningStats.LastRewardTime = time.Now()
-					miningStats.MiniBlocks++
-					miningStats.mu.Unlock()
-					time.Sleep(500 * time.Millisecond)
-				}
+					}
+				}()
+				miningStats.mu.Lock()
+				miningStats.LastRewardTime = time.Now()
+				miningStats.MiniBlocks++
+				miningStats.mu.Unlock()
+				time.Sleep(500 * time.Millisecond)
 			}
 		}
 		runtime.Gosched()
