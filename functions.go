@@ -2984,6 +2984,22 @@ func setPrioritiseStatus(enabled bool) {
 	}
 }
 
+func getPasswordForSend() bool {
+	v, err := GetValue("settings", []byte("passwordForSend"))
+	if err != nil || len(v) == 0 {
+		return true
+	}
+	return string(v) == "true"
+}
+
+func setPasswordForSend(enabled bool) {
+	if enabled {
+		_ = StoreValue("settings", []byte("passwordForSend"), []byte("true"))
+	} else {
+		_ = StoreValue("settings", []byte("passwordForSend"), []byte("false"))
+	}
+}
+
 func immediateBalanceRefresh() {
 	if engram.Disk == nil || !session.WalletOpen {
 		return
@@ -6135,10 +6151,10 @@ func verificationOverlay(password bool, headerText, subText, dismiss string, cal
 				btnConfirm.Refresh()
 			}
 		} else {
-			callback(true)
 			overlay.Top().Hide()
 			overlay.Remove(overlay.Top())
 			overlay.Remove(overlay.Top())
+			callback(true)
 		}
 	}
 

@@ -1928,6 +1928,39 @@ func layoutAppSettings() fyne.CanvasObject {
 			)
 		}(),
 
+		// SECURITY Section
+		rectSpacer,
+		rectSpacer,
+		container.NewHBox(
+			layout.NewSpacer(),
+			line1,
+			layout.NewSpacer(),
+			func() fyne.CanvasObject {
+				securityTitle := canvas.NewText(i18n.T("settings.security_section"), apptheme.C.Gray)
+				securityTitle.TextSize = scaleFont(11)
+				securityTitle.Alignment = fyne.TextAlignCenter
+				securityTitle.TextStyle = fyne.TextStyle{Bold: true}
+				return securityTitle
+			}(),
+			layout.NewSpacer(),
+			line2,
+			layout.NewSpacer(),
+		),
+		rectSpacer,
+		func() fyne.CanvasObject {
+			securityDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.require_password"))
+			securityDesc.Wrapping = fyne.TextWrapWord
+			return securityDesc
+		}(),
+		rectSpacer,
+		func() fyne.CanvasObject {
+			checkPassword := widget.NewCheck("", func(b bool) {
+				setPasswordForSend(b)
+			})
+			checkPassword.SetChecked(getPasswordForSend())
+			return checkPassword
+		}(),
+
 		// LOG VIEWER KEY Section
 		rectSpacer,
 		rectSpacer,

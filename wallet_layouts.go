@@ -1246,39 +1246,71 @@ func layoutSend() fyne.CanvasObject {
 			if wRings != nil && err == nil && tx.Address != nil {
 				sendAmount := tx.Amount
 				sendDest := tx.Address.String()
-				err = addTransfer()
-				if err == nil {
-					btnSendNow.Disable()
-					btnSendNow.Text = i18n.T("send.sending")
-					btnSendNow.Refresh()
-					go func() {
-						showLoadingOverlay()
-						txid, sendErr := sendTransfers()
-						if sendErr != nil {
-							log.Printf("[Send] Error: %v\n", sendErr)
+
+				// Format a truncated address for display
+				shortDest := sendDest
+				if len(sendDest) > 16 {
+					shortDest = sendDest[:8] + "..." + sendDest[len(sendDest)-6:]
+				}
+
+				// Shared send execution
+				executeSend := func() {
+					err = addTransfer()
+					if err == nil {
+						btnSendNow.Disable()
+						btnSendNow.Text = i18n.T("send.sending")
+						btnSendNow.Refresh()
+						go func() {
+							showLoadingOverlay()
+							txid, sendErr := sendTransfers()
+							if sendErr != nil {
+								log.Printf("[Send] Error: %v\n", sendErr)
+								uiDo(func() {
+									removeOverlays()
+									btnSendNow.Text = i18n.T("send.send")
+									btnSendNow.Enable()
+									btnSendNow.Refresh()
+									dialog.ShowError(sendErr, session.Window)
+								})
+								return
+							}
+							log.Printf("[Send] Transaction sent: %s\n", txid)
 							uiDo(func() {
 								removeOverlays()
-								btnSendNow.Text = i18n.T("send.send")
-								btnSendNow.Enable()
-								btnSendNow.Refresh()
-								dialog.ShowError(sendErr, session.Window)
+								session.LastDomain = session.Window.Content()
+								session.Window.SetContent(layoutTransition())
+								session.Window.SetContent(layoutDashboard())
+								removeOverlays()
 							})
-							return
-						}
-						log.Printf("[Send] Transaction sent: %s\n", txid)
-						uiDo(func() {
-							removeOverlays()
-							session.LastDomain = session.Window.Content()
-							session.Window.SetContent(layoutTransition())
-							session.Window.SetContent(layoutDashboard())
-							removeOverlays()
-						})
-						if getNotificationsEnabled() {
-							fyne.CurrentApp().SendNotification(fyne.NewNotification("Engram", i18n.T("notification.send_success")))
-						}
-						confirmSendAsync(txid, sendAmount, sendDest)
-					}()
+							if getNotificationsEnabled() {
+								fyne.CurrentApp().SendNotification(fyne.NewNotification("Engram", i18n.T("notification.send_success")))
+							}
+							confirmSendAsync(txid, sendAmount, sendDest)
+						}()
+					}
 				}
+
+				// Step 1: Show confirmation overlay (like CONFIRM RATING)
+			confBody := fmt.Sprintf(i18n.T("tela.confirm_transaction_body"), globals.FormatMoney(sendAmount), shortDest)
+			verificationOverlay(false, i18n.T("tela.confirm_transaction_header"), confBody, "Yes", func(confirm bool) {
+					if !confirm {
+						return
+					}
+
+					// Step 2: Check if password is required
+					if getPasswordForSend() {
+						verificationOverlay(true, "", "", "", func(passwordOK bool) {
+							if !passwordOK {
+								return
+							}
+							// Password accepted — execute the send
+							executeSend()
+						})
+					} else {
+						// Password not required — send directly
+						executeSend()
+					}
+				})
 			} else {
 				wReceiver.SetValidationError(errors.New("invalid address"))
 				wReceiver.Refresh()

@@ -305,6 +305,32 @@ func layoutMyScreen() fyne.CanvasObject {
 - `NewVScroll` adds `container.NewCenter` around content
 - On mobile: call `SetCurrentScrollBox(scrollContainer)` at page mount for keyboard scroll handling
 
+### Window Size Rule
+
+The window is a **fixed 360×680** (`SetFixedSize(true)`) — it must never grow to accommodate content.
+
+**Violation example — don't do this:**
+```go
+// ❌ widget.Check label doesn't wrap — forces window wider
+widget.NewCheck("Require password before sending transactions", onToggle)
+```
+
+**Correct pattern — text that might overflow must wrap:**
+```go
+// ✅ Use RichText with word wrapping + separate short/empty control
+securityDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.require_password"))
+securityDesc.Wrapping = fyne.TextWrapWord
+// Then use a checkbox, switch, or button with an empty or short label
+widget.NewCheck("", onToggle)
+```
+
+**Checklist for all new UI elements:**
+1. Does this element increase the content's `MinSize()` beyond 360×680?
+2. If so, does it use `Wrapping = fyne.TextWrapWord` to wrap text vertically?
+3. If a widget doesn't support wrapping (e.g. `widget.Check`, `widget.Label`), split it into a wrapping text element and a separate control.
+4. Never put a sentence-length label on a checkbox, radio button, or button — it will force the window wider.
+5. Prefer `widget.NewRichTextFromMarkdown(...)` with `Wrapping = fyne.TextWrapWord` for any text that might exceed the available width.
+
 ---
 
 ## VI. Navigation System
