@@ -1961,70 +1961,73 @@ func layoutAppSettings() fyne.CanvasObject {
 			return checkPassword
 		}(),
 
-		// LOG VIEWER KEY Section
-		rectSpacer,
-		rectSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			line1,
-			layout.NewSpacer(),
-			func() fyne.CanvasObject {
-				logKeyTitle := canvas.NewText(i18n.T("settings.log_viewer_section"), apptheme.C.Gray)
-				logKeyTitle.TextSize = scaleFont(11)
-				logKeyTitle.Alignment = fyne.TextAlignCenter
-				logKeyTitle.TextStyle = fyne.TextStyle{Bold: true}
-				return logKeyTitle
-			}(),
-			layout.NewSpacer(),
-			line2,
-			layout.NewSpacer(),
-		),
-		rectSpacer,
-		container.NewStack(
-			container.NewHBox(
-				layout.NewSpacer(),
-				container.NewStack(
-					rectWidth90,
-					container.NewVBox(
-						rectSpacer,
-						func() fyne.CanvasObject {
-							desc := widget.NewRichTextFromMarkdown(i18n.T("settings.log_viewer_desc"))
-							desc.Wrapping = fyne.TextWrapWord
-							return desc
-						}(),
-						rectSpacer,
-						func() fyne.CanvasObject {
-							// Load saved key, default to backtick
-							savedKey := "`"
-							if data, err := GetValue("settings", []byte("log_viewer_key")); err == nil && len(data) > 0 {
-								if len(data) == 1 {
-									savedKey = string(data)
+		func() fyne.CanvasObject {
+			if isMobile() {
+				return rectSpacer
+			}
+			return container.NewStack(
+				container.NewHBox(
+					layout.NewSpacer(),
+					container.NewStack(
+						rectWidth90,
+						container.NewVBox(
+							rectSpacer,
+							rectSpacer,
+							container.NewHBox(
+								layout.NewSpacer(),
+								line1,
+								layout.NewSpacer(),
+								func() fyne.CanvasObject {
+									logKeyTitle := canvas.NewText(i18n.T("settings.log_viewer_section"), apptheme.C.Gray)
+									logKeyTitle.TextSize = scaleFont(11)
+									logKeyTitle.Alignment = fyne.TextAlignCenter
+									logKeyTitle.TextStyle = fyne.TextStyle{Bold: true}
+									return logKeyTitle
+								}(),
+								layout.NewSpacer(),
+								line2,
+								layout.NewSpacer(),
+							),
+							rectSpacer,
+							func() fyne.CanvasObject {
+								desc := widget.NewRichTextFromMarkdown(i18n.T("settings.log_viewer_desc"))
+								desc.Wrapping = fyne.TextWrapWord
+								return desc
+							}(),
+							rectSpacer,
+							func() fyne.CanvasObject {
+								// Load saved key, default to backtick
+								savedKey := "`"
+								if data, err := GetValue("settings", []byte("log_viewer_key")); err == nil && len(data) > 0 {
+									if len(data) == 1 {
+										savedKey = string(data)
+									}
 								}
-							}
 
-							entry := widget.NewEntry()
-							entry.SetText(savedKey)
-							entry.PlaceHolder = "`"
-							entry.OnChanged = func(s string) {
-								// Allow max 1 character — keep only the last rune entered
-								if len([]rune(s)) > 1 {
-									runes := []rune(s)
-									last := string(runes[len(runes)-1:])
-									entry.SetText(last)
-								} else if len(s) > 0 {
-									StoreValue("settings", []byte("log_viewer_key"), []byte(s))
-									logger.Printf("[Settings] Log viewer key changed to: %s\n", s)
+								entry := widget.NewEntry()
+								entry.SetText(savedKey)
+								entry.PlaceHolder = "`"
+								entry.OnChanged = func(s string) {
+									// Allow max 1 character — keep only the last rune entered
+									if len([]rune(s)) > 1 {
+										runes := []rune(s)
+										last := string(runes[len(runes)-1:])
+										entry.SetText(last)
+									} else if len(s) > 0 {
+										StoreValue("settings", []byte("log_viewer_key"), []byte(s))
+										logger.Printf("[Settings] Log viewer key changed to: %s\n", s)
+									}
 								}
-							}
 
-							return container.NewCenter(entry)
-						}(),
-						rectSpacer,
+								return container.NewCenter(entry)
+							}(),
+							rectSpacer,
+						),
 					),
+					layout.NewSpacer(),
 				),
-				layout.NewSpacer(),
-			),
-		),
+			)
+		}(),
 
 		// EPOCH STATISTICS Section
 		rectSpacer,
