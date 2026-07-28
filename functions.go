@@ -2787,9 +2787,16 @@ func loadResources() {
 
 }
 
-// UpdateThemeLogo swaps the DERO logo image based on the active theme.
+// UpdateThemeLogo swaps the DERO logo image based on the user's saved logo
+// preference. If no explicit logo is stored, it falls back to the active theme.
 func UpdateThemeLogo() {
-	switch apptheme.ThemeMode {
+	logoKey := ""
+	if data, err := GetValue("settings", []byte("logo")); err == nil && len(data) > 0 {
+		logoKey = string(data)
+	} else {
+		logoKey = apptheme.ThemeMode
+	}
+	switch logoKey {
 	case apptheme.ThemeDerotopia:
 		res.gram.Resource = resourceDerotopiaLogoPng
 	case apptheme.ThemeElDorado:

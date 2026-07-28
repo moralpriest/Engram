@@ -1928,6 +1928,54 @@ func layoutAppSettings() fyne.CanvasObject {
 			)
 		}(),
 
+		rectSpacer,
+		widget.NewRichTextFromMarkdown("### "+i18n.T("settings.logo_label")),
+		rectSpacer,
+		func() *fyne.Container {
+			logoNames := []string{i18n.T("settings.logo_follow_theme"), "Engram Classic", "Derotopia", "El Dorado", "Crystallina", "Atlantis"}
+			logoKeys := []string{"", apptheme.ThemeEngram, apptheme.ThemeDerotopia, apptheme.ThemeElDorado, apptheme.ThemeCrystallina, apptheme.ThemeAtlantis}
+			savedLogo := ""
+			if data, err := GetValue("settings", []byte("logo")); err == nil && len(data) > 0 {
+				savedLogo = string(data)
+			}
+			wLogo := widget.NewSelect(logoNames, func(s string) {
+				idx := 0
+				for i, name := range logoNames {
+					if name == s {
+						idx = i
+						break
+					}
+				}
+				key := logoKeys[idx]
+				if key == savedLogo {
+					return
+				}
+				if key == "" {
+					// Follow Theme: clear stored preference so logo stays in sync
+					StoreValue("settings", []byte("logo"), []byte{})
+				} else {
+					StoreValue("settings", []byte("logo"), []byte(key))
+				}
+				UpdateThemeLogo()
+				settingsActiveTab = 2
+				session.Window.SetContent(layoutAppSettings())
+			})
+			sel := 0 // default: Follow Theme
+			if savedLogo != "" {
+				for i, key := range logoKeys {
+					if key == savedLogo {
+						sel = i
+						break
+					}
+				}
+			}
+			wLogo.SetSelectedIndex(sel)
+			return container.NewStack(
+				rectWidth90,
+				wLogo,
+			)
+		}(),
+
 		// SECURITY Section
 		rectSpacer,
 		rectSpacer,

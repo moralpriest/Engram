@@ -242,6 +242,8 @@ var stringsEN = map[string]string{
 	"settings.language_desc":                         "Choose the display language for the application.",
 	"settings.theme_section":                         "THEMES",
 	"settings.theme_label":                           "Select Theme",
+	"settings.logo_label":                            "Select Logo",
+	"settings.logo_follow_theme":                    "Follow Theme",
 	"settings.security_section":                     "SECURITY",
 	"settings.require_password":                      "Ask for password before sending a single transaction",
 	"settings.log_viewer_section":                    "LOG VIEWER KEY",
