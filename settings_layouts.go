@@ -1853,6 +1853,7 @@ func layoutAppSettings() fyne.CanvasObject {
 				}
 				i18n.SetLanguageFromIndex(idx)
 				StoreValue("settings", []byte("language"), []byte(langCodes[idx]))
+				updateTrayLanguage()
 				settingsActiveTab = 2
 				session.Window.SetContent(layoutAppSettings())
 			})

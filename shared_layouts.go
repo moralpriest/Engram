@@ -320,6 +320,7 @@ func layoutFrameWithWallet(singleWalletName string) fyne.CanvasObject {
 
 		if langData, err := GetValue("settings", []byte("language")); err == nil && len(langData) > 0 {
 			i18n.SetLanguage(string(langData))
+			updateTrayLanguage()
 			session.Window.SetContent(layoutMain())
 		} else {
 			session.Window.SetContent(layoutLanguageSelector())

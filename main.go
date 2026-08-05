@@ -194,9 +194,14 @@ func main() {
 	a.SetIcon(resourceIconPng)
 	session.Window.SetIcon(resourceIconPng)
 
+	// Load saved language (or detect OS locale on first run) BEFORE the
+	// system tray is built, so tray labels are localized at creation time.
+	initLanguage()
+
 	// System tray setup (desktop only)
 	if !a.Driver().Device().IsMobile() {
 		initSystemTray()
+		updateTrayLanguage()
 	}
 
 	// Init objects
@@ -382,6 +387,7 @@ func main() {
 
 		if langData, err := GetValue("settings", []byte("language")); err == nil && len(langData) > 0 {
 			i18n.SetLanguage(string(langData))
+			updateTrayLanguage()
 			session.Window.SetContent(layoutMain())
 		} else {
 			session.Window.SetContent(layoutLanguageSelector())

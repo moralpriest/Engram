@@ -32,7 +32,11 @@ func layoutLanguageSelector() fyne.CanvasObject {
 
 	pulseTexts := make([]pulseText, len(languages))
 	savedLang := i18n.GetLanguage()
+	startIdx := 0
 	for i, code := range languages {
+		if code == savedLang {
+			startIdx = i
+		}
 		i18n.SetLanguage(code)
 		pulseTexts[i] = pulseText{
 			title:     i18n.T("language.title"),
@@ -43,16 +47,16 @@ func layoutLanguageSelector() fyne.CanvasObject {
 	}
 	i18n.SetLanguage(savedLang)
 
-	title := canvas.NewText(pulseTexts[0].title, apptheme.C.Green)
+	title := canvas.NewText(pulseTexts[startIdx].title, apptheme.C.Green)
 	title.TextSize = scaleFont(24)
 	title.Alignment = fyne.TextAlignCenter
 	title.TextStyle = fyne.TextStyle{Bold: true}
 
-	sub1 := canvas.NewText(pulseTexts[0].subtitle1, apptheme.C.Gray)
+	sub1 := canvas.NewText(pulseTexts[startIdx].subtitle1, apptheme.C.Gray)
 	sub1.TextSize = scaleFont(13)
 	sub1.Alignment = fyne.TextAlignCenter
 
-	sub2 := canvas.NewText(pulseTexts[0].subtitle2, apptheme.C.Gray)
+	sub2 := canvas.NewText(pulseTexts[startIdx].subtitle2, apptheme.C.Gray)
 	sub2.TextSize = scaleFont(13)
 	sub2.Alignment = fyne.TextAlignCenter
 
@@ -148,14 +152,18 @@ func layoutLanguageSelector() fyne.CanvasObject {
 
 	wLang = widget.NewSelect(langNames, nil)
 	wLang.PlaceHolder = "..."
+	if startIdx > 0 {
+		wLang.SetSelectedIndex(startIdx)
+	}
 
 	btnConfirm := widget.NewButtonWithIcon("", theme.LoginIcon(), func() {
 		idx := wLang.SelectedIndex()
 		if idx < 0 {
-			idx = 0
+			idx = startIdx
 		}
 		i18n.SetLanguageFromIndex(idx)
 		StoreValue("settings", []byte("language"), []byte(languages[idx]))
+		updateTrayLanguage()
 		startAppForegroundAndroid()
 		transitionToMain()
 	})
@@ -177,7 +185,7 @@ func layoutLanguageSelector() fyne.CanvasObject {
 		selecting = false
 	}
 
-	updatePulseText(0, false)
+	updatePulseText(startIdx, false)
 
 	dropdownCard := canvas.NewRectangle(color.Transparent)
 	dropdownCard.SetMinSize(fyne.NewSize(ui.Width*0.6, 0))

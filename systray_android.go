@@ -13,3 +13,8 @@ func initSystemTray() {
 func updateTrayMenu() {
 	// No system tray on Android.
 }
+
+// updateTrayLanguage is a no-op on Android (no system tray).
+func updateTrayLanguage() {
+	// No system tray on Android.
+}

@@ -36,7 +36,10 @@ var (
 // Called from main() after the app and session are initialized.
 func initSystemTray() {
 	onReady := func() {
-		systray.SetIcon(resourceEngramWhitePng.Content())
+		// SetTemplateIcon on macOS marks the image as a template so the system
+		// auto-tints it for the current light/dark menu bar appearance; on
+		// Windows/Linux it falls back to the same bytes (as before).
+		systray.SetTemplateIcon(resourceEngramWhitePng.Content(), resourceEngramWhitePng.Content())
 		systray.SetTitle("Engram")
 		systray.SetTooltip("Engram - DERO Wallet")
 
@@ -44,33 +47,33 @@ func initSystemTray() {
 		//   wallet connected: Exit, Contracts+, Messages, TELA, Dashboard, Settings, Daemon & Miner, —, Quit
 		//   no wallet:        Connect, Connection Settings, Daemon & Miner, —, Quit		// --- Connected-wallet items ---
 		trayExit = systray.AddMenuItem(i18n.T("system_tray.exit"), "")
-		trayExit.SetIcon(trayIconExitSvg.Content())
+		trayExit.SetTemplateIcon(trayIconExitSvg.Content(), trayIconExitSvg.Content())
 		trayContracts = systray.AddMenuItem(i18n.T("system_tray.contracts"), "")
-		trayContracts.SetIcon(trayIconContractsSvg.Content())
+		trayContracts.SetTemplateIcon(trayIconContractsSvg.Content(), trayIconContractsSvg.Content())
 		trayMessages = systray.AddMenuItem(i18n.T("system_tray.messages"), "")
-		trayMessages.SetIcon(trayIconMessagesSvg.Content())
+		trayMessages.SetTemplateIcon(trayIconMessagesSvg.Content(), trayIconMessagesSvg.Content())
 		trayTELA = systray.AddMenuItem(i18n.T("system_tray.tela"), "")
-		trayTELA.SetIcon(trayIconTelaSvg.Content())
+		trayTELA.SetTemplateIcon(trayIconTelaSvg.Content(), trayIconTelaSvg.Content())
 		trayDashboard = systray.AddMenuItem(i18n.T("system_tray.dashboard"), "")
-		trayDashboard.SetIcon(trayIconDashboardSvg.Content())
+		trayDashboard.SetTemplateIcon(trayIconDashboardSvg.Content(), trayIconDashboardSvg.Content())
 
 		// --- Not-logged-in items (same position) ---
 		trayConnect = systray.AddMenuItem(i18n.T("system_tray.connect"), "")
-		trayConnect.SetIcon(trayIconConnectSvg.Content())
+		trayConnect.SetTemplateIcon(trayIconConnectSvg.Content(), trayIconConnectSvg.Content())
 		trayConnectionSettings = systray.AddMenuItem(i18n.T("system_tray.connection_settings"), "")
-		trayConnectionSettings.SetIcon(trayIconConnectionSettingsSvg.Content())
+		trayConnectionSettings.SetTemplateIcon(trayIconConnectionSettingsSvg.Content(), trayIconConnectionSettingsSvg.Content())
 
 		// --- Wallet-settings item ---
 		traySettings = systray.AddMenuItem(i18n.T("system_tray.settings"), "")
-		traySettings.SetIcon(trayIconSettingsSvg.Content())
+		traySettings.SetTemplateIcon(trayIconSettingsSvg.Content(), trayIconSettingsSvg.Content())
 
 		// --- Always-visible items ---
 		trayDaemonMiner = systray.AddMenuItem(i18n.T("system_tray.daemon_miner"), "")
-		trayDaemonMiner.SetIcon(trayIconDaemonMinerSvg.Content())
+		trayDaemonMiner.SetTemplateIcon(trayIconDaemonMinerSvg.Content(), trayIconDaemonMinerSvg.Content())
 		traySeparator = systray.AddMenuItem("-", "")
 		traySeparator.Disable()
 		trayQuit = systray.AddMenuItem(i18n.T("system_tray.quit"), "")
-		trayQuit.SetIcon(trayIconQuitSvg.Content())
+		trayQuit.SetTemplateIcon(trayIconQuitSvg.Content(), trayIconQuitSvg.Content())
 
 		// Set initial visibility based on current wallet state
 		applyTrayVisibility()
@@ -215,4 +218,30 @@ func updateTrayMenu() {
 		systray.SetTooltip("Engram - DERO Wallet")
 	}
 	applyTrayVisibility()
+}
+
+// updateTrayLanguage re-titles every system tray menu item in the active
+// UI language. Called after the language is loaded at startup or changed in
+// Settings, so the tray always follows the selected language.
+func updateTrayLanguage() {
+	// Skip if app is exiting — DBus connection may already be closed.
+	if appExiting {
+		return
+	}
+
+	update := func(item *systray.MenuItem, key string) {
+		if item != nil {
+			item.SetTitle(i18n.T(key))
+		}
+	}
+
+	update(trayExit, "system_tray.exit")
+	update(trayContracts, "system_tray.contracts")
+	update(trayMessages, "system_tray.messages")
+	update(trayTELA, "system_tray.tela")
+	update(trayDashboard, "system_tray.dashboard")
+	update(trayConnect, "system_tray.connect")
+	update(trayConnectionSettings, "system_tray.connection_settings")
+	update(traySettings, "system_tray.settings")
+	update(trayDaemonMiner, "system_tray.daemon_miner")
 }
