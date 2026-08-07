@@ -1407,21 +1407,6 @@ func layoutAppSettings() fyne.CanvasObject {
 	})
 	checkNotif.SetChecked(getNotificationsEnabled())
 
-	// STATUS AREA Section
-	statusAreaTitle := canvas.NewText(i18n.T("settings.status_area"), apptheme.C.Gray)
-	statusAreaTitle.TextSize = scaleFont(11)
-	statusAreaTitle.Alignment = fyne.TextAlignCenter
-	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
-
-	// PRIORITISE STATUS Section
-	prioritiseDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.prioritise_status_desc"))
-	prioritiseDesc.Wrapping = fyne.TextWrapWord
-
-	prioritiseCheck := widget.NewCheck(i18n.T("settings.prioritise_status"), func(b bool) {
-		setPrioritiseStatus(b)
-	})
-	prioritiseCheck.SetChecked(getPrioritiseStatus())
-
 	// EPOCH STATISTICS Section
 	epochTitle := canvas.NewText(i18n.T("settings.epoch_section"), apptheme.C.Gray)
 	epochTitle.TextSize = scaleFont(11)
@@ -2607,13 +2592,10 @@ func layoutNetwork() fyne.CanvasObject {
 	statusAreaTitle.Alignment = fyne.TextAlignCenter
 	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
 
-	prioritiseDesc := widget.NewRichTextFromMarkdown(i18n.T("settings.prioritise_status_desc"))
-	prioritiseDesc.Wrapping = fyne.TextWrapWord
-
-	prioritiseCheck := widget.NewCheck(i18n.T("settings.prioritise_status"), func(b bool) {
-		setPrioritiseStatus(b)
+	classicCheck := widget.NewCheck(i18n.T("settings.classic_label"), func(b bool) {
+		setClassicStatus(b)
 	})
-	prioritiseCheck.SetChecked(getPrioritiseStatus())
+	classicCheck.SetChecked(getClassicStatus())
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -2642,9 +2624,7 @@ func layoutNetwork() fyne.CanvasObject {
 			layout.NewSpacer(),
 		),
 		rectSpacer,
-		prioritiseDesc,
-		rectSpacer,
-		prioritiseCheck,
+		classicCheck,
 	)
 
 	scrollBox := container.NewVScroll(

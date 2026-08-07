@@ -2991,6 +2991,18 @@ func setPrioritiseStatus(enabled bool) {
 	}
 }
 
+// getClassicStatus reports whether the status area uses the normal (middle) layout.
+// Classic corresponds to the standard dashboard format, so it matches prioritise-status.
+func getClassicStatus() bool {
+	return getPrioritiseStatus()
+}
+
+// setClassicStatus enables/disables the normal (middle) status layout. Disabling it
+// moves the status area to the bottom.
+func setClassicStatus(classic bool) {
+	setPrioritiseStatus(classic)
+}
+
 func getPasswordForSend() bool {
 	v, err := GetValue("settings", []byte("passwordForSend"))
 	if err != nil || len(v) == 0 {

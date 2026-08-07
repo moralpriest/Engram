@@ -327,9 +327,15 @@ widget.NewCheck("", onToggle)
 **Checklist for all new UI elements:**
 1. Does this element increase the content's `MinSize()` beyond 360×680?
 2. If so, does it use `Wrapping = fyne.TextWrapWord` to wrap text vertically?
-3. If a widget doesn't support wrapping (e.g. `widget.Check`, `widget.Label`), split it into a wrapping text element and a separate control.
+3. If a widget doesn't support wrapping (e.g. `widget.Check`, `widget.Label`, `canvas.NewText`), split it into a wrapping text element and a separate control.
 4. Never put a sentence-length label on a checkbox, radio button, or button — it will force the window wider.
 5. Prefer `widget.NewRichTextFromMarkdown(...)` with `Wrapping = fyne.TextWrapWord` for any text that might exceed the available width.
+
+**WARNING: `canvas.NewText` never wraps.**
+- A `canvas.NewText` heading does **not** wrap text — if the string is longer than the canvas width it bleeds off-screen **instead** of growing the fixed window, and there is no layout warning. This is especially likely in **non-English translations**, where a single word or phrase is often much longer than the equivalent English.
+- On narrow screens (mobile) a long translated heading will overflow invisibly, so it is easy to ship broken without noticing.
+- **Golden rule for translations:** keep text that is rendered as a `canvas.NewText` heading/button label **short** (prefer abbreviations over literal translations). For anything that could plausibly be longer in another language, render it with a wrapping `RichText` instead, or confirm the value fits the fixed 360px width.
+- **Golden rule for tabs/nav rows:** keep `AppTabs`/`NewGridLayout` label strings short in every language. On mobile, over-wide tab labels collapse into an overflow `…` menu and the later tabs become unreachable "behind the dots".
 
 ---
 
