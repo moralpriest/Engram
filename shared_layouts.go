@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -67,7 +68,7 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	label := canvas.NewText(i18n.T("register.proof_of_work"), apptheme.C.Gray)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 	label.TextSize = scaleFont(12)
-	hashes := canvas.NewText(fmt.Sprintf("%d", session.RegHashes), apptheme.C.Account)
+	hashes := canvas.NewText(fmt.Sprintf("%d", atomic.LoadInt64(&session.RegHashes)), apptheme.C.Account)
 	hashes.TextSize = scaleFont(18)
 
 	startTime := time.Now()
@@ -79,11 +80,21 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 		for engram.Disk != nil && session.Domain == "app.register" {
 			elapsed := time.Since(startTime).Seconds()
 			fyne.Do(func() {
-				hashes.Text = fmt.Sprintf("%d", session.RegHashes)
+				attempts := atomic.LoadInt64(&session.RegHashes)
+				hashes.Text = fmt.Sprintf("%d", attempts)
 				hashes.Refresh()
 
-				if elapsed >= 2.0 && session.RegHashes > 0 {
-					hashRate := float64(session.RegHashes) / elapsed
+				if atomic.LoadInt32(&session.RegBroadcasting) == 1 {
+					// Winning hash found; the registration TX is being sent to
+					// the daemon. The countdown is meaningless from here, so
+					// show an explicit state instead of a frozen timer.
+					timeLabel.Text = i18n.T("register.broadcasting")
+					timeLabel.Refresh()
+					return
+				}
+
+				if elapsed >= 2.0 && attempts > 0 {
+					hashRate := float64(attempts) / elapsed
 					expectedTotal := 16777216.0 / hashRate
 					remaining := expectedTotal - elapsed
 

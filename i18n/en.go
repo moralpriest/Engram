@@ -635,6 +635,7 @@ var stringsEN = map[string]string{
 	"register.countdown_fmt_hours":   "Countdown: ~%dh %dm remaining",
 	"register.countdown_fmt_minutes": "Countdown: ~%dm %ds remaining",
 	"register.countdown_fmt_seconds": "Countdown: ~%ds remaining",
+	"register.broadcasting":          "Broadcasting registration to daemon...",
 
 	"files.signature_detail":    "S I G N A T U R E    D E T A I L",
 	"files.verification_status": "   VERIFICATION   STATUS",

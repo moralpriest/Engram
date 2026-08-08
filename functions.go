@@ -64,6 +64,7 @@ import (
 
 	"github.com/civilware/Gnomon/storage"
 	"github.com/deroproject/derohe/config"
+	"github.com/deroproject/derohe/cryptography/bn256"
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/dvm"
 	"github.com/deroproject/derohe/globals"
@@ -143,6 +144,7 @@ type Session struct {
 	NewUser             string
 	Gif                 *x.AnimatedGif
 	RegHashes           int64
+	RegBroadcasting     int32
 	LimitMessages       bool
 	TrackRecentBlocks   int64
 	NavStack            *NavigationStack
@@ -3178,31 +3180,84 @@ func registerAccount() {
 	session.Window.SetContent(layoutTransition())
 	session.Window.SetContent(layoutWaiting(title, heading, sub, link))
 
-	// Registration PoW
+	// Registration PoW.
+	// Increment-optimized nonce search (lineage: mmarcel/8lecramm ->
+	// Dirtybird99, as used in HOLOGRAM's cold registration miner): instead of
+	// building a fresh tx per attempt (walletapi.GetRegistrationTX does a
+	// ScalarMult + two string formats + full IsRegistrationValid every try),
+	// sign once with a random nonce, then advance the nonce by one each
+	// attempt (point += G). The 24-bit target and wire format are unchanged.
+	// Sound because at most one registration is ever published per wallet.
 	go func() {
 		var reg_tx *transaction.Transaction
-		successful_regs := make(chan *transaction.Transaction)
-		counter := 0
-		session.RegHashes = 0
+		successful_regs := make(chan *transaction.Transaction, 1)
+		cancel := make(chan struct{})
+		atomic.StoreInt64(&session.RegHashes, 0)
+		atomic.StoreInt32(&session.RegBroadcasting, 0)
 
-		for i := 0; i < runtime.GOMAXPROCS(0)-1; i++ {
+		workers := runtime.GOMAXPROCS(0)
+		if workers > 1 {
+			workers-- // leave a core for the UI thread
+		}
+		if workers < 1 {
+			workers = 1
+		}
+
+		for i := 0; i < workers; i++ {
 			go func() {
-				for counter == 0 {
-					if engram.Disk == nil {
-						break
-					} else if engram.Disk.IsRegistered() {
-						break
+				if engram.Disk == nil || engram.Disk.IsRegistered() {
+					return
+				}
+
+				// Build the skeleton + first signature once; every later attempt
+				// only advances (tmppoint, tmpsecret) -- no ScalarMult in the loop.
+				first := engram.Disk.GetRegistrationTX()
+				pub := engram.Disk.Get_Keys().Public.G1().String()
+				secret := engram.Disk.Get_Keys().Secret.BigInt()
+
+				var tmppoint bn256.G1
+				tmpsecret := crypto.RandomScalar()
+				tmppoint.ScalarMult(crypto.G, tmpsecret)
+
+				for {
+					select {
+					case <-cancel:
+						return
+					default:
 					}
 
-					lreg_tx := engram.Disk.GetRegistrationTX()
-					hash := lreg_tx.GetHash()
-					session.RegHashes++
+					if atomic.LoadInt32(&session.RegBroadcasting) == 1 {
+						return
+					}
+					if engram.Disk == nil || engram.Disk.IsRegistered() {
+						return
+					}
+
+					ltx := *first
+					c := crypto.ReducedHash([]byte(fmt.Sprintf("%s%s", pub, tmppoint.String())))
+					s := new(big.Int).Mul(c, secret)
+					s.Mod(s, bn256.Order)
+					s.Add(s, tmpsecret)
+					s.Mod(s, bn256.Order)
+
+					crypto.FillBytes(c, ltx.C[:])
+					crypto.FillBytes(s, ltx.S[:])
+
+					hash := ltx.GetHash()
+					atomic.AddInt64(&session.RegHashes, 1)
 
 					if hash[0] == 0 && hash[1] == 0 && hash[2] == 0 {
-						successful_regs <- lreg_tx
-						counter++
-						break
+						candidate := ltx
+						if candidate.IsRegistrationValid() {
+							select {
+							case successful_regs <- &candidate:
+							default:
+							}
+						}
+						return
 					}
+					tmpsecret.Add(tmpsecret, big.NewInt(1))
+					tmppoint.Add(&tmppoint, crypto.G)
 				}
 			}()
 		}
@@ -3222,9 +3277,15 @@ func registerAccount() {
 		}
 
 		reg_tx = <-successful_regs
+		close(cancel) // stop the remaining workers now that we have a winner
 
+		// Mining is done -- the GUI countdown switches to a broadcasting state
+		// (the send below blocks on the daemon; without this the timer appears
+		// frozen on "Completing soon..." while the RPC round-trip runs).
+		atomic.StoreInt32(&session.RegBroadcasting, 1)
 		logger.Printf("[Registration] Registration TXID: %s\n", reg_tx.GetHash())
 		err := engram.Disk.SendTransaction(reg_tx)
+		atomic.StoreInt32(&session.RegBroadcasting, 0)
 		if err != nil {
 			session.Gif.Stop()
 			session.Gif = nil
