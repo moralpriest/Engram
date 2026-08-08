@@ -2625,6 +2625,26 @@ func updateDashboardAfterLogin() {
 	go updateVillagerAvatar()
 }
 
+// addFullscreenOverlay sizes the overlay to fill the canvas interactive area before
+// adding it to the overlay stack. Fyne v2.7 only auto-sizes overlays that are internal
+// *widget.OverlayContainer instances; plain containers (which this app uses throughout)
+// keep their minimum size when added to an already-sized canvas, which pushes content
+// such as the back button below the visible area. Must be called on the UI goroutine.
+func addFullscreenOverlay(obj fyne.CanvasObject) {
+	if session.Window == nil {
+		return
+	}
+
+	canvasObj := session.Window.Canvas()
+	pos, size := canvasObj.InteractiveArea()
+	if !size.IsZero() {
+		obj.Resize(size)
+		obj.Move(pos)
+	}
+
+	canvasObj.Overlays().Add(obj)
+}
+
 // Remove all overlays
 func removeOverlays() {
 	uiDo(func() {

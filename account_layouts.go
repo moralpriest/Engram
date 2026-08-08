@@ -157,7 +157,6 @@ func layoutAccount() fyne.CanvasObject {
 	linkRecoveryWords.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
-		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText(i18n.T("account.verification"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
@@ -196,13 +195,13 @@ func layoutAccount() fyne.CanvasObject {
 
 		btnConfirm.OnTapped = func() {
 			if engram.Disk.Check_Password(entryPassword.Text) {
-				overlay.Add(
+				addFullscreenOverlay(
 					container.NewStack(
 						&iframe{},
 						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
-				overlay.Add(layoutRecovery())
+				addFullscreenOverlay(layoutRecovery())
 			} else {
 				btnConfirm.Text = i18n.T("account.invalid_password")
 				btnConfirm.Disable()
@@ -215,7 +214,7 @@ func layoutAccount() fyne.CanvasObject {
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				canvas.NewRectangle(apptheme.C.DarkMatter),
@@ -256,7 +255,7 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				container.NewBorder(
@@ -277,7 +276,6 @@ func layoutAccount() fyne.CanvasObject {
 	linkRecoveryHex.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
-		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText(i18n.T("account.verification"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
@@ -316,13 +314,13 @@ func layoutAccount() fyne.CanvasObject {
 
 		btnConfirm.OnTapped = func() {
 			if engram.Disk.Check_Password(entryPassword.Text) {
-				overlay.Add(
+				addFullscreenOverlay(
 					container.NewStack(
 						&iframe{},
 						canvas.NewRectangle(apptheme.C.DarkMatter),
 					),
 				)
-				overlay.Add(layoutRecoveryHex())
+				addFullscreenOverlay(layoutRecoveryHex())
 			} else {
 				btnConfirm.Text = i18n.T("account.invalid_password")
 				btnConfirm.Disable()
@@ -335,7 +333,7 @@ func layoutAccount() fyne.CanvasObject {
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				canvas.NewRectangle(apptheme.C.DarkMatter),
@@ -376,7 +374,7 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				container.NewBorder(
@@ -397,7 +395,6 @@ func layoutAccount() fyne.CanvasObject {
 	linkChangePassword.OnTapped = func() {
 		errorText.Text = ""
 		errorText.Refresh()
-		overlay := session.Window.Canvas().Overlays()
 
 		header := canvas.NewText(i18n.T("account.authorization"), apptheme.C.Gray)
 		header.TextSize = scaleFont(14)
@@ -490,7 +487,7 @@ func layoutAccount() fyne.CanvasObject {
 		span := canvas.NewRectangle(color.Transparent)
 		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				canvas.NewRectangle(apptheme.C.DarkMatter),
@@ -537,7 +534,7 @@ func layoutAccount() fyne.CanvasObject {
 			),
 		)
 
-		overlay.Add(
+		addFullscreenOverlay(
 			container.NewStack(
 				&iframe{},
 				container.NewBorder(
@@ -736,14 +733,14 @@ func layoutRecovery() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	footer := container.NewVBox(
-		wSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnCancel,
-			layout.NewSpacer(),
+	footer := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnCancel),
+			),
+			rectSpacer,
 		),
-		wSpacer,
 	)
 
 	body := widget.NewLabel(i18n.T("account.save_words"))
@@ -815,10 +812,12 @@ func layoutRecovery() fyne.CanvasObject {
 
 	layout := container.NewStack(
 		&iframe{},
-		container.NewVBox(
+		container.NewBorder(
 			header,
-			scrollBox,
 			footer,
+			nil,
+			nil,
+			scrollBox,
 		),
 	)
 
@@ -856,14 +855,14 @@ func layoutRecoveryHex() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	footer := container.NewVBox(
-		wSpacer,
-		container.NewHBox(
-			layout.NewSpacer(),
-			btnCancel,
-			layout.NewSpacer(),
+	footer := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnCancel),
+			),
+			rectSpacer,
 		),
-		wSpacer,
 	)
 
 	body := widget.NewLabel(i18n.T("account.save_hex"))
@@ -970,10 +969,12 @@ func layoutRecoveryHex() fyne.CanvasObject {
 
 	layout := container.NewStack(
 		&iframe{},
-		container.NewVBox(
+		container.NewBorder(
 			header,
-			scrollBox,
 			footer,
+			nil,
+			nil,
+			scrollBox,
 		),
 	)
 
