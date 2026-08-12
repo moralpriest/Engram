@@ -1,10 +1,10 @@
 module github.com/DEROFDN/engram
 
-go 1.26
+go 1.26.0
 
 replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
-replace github.com/civilware/Gnomon => ../Gnomon
+replace github.com/hypergnomon/hypergnomon => ../HyperGnomon
 
 replace github.com/civilware/epoch => ../epoch
 
@@ -13,13 +13,13 @@ require (
 	fyne.io/systray v1.12.1
 	fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/civilware/Gnomon v0.0.0-20240403103529-8b2fdb2b3106
 	github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb
 	github.com/civilware/tela v0.0.0-20260530200926-176ee608babd
 	github.com/creachadair/jrpc2 v1.3.4
 	github.com/deroproject/derohe v0.0.0-20260527071132-5cd042e8f541
 	github.com/deroproject/graviton v0.0.0-20220130070622-2c248a53b2e1
 	github.com/gorilla/websocket v1.5.3
+	github.com/hypergnomon/hypergnomon v0.0.0
 	github.com/makiuchi-d/gozxing v0.1.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
@@ -41,6 +41,7 @@ require (
 	github.com/cenkalti/rpc2 v1.0.4 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
+	github.com/civilware/Gnomon v0.0.0-20240403103529-8b2fdb2b3106 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dchest/siphash v1.2.3 // indirect
@@ -48,7 +49,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fredbi/uri v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/fyne-io/gl-js v0.2.0 // indirect
 	github.com/fyne-io/glfw-js v0.3.0 // indirect
 	github.com/fyne-io/image v0.1.1 // indirect
@@ -69,22 +70,16 @@ require (
 	github.com/klauspost/reedsolomon v1.13.2 // indirect
 	github.com/lesismal/llib v1.2.2 // indirect
 	github.com/lesismal/nbio v1.6.7 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.17 // indirect
-	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
-	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.6.1 // indirect
-	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
-	github.com/schollz/progressbar/v3 v3.19.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
@@ -93,18 +88,18 @@ require (
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
-	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
+	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
+	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xtaci/kcp-go/v5 v5.6.2 // indirect
 	github.com/yuin/goldmark v1.7.16 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/net v0.51.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/term v0.40.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -43,7 +43,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	x "fyne.io/x/fyne/widget"
-	"github.com/civilware/Gnomon/structures"
 	"github.com/civilware/tela"
 	"github.com/civilware/tela/logger"
 	"github.com/creachadair/jrpc2"
@@ -51,6 +50,7 @@ import (
 	"github.com/deroproject/derohe/globals"
 	"github.com/deroproject/derohe/walletapi/xswd"
 	"github.com/deroproject/graviton"
+	"github.com/hypergnomon/hypergnomon/pkg/gnomes/structures"
 )
 
 func layoutTELA() fyne.CanvasObject {

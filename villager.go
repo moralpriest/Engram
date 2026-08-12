@@ -12,12 +12,12 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
-	"github.com/civilware/Gnomon/rwc"
 	"github.com/civilware/tela/logger"
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
 	"github.com/deroproject/derohe/rpc"
 	"github.com/gorilla/websocket"
+	"github.com/hypergnomon/hypergnomon/rpc/rwc"
 )
 
 const VILLAGER_SCID = "f0b29081c1ed35fe942cb3402cd9d7bf0cf27639201bbc96223bdc99c4c6aa9f"

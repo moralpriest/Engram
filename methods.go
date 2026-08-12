@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"github.com/civilware/Gnomon/structures"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/creachadair/jrpc2/handler"
+	"github.com/hypergnomon/hypergnomon/pkg/gnomes/structures"
 )
 
 // Further methods to add to XSWD,
