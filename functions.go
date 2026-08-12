@@ -5512,7 +5512,11 @@ func startGnomon() {
 
 			term := []string(nil)
 			term = append(term, "Function Initialize")
-			height, err := gnomon.Graviton.GetLastIndexHeight()
+			// Resume height comes from the real bbolt store. The vestigial
+			// graviton handle always errors (graviton is unsupported in
+			// HyperGnomon), which previously forced a height of 0 and reset
+			// the scan on every launch.
+			height, err := gnomon.BBolt.GetLastIndexHeight()
 			if err != nil {
 				height = 0
 			}
@@ -5594,36 +5598,25 @@ func isDatabaseCorrupted(path string) bool {
 		return true // Permission issues = corruption
 	}
 
-	// Try basic validation with recovery
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Printf("[Gnomon] Database validation panic: %v\n", r)
-		}
-	}()
-
-	// Try to open database safely
-	grav, err := storage.NewGravDB(path, "25ms")
-	if err != nil {
-		logger.Printf("[Gnomon] Cannot open database: %v\n", err)
-		return true
+	// HyperGnomon is bbolt-only. The old check validated through the vestigial
+	// graviton handle, whose GetLastIndexHeight always answers
+	// ErrGravDBNotSupported — that made every startup treat a perfectly healthy
+	// bbolt database as "corrupted", back it up and recreate it, wiping all
+	// index progress on each launch. Validate the real bbolt store instead
+	// (non-destructive read-only check); a store locked by another handle
+	// (ErrStoreInUse) is healthy, not corruption.
+	err := storage.ValidateStore(path, 5*time.Second)
+	if err == nil {
+		logger.Printf("[Gnomon] Database appears valid, but being cautious...\n")
+		return false
+	}
+	if errors.Is(err, storage.ErrStoreInUse) {
+		logger.Printf("[Gnomon] Database is locked by another handle, treating as valid\n")
+		return false
 	}
 
-	// Multiple validation attempts
-	_, err = grav.GetLastIndexHeight()
-	if err != nil {
-		logger.Printf("[Gnomon] Database validation error: %v\n", err)
-		return true
-	}
-
-	// Additional validation - try snapshot creation (often exposes corruption)
-	defer func() {
-		if r := recover(); r != nil {
-			logger.Printf("[Gnomon] Snapshot validation panic: %v\n", r)
-		}
-	}()
-
-	logger.Printf("[Gnomon] Database appears valid, but being cautious...\n")
-	return false
+	logger.Printf("[Gnomon] Database validation error: %v\n", err)
+	return true
 }
 
 // Stop all indexers and close Gnomon
