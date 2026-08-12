@@ -1479,6 +1479,13 @@ func layoutTELA() fyne.CanvasObject {
 		var heightDelta int64
 		var storedIndexedHeight int64
 
+		// Scan-phase progress mapping. The default (prefilter path) maps the
+		// scan across 60%→90%. The precomputed-candidates path skips the
+		// prefilter entirely, so its scan phase starts lower (45%) and spans
+		// wider (45%→90%) to avoid a jarring jump straight to 60%.
+		scanProgressBase := 0.60
+		scanProgressSpan := 0.30
+
 		var gnomonSyncStartTime time.Time
 		var estimatedTelaFallback = 30 * time.Second
 
@@ -2299,7 +2306,13 @@ func layoutTELA() fyne.CanvasObject {
 						prefilterAllowed[sc] = true
 					}
 				}
-				updateTelaProgress(0.60)
+				// Candidates are already verified; the remaining work is the
+				// INDEX batch fetch + scan. Start the scan phase lower than the
+				// prefilter path (45% instead of 60%) so the bar tracks the
+				// fetch step instead of jumping straight to 60%.
+				scanProgressBase = 0.45
+				scanProgressSpan = 0.45
+				updateTelaProgress(0.45)
 			} else {
 				candidates := make([]string, 0, len(allSCIDs))
 				for _, sc := range allSCIDs {
@@ -2466,7 +2479,7 @@ func layoutTELA() fyne.CanvasObject {
 				currentHeight = gnomon.Index.LastIndexedHeight
 			}
 			heightGrew := currentHeight > lastBackfillHeight && lastBackfillHeight > 0
-			if !restrictiveMode && !telaBackfillActive.Load() && (!telaBackfillFailed.Load() || heightGrew) {
+			if !restrictiveMode && gnomon.Index != nil && !telaBackfillActive.Load() && (!telaBackfillFailed.Load() || heightGrew) {
 				if heightGrew {
 					logger.Printf("[TELA] Gnomon height grew %d -> %d; resetting backfill failure state\n", lastBackfillHeight, currentHeight)
 					telaBackfillFailed.Store(false)
@@ -2630,9 +2643,9 @@ func layoutTELA() fyne.CanvasObject {
 				lastUIRefresh = now
 				setResultsText("  Scanning... (%d / %d)", scanned, allLen)
 				results.Color = apptheme.StatusTextColor()
-				// Phase-based progress: scan is 60% -> 90%
+				// Phase-based progress: scan spans scanProgressBase -> 90%
 				if allLen > 0 {
-					updateTelaProgress(0.60 + 0.30*float64(scanned)/float64(allLen))
+					updateTelaProgress(scanProgressBase + scanProgressSpan*float64(scanned)/float64(allLen))
 				}
 				uiDo(func() {
 					results.Refresh()
@@ -2743,7 +2756,7 @@ func layoutTELA() fyne.CanvasObject {
 		wg.Wait()
 		phaseScanMs = time.Since(scanPhaseStart).Milliseconds()
 
-		if len(scidsToIndex) > 0 {
+		if len(scidsToIndex) > 0 && gnomon.Index != nil {
 			batch := make(map[string]*structures.FastSyncImport, len(scidsToIndex))
 			for _, scid := range scidsToIndex {
 				batch[scid] = &structures.FastSyncImport{}
