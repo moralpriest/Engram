@@ -195,7 +195,8 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
   - Gnomon sync wait bypass when embedded list is present
 - **Background backfill** runs on every first click (non-blocking) to discover NEW TELA apps published since the embedded list was compiled. New apps appear on the next click.
 - After modifying Gnomon code, remember to run `go mod vendor` to sync Engram's vendor directory.
-- Gnomon dependency points to the remote fork (`replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.0-20260429054005-02f3d30e2477`).
+- Gnomon and tela dependencies point to the live `dev` branch via local filesystem replaces (`replace github.com/civilware/Gnomon => ../Gnomon`, `replace github.com/civilware/tela => ../tela`). These clones live at `/home/priest/Projects/{Gnomon,tela}` on the `dev` branch; `git pull` there, then `go mod vendor`, then rebuild to pick up changes.
+- With local replaces active, builds REQUIRE the sibling clones to be present (CI/package builds outside this machine will fail without them).
 - To update the embedded SCID list: run Engram, click TELA, copy `datashards/tela_scid_cache.json` → `tela_embedded.go`.
 
 ## Final Notes

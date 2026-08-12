@@ -4,7 +4,7 @@ go 1.26
 
 replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
-replace github.com/civilware/Gnomon => github.com/moralpriest/Gnomon v0.0.1-waitfix-dev
+replace github.com/civilware/Gnomon => ../Gnomon
 
 replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-20260607210939-1bb1734a8874
 
@@ -17,7 +17,7 @@ require (
 	github.com/civilware/epoch v0.0.0-20241002060739-1ed2fc6f74cb
 	github.com/civilware/tela v0.0.0-20260530200926-176ee608babd
 	github.com/creachadair/jrpc2 v1.3.4
-	github.com/deroproject/derohe v0.0.0-20250813215012-9b6a8b82c839
+	github.com/deroproject/derohe v0.0.0-20260527071132-5cd042e8f541
 	github.com/deroproject/graviton v0.0.0-20220130070622-2c248a53b2e1
 	github.com/gorilla/websocket v1.5.3
 	github.com/makiuchi-d/gozxing v0.1.1
@@ -110,6 +110,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/civilware/tela => github.com/moralpriest/tela v0.0.0-20260507234742-2edd3a5771fc
+replace github.com/civilware/tela => ../tela
 
 replace github.com/deroproject/derohe => github.com/DEROFDN/derohe v0.0.0-20260705204633-6f9bd2ca1209
