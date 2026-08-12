@@ -1707,11 +1707,6 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		gnomonReadyForTela := func() bool {
-			// Embedded TELA SCIDs are always available — skip Gnomon sync wait entirely.
-			// This makes the first TELA click fast even on a fresh install.
-			if len(embeddedTelaSCIDs) > 0 {
-				return true
-			}
 			// If we have a recent JSON cache, Gnomon doesn't need to be fully synced.
 			// We already know which SCIDs are TELA candidates — skip the sync wait.
 			if hasValidTelaJSONCache() {

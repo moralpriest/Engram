@@ -5848,34 +5848,14 @@ func (g *Gnomon) GetAllOwnersAndSCIDs() (scids map[string]string) {
 	}
 }
 
-// GetTelaCandidates returns pre-computed TELA candidate SCIDs from Gnomon DB.
-// Falls back to an embedded list when the DB is empty (fresh install), making
-// the first TELA click fast without waiting for the background backfill.
+// GetTelaCandidates returns TELA candidate SCIDs from the Gnomon DB.
+// TELA candidates are discovered and validated by the indexer/backfill;
+// there is no embedded fallback list.
 func (g *Gnomon) GetTelaCandidates() []string {
 	if g.Index == nil {
 		return nil
 	}
-	candidates := g.Index.GetTelaCandidates()
-
-	// Merge with embedded list to ensure we don't miss anything known,
-	// especially during fresh sync when DB is partially populated.
-	if len(embeddedTelaSCIDs) > 0 {
-		candidateMap := make(map[string]bool)
-		for _, c := range candidates {
-			candidateMap[c] = true
-		}
-		added := 0
-		for _, ec := range embeddedTelaSCIDs {
-			if !candidateMap[ec] {
-				candidates = append(candidates, ec)
-				added++
-			}
-		}
-		if added > 0 {
-			logger.Printf("[Gnomon] Added %d embedded TELA SCIDs to %d DB candidates\n", added, len(candidates)-added)
-		}
-	}
-	return candidates
+	return g.Index.GetTelaCandidates()
 }
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
