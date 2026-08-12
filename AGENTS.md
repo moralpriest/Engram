@@ -189,15 +189,15 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - Build Android APK: `task package-android`
 
 ## TELA Performance Notes
-- **First TELA click is now ~2 seconds** on both fresh installs and repeat visits, thanks to:
-  - An **embedded SCID list** (`tela_embedded.go`) compiled into the binary (88 known TELA apps)
-  - `GetTelaCandidates()` fallback to embedded list when Gnomon DB is empty
-  - Gnomon sync wait bypass when embedded list is present
-- **Background backfill** runs on every first click (non-blocking) to discover NEW TELA apps published since the embedded list was compiled. New apps appear on the next click.
-- After modifying Gnomon code, remember to run `go mod vendor` to sync Engram's vendor directory.
-- Gnomon, tela, and epoch dependencies point to the live `dev` branch via local filesystem replaces (`replace github.com/civilware/Gnomon => ../Gnomon`, `replace github.com/civilware/tela => ../tela`, `replace github.com/civilware/epoch => ../epoch`). These clones live at `/home/priest/Projects/{Gnomon,tela,epoch}` on the `dev` branch; `git pull` there, then `go mod vendor`, then rebuild to pick up changes.
+- There is **no pre-seeded/embedded SCID list** — `tela_embedded.go` was removed by design. TELA candidates come only from real discovery:
+  - HyperGnomon's `telacandidates` bbolt bucket (`GetTelaCandidates()` → `BackfillTelaCandidates()`)
+  - The plain JSON cache `datashards/tela_scid_cache.json` (24h freshness, written after a successful prefilter) — this is what makes repeat clicks fast
+  - The encrypted TELA caches, then a full prefilter as last resort
+- **Background backfill** runs on every first click (non-blocking) to discover TELA apps; new apps appear on the next click.
+- A healthy Gnomon DB is never wiped at startup: `isDatabaseCorrupted()` validates the bbolt store via `storage.ValidateStore` (a locked store is treated as valid, not corrupt). Do not reintroduce a gravdb-based validation — HyperGnomon is bbolt-only and the graviton handle always errors.
+- After modifying HyperGnomon code, remember to run `go mod vendor` to sync Engram's vendor directory (Engram builds against `vendor/`, not the replace path directly).
+- Dependencies point to local filesystem replaces (`replace github.com/hypergnomon/hypergnomon => ../HyperGnomon`, `replace github.com/civilware/tela => ../tela`, `replace github.com/civilware/epoch => ../epoch`). These clones live at `/home/priest/Projects/{HyperGnomon,tela,epoch}`; `git pull` there, then `go mod vendor`, then rebuild to pick up changes.
 - With local replaces active, builds REQUIRE the sibling clones to be present (CI/package builds outside this machine will fail without them).
-- To update the embedded SCID list: run Engram, click TELA, copy `datashards/tela_scid_cache.json` → `tela_embedded.go`.
 
 ## Final Notes
 
