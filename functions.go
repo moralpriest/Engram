@@ -1873,12 +1873,31 @@ func testNodeConnectionTimeout(address string, timeout time.Duration) bool {
 
 // Set the daemon endpoint setting to local Graviton tree
 func setDaemon(s string) (err error) {
+	changed := s != session.Daemon
 	if err = StoreValue("settings", []byte("endpoint"), []byte(s)); err != nil {
 		logger.Errorf("[Settings] Could not store daemon endpoint: %s\n", err)
 		return err
 	}
 	globals.Arguments["--daemon-address"] = s
 	session.Daemon = s
+
+	// A node change must re-point the Gnomon indexer: its scan endpoint is
+	// fixed at construction, so without a restart it keeps scanning the old
+	// node (e.g. a pruned local node), missing most of the chain and leaving
+	// TELA discovery nearly empty. startGnomon also detects the endpoint
+	// change and resets any hollow index for a full scan on the new node.
+	if changed && gnomon.Index != nil && isWalletGenerationActive(currentWalletGeneration()) && !globals.Exit_In_Progress {
+		logger.Printf("[Gnomon] Daemon changed to %s — restarting indexer on the new node\n", s)
+		go func() {
+			stopGnomon()
+			// Give the bbolt lock a moment to release before reopening.
+			time.Sleep(500 * time.Millisecond)
+			enableGnomon, _ := getGnomon()
+			if enableGnomon == "1" {
+				startGnomon()
+			}
+		}()
+	}
 	return
 }
 
@@ -5400,6 +5419,43 @@ func startGnomon() {
 						})
 					}
 				}
+
+				// If this database was indexed against a different daemon
+				// endpoint, its scan position may be hollow: a pruned/sparse
+				// node skips missing history, so LastIndexedHeight can sit at
+				// the tip while only a handful of SCIDs were ever seen. Move
+				// it aside so the new node gets a complete fresh scan.
+				//
+				// FastSync-built indexes are exempt: they populate the full
+				// registry directly from the GnomonSC contract (a plain contract
+				// read, valid on any node), so the endpoint never hollows them.
+				// Presence of tela_cache.bin is the marker — only the FastSync
+				// probe writes it; a block-scan-only index never does.
+				fastSyncComplete := false
+				if _, err := os.Stat(filepath.Join(path, "tela_cache.bin")); err == nil {
+					fastSyncComplete = true
+				}
+				endpointFile := filepath.Join(path, "indexed_endpoint")
+				if prev, err := os.ReadFile(endpointFile); err == nil && !fastSyncComplete {
+					prevEndpoint := strings.TrimSpace(string(prev))
+					curEndpoint := strings.TrimSpace(session.Daemon)
+					if prevEndpoint != "" && prevEndpoint != curEndpoint {
+						logger.Printf("[Gnomon] Index was built against %s, current daemon is %s — resetting for a full scan on the new node\n", prevEndpoint, session.Daemon)
+						backupPath := path + "_reset_" + time.Now().Format("20060102_150405")
+						if err := os.Rename(path, backupPath); err == nil {
+							logger.Printf("[Gnomon] Moved stale index to: %s\n", backupPath)
+							// Tell the user why a fresh sync is starting; a node switch
+							// discards a hollow index and re-scans the full chain.
+							fyne.Do(func() {
+								if session.Window != nil {
+									dialog.ShowInformation("Gnomon Re-sync",
+										fmt.Sprintf("The Gnomon index was built against a different node (%s).\nStarting a fresh full sync on %s.\nOld index backed up to:\n%s", prevEndpoint, session.Daemon, backupPath),
+										session.Window)
+								}
+							})
+						}
+					}
+				}
 			}
 
 			// Initialize fresh databases with retry logic and configurable timeout
@@ -5439,6 +5495,13 @@ func startGnomon() {
 				gnomon.setBootstrapError("Connection timeout")
 				logger.Printf("[Gnomon] Failed to initialize BBoltDB: %v\n", err)
 				return
+			}
+
+			// Record which daemon this index is being built against, so a later
+			// node change triggers a fresh full scan instead of resuming a
+			// hollow index. Best-effort: a write failure only costs a rescan.
+			if err := os.WriteFile(filepath.Join(path, "indexed_endpoint"), []byte(session.Daemon), 0600); err != nil {
+				logger.Printf("[Gnomon] Could not record indexed endpoint: %v\n", err)
 			}
 			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
 			if err != nil {
