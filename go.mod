@@ -6,7 +6,7 @@ replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
 replace github.com/civilware/Gnomon => ../Gnomon
 
-replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-20260607210939-1bb1734a8874
+replace github.com/civilware/epoch => ../epoch
 
 require (
 	fyne.io/fyne/v2 v2.7.4
