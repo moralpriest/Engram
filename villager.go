@@ -78,12 +78,15 @@ func fetchVillagerPixels(address string) (string, error) {
 
 	if len(result.ValuesString) > 0 {
 		avatarHex := result.ValuesString[0]
-		if avatarHex == "" {
-			return "", fmt.Errorf("empty avatar hex")
+		// The daemon answers "NOT AVAILABLE err: ..." when the key does not
+		// exist. Hex-decoding that placeholder produced noisy per-pulse error
+		// logs, so treat it the same as an empty avatar.
+		if avatarHex == "" || strings.HasPrefix(avatarHex, "NOT AVAILABLE") {
+			return "", fmt.Errorf("no avatar stored for address")
 		}
 		decoded, err := hex.DecodeString(avatarHex)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("avatar value is not valid hex")
 		}
 		return string(decoded), nil
 	}
