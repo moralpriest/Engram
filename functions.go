@@ -2404,6 +2404,15 @@ func login() {
 			}
 		}
 
+		// Load the Gnomon enabled-setting SYNCHRONOUSLY before StartPulse fires
+		// startGnomon() on connect. The login background goroutine also calls
+		// getGnomon(), but it runs after initWebSocketState() and can lose the
+		// race against a fast daemon connect — startGnomon() then sees
+		// gnomon.Active == 0 and skips, leaving the first TELA click to pay the
+		// full FastSync cost. Pre-loading here makes the login-time FastSync
+		// pre-warm deterministic (works for registered AND unregistered wallets).
+		_, _ = getGnomon()
+
 		go StartPulse()
 	} else {
 		engram.Disk.SetOfflineMode()
@@ -2464,9 +2473,10 @@ func login() {
 		go func() {
 			generation := currentWalletGeneration()
 
-			// Initialize WebSocket and Gnomon state in background
+			// Initialize WebSocket state in background. Gnomon's enabled-setting
+			// was already loaded synchronously above (before go StartPulse) so the
+			// login-time FastSync pre-warm always fires — no duplicate call here.
 			initWebSocketState()
-			_, _ = getGnomon()
 
 			// Wait for StartPulse to actually establish connection
 			connected := waitForConnectionWithTimeout(10 * time.Second)
