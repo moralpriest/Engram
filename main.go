@@ -155,8 +155,11 @@ func main() {
 	RasterizeEnigmaLogo()
 
 	if safeMode {
-		// Disable Gnomon in safe mode
+		// Disable Gnomon in safe mode. The package-level flag keeps it off
+		// across login (where the stored "gnomon" setting would otherwise
+		// re-enable it via getGnomon/startGnomon).
 		gnomon.Active = 0
+		safeModeEnabled = true
 	}
 	session.Window = a.NewWindow("Engram")
 	session.Window.SetMaster()

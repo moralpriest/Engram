@@ -258,6 +258,13 @@ type GnomonBootstrapState struct {
 
 var gnomonMu sync.Mutex
 
+// safeModeEnabled is set from the --safe-mode / -s CLI flag in main(). While
+// active, Gnomon stays disabled regardless of the stored "gnomon" setting:
+// getGnomon() reports 0 and startGnomon() refuses to run. This keeps the
+// safe-mode contract ("Gnomon disabled") intact across login, where the
+// setting would otherwise re-enable it.
+var safeModeEnabled bool
+
 type ProofData struct {
 	Receivers []string
 	Amounts   []uint64
@@ -2005,6 +2012,14 @@ func getMode() {}
 
 // Get the default Gnomon settings from local Graviton tree
 func getGnomon() (r string, err error) {
+	// Safe mode hard-disables Gnomon regardless of the stored setting.
+	// Without this, login() would re-enable it from the setting and defeat
+	// the --safe-mode contract.
+	if safeModeEnabled {
+		gnomon.Active = 0
+		return "0", nil
+	}
+
 	v, err := GetValue("settings", []byte("gnomon"))
 	if err != nil {
 		gnomon.Active = 1
@@ -2032,6 +2047,11 @@ func getGnomon() (r string, err error) {
 
 // Set the default Gnomon settings to the local Graviton tree
 func setGnomon(s string) (err error) {
+	// Safe mode keeps Gnomon disabled even if a caller tries to enable it.
+	if safeModeEnabled && s == "1" {
+		gnomon.Active = 0
+		return nil
+	}
 	if s == "1" {
 		err = StoreValue("settings", []byte("gnomon"), []byte("1"))
 		gnomon.Active = 1
@@ -5389,6 +5409,11 @@ func startGnomon() {
 		return
 	}
 	if globals.Exit_In_Progress {
+		return
+	}
+	// Safe mode hard-disables Gnomon: never start the indexer, even if a
+	// direct caller (e.g. the TELA click path) invokes startGnomon().
+	if safeModeEnabled {
 		return
 	}
 
