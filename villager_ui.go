@@ -23,22 +23,26 @@ import (
 )
 
 func RefreshVillagerLogo() {
-	if res.logoContainer == nil {
-		return
-	}
+	// The logo container belongs to the dashboard, so all mutations must
+	// happen on the main goroutine. This is safe to call from any thread.
+	fyne.Do(func() {
+		if res.logoContainer == nil {
+			return
+		}
 
-	res.logoContainer.Objects = nil
-	res.villagerMu.Lock()
-	vImg := res.villager
-	res.villagerMu.Unlock()
+		res.logoContainer.Objects = nil
+		res.villagerMu.Lock()
+		vImg := res.villager
+		res.villagerMu.Unlock()
 
-	if vImg != nil && !session.VillagerHidden {
-		vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
-		res.logoContainer.Add(vImg)
-	} else {
-		res.logoContainer.Add(res.gram)
-	}
-	res.logoContainer.Refresh()
+		if vImg != nil && !session.VillagerHidden {
+			vImg.SetMinSize(fyne.NewSize(ui.Width, scaleSize(150)))
+			res.logoContainer.Add(vImg)
+		} else {
+			res.logoContainer.Add(res.gram)
+		}
+		res.logoContainer.Refresh()
+	})
 }
 
 func showVillagerPopup(parent *fyne.Container) {

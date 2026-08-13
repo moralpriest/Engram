@@ -4332,7 +4332,15 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 		}
 		session.Domain = "app.tela"
 		session.LastDomain = capture
-		go callback()
+		// The callback (e.g. re-opening the dashboard or refreshing the list)
+		// touches UI, so it must run on the main goroutine — a bare go func
+		// would make layoutTELAManager's callers (villager edit, TELA refresh)
+		// rebuild UI off-thread and trip Fyne's thread checks.
+		if callback != nil {
+			go func() {
+				fyne.Do(callback)
+			}()
+		}
 	})
 
 	btnFilesContracts := newSizedIconButton(theme.FolderIcon(), func() {
