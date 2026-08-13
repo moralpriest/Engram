@@ -6058,19 +6058,10 @@ func preIndexFavorites(favs map[string]*TELAFavoriteData) {
 
 // ScanDependentSCIDs scans a SCID's variables for values that look like valid SCIDs
 // (64-character hex strings). Returns deduplicated list of dependent SCIDs.
-func ScanDependentSCIDs(scid string) []string {
-	if gnomon.Index == nil {
-		return nil
-	}
-
-	var vars []*structures.SCIDVariable
-	switch gnomon.Index.DBType {
-	case "gravdb":
-		vars = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(scid)
-	case "boltdb":
-		vars = gnomon.Index.BBSBackend.GetAllSCIDVariableDetails(scid)
-	}
-
+// scanSCIDVariablesForDeps extracts SCID references stored as 64-hex variable
+// values inside a contract's variables. Shared by the DB scan (ScanDependentSCIDs)
+// and the RPC fallback (fetchParentDependentSCIDs) so both produce identical results.
+func scanSCIDVariablesForDeps(scid string, vars []*structures.SCIDVariable) []string {
 	deps := make(map[string]bool)
 	for _, v := range vars {
 		if val, ok := v.Value.(string); ok && len(val) == 64 {
@@ -6085,6 +6076,22 @@ func ScanDependentSCIDs(scid string) []string {
 		result = append(result, dep)
 	}
 	return result
+}
+
+func ScanDependentSCIDs(scid string) []string {
+	if gnomon.Index == nil {
+		return nil
+	}
+
+	var vars []*structures.SCIDVariable
+	switch gnomon.Index.DBType {
+	case "gravdb":
+		vars = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(scid)
+	case "boltdb":
+		vars = gnomon.Index.BBSBackend.GetAllSCIDVariableDetails(scid)
+	}
+
+	return scanSCIDVariablesForDeps(scid, vars)
 }
 
 // ScanTELAAppSourceFiles scans cloned TELA app files (.js, .html) for hardcoded SCIDs.
@@ -6173,58 +6180,217 @@ func ScanTELAAppSourceFiles(scid string) []string {
 	return result
 }
 
+// autoIndexMu serializes AutoIndexDependentSCIDs passes so a slow/unstable
+// daemon can't stack overlapping background scans.
+var autoIndexMu sync.Mutex
+
+// errSCNoVariables marks a contract with no stored variables. Such a contract
+// can never be re-fetched successfully, so dependent-SCID passes skip it
+// immediately instead of stalling the pass with retry backoffs.
+var errSCNoVariables = errors.New("sc has no stored variables")
+
+// waitForDaemonForAutoIndex waits up to 45s for daemon connectivity before a
+// dependent-SCID pass starts, so RPC fetches don't all fail while derod is down.
+func waitForDaemonForAutoIndex() bool {
+	if isDaemonConnected() || walletapi.IsDaemonOnline() {
+		return true
+	}
+	deadline := time.Now().Add(45 * time.Second)
+	for time.Now().Before(deadline) {
+		if isDaemonConnected() || walletapi.IsDaemonOnline() {
+			return true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return isDaemonConnected() || walletapi.IsDaemonOnline()
+}
+
+// parseSCVarsForIndex decodes a GetSC result into SCIDVariable entries,
+// mirroring Gnomon's own parseGetSCResult (hex-decoded strings, compressed
+// address points, and 32-byte hash-like values) so stored data matches what
+// regular indexing produces.
+func parseSCVarsForIndex(result *rpc.GetSC_Result) []*structures.SCIDVariable {
+	if result == nil {
+		return nil
+	}
+	n := len(result.VariableStringKeys) + len(result.VariableUint64Keys)
+	if n == 0 {
+		return nil
+	}
+	vars := make([]*structures.SCIDVariable, 0, n)
+	for k, v := range result.VariableStringKeys {
+		vars = append(vars, &structures.SCIDVariable{Key: k, Value: v})
+	}
+	for k, v := range result.VariableUint64Keys {
+		vars = append(vars, &structures.SCIDVariable{Key: k, Value: v})
+	}
+	return vars
+}
+
+// fetchDependentSCVars fetches a contract's variables directly from the daemon
+// via DERO.GetSC over a dedicated connection (never shares the global rpc_client,
+// which the UI thread also uses). Returns errSCNoVariables when the contract has
+// none stored.
+func fetchDependentSCVars(scid string) ([]*structures.SCIDVariable, error) {
+	ws, _, err := websocket.DefaultDialer.Dial("ws://"+session.Daemon+"/ws", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer ws.Close()
+	input_output := rwc.New(ws)
+	client := jrpc2.NewClient(channel.RawJSON(input_output, input_output), nil)
+	defer client.Close()
+
+	var result rpc.GetSC_Result
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.CallResult(ctx, "DERO.GetSC", rpc.GetSC_Params{SCID: scid, Variables: true}, &result); err != nil {
+		return nil, err
+	}
+	vars := parseSCVarsForIndex(&result)
+	if len(vars) == 0 {
+		return nil, errSCNoVariables
+	}
+	return vars, nil
+}
+
+// storeDependentSCID persists a dependent contract's variables with a
+// single-tree commit, immune to the graviton multi-snapshot commit race that
+// could make AddSCIDToIndex's store silently fail. The height is taken from
+// the indexer's current chain height so reads see the freshest snapshot.
+func storeDependentSCID(scid string, vars []*structures.SCIDVariable) error {
+	if gnomon.BBolt == nil {
+		return fmt.Errorf("gnomon bbolt store not initialized")
+	}
+	var height int64
+	if gnomon.Index != nil {
+		height = gnomon.Index.ChainHeight
+	}
+	return gnomon.BBolt.Inner().StoreSCIDVariableDetails(scid, vars, height)
+}
+
+// indexDependentSCID adds a single dependent SCID to Gnomon's index. Prefers
+// Gnomon's standard AddSCIDToIndex; when that fails (e.g. a fresh fastsync/
+// remote install where the local DB has no staged variables), falls back to
+// fetching vars by RPC and storing them with a single-tree commit.
+func indexDependentSCID(dep string) error {
+	add := map[string]*structures.FastSyncImport{
+		dep: {},
+	}
+	if err := gnomon.Index.AddSCIDToIndex(add, false, true); err == nil {
+		return nil
+	} else {
+		logger.Debugf("[Engram] AutoIndex: AddSCIDToIndex failed for %s..., trying RPC store: %v\n", dep[:16], err)
+	}
+
+	vars, err := fetchDependentSCVars(dep)
+	if err != nil {
+		return err
+	}
+	return storeDependentSCID(dep, vars)
+}
+
+// fetchParentDependentSCIDs fetches a parent contract's variables directly from
+// the daemon and scans them for dependent SCIDs. Used when the local DB has no
+// staged variables for the parent (fresh fastsync/remote installs).
+func fetchParentDependentSCIDs(scid string) []string {
+	vars, err := fetchDependentSCVars(scid)
+	if err != nil {
+		if !errors.Is(err, errSCNoVariables) {
+			logger.Debugf("[Engram] AutoIndex: could not fetch vars for %s: %v\n", scid[:16], err)
+		}
+		return nil
+	}
+	return scanSCIDVariablesForDeps(scid, vars)
+}
+
 // AutoIndexDependentSCIDs finds any SCIDs stored as variable values or hardcoded in
 // TELA app source files inside parentSCID and automatically adds them to Gnomon's index.
 // This enables TELA apps like DeroBeats to fetch their dependent contracts without manual user action.
+//
+// The whole pass runs in a background goroutine, serialized with autoIndexMu and
+// bounded by a 3-minute deadline, so a slow/unstable daemon can't stall the TELA
+// launch while the browser waits to open. The pass first waits (up to 45s) for
+// daemon connectivity, then scans variables from the local DB (falling back to
+// direct RPC on fresh fastsync installs) and the cloned app source files.
 func AutoIndexDependentSCIDs(parentSCID string) {
 	if gnomon.Index == nil {
 		return
 	}
 
-	// Scan contract variables
-	varDeps := ScanDependentSCIDs(parentSCID)
+	go func() {
+		autoIndexMu.Lock()
+		defer autoIndexMu.Unlock()
 
-	// Scan app source files (JS/HTML)
-	sourceDeps := ScanTELAAppSourceFiles(parentSCID)
-
-	// Merge and deduplicate
-	allDeps := make(map[string]bool)
-	for _, dep := range varDeps {
-		allDeps[dep] = true
-	}
-	for _, dep := range sourceDeps {
-		allDeps[dep] = true
-	}
-
-	if len(allDeps) == 0 {
-		logger.Printf("[Engram] AutoIndex: no dependent SCIDs found in %s", parentSCID[:16])
-		return
-	}
-
-	logger.Printf("[Engram] AutoIndex: found %d dependent SCID(s) in %s (%d from vars, %d from source)",
-		len(allDeps), parentSCID[:16], len(varDeps), len(sourceDeps))
-
-	indexed := 0
-	already := 0
-	for dep := range allDeps {
-		// Skip if already indexed
-		if gnomon.GetAllSCIDVariableDetails(dep) != nil {
-			already++
-			continue
+		// Re-check inside the goroutine: the index can be torn down while the
+		// launch path is still running (sync stop / wallet close).
+		if gnomon.Index == nil {
+			return
 		}
 
-		add := map[string]*structures.FastSyncImport{
-			dep: {},
+		deadline := time.Now().Add(3 * time.Minute)
+
+		// Wait for daemon connectivity first so RPC fetches don't all fail.
+		if !waitForDaemonForAutoIndex() {
+			logger.Printf("[Engram] AutoIndex: daemon not reachable within 45s, skipping %s\n", parentSCID[:16])
+			return
 		}
-		if err := gnomon.Index.AddSCIDToIndex(add, false, true); err != nil {
-			logger.Errorf("[Engram] AutoIndex: failed to index %s...: %v", dep[:16], err)
-		} else {
-			logger.Printf("[Engram] AutoIndex: indexed dependent SCID %s...", dep[:16])
-			indexed++
+
+		// Scan contract variables (DB first; RPC fallback when the local index
+		// has nothing staged — the fastsync/remote fresh-install case).
+		varDeps := ScanDependentSCIDs(parentSCID)
+		if len(varDeps) == 0 {
+			varDeps = fetchParentDependentSCIDs(parentSCID)
 		}
-	}
-	logger.Printf("[Engram] AutoIndex: done for %s (new=%d, already=%d, total=%d)",
-		parentSCID[:16], indexed, already, len(allDeps))
+
+		// Scan app source files (JS/HTML)
+		sourceDeps := ScanTELAAppSourceFiles(parentSCID)
+
+		// Merge and deduplicate
+		allDeps := make(map[string]bool)
+		for _, dep := range varDeps {
+			allDeps[dep] = true
+		}
+		for _, dep := range sourceDeps {
+			allDeps[dep] = true
+		}
+
+		if len(allDeps) == 0 {
+			logger.Printf("[Engram] AutoIndex: no dependent SCIDs found in %s\n", parentSCID[:16])
+			return
+		}
+
+		logger.Printf("[Engram] AutoIndex: found %d dependent SCID(s) in %s (%d from vars, %d from source)\n",
+			len(allDeps), parentSCID[:16], len(varDeps), len(sourceDeps))
+
+		indexed := 0
+		already := 0
+		for dep := range allDeps {
+			if time.Now().After(deadline) {
+				logger.Printf("[Engram] AutoIndex: 3-minute deadline reached for %s, stopping\n", parentSCID[:16])
+				break
+			}
+
+			// Skip if already indexed
+			if gnomon.GetAllSCIDVariableDetails(dep) != nil {
+				already++
+				continue
+			}
+
+			if err := indexDependentSCID(dep); err != nil {
+				if errors.Is(err, errSCNoVariables) {
+					logger.Debugf("[Engram] AutoIndex: %s has no variables, skipping\n", dep[:16])
+					continue
+				}
+				logger.Errorf("[Engram] AutoIndex: failed to index %s...: %v\n", dep[:16], err)
+			} else {
+				logger.Printf("[Engram] AutoIndex: indexed dependent SCID %s...\n", dep[:16])
+				indexed++
+			}
+		}
+		logger.Printf("[Engram] AutoIndex: done for %s (new=%d, already=%d, total=%d)\n",
+			parentSCID[:16], indexed, already, len(allDeps))
+	}()
 }
 
 // Get the current code of a smart contract
