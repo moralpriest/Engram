@@ -10,6 +10,7 @@ import (
 	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela"
 	"github.com/deroproject/derohe/rpc"
+	"github.com/deroproject/derohe/walletapi"
 )
 
 func TestDecodeHex(t *testing.T) {
@@ -30,6 +31,101 @@ func TestDecodeHex(t *testing.T) {
 				t.Fatalf("decodeHex(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestPulseTokenLifecycle guards the pulse-token fix: a freshly started pulse
+// must run under a non-zero token. On a fresh login pulseToken starts at 0, and
+// isPulseTokenActive rejects 0 — before the fix the pulse loop exited
+// immediately and flipped daemonConnected back to false, bouncing the login
+// background goroutine back to the auth screen ("logs me out" + frozen yellow
+// sync indicator).
+func TestPulseTokenLifecycle(t *testing.T) {
+	// Save and stub the global wallet-session state the pulse guards read.
+	walletSessionMu.Lock()
+	prevDisk := engram.Disk
+	prevOpen := session.WalletOpen
+	prevToken := pulseToken
+	prevRunning := pulseRunning
+	prevGen := pulseSessionGeneration
+	prevWalletGen := walletSessionGeneration
+	engram.Disk = &walletapi.Wallet_Disk{}
+	session.WalletOpen = true
+	pulseToken = 0
+	pulseRunning = false
+	pulseSessionGeneration = 0
+	walletSessionGeneration = 0
+	walletSessionMu.Unlock()
+	defer func() {
+		walletSessionMu.Lock()
+		engram.Disk = prevDisk
+		session.WalletOpen = prevOpen
+		pulseToken = prevToken
+		pulseRunning = prevRunning
+		pulseSessionGeneration = prevGen
+		walletSessionGeneration = prevWalletGen
+		walletSessionMu.Unlock()
+	}()
+
+	if !startPulseForActiveWallet() {
+		t.Fatal("startPulseForActiveWallet should succeed with a fresh pulse")
+	}
+	tok := currentPulseToken()
+	if tok == 0 {
+		t.Fatal("pulse token must be non-zero for a freshly started pulse (isPulseTokenActive rejects 0)")
+	}
+	if !isPulseTokenActive(tok) {
+		t.Fatalf("isPulseTokenActive(%d) should be true for the running pulse", tok)
+	}
+
+	// A second StartPulse while one is running must be guarded.
+	if startPulseForActiveWallet() {
+		t.Fatal("second start while running should be rejected")
+	}
+
+	// Finishing allows a restart with a fresh, higher token.
+	finishPulseForGeneration(tok)
+	if pulseRunning {
+		t.Fatal("pulseRunning should be false after finishPulseForGeneration")
+	}
+	if !startPulseForActiveWallet() {
+		t.Fatal("restart after finish should succeed")
+	}
+	tok2 := currentPulseToken()
+	if tok2 <= tok {
+		t.Fatalf("expected new token %d > old token %d", tok2, tok)
+	}
+
+	// bumpPulseGeneration (foreground) must invalidate the running pulse.
+	bumpPulseGeneration()
+	if isPulseTokenActive(tok2) {
+		t.Fatal("old token should be invalidated by bumpPulseGeneration")
+	}
+
+	// A stale finish from a previous generation must not clear a newer pulse.
+	if !startPulseForActiveWallet() {
+		t.Fatal("restart after bump should succeed")
+	}
+	tok3 := currentPulseToken()
+	finishPulseForGeneration(tok2) // stale generation
+	if !pulseRunning || pulseSessionGeneration != tok3 {
+		t.Fatal("stale finishPulseForGeneration must not clear the newer pulse")
+	}
+	finishPulseForGeneration(tok3)
+	if pulseRunning {
+		t.Fatal("finish with the current generation should clear the pulse")
+	}
+
+	// beginWalletShutdown must invalidate a running pulse.
+	if !startPulseForActiveWallet() {
+		t.Fatal("start before shutdown should succeed")
+	}
+	tok4 := currentPulseToken()
+	if !beginWalletShutdown() {
+		t.Fatal("beginWalletShutdown should succeed with an open wallet")
+	}
+	if isPulseTokenActive(tok4) {
+		t.Fatal("running pulse should be invalidated by beginWalletShutdown")
 	}
 }
 

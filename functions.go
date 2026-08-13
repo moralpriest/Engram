@@ -323,8 +323,27 @@ var addressDisplayCacheMu sync.RWMutex
 
 var walletSessionMu sync.RWMutex
 var walletSessionGeneration uint64
+
+// pulseToken is a separate counter bumped on foreground / wallet-shutdown
+// (instead of walletSessionGeneration). Pulse goroutines validate against it,
+// so a foreground can still invalidate/restart a stale pulse — but a foreground
+// no longer voids in-flight XSWD prompt button callbacks, which keep checking
+// the untouched wallet generation.
+var pulseToken uint64
 var pulseSessionGeneration uint64
 var pulseRunning bool
+
+func currentPulseToken() uint64 {
+	walletSessionMu.RLock()
+	defer walletSessionMu.RUnlock()
+	return pulseToken
+}
+
+func isPulseTokenActive(token uint64) bool {
+	walletSessionMu.RLock()
+	defer walletSessionMu.RUnlock()
+	return token != 0 && token == pulseToken && engram.Disk != nil && session.WalletOpen
+}
 
 // lastPulseHeartbeat is updated by the main pulse loop each iteration.
 // Used to detect stalled sync when the app returns from background.
@@ -356,6 +375,7 @@ func beginWalletShutdown() bool {
 		return false
 	}
 	walletSessionGeneration++
+	pulseToken++
 	pulseRunning = false
 	pulseSessionGeneration = 0
 	return true
@@ -369,11 +389,17 @@ func startPulseForActiveWallet() bool {
 	if engram.Disk == nil || !session.WalletOpen {
 		return false
 	}
-	if pulseRunning && pulseSessionGeneration == walletSessionGeneration {
+	if pulseRunning && pulseSessionGeneration == pulseToken {
 		return false
 	}
 	pulseRunning = true
-	pulseSessionGeneration = walletSessionGeneration
+	// Bump pulseToken so this pulse runs under a fresh, non-zero generation.
+	// isPulseTokenActive rejects token 0, and on a fresh login (no foreground /
+	// shutdown bump yet) pulseToken would otherwise still be 0 — the pulse loop
+	// would exit immediately and flip daemonConnected back to false, bouncing
+	// the login background goroutine back to the auth screen.
+	pulseToken++
+	pulseSessionGeneration = pulseToken
 	return true
 }
 
@@ -396,9 +422,12 @@ func pulseIsStalled() bool {
 }
 
 // bumpPulseGeneration invalidates old pulse goroutines and resets state.
+// It bumps the separate pulseToken instead of walletSessionGeneration so a
+// foreground can restart a stale pulse without voiding in-flight XSWD prompt
+// button callbacks (which validate against the untouched wallet generation).
 func bumpPulseGeneration() {
 	walletSessionMu.Lock()
-	walletSessionGeneration++
+	pulseToken++
 	pulseRunning = false
 	pulseSessionGeneration = 0
 	walletSessionMu.Unlock()
@@ -1639,7 +1668,7 @@ func StartPulse() {
 		return
 	}
 
-	generation := currentWalletGeneration()
+	generation := currentPulseToken()
 	defer finishPulseForGeneration(generation)
 
 	if !isDaemonConnected() && engram.Disk != nil {
@@ -1699,7 +1728,7 @@ func StartPulse() {
 			count := 0
 			lastDaemonHeight := int64(-1)
 			heightStallSince := time.Now()
-			for isWalletGenerationActive(generation) {
+			for isPulseTokenActive(generation) {
 				if !session.WalletOpen {
 					break
 				}
@@ -1727,7 +1756,7 @@ func StartPulse() {
 
 					time.Sleep(time.Second)
 				} else {
-					if !isWalletGenerationActive(generation) {
+					if !isPulseTokenActive(generation) {
 						break
 					}
 
