@@ -625,8 +625,8 @@ func layoutPad() fyne.CanvasObject {
 			// dialogFileSave.SetFilter(storage.NewMimeTypeFileFilter([]string{"text/*"}))
 			dialogFileSave.SetView(dialog.ListView)
 			dialogFileSave.SetFileName(fmt.Sprintf("%s.txt", session.Datapad))
-			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileSave.Show()
+			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 		} else if action == "import" {
 			dialogFileImport := dialog.NewFileOpen(func(uri fyne.URIReadCloser, err error) {
 				if err != nil {
@@ -696,8 +696,8 @@ func layoutPad() fyne.CanvasObject {
 
 			// dialogFileSave.SetFilter(storage.NewMimeTypeFileFilter([]string{"text/*"}))
 			dialogFileImport.SetView(dialog.ListView)
-			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileImport.Show()
+			dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 		} else if action == "delete" {
 			header := canvas.NewText(i18n.T("datapad.delete_request"), apptheme.C.Gray)
 			header.TextSize = scaleFont(14)

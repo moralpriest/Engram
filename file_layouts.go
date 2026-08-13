@@ -224,9 +224,9 @@ func layoutFileManager() fyne.CanvasObject {
 					dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
 					dialogFileSign.SetView(dialog.ListView)
 					dialogFileSign.SetFileName(outputFileName)
-					dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 					dialogFileSign.SetConfirmText("Save Sign")
 					dialogFileSign.Show()
+					dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 				})
 			}()
 		} else {
@@ -284,7 +284,6 @@ func layoutFileManager() fyne.CanvasObject {
 		}
 	}
 
-	dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
 	dialogBrowse.SetView(dialog.ListView)
 
 	signedList.OnSelected = func(id widget.ListItemID) {
@@ -428,6 +427,7 @@ func layoutFileManager() fyne.CanvasObject {
 		}
 
 		dialogBrowse.Show()
+		dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	labelAction := canvas.NewText(i18n.T("files.drag_drop"), apptheme.C.Gray)
@@ -574,9 +574,9 @@ func layoutFileManager() fyne.CanvasObject {
 				dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
 				dialogFileSign.SetView(dialog.ListView)
 				dialogFileSign.SetFileName(inputFileName)
-				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 				dialogFileSign.SetConfirmText("Save Sign")
 				dialogFileSign.Show()
+				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 			} else {
 				singedLen := len(signedResults)
 				count := 1 + singedLen
@@ -667,10 +667,9 @@ func layoutFileManager() fyne.CanvasObject {
 						labelResults.Refresh()
 					}
 				}, session.Window)
-
-				dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
 				dialogVerify.SetView(dialog.ListView)
 				dialogVerify.Show()
+				dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
 			} else {
 				verifiedLen := len(verifiedResults)
 				count := 1 + verifiedLen
@@ -918,14 +917,14 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 		}
 	}
 
-	// Resize browser to app size and add SC file filter
-	dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
+	// Add SC file filter and show browser at app size
 	dialogBrowse.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 	dialogBrowse.SetView(dialog.ListView)
 
 	btnBrowse := widget.NewButton(i18n.T("files.browse_files"), nil)
 	btnBrowse.OnTapped = func() {
 		dialogBrowse.Show()
+		dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
@@ -1343,9 +1342,9 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				dialogFileSign.SetFilter(storage.NewExtensionFileFilter([]string{".signed"}))
 				dialogFileSign.SetView(dialog.ListView)
 				dialogFileSign.SetFileName(outputFileName)
-				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 				dialogFileSign.SetConfirmText("Save Sign")
 				dialogFileSign.Show()
+				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
 			})
 		}
 	}, session.Window)
@@ -1359,7 +1358,6 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		}
 	}
 
-	dialogBrowseFiles.Resize(fyne.NewSize(ui.Width, ui.Height))
 	dialogBrowseFiles.SetView(dialog.ListView)
 
 	signedList.OnSelected = func(id widget.ListItemID) {
@@ -1490,6 +1488,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 	btnSignFile := widget.NewButton(i18n.T("files.sign_file"), nil)
 	btnSignFile.OnTapped = func() {
 		dialogBrowseFiles.Show()
+		dialogBrowseFiles.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	btnVerifyFile := widget.NewButton(i18n.T("files.verify_signature"), nil)
@@ -1557,9 +1556,9 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 			}
 		}
 
-		dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
 		dialogVerify.SetView(dialog.ListView)
 		dialogVerify.Show()
+		dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	// ==================== NOTES TAB: Inline notes entry & list ====================
@@ -1800,13 +1799,13 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		}
 	}
 
-	dialogBrowseSC.Resize(fyne.NewSize(ui.Width, ui.Height))
 	dialogBrowseSC.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 	dialogBrowseSC.SetView(dialog.ListView)
 
 	btnBrowseSC := widget.NewButton(i18n.T("files.browse_bas"), nil)
 	btnBrowseSC.OnTapped = func() {
 		dialogBrowseSC.Show()
+		dialogBrowseSC.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
@@ -2900,8 +2899,8 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 			dialogFileSave.SetView(dialog.ListView)
 			dialogFileSave.SetFileName(exportFileName)
-			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 			dialogFileSave.Show()
+			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
 		case "Install": // Install SC
 			code := entryCode.Text
 			if code == "" {

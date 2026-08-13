@@ -2181,8 +2181,8 @@ func layoutRestore() fyne.CanvasObject {
 
 		dialogFileImport.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
 		dialogFileImport.SetView(dialog.ListView)
-		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 		dialogFileImport.Show()
+		dialogFileImport.Resize(fyne.NewSize(ui.Width, ui.Height))
 	}
 
 	scrollBox = container.NewVScroll(
