@@ -619,8 +619,7 @@ func layoutAccount() fyne.CanvasObject {
 							dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".db"}))
 							dialogFileSave.SetView(dialog.ListView)
 							dialogFileSave.SetFileName(filepath.Base(session.Path))
-							dialogFileSave.Show()
-							dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+							showDialogResized(dialogFileSave)
 						})
 					}()
 				}

@@ -225,8 +225,7 @@ func layoutFileManager() fyne.CanvasObject {
 					dialogFileSign.SetView(dialog.ListView)
 					dialogFileSign.SetFileName(outputFileName)
 					dialogFileSign.SetConfirmText("Save Sign")
-					dialogFileSign.Show()
-					dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+					showDialogResized(dialogFileSign)
 				})
 			}()
 		} else {
@@ -426,8 +425,7 @@ func layoutFileManager() fyne.CanvasObject {
 			dialogBrowse.SetConfirmText(i18n.T("files.verify"))
 		}
 
-		dialogBrowse.Show()
-		dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogBrowse)
 	}
 
 	labelAction := canvas.NewText(i18n.T("files.drag_drop"), apptheme.C.Gray)
@@ -575,8 +573,7 @@ func layoutFileManager() fyne.CanvasObject {
 				dialogFileSign.SetView(dialog.ListView)
 				dialogFileSign.SetFileName(inputFileName)
 				dialogFileSign.SetConfirmText("Save Sign")
-				dialogFileSign.Show()
-				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+				showDialogResized(dialogFileSign)
 			} else {
 				singedLen := len(signedResults)
 				count := 1 + singedLen
@@ -668,8 +665,7 @@ func layoutFileManager() fyne.CanvasObject {
 					}
 				}, session.Window)
 				dialogVerify.SetView(dialog.ListView)
-				dialogVerify.Show()
-				dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
+				showDialogResized(dialogVerify)
 			} else {
 				verifiedLen := len(verifiedResults)
 				count := 1 + verifiedLen
@@ -923,8 +919,7 @@ func layoutContractBuilder(promptText string) fyne.CanvasObject {
 
 	btnBrowse := widget.NewButton(i18n.T("files.browse_files"), nil)
 	btnBrowse.OnTapped = func() {
-		dialogBrowse.Show()
-		dialogBrowse.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogBrowse)
 	}
 
 	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
@@ -1343,8 +1338,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 				dialogFileSign.SetView(dialog.ListView)
 				dialogFileSign.SetFileName(outputFileName)
 				dialogFileSign.SetConfirmText("Save Sign")
-				dialogFileSign.Show()
-				dialogFileSign.Resize(fyne.NewSize(ui.Width, ui.Height))
+				showDialogResized(dialogFileSign)
 			})
 		}
 	}, session.Window)
@@ -1487,8 +1481,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	btnSignFile := widget.NewButton(i18n.T("files.sign_file"), nil)
 	btnSignFile.OnTapped = func() {
-		dialogBrowseFiles.Show()
-		dialogBrowseFiles.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogBrowseFiles)
 	}
 
 	btnVerifyFile := widget.NewButton(i18n.T("files.verify_signature"), nil)
@@ -1557,8 +1550,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 		}
 
 		dialogVerify.SetView(dialog.ListView)
-		dialogVerify.Show()
-		dialogVerify.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogVerify)
 	}
 
 	// ==================== NOTES TAB: Inline notes entry & list ====================
@@ -1804,8 +1796,7 @@ func layoutFilesAndContracts() fyne.CanvasObject {
 
 	btnBrowseSC := widget.NewButton(i18n.T("files.browse_bas"), nil)
 	btnBrowseSC.OnTapped = func() {
-		dialogBrowseSC.Show()
-		dialogBrowseSC.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogBrowseSC)
 	}
 
 	btnEditor := widget.NewButton(i18n.T("files.open_editor"), nil)
@@ -2899,8 +2890,7 @@ func layoutContractEditor(filename, filedata string) fyne.CanvasObject {
 			dialogFileSave.SetFilter(storage.NewExtensionFileFilter([]string{".bas"}))
 			dialogFileSave.SetView(dialog.ListView)
 			dialogFileSave.SetFileName(exportFileName)
-			dialogFileSave.Show()
-			dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+			showDialogResized(dialogFileSave)
 		case "Install": // Install SC
 			code := entryCode.Text
 			if code == "" {

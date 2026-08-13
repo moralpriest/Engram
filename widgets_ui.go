@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
@@ -94,6 +95,20 @@ func (r *walletBtnRenderer) Destroy() {}
 
 func newAdaptiveButton(label string, icon fyne.Resource, tapped func()) fyne.CanvasObject {
 	return wrapMobileButton(widget.NewButtonWithIcon(label, icon, tapped))
+}
+
+// showDialogResized shows a file dialog and sizes it to the app window on
+// desktop. On mobile the native OS picker is used (full-screen), so resizing
+// is skipped entirely: the OS-override path in FileDialog.Show() returns
+// without creating a dialog window, and fyne 2.8.0's FileDialog.Resize calls
+// MinSize() (which dereferences that nil window) before its own nil check,
+// crashing the app the moment any file dialog is opened.
+func showDialogResized(d *dialog.FileDialog) {
+	d.Show()
+	if isMobile() {
+		return
+	}
+	d.Resize(fyne.NewSize(ui.Width, ui.Height))
 }
 
 func wrapMobileButton(obj fyne.CanvasObject) fyne.CanvasObject {

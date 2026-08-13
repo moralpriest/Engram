@@ -1597,8 +1597,7 @@ func layoutAppSettings() fyne.CanvasObject {
 
 		dialogFileSave.SetView(dialog.ListView)
 		dialogFileSave.SetFileName(debugLogFileName)
-		dialogFileSave.Show()
-		dialogFileSave.Resize(fyne.NewSize(ui.Width, ui.Height))
+		showDialogResized(dialogFileSave)
 	})
 
 	// DATASHARD Section components
