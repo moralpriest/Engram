@@ -23,6 +23,10 @@ func showXSWDBlockDialog(ad *xswd.ApplicationData, method, reason, detail string
 	}
 	overlay := session.Window.Canvas().Overlays()
 
+	// Reference-based overlay layers: removal targets the exact layers this
+	// dialog added, so it can never pop another dialog's widgets.
+	var dialogLayers [2]fyne.CanvasObject
+
 	appName := ""
 	if ad != nil {
 		appName = ad.Name
@@ -78,9 +82,8 @@ func showXSWDBlockDialog(ad *xswd.ApplicationData, method, reason, detail string
 
 	dismiss := func() {
 		fyne.Do(func() {
-			for i := 0; i < 2 && len(overlay.List()) > 0; i++ {
-				overlay.Remove(overlay.Top())
-			}
+			overlay.Remove(dialogLayers[0])
+			overlay.Remove(dialogLayers[1])
 		})
 	}
 	revoke := func() {
@@ -94,18 +97,18 @@ func showXSWDBlockDialog(ad *xswd.ApplicationData, method, reason, detail string
 	linkRevoke.OnTapped = revoke
 
 	fyne.Do(func() {
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(apptheme.C.DarkMatter),
-			),
+		backdrop := container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		)
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(body),
-			),
+		dialog := container.NewStack(
+			&iframe{},
+			container.NewCenter(body),
 		)
+		dialogLayers[0] = backdrop
+		dialogLayers[1] = dialog
+		overlay.Add(backdrop)
+		overlay.Add(dialog)
 		session.Window.RequestFocus()
 	})
 }

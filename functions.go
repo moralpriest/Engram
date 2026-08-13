@@ -7594,13 +7594,13 @@ func showXSWDPrompt() bool {
 
 	btnAllow := widget.NewButton(i18n.T("settings.permissions.allow"), func() {
 		allowed = true
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnAllow.Importance = widget.MediumImportance
 
 	btnDeny := widget.NewButton(i18n.T("settings.permissions.deny"), func() {
 		allowed = false
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnDeny.Importance = widget.MediumImportance
 
@@ -7633,51 +7633,51 @@ func showXSWDPrompt() bool {
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
+	var promptBackdrop, promptDialog fyne.CanvasObject
+
 	uiDo(func() {
 		overlay := session.Window.Canvas().Overlays()
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(apptheme.C.DarkMatter),
-			),
+		promptBackdrop = container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		)
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
+		overlay.Add(promptBackdrop)
+		promptDialog = container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					content,
+					btnRow,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
 		)
+		overlay.Add(promptDialog)
 	})
 
 	<-done
 
 	uiDo(func() {
 		overlay := session.Window.Canvas().Overlays()
-		overlay.Top().Hide()
-		overlay.Remove(overlay.Top())
-		overlay.Remove(overlay.Top())
+		promptDialog.Hide()
+		overlay.Remove(promptBackdrop)
+		overlay.Remove(promptDialog)
 	})
 
 	setAskedXSWD()
@@ -8177,9 +8177,11 @@ func toggleXSWD(endpoint string) {
 				return
 			}
 			remoteAccess.WS.server = xswd.NewXSWDServerWithPort(portInt, engram.Disk, false, noStoreMethods, func(ad *xswd.ApplicationData) bool {
-				return XSWDPrompt(ad)
+				// Route through the FIFO queue so concurrent connection + permission
+				// prompts never stack their overlay layers (mobile stability).
+				return queuedXSWDPrompt(ad)
 			}, func(ad *xswd.ApplicationData, r *jrpc2.Request) xswd.Permission {
-				return AskPermissionForRequest(ad, r)
+				return queuedAskPermissionForRequest(ad, r)
 			})
 
 			server := remoteAccess.WS.server
@@ -8451,21 +8453,21 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 	btnAllow := widget.NewButton(i18n.T("xswd.allow"), func() {
 		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
+			signalPromptDone(done)
 			return
 		}
 		confirmed = true
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnAllow.Importance = widget.MediumImportance
 
 	btnDeny := widget.NewButton(i18n.T("xswd.deny"), func() {
 		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
+			signalPromptDone(done)
 			return
 		}
 		confirmed = false
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnDeny.Importance = widget.MediumImportance
 
@@ -8513,41 +8515,43 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
+	// Reference-based overlay layers: removal targets the exact layers this
+	// prompt added, so a queued prompt can never pop another dialog's widgets.
+	var promptLayers [2]fyne.CanvasObject
 	fyne.Do(func() {
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(apptheme.C.DarkMatter),
-			),
+		backdrop := container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
+		dialog := container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					btnRow,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
 		)
+		promptLayers[0] = backdrop
+		promptLayers[1] = dialog
+		overlay.Add(backdrop)
+		overlay.Add(dialog)
 
 		if a.Driver().Device().IsMobile() {
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.connection_received")})
@@ -8568,11 +8572,8 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	}
 
 	fyne.Do(func() {
-		if len(overlay.List()) >= 2 {
-			overlay.Top().Hide()
-			overlay.Remove(overlay.Top())
-			overlay.Remove(overlay.Top())
-		}
+		overlay.Remove(promptLayers[0])
+		overlay.Remove(promptLayers[1])
 	})
 
 	go refreshXSWDList()
@@ -8857,7 +8858,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	done := make(chan struct{})
 	btnAllow.OnTapped = func() {
 		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
+			signalPromptDone(done)
 			return
 		}
 		if alwaysRemember && canStorePermission {
@@ -8865,12 +8866,12 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		} else {
 			choice = xswd.Allow
 		}
-		done <- struct{}{}
+		signalPromptDone(done)
 	}
 
 	btnDeny.OnTapped = func() {
 		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
+			signalPromptDone(done)
 			return
 		}
 		if alwaysRemember && canStorePermission {
@@ -8878,7 +8879,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		} else {
 			choice = xswd.Deny
 		}
-		done <- struct{}{}
+		signalPromptDone(done)
 	}
 
 	linkRemove := widget.NewHyperlinkWithStyle(i18n.T("xswd.remove_application"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
@@ -8902,45 +8903,47 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
+	// Reference-based overlay layers: removal targets the exact layers this
+	// prompt added, so a queued prompt can never pop another dialog's widgets.
+	var promptLayers [2]fyne.CanvasObject
 	fyne.Do(func() {
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(apptheme.C.DarkMatter),
-			),
+		backdrop := container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		)
-
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						content,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						container.NewHBox(
-							layout.NewSpacer(),
-							linkRemove,
-							layout.NewSpacer(),
-						),
-						rectSpacer,
+		dialog := container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					content,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					container.NewHBox(
+						layout.NewSpacer(),
+						linkRemove,
+						layout.NewSpacer(),
+					),
+					rectSpacer,
 				),
 			),
 		)
+		promptLayers[0] = backdrop
+		promptLayers[1] = dialog
+		overlay.Add(backdrop)
+		overlay.Add(dialog)
 
 		if fyne.CurrentApp().Driver().Device().IsMobile() {
 			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.new_permission_notification")})
@@ -8961,11 +8964,8 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	fyne.Do(func() {
-		if len(overlay.List()) >= 2 {
-			overlay.Top().Hide()
-			overlay.Remove(overlay.Top())
-			overlay.Remove(overlay.Top())
-		}
+		overlay.Remove(promptLayers[0])
+		overlay.Remove(promptLayers[1])
 	})
 
 	go refreshXSWDList()
@@ -9044,7 +9044,7 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 
 	btnEnable.OnTapped = func() {
 		if !isWalletGenerationActive(generation) {
-			done <- struct{}{}
+			signalPromptDone(done)
 			return
 		}
 
@@ -9064,12 +9064,12 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 			choice = xswd.Allow
 			logger.Printf("[EPOCH] Started successfully via permission prompt (allowWithAddress: %v)\n", remoteAccess.EPOCH.allowWithAddress)
 		}
-		done <- struct{}{}
+		signalPromptDone(done)
 	}
 
 	btnDeny.OnTapped = func() {
 		choice = xswd.Deny
-		done <- struct{}{}
+		signalPromptDone(done)
 	}
 
 	content := container.NewStack(
@@ -9112,39 +9112,37 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			canvas.NewRectangle(apptheme.C.DarkMatter),
-		),
+	promptBackdrop := container.NewStack(
+		&iframe{},
+		canvas.NewRectangle(apptheme.C.DarkMatter),
 	)
+	overlay.Add(promptBackdrop)
 
-	overlay.Add(
-		container.NewStack(
-			&iframe{},
-			container.NewCenter(
-				container.NewVBox(
-					span,
-					container.NewCenter(
-						header,
-					),
-					container.NewCenter(
-						container.NewStack(
-							span,
-						),
-					),
-					rectSpacer,
-					rectSpacer,
-					content,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
-					rectSpacer,
+	promptDialog := container.NewStack(
+		&iframe{},
+		container.NewCenter(
+			container.NewVBox(
+				span,
+				container.NewCenter(
+					header,
 				),
+				container.NewCenter(
+					container.NewStack(
+						span,
+					),
+				),
+				rectSpacer,
+				rectSpacer,
+				content,
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
+				rectSpacer,
 			),
 		),
 	)
+	overlay.Add(promptDialog)
 
 	if a.Driver().Device().IsMobile() {
 		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
@@ -9162,9 +9160,9 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 		return xswd.Deny
 	}
 
-	overlay.Top().Hide()
-	overlay.Remove(overlay.Top())
-	overlay.Remove(overlay.Top())
+	promptDialog.Hide()
+	overlay.Remove(promptBackdrop)
+	overlay.Remove(promptDialog)
 
 	go refreshXSWDList()
 
@@ -9320,13 +9318,13 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 
 	btnAllow := widget.NewButton(xswd.Allow.String(), func() {
 		choice = xswd.Allow
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnAllow.Importance = widget.MediumImportance
 
 	btnDeny := widget.NewButton(xswd.Deny.String(), func() {
 		choice = xswd.Deny
-		done <- struct{}{}
+		signalPromptDone(done)
 	})
 	btnDeny.Importance = widget.MediumImportance
 
@@ -9363,44 +9361,47 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 	span := canvas.NewRectangle(color.Transparent)
 	span.SetMinSize(fyne.NewSize(ui.Width, 10))
 
+	// Reference-based overlay layers: removal targets the exact layers this
+	// prompt added, so it can never pop another dialog's widgets.
+	var promptLayers [2]fyne.CanvasObject
 	uiDo(func() {
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				canvas.NewRectangle(apptheme.C.DarkMatter),
-			),
+		backdrop := container.NewStack(
+			&iframe{},
+			canvas.NewRectangle(apptheme.C.DarkMatter),
 		)
+		promptLayers[0] = backdrop
+		overlay.Add(backdrop)
 	})
 
 	uiDo(func() {
-		overlay.Add(
-			container.NewStack(
-				&iframe{},
-				container.NewCenter(
-					container.NewVBox(
-						span,
-						container.NewCenter(
-							header,
-						),
-						container.NewCenter(
-							container.NewStack(
-								span,
-							),
-						),
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						content,
-						btnRow,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
-						rectSpacer,
+		dialog := container.NewStack(
+			&iframe{},
+			container.NewCenter(
+				container.NewVBox(
+					span,
+					container.NewCenter(
+						header,
 					),
+					container.NewCenter(
+						container.NewStack(
+							span,
+						),
+					),
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					content,
+					btnRow,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
+					rectSpacer,
 				),
 			),
 		)
+		promptLayers[1] = dialog
+		overlay.Add(dialog)
 	})
 
 	// Wait for user input or cancellation
@@ -9414,9 +9415,8 @@ func AskPermissionForRequestE(headerText string, params interface{}, cancelChans
 	logger.Debugf("[AskPermissionForRequestE] User input received for: %s\n", headerText)
 
 	uiDo(func() {
-		overlay.Top().Hide()
-		overlay.Remove(overlay.Top())
-		overlay.Remove(overlay.Top())
+		overlay.Remove(promptLayers[0])
+		overlay.Remove(promptLayers[1])
 	})
 
 	return
