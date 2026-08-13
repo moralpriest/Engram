@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run this to patch the GoNativeActivity.java in the Fyne module cache with QR scanner support
 
-CACHE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.7.3/internal/driver/mobile/app/GoNativeActivity.java"
+CACHE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.0/internal/driver/mobile/app/GoNativeActivity.java"
 SOURCE_PATH="$(dirname "$0")/internal/patches/android/GoNativeActivity.java"
 
 echo "Patching GoNativeActivity.java in module cache..."
