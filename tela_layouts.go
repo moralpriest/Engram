@@ -898,8 +898,15 @@ func layoutTELA() fyne.CanvasObject {
 				go func() {
 					openURLAfterDelay := func(link string) {
 						if verifyTELAServerIsUp(link) {
-							// Guarantee XSWD is running on the correct dual-stack port before opening browser
-							EnsureXSWD()
+							// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+							// Skip opening a tab that can never connect when it isn't ready.
+							if !EnsureXSWD() {
+								logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
+								errorText.Text = i18n.T("tela.error_cannot_open")
+								errorText.Color = apptheme.C.Red
+								errorText.Refresh()
+								return
+							}
 
 							if u, err := url.Parse(link); err == nil {
 								fyne.CurrentApp().OpenURL(u)
@@ -3877,8 +3884,15 @@ func layoutTELA() fyne.CanvasObject {
 							return // If url is not valid, scid won't be saved in history
 						} else {
 							pushTELANavigation(s)
-							// Guarantee XSWD is running on the correct dual-stack port before opening browser
-							EnsureXSWD()
+							// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+							// Skip opening a tab that can never connect when it isn't ready.
+							if !EnsureXSWD() {
+								logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
+								errorText.Text = i18n.T("tela.error_cannot_open")
+								errorText.Color = apptheme.C.Red
+								errorText.Refresh()
+								return
+							}
 							fyne.CurrentApp().OpenURL(url)
 						}
 					} else {
@@ -3937,8 +3951,15 @@ func layoutTELA() fyne.CanvasObject {
 									return
 								} else {
 									pushTELANavigation(s)
-									// Guarantee XSWD is running on the correct dual-stack port before opening browser
-									EnsureXSWD()
+									// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+									// Skip opening a tab that can never connect when it isn't ready.
+									if !EnsureXSWD() {
+										logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
+										errorText.Text = i18n.T("tela.error_cannot_open")
+										errorText.Color = apptheme.C.Red
+										errorText.Refresh()
+										return
+									}
 									fyne.CurrentApp().OpenURL(url)
 								}
 							} else {
@@ -4438,8 +4459,15 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 			} else {
 				pushTELANavigation(index.SCID)
 				CleanStaleXSWDConnections()
-				// Guarantee XSWD is running on the correct dual-stack port before opening browser
-				EnsureXSWD()
+				// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+				// Skip opening a tab that can never connect when it isn't ready.
+				if !EnsureXSWD() {
+					logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
+					errorText.Text = i18n.T("tela.error_cannot_open")
+					errorText.Color = apptheme.C.Red
+					errorText.Refresh()
+					return
+				}
 				q := url.Query()
 				q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
 				q.Set("_v", fmt.Sprintf("%d", time.Now().UnixNano()))
@@ -4767,8 +4795,15 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				openURLAfterDelay := func(link string) {
 					if verifyTELAServerIsUp(link) {
 						CleanStaleXSWDConnections()
-						// Guarantee XSWD is running on the correct dual-stack port before opening browser
-						EnsureXSWD()
+						// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+						// Skip opening a tab that can never connect when it isn't ready.
+						if !EnsureXSWD() {
+							logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
+							errorText.Text = i18n.T("tela.error_cannot_open")
+							errorText.Color = apptheme.C.Red
+							errorText.Refresh()
+							return
+						}
 
 						if u, perr := url.Parse(link); perr == nil {
 							q := u.Query()
@@ -4871,8 +4906,15 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 								} else {
 									pushTELANavigation(index.SCID)
 									CleanStaleXSWDConnections()
-									// Guarantee XSWD is running on the correct dual-stack port before opening browser
-									EnsureXSWD()
+									// Guarantee XSWD is running on the correct dual-stack port before opening browser.
+									// Skip opening a tab that can never connect when it isn't ready.
+									if !EnsureXSWD() {
+										logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", servedLink)
+										errorText.Text = i18n.T("tela.error_cannot_open")
+										errorText.Color = apptheme.C.Red
+										errorText.Refresh()
+										return
+									}
 									q := parsedURL.Query()
 									q.Set("_t", fmt.Sprintf("%d", time.Now().UnixMilli()))
 									q.Set("_v", fmt.Sprintf("%d", time.Now().UnixNano()))

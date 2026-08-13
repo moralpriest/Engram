@@ -3889,9 +3889,13 @@ func safeOpenURL(u *url.URL) {
 		return
 	}
 
-	// If it's a TELA-like URL (localhost/127.0.0.1), ensure XSWD is ready
+	// If it's a TELA-like URL (localhost/127.0.0.1), ensure XSWD is ready;
+	// if it can't come up, warn instead of opening a tab that can never connect.
 	if strings.HasPrefix(u.Host, "localhost") || strings.HasPrefix(u.Host, "127.0.0.1") {
-		EnsureXSWD()
+		if !EnsureXSWD() {
+			logger.Warnf("[OpenURL] XSWD not ready, refusing to open %s\n", u.String())
+			return
+		}
 	}
 
 	logger.Printf("[OpenURL] Requesting to open: %s\n", u.String())
@@ -8192,10 +8196,16 @@ func CleanStaleXSWDConnections() {
 }
 
 // EnsureXSWD handles XSWD server lifecycle, ensuring it is bound to dual-stack :44326
-// and is ready for dApp connections.
-func EnsureXSWD() {
+// and is ready for dApp connections. It waits up to 5s for the server to actually
+// be running before returning, then reports true; verifies global state is enabled.
+// Clears a stale, non-running server object so a later call can start fresh
+// (e.g. after a failed bind). Returns false (with a log line) when the wallet is
+// closed, offline mode is on, the user declined / disabled WebSocket (XSWD), or
+// the server never became ready.
+func EnsureXSWD() bool {
 	if engram.Disk == nil || session.Offline {
-		return
+		logger.Printf("[Engram] EnsureXSWD: skipped (wallet closed or offline)\n")
+		return false
 	}
 
 	// Always use port 44326 for modern XSWD/Villager compatibility
@@ -8213,12 +8223,28 @@ func EnsureXSWD() {
 				remoteAccess.WS.global.enabled = true
 				setPermissions()
 			} else {
-				return // User declined
+				logger.Printf("[Engram] EnsureXSWD: user declined WebSocket connections\n")
+				return false // User declined
 			}
 		} else {
 			// Already asked before. If it's disabled, we respect that.
-			return
+			logger.Printf("[Engram] EnsureXSWD: WebSocket disabled by user, not starting\n")
+			return false
 		}
+	}
+
+	// Zombie-server cleanup: clear a stale, non-running server object so a
+	// later call can start fresh (e.g. after a failed bind).
+	xswdStateMu.RLock()
+	zombie := remoteAccess.WS.server != nil && !remoteAccess.WS.server.IsRunning()
+	xswdStateMu.RUnlock()
+	if zombie {
+		logger.Printf("[Engram] EnsureXSWD: clearing stale non-running server object\n")
+		xswdStateMu.Lock()
+		if remoteAccess.WS.server != nil && !remoteAccess.WS.server.IsRunning() {
+			remoteAccess.WS.server = nil
+		}
+		xswdStateMu.Unlock()
 	}
 
 	// Start server if not running
@@ -8226,24 +8252,27 @@ func EnsureXSWD() {
 		logger.Printf("[Engram] EnsureXSWD: Starting server on %s\n", targetPort)
 		toggleXSWD(targetPort)
 
-		// Wait up to 2 seconds for server to be ready
-		for i := 0; i < 20; i++ {
+		// Wait up to 5 seconds for server to be ready
+		for i := 0; i < 50; i++ {
 			xswdStateMu.RLock()
 			server := remoteAccess.WS.server
 			xswdStateMu.RUnlock()
 			if server != nil && server.IsRunning() {
 				logger.Printf("[Engram] EnsureXSWD: Server is ready after %dms\n", i*100)
-				break
+				return true
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
-	} else {
-		// Even if server is running, ensure global state matches for UI consistency
-		if !remoteAccess.WS.global.enabled {
-			remoteAccess.WS.global.enabled = true
-			setPermissions()
-		}
+		logger.Printf("[Engram] EnsureXSWD: server did not become ready within 5s\n")
+		return false
 	}
+
+	// Even if server is running, ensure global state matches for UI consistency
+	if !remoteAccess.WS.global.enabled {
+		remoteAccess.WS.global.enabled = true
+		setPermissions()
+	}
+	return true
 }
 
 // Start a permissioned web socket server to allow decentralized application communication
