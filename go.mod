@@ -85,15 +85,13 @@ require (
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	github.com/templexxx/cpu v0.0.9 // indirect
-	github.com/templexxx/xorsimd v0.4.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	github.com/xtaci/kcp-go/v5 v5.6.2 // indirect
+	github.com/xtaci/kcp-go/v5 v5.6.72 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
@@ -109,4 +107,4 @@ require (
 
 replace github.com/civilware/tela => ../tela
 
-replace github.com/deroproject/derohe => github.com/DEROFDN/derohe v0.0.0-20260705204633-6f9bd2ca1209
+replace github.com/deroproject/derohe => github.com/DHEBP/derohe v0.0.0-20260812071322-c348735069d4
