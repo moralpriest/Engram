@@ -700,8 +700,9 @@ func fetchDaemonInfo() (DaemonInfo, error) {
 	cachedDaemonInfo = *result.Result
 	daemonInfoMu.Unlock()
 
-	logger.Printf("[Daemon RPC] fetchDaemonInfo SUCCESS - height=%d topoheight=%d synced=%v",
-		result.Result.Height, result.Result.Topoheight, result.Result.Synchronized)
+	// Deliberately no per-call SUCCESS log: fetchDaemonInfo runs on a
+	// 3-second background loop, so logging here would spam the debug log
+	// constantly. Meaningful changes are logged by the refresh loop.
 	return *result.Result, nil
 }
 

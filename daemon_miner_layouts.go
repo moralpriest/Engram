@@ -20,6 +20,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/civilware/tela/logger"
+
 	"github.com/DEROFDN/engram/i18n"
 	apptheme "github.com/DEROFDN/engram/internal/theme"
 )
@@ -247,13 +249,22 @@ var refreshDaemonInfoOnce sync.Once
 func startBackgroundDaemonRefresh() {
 	refreshDaemonInfoOnce.Do(func() {
 		go func() {
+			// Log only when something meaningful changes (height advanced or
+			// sync state flipped). The loop polls every 3 seconds, so logging
+			// every iteration would spam the debug log constantly.
+			var lastHeight uint64
+			var lastSynced bool
 			for {
 				info, err := fetchDaemonInfo()
 				if err == nil {
-					fmt.Printf("[Daemon RPC] Background refresh: height=%d topo=%d synced=%v", info.Height, info.Topoheight, info.Synchronized)
+					if info.Height != lastHeight || info.Synchronized != lastSynced {
+						lastHeight = info.Height
+						lastSynced = info.Synchronized
+						logger.Printf("[Daemon RPC] Background refresh: height=%d topo=%d synced=%v", info.Height, info.Topoheight, info.Synchronized)
+					}
 					uiDo(func() { updateInfoUILabels(info) })
 				} else {
-					fmt.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
+					logger.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
 				}
 				updateDaemonStateFromDetection()
 				uiDo(syncToggleStates)
