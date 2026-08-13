@@ -346,6 +346,7 @@ var stringsAR = map[string]string{
 	"send.title":       "إ ر س ا ل",
 	"send.address":     "العنوان",
 	"send.amount":      "المبلغ",
+	"send.available":   "متاح",
 	"send.comment":     "تعليق",
 	"send.fee":         "الرسوم",
 	"send.send":        "إرسال",

@@ -331,6 +331,7 @@ var stringsJA = map[string]string{
 	"send.title":                                     "送金",
 	"send.address":                                   "アドレス",
 	"send.amount":                                    "金額",
+	"send.available":                                 "利用可能",
 	"send.comment":                                   "コメント",
 	"send.fee":                                       "手数料",
 	"send.send":                                      "送信",

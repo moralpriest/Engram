@@ -331,6 +331,7 @@ var stringsZH = map[string]string{
 	"send.title":                                     "发送资金",
 	"send.address":                                   "地址",
 	"send.amount":                                    "金额",
+	"send.available":                                 "可用",
 	"send.comment":                                   "注释",
 	"send.fee":                                       "手续费",
 	"send.send":                                      "发送",

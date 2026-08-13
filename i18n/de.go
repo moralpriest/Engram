@@ -346,6 +346,7 @@ var stringsDE = map[string]string{
 	"send.title":       "Geld Senden",
 	"send.address":     "Adresse",
 	"send.amount":      "Menge",
+	"send.available":   "Verfügbar",
 	"send.comment":     "Kommentar",
 	"send.fee":         "Gebühr",
 	"send.send":        "Senden",

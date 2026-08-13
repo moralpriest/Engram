@@ -346,6 +346,7 @@ var stringsNL = map[string]string{
 	"send.title":       "Verzenden",
 	"send.address":     "Adres",
 	"send.amount":      "Bedrag",
+	"send.available":   "Beschikbaar",
 	"send.comment":     "Opmerking",
 	"send.fee":         "Transactiekosten",
 	"send.send":        "Verzenden",

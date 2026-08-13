@@ -124,6 +124,7 @@ type Session struct {
 	AddressHidden       bool
 	BalanceUSD          string
 	BalanceText         *canvas.Text
+	SendBalanceText     *tappableText
 	BalanceUSDText      *canvas.Text
 	ModeText            *canvas.Text
 	IDText              *canvas.Text
@@ -1645,6 +1646,9 @@ func refreshPulseWalletState(sentNotifications *bool) {
 			session.BalanceText.Text = globals.FormatMoney(session.Balance)
 			session.BalanceText.Refresh()
 		}
+		if session.SendBalanceText != nil && !session.BalanceHidden {
+			session.SendBalanceText.SetText(formatAvailableBalance(session.Balance))
+		}
 		if session.StatusText != nil {
 			session.StatusText.Text = fmt.Sprintf("%d", session.WalletHeight)
 			session.StatusText.Refresh()
@@ -3025,16 +3029,33 @@ func addTransfer() error {
 	return nil
 }
 
+// estimateTransferFee returns the expected transaction fee for a transfer
+// made with the given ring size, matching the fee used when building the tx.
+func estimateTransferFee(ringsize uint64) uint64 {
+	fees := ((ringsize + 1) * config.FEE_PER_KB) / 4
+	if fees < 85 {
+		fees = 85
+	}
+	return fees
+}
+
+// formatAvailableBalance renders the "Available" label shown under the
+// amount field on the send page, following the BalanceHidden setting.
+// It includes the estimated fee for the currently selected ring size.
+func formatAvailableBalance(balance uint64) string {
+	if session.BalanceHidden {
+		return "••••••"
+	}
+	return fmt.Sprintf("%s: %s · %s: %s", i18n.T("send.available"), globals.FormatMoney(balance), i18n.T("send.fee"), globals.FormatMoney(estimateTransferFee(tx.Ringsize)))
+}
+
 // Send all batched transfers (TODO: export offline transactions to file in Offline mode)
 func sendTransfers() (txid crypto.Hash, err error) {
 	if session.Offline {
 		return
 	}
 
-	fees := ((tx.Ringsize + 1) * config.FEE_PER_KB) / 4
-	if fees < 85 {
-		fees = 85
-	}
+	fees := estimateTransferFee(tx.Ringsize)
 
 	tx.TX, err = engram.Disk.TransferPayload0(tx.Pending, tx.Ringsize, false, rpc.Arguments{}, fees, false)
 	if err != nil {
@@ -3128,6 +3149,9 @@ func immediateBalanceRefresh() {
 		if session.BalanceText != nil && !session.BalanceHidden {
 			session.BalanceText.Text = globals.FormatMoney(session.Balance)
 			session.BalanceText.Refresh()
+		}
+		if session.SendBalanceText != nil && !session.BalanceHidden {
+			session.SendBalanceText.SetText(formatAvailableBalance(session.Balance))
 		}
 	})
 }

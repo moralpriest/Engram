@@ -431,6 +431,7 @@ var stringsEL = map[string]string{
 	"send.title":                                     "Αποστολή Χρημάτων",
 	"send.address":                                   "Διεύθυνση",
 	"send.amount":                                    "Ποσό",
+	"send.available":                                 "Διαθέσιμο",
 	"send.comment":                                   "Σχόλιο",
 	"send.fee":                                       "Τέλος",
 	"send.send":                                      "Αποστολή",

@@ -346,6 +346,7 @@ var stringsRU = map[string]string{
 	"send.title":       "Отправить средства",
 	"send.address":     "Адрес",
 	"send.amount":      "Сумма",
+	"send.available":   "Доступно",
 	"send.comment":     "Комментарий",
 	"send.fee":         "Комиссия",
 	"send.send":        "Отправить",

@@ -482,6 +482,7 @@ var stringsTemplate = map[string]string{
 	"send.title":       "",
 	"send.address":     "",
 	"send.amount":      "",
+	"send.available":   "",
 	"send.comment":     "",
 	"send.fee":         "",
 	"send.send":        "",

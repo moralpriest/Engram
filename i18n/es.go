@@ -346,6 +346,7 @@ var stringsES = map[string]string{
 	"send.title":       "Enviar DERO",
 	"send.address":     "Dirección",
 	"send.amount":      "Monto",
+	"send.available":   "Disponible",
 	"send.comment":     "Comentario",
 	"send.fee":         "Tarifa",
 	"send.send":        "Enviar",

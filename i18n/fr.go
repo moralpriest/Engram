@@ -346,6 +346,7 @@ var stringsFR = map[string]string{
 	"send.title":       "Envoyer DERO",
 	"send.address":     "Adresse",
 	"send.amount":      "Montant",
+	"send.available":   "Disponible",
 	"send.comment":     "Commentaire",
 	"send.fee":         "Frais",
 	"send.send":        "Envoyer",

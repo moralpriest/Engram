@@ -144,3 +144,83 @@ func pulseButton(rect *canvas.Rectangle, done chan struct{}) {
 		}
 	})
 }
+
+// tappableText is a simple text label that responds to taps.
+// Used for the "Available" amount on the send page: tap to fill max.
+type tappableText struct {
+	widget.BaseWidget
+	Text     string
+	Color    color.Color
+	FontSize float32
+	onTapped func()
+	lbl      *canvas.Text
+}
+
+func newTappableText(text string, textColor color.Color, onTap func()) *tappableText {
+	t := &tappableText{
+		Text:     text,
+		Color:    textColor,
+		FontSize: scaleFont(14),
+		onTapped: onTap,
+	}
+	t.ExtendBaseWidget(t)
+	return t
+}
+
+func (t *tappableText) CreateRenderer() fyne.WidgetRenderer {
+	t.lbl = canvas.NewText(t.Text, t.Color)
+	t.lbl.TextSize = t.FontSize
+	t.lbl.TextStyle = fyne.TextStyle{Bold: true}
+	return &tappableTextRenderer{label: t}
+}
+
+func (t *tappableText) Tapped(_ *fyne.PointEvent) {
+	if t.onTapped != nil {
+		t.onTapped()
+	}
+}
+
+func (t *tappableText) SetText(s string) {
+	t.Text = s
+	if t.lbl != nil {
+		t.lbl.Text = s
+		t.lbl.Refresh()
+	}
+}
+
+func (t *tappableText) SetColor(c color.Color) {
+	t.Color = c
+	if t.lbl != nil {
+		t.lbl.Color = c
+		t.lbl.Refresh()
+	}
+}
+
+type tappableTextRenderer struct {
+	label *tappableText
+}
+
+func (r *tappableTextRenderer) BackgroundColor() color.Color {
+	return color.Transparent
+}
+
+func (r *tappableTextRenderer) Destroy() {
+}
+
+func (r *tappableTextRenderer) Layout(size fyne.Size) {
+	r.label.lbl.Resize(size)
+}
+
+func (r *tappableTextRenderer) MinSize() fyne.Size {
+	return r.label.lbl.MinSize()
+}
+
+func (r *tappableTextRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{r.label.lbl}
+}
+
+func (r *tappableTextRenderer) Refresh() {
+	r.label.lbl.Text = r.label.Text
+	r.label.lbl.Color = r.label.Color
+	r.label.lbl.Refresh()
+}

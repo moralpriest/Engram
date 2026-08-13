@@ -134,6 +134,7 @@ func layoutDashboard() fyne.CanvasObject {
 
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
+	session.SendBalanceText = nil
 
 	session.BalanceText = canvas.NewText("...", apptheme.BalanceColor())
 	session.BalanceText.TextSize = scaleFont(28)
@@ -984,6 +985,64 @@ func layoutSend() fyne.CanvasObject {
 	wAmount := widget.NewEntry()
 	wAmount.SetPlaceHolder(i18n.T("send.amount"))
 
+	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
+		session.BalanceHidden = string(balanceHiddenVal) == "true"
+	} else {
+		session.BalanceHidden = true
+	}
+
+	// Available balance shown under the amount field. Tap it to fill the
+	// full balance minus the fee for the selected ring size.
+	availableText := newTappableText("...", apptheme.BalanceColor(), func() {
+		if engram.Disk == nil {
+			return
+		}
+		balance, _ := engram.Disk.Get_Balance()
+		fees := estimateTransferFee(tx.Ringsize)
+		if balance <= fees {
+			return
+		}
+		wAmount.SetText(globals.FormatMoney(balance - fees))
+	})
+	session.SendBalanceText = availableText
+	go func() {
+		if engram.Disk != nil {
+			balance, _ := engram.Disk.Get_Balance()
+			fyne.Do(func() {
+				availableText.SetText(formatAvailableBalance(balance))
+			})
+		}
+	}()
+
+	var availableToggleBtn *widget.Button
+	availableToggleBtn = widget.NewButtonWithIcon("", theme.VisibilityIcon(), func() {
+		session.BalanceHidden = !session.BalanceHidden
+		if session.BalanceHidden {
+			availableToggleBtn.SetIcon(theme.VisibilityOffIcon())
+			availableText.SetText("••••••")
+			availableToggleBtn.Refresh()
+			go StoreEncryptedValue("settings", []byte("BalanceHidden"), []byte("true"))
+		} else {
+			availableToggleBtn.SetIcon(theme.VisibilityIcon())
+			availableText.SetText("...")
+			availableToggleBtn.Refresh()
+			go func() {
+				if engram.Disk != nil {
+					currentBalance, _ := engram.Disk.Get_Balance()
+					fyne.Do(func() {
+						availableText.SetText(formatAvailableBalance(currentBalance))
+					})
+				}
+				StoreEncryptedValue("settings", []byte("BalanceHidden"), []byte("false"))
+			}()
+		}
+	})
+	availableToggleBtn.Importance = widget.LowImportance
+	if session.BalanceHidden {
+		availableToggleBtn.SetIcon(theme.VisibilityOffIcon())
+		availableText.SetText("••••••")
+	}
+
 	wMessage := widget.NewEntry()
 	wMessage.SetValidationError(nil)
 	wMessage.SetPlaceHolder(i18n.T("send.comment"))
@@ -1092,6 +1151,7 @@ func layoutSend() fyne.CanvasObject {
 							balance, _ := engram.Disk.Get_Balance()
 							if tx.Amount <= balance {
 								btnSend.Enable()
+								btnSendNow.Enable()
 							}
 						}
 					} else {
@@ -1101,6 +1161,7 @@ func layoutSend() fyne.CanvasObject {
 							balance, _ := engram.Disk.Get_Balance()
 							if tx.Amount <= balance {
 								btnSend.Enable()
+								btnSendNow.Enable()
 							}
 						}
 					}
@@ -1156,7 +1217,7 @@ func layoutSend() fyne.CanvasObject {
 				if entry <= balance {
 					tx.Amount = entry
 					wAmount.SetValidationError(nil)
-					if wReceiver.Validate() == nil {
+					if tx.Address != nil {
 						btnSend.Enable()
 						btnSendNow.Enable()
 					}
@@ -1204,6 +1265,17 @@ func layoutSend() fyne.CanvasObject {
 		if err != nil {
 			tx.Ringsize = 16
 			wRings.SetSelected(i18n.T("send.ring_16"))
+		}
+		// Refresh the available-balance label so the fee reflects the new ring size.
+		if session.SendBalanceText != nil && !session.BalanceHidden {
+			go func() {
+				if engram.Disk != nil {
+					balance, _ := engram.Disk.Get_Balance()
+					fyne.Do(func() {
+						session.SendBalanceText.SetText(formatAvailableBalance(balance))
+					})
+				}
+			}()
 		}
 		safeCanvasFocus(wReceiver)
 	}
@@ -1291,8 +1363,8 @@ func layoutSend() fyne.CanvasObject {
 				}
 
 				// Step 1: Show confirmation overlay (like CONFIRM RATING)
-			confBody := fmt.Sprintf(i18n.T("tela.confirm_transaction_body"), globals.FormatMoney(sendAmount), shortDest)
-			verificationOverlay(false, i18n.T("tela.confirm_transaction_header"), confBody, "Yes", func(confirm bool) {
+				confBody := fmt.Sprintf(i18n.T("tela.confirm_transaction_body"), globals.FormatMoney(sendAmount), shortDest)
+				verificationOverlay(false, i18n.T("tela.confirm_transaction_header"), confBody, "Yes", func(confirm bool) {
 					if !confirm {
 						return
 					}
@@ -1395,6 +1467,13 @@ func layoutSend() fyne.CanvasObject {
 		rectSpacer,
 		wReceiver,
 		wAmount,
+		rectSpacer,
+		container.NewCenter(
+			container.NewHBox(
+				availableText,
+				availableToggleBtn,
+			),
+		),
 		rectSpacer,
 		rectSpacer,
 		container.NewHBox(

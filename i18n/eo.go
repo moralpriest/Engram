@@ -346,6 +346,7 @@ var stringsEO = map[string]string{
 	"send.title":       "Sendi Monon",
 	"send.address":     "Adreso",
 	"send.amount":      "Kvanto",
+	"send.available":   "Havebla",
 	"send.comment":     "Komento",
 	"send.fee":         "Kotizo",
 	"send.send":        "Sendi",
