@@ -88,6 +88,7 @@ func layoutSettings() fyne.CanvasObject {
 		{Address: "dero-node.net:10102", Status: "unknown"},
 		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
 		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+		{Address: "dero.geeko.cloud:10102", Status: "unknown"},
 	}
 	testnetNodes := []NodeItem{
 		{Address: "69.30.234.163:40402", Status: "unknown"},
@@ -2331,6 +2332,7 @@ func layoutNetwork() fyne.CanvasObject {
 		{Address: "dero-node.net:10102", Status: "unknown"},
 		{Address: "community-pools.mysrv.cloud:10102", Status: "unknown"},
 		{Address: "node.derofoundation.org:11012", Status: "unknown"},
+		{Address: "dero.geeko.cloud:10102", Status: "unknown"},
 	}
 	testnetNodes := []NodeItem{
 		{Address: "69.30.234.163:40402", Status: "unknown"},
