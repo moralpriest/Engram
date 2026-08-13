@@ -97,6 +97,7 @@ var stringsZH = map[string]string{
 	"settings.sort_by":                  "排序方式",
 	"settings.ratings":                  "评分",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "最近",
 	"settings.reset_defaults":           "重置默认设置",
 	"settings.delete_search":            "删除搜索数据",
 	"settings.shutdown_tela":            "关闭 TELA",

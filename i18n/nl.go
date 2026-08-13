@@ -102,6 +102,7 @@ var stringsNL = map[string]string{
 	"settings.sort_by":                  "Sorteren op",
 	"settings.ratings":                  "Beoordelingen",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "Recent",
 	"settings.reset_defaults":           "Standaardwaarden",
 	"settings.delete_search":            "Zoekgeschiedenis wissen",
 	"settings.shutdown_tela":            "TELA afsluiten",

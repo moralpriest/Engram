@@ -1201,7 +1201,7 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// Sort By radio buttons
-	sortByOptions := []string{i18n.T("settings.ratings"), i18n.T("settings.az")}
+	sortByOptions := []string{i18n.T("settings.ratings"), i18n.T("settings.az"), i18n.T("settings.recent")}
 	wSortBy := widget.NewRadioGroup(sortByOptions, nil)
 	wSortBy.Horizontal = true
 	if storedSortBy, found := getTELADual("Sort By"); found {
@@ -1211,6 +1211,8 @@ func layoutAppSettings() fyne.CanvasObject {
 			setTELADual("Sort Order", []byte("Descending"))
 		} else if storedSortBy == "A-Z" {
 			wSortBy.SetSelected(i18n.T("settings.az"))
+		} else if storedSortBy == "Recent" {
+			wSortBy.SetSelected(i18n.T("settings.recent"))
 		} else {
 			wSortBy.SetSelected(i18n.T("settings.ratings"))
 		}
@@ -1221,6 +1223,9 @@ func layoutAppSettings() fyne.CanvasObject {
 		if s != "" {
 			if s == i18n.T("settings.ratings") {
 				setTELADual("Sort By", []byte("Ratings"))
+				setTELADual("Sort Order", []byte("Descending"))
+			} else if s == i18n.T("settings.recent") {
+				setTELADual("Sort By", []byte("Recent"))
 				setTELADual("Sort Order", []byte("Descending"))
 			} else {
 				setTELADual("Sort By", []byte("A-Z"))

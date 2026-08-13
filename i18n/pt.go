@@ -102,6 +102,7 @@ var stringsPT = map[string]string{
 	"settings.sort_by":                  "Ordenar por",
 	"settings.ratings":                  "Avaliações",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "Recentes",
 	"settings.reset_defaults":           "Redefinir Configurações",
 	"settings.delete_search":            "Apagar Dados de Busca",
 	"settings.shutdown_tela":            "Desligar TELA",

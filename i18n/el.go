@@ -193,6 +193,7 @@ var stringsEL = map[string]string{
 	"settings.sort_by":                               "Ταξινόμηση κατά",
 	"settings.ratings":                               "Βαθμολογίες",
 	"settings.az":                                    "A-Z",
+	"settings.recent":                                "Πρόσφατα",
 	"settings.reset_defaults":                        "Επαναφορά Προεπιλογών",
 	"settings.delete_search":                         "Διαγραφή Δεδ. Αναζήτησης",
 	"settings.shutdown_tela":                         "Τερματισμός TELA",

@@ -9988,6 +9988,51 @@ func telaFilterSearchExclusions(dURL, searchExclusions string) (err error) {
 	return
 }
 
+var (
+	telaReleasedMu  sync.Mutex
+	telaReleasedMap map[string]int64
+	telaReleasedAt  time.Time
+)
+
+// telaReleasedTimes returns a map of SCID -> release height for the given
+// app entries, i.e. the block at which the app was installed on the chain.
+// The first interaction with an SCID is its install, so the minimum
+// interaction height is the release block. Cached for 30 seconds; install
+// records are write-once, so this is stable data.
+func telaReleasedTimes(in []INDEXwithRatings) map[string]int64 {
+	telaReleasedMu.Lock()
+	defer telaReleasedMu.Unlock()
+
+	if telaReleasedMap != nil && time.Since(telaReleasedAt) < 30*time.Second {
+		return telaReleasedMap
+	}
+
+	m := map[string]int64{}
+	if gnomon.BBolt != nil {
+		for _, entry := range in {
+			scid := entry.SCID
+			if scid == "" {
+				continue
+			}
+			hs := gnomon.BBolt.GetSCIDInteractionHeight(scid)
+			if len(hs) == 0 {
+				continue
+			}
+			min := hs[0]
+			for _, h := range hs[1:] {
+				if h < min {
+					min = h
+				}
+			}
+			m[scid] = min
+		}
+	}
+
+	telaReleasedMap = m
+	telaReleasedAt = time.Now()
+	return telaReleasedMap
+}
+
 // Sort and return search display strings for list widget
 func telaSearchDisplayAll(in []INDEXwithRatings, sortBy string, descending bool) (display []string) {
 	telaSearch := make([]INDEXwithRatings, len(in))
@@ -9995,6 +10040,16 @@ func telaSearchDisplayAll(in []INDEXwithRatings, sortBy string, descending bool)
 	activeSCIDs := map[string]struct{}{}
 	for _, serv := range getTelaActiveServers() {
 		activeSCIDs[serv.SCID] = struct{}{}
+	}
+
+	var releasedTimes map[string]int64
+	if sortBy == "Recent" {
+		releasedTimes = telaReleasedTimes(in)
+		if len(releasedTimes) == 0 {
+			// No install data indexed yet, so release order is unavailable.
+			// Fall back to ratings so the list and direction toggle stay sensible.
+			sortBy = "Ratings"
+		}
 	}
 
 	switch sortBy {
@@ -10009,6 +10064,18 @@ func telaSearchDisplayAll(in []INDEXwithRatings, sortBy string, descending bool)
 				return telaSearch[i].NameHdr > telaSearch[j].NameHdr
 			}
 			return telaSearch[i].NameHdr < telaSearch[j].NameHdr
+		})
+	case "Recent":
+		sort.Slice(telaSearch, func(i, j int) bool {
+			_, iActive := activeSCIDs[telaSearch[i].SCID]
+			_, jActive := activeSCIDs[telaSearch[j].SCID]
+			if iActive != jActive {
+				return iActive
+			}
+			if descending {
+				return releasedTimes[telaSearch[i].SCID] > releasedTimes[telaSearch[j].SCID]
+			}
+			return releasedTimes[telaSearch[i].SCID] < releasedTimes[telaSearch[j].SCID]
 		})
 	default: // Ratings
 		sort.Slice(telaSearch, func(i, j int) bool {

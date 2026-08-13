@@ -102,6 +102,7 @@ var stringsEO = map[string]string{
 	"settings.sort_by":                  "Ordigi laŭ",
 	"settings.ratings":                  "Taksoj",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "Ĵusaj",
 	"settings.reset_defaults":           "Restarigi Defaŭltajn Agordojn",
 	"settings.delete_search":            "Forigi Serĉajn Datumojn",
 	"settings.shutdown_tela":            "Malŝalti TELA",

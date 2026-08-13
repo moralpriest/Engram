@@ -102,6 +102,7 @@ var stringsES = map[string]string{
 	"settings.sort_by":                  "Ordenar por",
 	"settings.ratings":                  "Valoraciones",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "Recientes",
 	"settings.reset_defaults":           "Restablecer config. predet.",
 	"settings.delete_search":            "Borrar datos búsqueda",
 	"settings.shutdown_tela":            "Apagar TELA",

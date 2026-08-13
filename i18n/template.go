@@ -237,6 +237,7 @@ var stringsTemplate = map[string]string{
 	"settings.sort_by":                  "",
 	"settings.ratings":                  "",
 	"settings.az":                       "",
+	"settings.recent":                   "",
 	"settings.reset_defaults":           "",
 	"settings.delete_search":            "",
 	"settings.shutdown_tela":            "",

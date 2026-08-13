@@ -102,6 +102,7 @@ var stringsDE = map[string]string{
 	"settings.sort_by":                  "Sortieren nach",
 	"settings.ratings":                  "Bewertungen",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "Zuletzt",
 	"settings.reset_defaults":           "Einstellungen Zurücksetzen",
 	"settings.delete_search":            "Suchdaten Löschen",
 	"settings.shutdown_tela":            "TELA Beenden",

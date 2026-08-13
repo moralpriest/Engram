@@ -1266,6 +1266,34 @@ func layoutTELA() fyne.CanvasObject {
 
 	activateTelaSearch := func() {}
 
+	sortByOptions := []string{"Ratings", "A-Z", "Recent"}
+	if storedSortBy, found := getTELADual("Sort By"); found {
+		if storedSortBy == "Z-A" {
+			sortBy = "A-Z"
+			sortDescending = true
+			setTELADual("Sort By", []byte("A-Z"))
+			setTELADual("Sort Order", []byte("Descending"))
+		} else {
+			sortBy = storedSortBy
+		}
+	} else {
+		sortBy = sortByOptions[0]
+	}
+
+	if sortBy == "A-Z" {
+		sortDescending = false
+	} else {
+		sortDescending = true
+	}
+
+	if storedSortOrder, found := getTELADual("Sort Order"); found {
+		if storedSortOrder == "Ascending" {
+			sortDescending = false
+		} else if storedSortOrder == "Descending" {
+			sortDescending = true
+		}
+	}
+
 	btnSortOrder := widget.NewButtonWithIcon("", theme.MenuDropDownIcon(), nil)
 	if !sortDescending {
 		btnSortOrder.SetIcon(theme.MenuDropUpIcon())
@@ -1358,34 +1386,6 @@ func layoutTELA() fyne.CanvasObject {
 	if storedRescanRecheck, found := getTELADual("Rescan Recheck"); found {
 		if storedRescanRecheck == "Yes" {
 			rescanRecheck = true
-		}
-	}
-
-	sortByOptions := []string{"Ratings", "A-Z"}
-	if storedSortBy, found := getTELADual("Sort By"); found {
-		if storedSortBy == "Z-A" {
-			sortBy = "A-Z"
-			sortDescending = true
-			setTELADual("Sort By", []byte("A-Z"))
-			setTELADual("Sort Order", []byte("Descending"))
-		} else {
-			sortBy = storedSortBy
-		}
-	} else {
-		sortBy = sortByOptions[0]
-	}
-
-	if sortBy == "A-Z" {
-		sortDescending = false
-	} else {
-		sortDescending = true
-	}
-
-	if storedSortOrder, found := getTELADual("Sort Order"); found {
-		if storedSortOrder == "Ascending" {
-			sortDescending = false
-		} else if storedSortOrder == "Descending" {
-			sortDescending = true
 		}
 	}
 

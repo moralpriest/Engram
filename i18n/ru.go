@@ -102,6 +102,7 @@ var stringsRU = map[string]string{
 	"settings.sort_by":                  "Сортировать по",
 	"settings.ratings":                  "Рейтинги",
 	"settings.az":                       "А-Я (A-Z)",
+	"settings.recent":                   "Недавние",
 	"settings.reset_defaults":           "Сбросить настройки по умолчанию",
 	"settings.delete_search":            "Удалить данные поиска",
 	"settings.shutdown_tela":            "Выключить TELA",

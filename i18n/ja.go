@@ -97,6 +97,7 @@ var stringsJA = map[string]string{
 	"settings.sort_by":                  "並べ替え",
 	"settings.ratings":                  "評価",
 	"settings.az":                       "A-Z",
+	"settings.recent":                   "最近",
 	"settings.reset_defaults":           "デフォルト設定にリセット",
 	"settings.delete_search":            "検索データを削除",
 	"settings.shutdown_tela":            "TELAをシャットダウン",

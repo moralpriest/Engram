@@ -102,6 +102,7 @@ var stringsAR = map[string]string{
 	"settings.sort_by":                  "ترتيب حسب",
 	"settings.ratings":                  "التقييمات",
 	"settings.az":                       "أ-ي",
+	"settings.recent":                   "الأخيرة",
 	"settings.reset_defaults":           "إعادة تعيين",
 	"settings.delete_search":            "حذف سجل البحث",
 	"settings.shutdown_tela":            "إيقاف TELA",
