@@ -233,6 +233,9 @@ tasks:
         if [ -d "vendor/fyne.io/fyne/v2" ]; then
           echo "Patching vendor directory..."
           cp internal/patches/android/* vendor/fyne.io/fyne/v2/internal/driver/mobile/app/
+          # fyne 2.8.0 renders AppTabs labels at caption size on mobile;
+          # restore the normal text size (pre-2.8.0 behavior).
+          perl -0pi -e 's/\tif isMobile\(r\.button\.tabs\) \{\n\t\tr\.label\.TextSize = th\.Size\(theme\.SizeNameCaptionText\)\n\t\}\n//g' vendor/fyne.io/fyne/v2/container/tabs.go
           echo "✅ Vendor directory patched."
         fi
 

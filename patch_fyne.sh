@@ -40,6 +40,22 @@ cp "$VENDOR_PATH/android.go"                  "$MODULE_PATH/android.go"
 # self-contained when the fyne CLI compiles from the patches dir.
 cp "$VENDOR_PATH/FyneNotificationReceiver.java" "$MODULE_PATH/FyneNotificationReceiver.java"
 
+# Restore the mobile AppTabs label size. fyne 2.8.0 renders tab text at
+# caption size (theme.SizeNameCaptionText) on mobile, shrinking it from the
+# normal text size (15px -> 11px with Engram's theme). Removing that branch
+# restores the pre-2.8.0 behavior where tabs always use SizeNameText.
+TABS_DIR="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.0/container"
+TABS_FILE="$TABS_DIR/tabs.go"
+if [ -f "$TABS_FILE" ]; then
+    chmod -R u+w "$TABS_DIR"
+    if [ ! -f "$TABS_FILE.orig" ]; then
+        cp "$TABS_FILE" "$TABS_FILE.orig"
+        echo "Backed up tabs.go -> tabs.go.orig"
+    fi
+    perl -0pi -e 's/\tif isMobile\(r\.button\.tabs\) \{\n\t\tr\.label\.TextSize = th\.Size\(theme\.SizeNameCaptionText\)\n\t\}\n//g' "$TABS_FILE"
+    echo "Patched container/tabs.go (mobile tab text size)"
+fi
+
 echo "✅ Patched module cache at: $MODULE_PATH"
 echo ""
 echo "Files patched:"
@@ -47,5 +63,6 @@ echo "  - GoNativeActivity.java       (Camera2 QR scanner, XSWD service Java cod
 echo "  - XSWDForegroundService.java  (Android foreground service)"
 echo "  - android.c                   (JNI bridge for startCamera/stopCamera, XSWD service)"
 echo "  - android.go                  (Go declarations)"
+echo "  - container/tabs.go           (mobile tab text size)"
 echo ""
 echo "Now run: fyne package --os android --app-id com.derofdn.engram"
