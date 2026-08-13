@@ -9868,6 +9868,8 @@ func PatchTELAAppSourceFiles(scid string) {
 				return err
 			}
 
+			changed := false
+
 			// We specifically target localhost:44326 (XSWD) to avoid breaking the origin check
 			// while still enabling the explicit loopback IP for mobile WebSocket connectivity.
 			if bytes.Contains(content, []byte("localhost:44326")) {
@@ -9882,9 +9884,33 @@ func PatchTELAAppSourceFiles(scid string) {
 					os.Remove(tmpPath) // Cleanup on failure
 					return err
 				}
-				count++
+				content = newContent
+				changed = true
 				logger.Printf("[TELA] PatchTELAAppSourceFiles: Patched %s (localhost:44326 -> 127.0.0.1:44326)\n", path)
 			}
+
+			// Mobile WebSocket auto-reconnect shim: keeps the XSWD socket alive
+			// across app-switches on Android so permission prompts don't need a
+			// manual Enter per reconnect. Idempotent (strips old copy first).
+			if ext == ".js" {
+				if updated, injected := injectMobileWSReconnectShim(content); injected {
+					tmpPath := path + ".tmp"
+					err = os.WriteFile(tmpPath, updated, info.Mode())
+					if err != nil {
+						return err
+					}
+					err = os.Rename(tmpPath, path)
+					if err != nil {
+						os.Remove(tmpPath) // Cleanup on failure
+						return err
+					}
+					content = updated
+					changed = true
+					logger.Printf("[TELA] PatchTELAAppSourceFiles: Injected WS reconnect shim into %s\n", path)
+				}
+			}
+
+			_ = changed
 		}
 		return nil
 	})
