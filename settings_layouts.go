@@ -2591,10 +2591,17 @@ func layoutNetwork() fyne.CanvasObject {
 	statusAreaTitle.Alignment = fyne.TextAlignCenter
 	statusAreaTitle.TextStyle = fyne.TextStyle{Bold: true}
 
-	classicCheck := widget.NewCheck(i18n.T("settings.classic_label"), func(b bool) {
-		setClassicStatus(b)
-	})
-	classicCheck.SetChecked(getClassicStatus())
+	statusPositionOptions := []string{i18n.T("settings.status_middle"), i18n.T("settings.status_bottom")}
+	statusPositionRadio := widget.NewRadioGroup(statusPositionOptions, nil)
+	statusPositionRadio.Horizontal = true
+	if getClassicStatus() {
+		statusPositionRadio.SetSelected(i18n.T("settings.status_middle"))
+	} else {
+		statusPositionRadio.SetSelected(i18n.T("settings.status_bottom"))
+	}
+	statusPositionRadio.OnChanged = func(s string) {
+		setClassicStatus(s == i18n.T("settings.status_middle"))
+	}
 
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
 		session.LastDomain = session.Window.Content()
@@ -2623,7 +2630,7 @@ func layoutNetwork() fyne.CanvasObject {
 			layout.NewSpacer(),
 		),
 		rectSpacer,
-		classicCheck,
+		container.NewCenter(statusPositionRadio),
 	)
 
 	scrollBox := container.NewVScroll(

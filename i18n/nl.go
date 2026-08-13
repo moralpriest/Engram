@@ -653,7 +653,8 @@ var stringsNL = map[string]string{
 	"notification.incoming":         "Inkomende transactie",
 	"settings.enable_notifications": "Meldingen inschakelen",
 	"settings.notifications_desc":   "Ontvang meldingen voor inkomende transacties en gebeurtenissen.",
-	"settings.classic_label":        "Klassiek",
+	"settings.status_middle":        "Midden",
+	"settings.status_bottom":        "Onder",
 	"settings.status_area":          "Statusgebied",
 
 	"messages.warning_daemon": "Maak verbinding met een daemon om berichten te laden.",

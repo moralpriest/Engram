@@ -618,7 +618,8 @@ var stringsZH = map[string]string{
 	"notification.incoming":                          "收到 %s DERO",
 	"settings.enable_notifications":                  "启用通知",
 	"settings.notifications_desc":                    "显示转入和转出提醒",
-	"settings.classic_label":                         "经典",
+	"settings.status_middle":                         "中间",
+	"settings.status_bottom":                         "底部",
 	"settings.status_area":                           "状态区域",
 	"messages.warning_daemon":                        "使用自己的节点运行可获得更可靠的体验\n\n所有消息都将永久写入区块链\n\n仅当您接受这些风险时才继续",
 

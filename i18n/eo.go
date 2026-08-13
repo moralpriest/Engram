@@ -655,7 +655,8 @@ var stringsEO = map[string]string{
 	"notification.incoming":         "Ricevitaj %s DERO",
 	"settings.enable_notifications": "Ebligi sciigojn",
 	"settings.notifications_desc":   "Montri alertojn por envenantaj kaj elirantaj translokigoj",
-	"settings.classic_label":        "Klasika",
+	"settings.status_middle":        "Mezo",
+	"settings.status_bottom":        "Malsupro",
 	"settings.status_area":          "Stata areo",
 
 	"messages.warning_daemon": "Ruli de via propra demono donas pli fidindan sperton\n\nĈiuj mesaĝoj estas konstante skribitaj al la blokĉeno\n\nDaŭrigu nur se vi akceptas tiujn riskojn",

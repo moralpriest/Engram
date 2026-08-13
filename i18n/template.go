@@ -783,7 +783,8 @@ var stringsTemplate = map[string]string{
 	"notification.incoming":         "",
 	"settings.enable_notifications": "",
 	"settings.notifications_desc":   "",
-	"settings.classic_label":        "",
+	"settings.status_middle":        "",
+	"settings.status_bottom":        "",
 	"settings.status_area":          "",
 
 	"messages.warning_daemon": "",

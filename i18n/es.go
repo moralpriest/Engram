@@ -654,7 +654,8 @@ var stringsES = map[string]string{
 	"notification.incoming":         "%s DERO recibidos",
 	"settings.enable_notifications": "Activar notificaciones",
 	"settings.notifications_desc":   "Mostrar alertas para transferencias entrantes y salientes",
-	"settings.classic_label":        "Clásico",
+	"settings.status_middle":        "Medio",
+	"settings.status_bottom":        "Inferior",
 	"settings.status_area":          "Área de estado",
 
 	"messages.warning_daemon": "Usar su propio daemon proporciona una experiencia más fiable\n\nTodos los mensajes se escriben permanentemente en la blockchain\n\nContinúe solo si acepta estos riesgos",

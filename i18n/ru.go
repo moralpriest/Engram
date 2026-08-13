@@ -655,7 +655,8 @@ var stringsRU = map[string]string{
 	"notification.incoming":         "Получено %s DERO",
 	"settings.enable_notifications": "Включить уведомления",
 	"settings.notifications_desc":   "Показывать оповещения о входящих и исходящих переводах",
-	"settings.classic_label":        "Классический",
+	"settings.status_middle":        "По центру",
+	"settings.status_bottom":        "Внизу",
 	"settings.status_area":          "Область статуса",
 
 	"messages.warning_daemon": "Запуск с собственного демона обеспечивает более надежную работу\n\nВсе сообщения навсегда записываются в блокчейн\n\nПродолжайте только если вы принимаете эти риски",

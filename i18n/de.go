@@ -655,7 +655,8 @@ var stringsDE = map[string]string{
 	"notification.incoming":         "%s DERO erhalten",
 	"settings.enable_notifications": "Benachrichtigungen aktivieren",
 	"settings.notifications_desc":   "Benachrichtigungen für ein- und ausgehende Überweisungen anzeigen",
-	"settings.classic_label":        "Klassisch",
+	"settings.status_middle":        "Mitte",
+	"settings.status_bottom":        "Unten",
 	"settings.status_area":          "Statusbereich",
 
 	"messages.warning_daemon": "Der Betrieb Ihres eigenen Daemons bietet ein zuverlässigeres Erlebnis\n\nAlle Nachrichten werden dauerhaft in der Blockchain gespeichert\n\nFahren Sie nur fort, wenn Sie diese Risiken akzeptieren",

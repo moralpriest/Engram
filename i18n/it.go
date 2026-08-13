@@ -655,7 +655,8 @@ var stringsIT = map[string]string{
 	"notification.incoming":         "Ricevuti %s DERO",
 	"settings.enable_notifications": "Abilita notifiche",
 	"settings.notifications_desc":   "Mostra avvisi per trasferimenti in entrata e in uscita",
-	"settings.classic_label":        "Classico",
+	"settings.status_middle":        "Centro",
+	"settings.status_bottom":        "In basso",
 	"settings.status_area":          "Area stato",
 
 	"messages.warning_daemon": "Gestire il proprio demone offre un'esperienza più affidabile\n\nTutti i messaggi vengono scritti permanentemente sulla blockchain\n\nProcedi solo se accetti questi rischi",

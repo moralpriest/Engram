@@ -758,7 +758,8 @@ var stringsEN = map[string]string{
 	"notification.incoming":         "Received %s DERO",
 	"settings.enable_notifications": "Enable Notifications",
 	"settings.notifications_desc":   "Show alerts for incoming and outgoing transfers",
-	"settings.classic_label":        "Classic",
+	"settings.status_middle":        "Middle",
+	"settings.status_bottom":        "Bottom",
 	"settings.status_area":          "Status Area",
 
 	"messages.warning_daemon": "Running from your own daemon yields a more reliable experience\n\nAll messages are permanently written to the blockchain\n\nProceed only if you accept these risks",

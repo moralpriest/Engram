@@ -656,7 +656,8 @@ var stringsAR = map[string]string{
 	"notification.incoming":         "رسالة جديدة من %s",
 	"settings.enable_notifications": "تفعيل الإشعارات",
 	"settings.notifications_desc":   "تلقي إشعارات للرسائل الواردة.",
-	"settings.classic_label":        "كلاسيكي",
+	"settings.status_middle":        "وسط",
+	"settings.status_bottom":        "أسفل",
 	"settings.status_area":          "منطقة الحالة",
 
 	"messages.warning_daemon": "المراسلة تتطلب اتصالاً بالخادم.",
