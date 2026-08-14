@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"os"
@@ -33,6 +34,10 @@ import (
 	"github.com/DEROFDN/engram/i18n"
 	apptheme "github.com/DEROFDN/engram/internal/theme"
 	"github.com/civilware/tela/logger"
+	"github.com/deroproject/derohe/globals"
+	"github.com/deroproject/derohe/walletapi"
+	"github.com/deroproject/derohe/walletapi/rpcserver"
+	"github.com/deroproject/derohe/walletapi/xswd"
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -390,6 +395,125 @@ func layoutAccount() fyne.CanvasObject {
 		safeCanvasFocus(entryPassword)
 	}
 
+	// Rename Wallet Link
+	linkRenameWallet := widget.NewHyperlinkWithStyle(i18n.T("account.rename_wallet"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	linkRenameWallet.OnTapped = func() {
+		errorText.Text = ""
+		errorText.Refresh()
+
+		header := canvas.NewText(i18n.T("account.verification"), apptheme.C.Gray)
+		header.TextSize = scaleFont(14)
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+
+		subHeader := canvas.NewText(i18n.T("account.confirm_password"), apptheme.C.Account)
+		subHeader.TextSize = scaleFont(22)
+		subHeader.Alignment = fyne.TextAlignCenter
+		subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+		btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+			overlay := session.Window.Canvas().Overlays()
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+			overlay.Remove(overlay.Top())
+		})
+
+		btnConfirm := widget.NewButton(i18n.T("account.submit"), nil)
+		btnConfirm.Disable()
+
+		entryPassword := NewReturnEntry()
+		entryPassword.Password = true
+		entryPassword.PlaceHolder = i18n.T("account.password")
+		entryPassword.OnChanged = func(s string) {
+			if s == "" {
+				btnConfirm.Text = i18n.T("account.submit")
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
+			} else {
+				btnConfirm.Text = i18n.T("account.submit")
+				btnConfirm.Enable()
+				btnConfirm.Refresh()
+			}
+		}
+
+		btnConfirm.OnTapped = func() {
+			if engram.Disk.Check_Password(entryPassword.Text) {
+				addFullscreenOverlay(
+					container.NewStack(
+						&iframe{},
+						canvas.NewRectangle(apptheme.C.DarkMatter),
+					),
+				)
+				addFullscreenOverlay(renameWalletOverlay(entryPassword.Text, errorText))
+			} else {
+				btnConfirm.Text = i18n.T("account.invalid_password")
+				btnConfirm.Disable()
+				btnConfirm.Refresh()
+			}
+		}
+
+		entryPassword.OnReturn = btnConfirm.OnTapped
+
+		span := canvas.NewRectangle(color.Transparent)
+		span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+
+		addFullscreenOverlay(
+			container.NewStack(
+				&iframe{},
+				canvas.NewRectangle(apptheme.C.DarkMatter),
+			),
+		)
+
+		top := container.NewVBox(
+			rectSpacer,
+			rectSpacer,
+			container.NewCenter(header),
+			rectSpacer,
+			rectSpacer,
+		)
+
+		center := container.NewCenter(
+			container.NewVBox(
+				subHeader,
+				widget.NewLabel(""),
+				container.NewCenter(
+					container.NewStack(
+						span,
+						entryPassword,
+					),
+				),
+				rectSpacer,
+				rectSpacer,
+				wrapMobileButton(btnConfirm),
+			),
+		)
+
+		bottom := container.NewStack(
+			container.NewVBox(
+				rectSpacer,
+				container.NewCenter(
+					container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+				),
+				rectSpacer,
+			),
+		)
+
+		addFullscreenOverlay(
+			container.NewStack(
+				&iframe{},
+				container.NewBorder(
+					top,
+					bottom,
+					nil,
+					nil,
+					center,
+				),
+			),
+		)
+
+		safeCanvasFocus(entryPassword)
+	}
+
 	// Change Password Link
 	linkChangePassword := widget.NewHyperlinkWithStyle(i18n.T("account.change_password"), nil, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	linkChangePassword.OnTapped = func() {
@@ -669,6 +793,7 @@ func layoutAccount() fyne.CanvasObject {
 						container.NewVBox(
 							linkRecoveryWords,
 							linkRecoveryHex,
+							linkRenameWallet,
 							linkChangePassword,
 							linkExportWallet,
 							errorText,
@@ -978,4 +1103,291 @@ func layoutRecoveryHex() fyne.CanvasObject {
 	)
 
 	return layout
+}
+
+var (
+	errWalletNameInvalid = errors.New("invalid wallet name")
+	errWalletNameExists  = errors.New("wallet name already exists")
+)
+
+// renameWalletOverlay shows the rename dialog: a name entry prefilled with the
+// current wallet name plus confirm/cancel. It needs the wallet password (from
+// the verification overlay) so the wallet can be reopened at its new path once
+// the db file has been renamed.
+func renameWalletOverlay(password string, errorText *canvas.Text) fyne.CanvasObject {
+	header := canvas.NewText(i18n.T("account.authorization"), apptheme.C.Gray)
+	header.TextSize = scaleFont(14)
+	header.Alignment = fyne.TextAlignCenter
+	header.TextStyle = fyne.TextStyle{Bold: true}
+
+	subHeader := canvas.NewText(i18n.T("account.rename_wallet"), apptheme.C.Account)
+	subHeader.TextSize = scaleFont(22)
+	subHeader.Alignment = fyne.TextAlignCenter
+	subHeader.TextStyle = fyne.TextStyle{Bold: true}
+
+	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		overlay := session.Window.Canvas().Overlays()
+		overlay.Top().Hide()
+		overlay.Remove(overlay.Top())
+		overlay.Remove(overlay.Top())
+	})
+
+	rectSpacer := canvas.NewRectangle(color.Transparent)
+	rectSpacer.SetMinSize(standardSpacerSize())
+
+	currentName := strings.TrimSuffix(filepath.Base(session.Path), ".db")
+
+	btnConfirm := widget.NewButton(i18n.T("account.submit"), nil)
+	btnConfirm.Disable()
+
+	entryName := NewReturnEntry()
+	entryName.Text = currentName
+	entryName.PlaceHolder = i18n.T("account.rename_placeholder")
+	entryName.OnChanged = func(s string) {
+		name := strings.TrimSuffix(strings.TrimSpace(s), ".db")
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(name) == currentName {
+			btnConfirm.Text = i18n.T("account.submit")
+			btnConfirm.Disable()
+		} else {
+			btnConfirm.Text = i18n.T("account.submit")
+			btnConfirm.Enable()
+		}
+		btnConfirm.Refresh()
+	}
+
+	btnConfirm.OnTapped = func() {
+		btnConfirm.Disable()
+		btnConfirm.Text = i18n.T("account.submit")
+		btnConfirm.Refresh()
+
+		err := renameWalletFile(entryName.Text, password)
+		if err != nil {
+			switch {
+			case errors.Is(err, errWalletNameInvalid):
+				btnConfirm.Text = i18n.T("account.rename_invalid")
+			case errors.Is(err, errWalletNameExists):
+				btnConfirm.Text = i18n.T("account.rename_exists")
+			default:
+				btnConfirm.Text = i18n.T("account.rename_error")
+			}
+			btnConfirm.Enable()
+			btnConfirm.Refresh()
+			return
+		}
+
+		// Success: dismiss all overlays and report on the account page.
+		overlay := session.Window.Canvas().Overlays()
+		for overlay.Top() != nil {
+			overlay.Top().Hide()
+			overlay.Remove(overlay.Top())
+		}
+		errorText.Text = i18n.T("account.rename_success")
+		errorText.Color = apptheme.C.Green
+		errorText.Refresh()
+	}
+
+	entryName.OnReturn = btnConfirm.OnTapped
+
+	span := canvas.NewRectangle(color.Transparent)
+	span.SetMinSize(fyne.NewSize(ui.Width, scaleSize(10)))
+
+	top := container.NewVBox(
+		rectSpacer,
+		rectSpacer,
+		container.NewCenter(header),
+		rectSpacer,
+		rectSpacer,
+	)
+
+	center := container.NewCenter(
+		container.NewVBox(
+			subHeader,
+			widget.NewLabel(""),
+			container.NewCenter(
+				container.NewStack(
+					span,
+					entryName,
+				),
+			),
+			rectSpacer,
+			rectSpacer,
+			wrapMobileButton(btnConfirm),
+		),
+	)
+
+	bottom := container.NewStack(
+		container.NewVBox(
+			rectSpacer,
+			container.NewCenter(
+				container.New(layout.NewGridLayoutWithColumns(1), btnBack),
+			),
+			rectSpacer,
+		),
+	)
+
+	return container.NewStack(
+		&iframe{},
+		container.NewBorder(
+			top,
+			bottom,
+			nil,
+			nil,
+			center,
+		),
+	)
+}
+
+// renameWalletFile renames the wallet db file on disk and reopens the wallet at
+// its new path so the app keeps running with the same keys. The wallet is saved
+// and closed first so the file can move safely, then reopened with the password
+// captured from the verification overlay.
+func renameWalletFile(newName, password string) error {
+	name := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(newName), ".db"))
+
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+		return errWalletNameInvalid
+	}
+
+	oldPath := session.Path
+	newPath := filepath.Join(filepath.Dir(oldPath), name+".db")
+
+	// Nothing to do when the name did not actually change.
+	if filepath.Clean(newPath) == filepath.Clean(oldPath) {
+		return nil
+	}
+
+	if _, err := os.Stat(newPath); err == nil {
+		return errWalletNameExists
+	}
+
+	// Save and close the wallet so the db file can be renamed safely.
+	if engram.Disk != nil {
+		if err := engram.Disk.Save_Wallet(); err != nil {
+			logger.Errorf("[Engram] Failed to save wallet before rename: %s\n", err)
+		}
+		engram.Disk.Close_Encrypted_Wallet()
+	}
+
+	if err := os.Rename(oldPath, newPath); err != nil {
+		logger.Errorf("[Engram] Renaming wallet %s to %s: %s\n", oldPath, newPath, err)
+		restoreWalletSession(oldPath, password)
+		return err
+	}
+
+	// Keep the backup copy in sync with the new name.
+	if _, err := os.Stat(oldPath + ".bak"); err == nil {
+		os.Remove(newPath + ".bak")
+		if err := os.Rename(oldPath+".bak", newPath+".bak"); err != nil {
+			logger.Warnf("[Engram] Could not rename wallet backup %s: %s\n", oldPath+".bak", err)
+		}
+	}
+
+	// Reopen the wallet at its new path; roll the file back if that fails.
+	temp, err := walletapi.Open_Encrypted_Wallet(newPath, password)
+	if err != nil {
+		_ = os.Rename(newPath, oldPath)
+		logger.Errorf("[Engram] Reopening renamed wallet %s: %s\n", newPath, err)
+		restoreWalletSession(oldPath, password)
+		return err
+	}
+
+	engram.Disk = temp
+	session.Path = newPath
+	session.Name = name
+
+	reapplyWalletSessionSettings()
+	restartRemoteAccessServers()
+
+	logger.Printf("[Engram] Wallet renamed: %s -> %s\n", oldPath, newPath)
+	return nil
+}
+
+// restoreWalletSession reopens the wallet at the given path after a failed
+// rename so the running session is not left with a closed wallet.
+func restoreWalletSession(path, password string) {
+	temp, err := walletapi.Open_Encrypted_Wallet(path, password)
+	if err != nil {
+		logger.Errorf("[Engram] Failed to restore wallet session at %s: %s\n", path, err)
+		return
+	}
+	engram.Disk = temp
+	reapplyWalletSessionSettings()
+	restartRemoteAccessServers()
+}
+
+// reapplyWalletSessionSettings re-applies network, daemon, and ring-size state
+// to a freshly opened wallet (mirrors the setup done in login()).
+func reapplyWalletSessionSettings() {
+	switch session.Network {
+	case NETWORK_TESTNET:
+		engram.Disk.SetNetwork(false)
+		globals.Arguments["--testnet"] = true
+		globals.Arguments["--simulator"] = false
+	case NETWORK_SIMULATOR:
+		engram.Disk.SetNetwork(true)
+		globals.Arguments["--testnet"] = false
+		globals.Arguments["--simulator"] = true
+	default:
+		engram.Disk.SetNetwork(true)
+		globals.Arguments["--testnet"] = false
+		globals.Arguments["--simulator"] = false
+	}
+
+	if !session.Offline {
+		walletapi.SetDaemonAddress(session.Daemon)
+		engram.Disk.SetDaemonAddress(session.Daemon)
+		if session.TrackRecentBlocks > 0 {
+			engram.Disk.SetTrackRecentBlocks(session.TrackRecentBlocks)
+		}
+	} else {
+		engram.Disk.SetOfflineMode()
+	}
+
+	setRingSize(engram.Disk, 16)
+	beginWalletSession()
+}
+
+// restartRemoteAccessServers re-binds the Remote Access RPC and XSWD servers to
+// the reopened wallet after a rename, since both cache the wallet pointer.
+func restartRemoteAccessServers() {
+	// Remote Access RPC server.
+	if remoteAccess.RPC.server != nil {
+		remoteAccess.RPC.server.RPCServer_Stop()
+		remoteAccess.RPC.server = nil
+		port := remoteAccess.RPC.port
+		if port == "" {
+			port = getRemoteAccess("RPC")
+		}
+		if port != "" {
+			globals.Arguments["--rpc-bind"] = port
+			if remoteAccess.RPC.user == "" {
+				remoteAccess.RPC.user = newRPCUsername()
+			}
+			if remoteAccess.RPC.pass == "" {
+				remoteAccess.RPC.pass = newRPCPassword()
+			}
+			globals.Arguments["--rpc-login"] = remoteAccess.RPC.user + ":" + remoteAccess.RPC.pass
+			srv, err := rpcserver.RPCServer_Start(engram.Disk, "RemoteAccess")
+			if err != nil {
+				logger.Errorf("[Engram] Failed to restart RPC server after wallet rename: %s\n", err)
+			} else {
+				remoteAccess.RPC.server = srv
+				logger.Printf("[Engram] RPC server restarted after wallet rename\n")
+			}
+		}
+	}
+
+	// XSWD (WebSocket) server.
+	if remoteAccess.WS.server != nil {
+		remoteAccess.WS.server.Stop()
+		xswdStateMu.Lock()
+		remoteAccess.WS.server = nil
+		remoteAccess.WS.apps = []xswd.ApplicationData{}
+		xswdStateMu.Unlock()
+		port := remoteAccess.WS.port
+		if port == "" {
+			port = ":44326"
+		}
+		go toggleXSWD(port)
+	}
 }
