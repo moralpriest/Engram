@@ -1795,8 +1795,13 @@ func layoutNodeModeSelection() fyne.CanvasObject {
 	)
 
 	// Force Full Mode checkbox when space check fails
+	// NOTE: the label is a sentence and must not sit on the Check (it would
+	// force the fixed 360px window wider in longer translations — see docs/Theme.md),
+	// so it is rendered as a wrapping RichText with an empty-label check beside it.
 	if !health.HasSpaceForFull {
-		forceCheck := widget.NewCheck(i18n.T("daemon_miner.force_full_mode"), func(checked bool) {
+		forceDesc := widget.NewRichTextFromMarkdown(i18n.T("daemon_miner.force_full_mode"))
+		forceDesc.Wrapping = fyne.TextWrapWord
+		forceCheck := widget.NewCheck("", func(checked bool) {
 			saveForceFullMode(checked)
 			if checked {
 				saveBtn.Enable()
@@ -1805,6 +1810,7 @@ func layoutNodeModeSelection() fyne.CanvasObject {
 		if forceFullMode {
 			forceCheck.SetChecked(true)
 		}
+		modeContent.Add(forceDesc)
 		modeContent.Add(forceCheck)
 	}
 
