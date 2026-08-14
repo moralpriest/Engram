@@ -447,10 +447,9 @@ func layoutMyAssets() fyne.CanvasObject {
 
 						assetTotal += 1
 
-						results.Text = "  Scanning... " + fmt.Sprintf("%d / %d", assetTotal, assetCount)
-						results.Color = apptheme.StatusTextColor()
-
 						fyne.Do(func() {
+							results.Text = "  Scanning... " + fmt.Sprintf("%d / %d", assetTotal, assetCount)
+							results.Color = apptheme.StatusTextColor()
 							results.Refresh()
 						})
 
@@ -1831,11 +1830,10 @@ func createAssetExplorerTabContent() fyne.CanvasObject {
 				if session.Domain != "app.explorer" && session.Domain != "app.filescontracts" {
 					break
 				}
-				entrySCID.Disable()
-				results.Text = "  Gnomon is syncing..."
-				results.Color = apptheme.StatusTextColor()
-
 				fyne.Do(func() {
+					entrySCID.Disable()
+					results.Text = "  Gnomon is syncing..."
+					results.Color = apptheme.StatusTextColor()
 					results.Refresh()
 				})
 

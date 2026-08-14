@@ -4,3 +4,6 @@ Name = "Engram"
 ID = "com.engram.wallet"
 Version = "0.6.9"
 Build = 616
+
+[Migrations]
+fyneDo = true

@@ -306,7 +306,9 @@ func layoutTELA() fyne.CanvasObject {
 		if len(s) > maxStatusLen {
 			s = s[:maxStatusLen-3] + "..."
 		}
-		results.Text = s
+		fyne.Do(func() {
+			results.Text = s
+		})
 	}
 
 	setTelaProgress := func(value float64) {
@@ -902,9 +904,11 @@ func layoutTELA() fyne.CanvasObject {
 							// Skip opening a tab that can never connect when it isn't ready.
 							if !EnsureXSWD() {
 								logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
-								errorText.Text = i18n.T("tela.error_cannot_open")
-								errorText.Color = apptheme.C.Red
-								errorText.Refresh()
+								fyne.Do(func() {
+									errorText.Text = i18n.T("tela.error_cannot_open")
+									errorText.Color = apptheme.C.Red
+									errorText.Refresh()
+								})
 								return
 							}
 
@@ -2051,8 +2055,8 @@ func layoutTELA() fyne.CanvasObject {
 						if allowTelaIndexMutations && gnomon.GetAllSCIDVariableDetails(scid) == nil {
 							if atomic.AddInt64(&cachedAdded, 1)%8 == 0 {
 								setResultsText("  Adding... (%d / %d)", idx+1, len(missingSCIDs))
-								results.Color = apptheme.StatusTextColor()
 								fyne.Do(func() {
+									results.Color = apptheme.StatusTextColor()
 									results.Refresh()
 								})
 							}
@@ -3816,10 +3820,9 @@ func layoutTELA() fyne.CanvasObject {
 				linkPermission, err := AskPermissionForRequestE("Open TELA Link", telaLink)
 				if err != nil {
 					logger.Errorf("[Engram] Open TELA link: %s\n", err)
-					errorText.Text = i18n.T("tela.error_cannot_open")
-					errorText.Color = apptheme.C.Red
-
 					fyne.Do(func() {
+						errorText.Text = i18n.T("tela.error_cannot_open")
+						errorText.Color = apptheme.C.Red
 						errorText.Refresh()
 					})
 
@@ -3827,7 +3830,9 @@ func layoutTELA() fyne.CanvasObject {
 				}
 
 				if linkPermission != xswd.Allow {
-					entryServeSCID.SetText("")
+					fyne.Do(func() {
+						entryServeSCID.SetText("")
+					})
 					return
 				}
 
@@ -4799,9 +4804,11 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 						// Skip opening a tab that can never connect when it isn't ready.
 						if !EnsureXSWD() {
 							logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
-							errorText.Text = i18n.T("tela.error_cannot_open")
-							errorText.Color = apptheme.C.Red
-							errorText.Refresh()
+							fyne.Do(func() {
+								errorText.Text = i18n.T("tela.error_cannot_open")
+								errorText.Color = apptheme.C.Red
+								errorText.Refresh()
+							})
 							return
 						}
 

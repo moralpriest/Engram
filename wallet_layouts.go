@@ -2960,7 +2960,10 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+			fyne.Do(func() {
+				results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+				results.Refresh()
+			})
 
 			_ = listData.Set(data)
 
@@ -3025,7 +3028,10 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+			fyne.Do(func() {
+				results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+				results.Refresh()
+			})
 
 			_ = listData.Set(data)
 
@@ -3090,7 +3096,10 @@ func layoutHistory() fyne.CanvasObject {
 				}
 			}
 
-			results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+			fyne.Do(func() {
+				results.Text = fmt.Sprintf(i18n.T("history.results"), countNonHeaders(data))
+				results.Refresh()
+			})
 
 			_ = listData.Set(data)
 

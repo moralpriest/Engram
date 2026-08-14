@@ -901,16 +901,20 @@ func layoutPM() fyne.CanvasObject {
 
 				// If we go DEFAULT_CONFIRMATION_TIMEOUT blocks without exiting 'Confirming...' loop, display failed to transfer and break
 				if walletapi.Get_Daemon_Height() > sHeight+int64(DEFAULT_CONFIRMATION_TIMEOUT) {
-					btnSend.Text = i18n.T("messages.failed_send")
-					btnSend.Disable()
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Text = i18n.T("messages.failed_send")
+						btnSend.Disable()
+						btnSend.Refresh()
+					})
 					break
 				}
 
 				// If daemon height has incremented, print retry counters into button space
 				if walletapi.Get_Daemon_Height()-sHeight > 0 {
-					btnSend.Text = fmt.Sprintf(i18n.T("transfers.confirming_progress"), walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
-					btnSend.Refresh()
+					fyne.Do(func() {
+						btnSend.Text = fmt.Sprintf(i18n.T("transfers.confirming_progress"), walletapi.Get_Daemon_Height()-sHeight, DEFAULT_CONFIRMATION_TIMEOUT)
+						btnSend.Refresh()
+					})
 				}
 
 				// If success, reload page w/ latest content. Otherwise retain the Failure message for UX relay
