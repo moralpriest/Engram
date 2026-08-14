@@ -42,6 +42,21 @@ sudo dnf install mesa-libGL-devel libX11-devel libXcursor-devel libXrandr-devel
 sudo pacman -S libx11 libxcursor libxrandr mesa
 ```
 
+### Wayland and X11
+
+Engram (via Fyne 2.8+) automatically uses **Wayland** when it is available, and falls back to X11 otherwise. Both work, but note:
+
+- On a Wayland session, Engram runs as a native Wayland client — no setup needed.
+- On X11, Engram runs as usual via `$DISPLAY`.
+- If you have both and want to force one, run:
+  ```bash
+  # Force X11
+  WAYLAND_DISPLAY= ./Engram
+  # Force Wayland
+  XDG_SESSION_TYPE=wayland ./Engram
+  ```
+- If the window does not appear in a mixed setup, unset `WAYLAND_DISPLAY` and launch again.
+
 ### 4. Create an account
 
 - Click **New Account**
