@@ -973,7 +973,6 @@ func layoutDashboard() fyne.CanvasObject {
 func layoutSend() fyne.CanvasObject {
 	session.Domain = "app.send"
 
-	wSpacer := widget.NewLabel(" ")
 	frame := &iframe{}
 
 	btnSend := widget.NewButtonWithIcon(i18n.T("send.save"), theme.DocumentSaveIcon(), nil)
@@ -1475,7 +1474,6 @@ func layoutSend() fyne.CanvasObject {
 			),
 		),
 		rectSpacer,
-		rectSpacer,
 		container.NewHBox(
 			line1,
 			layout.NewSpacer(),
@@ -1484,10 +1482,8 @@ func layoutSend() fyne.CanvasObject {
 			line2,
 		),
 		rectSpacer,
-		rectSpacer,
 		wPaymentID,
 		wMessage,
-		wSpacer,
 	)
 
 	rectWidth90 := canvas.NewRectangle(color.Transparent)
