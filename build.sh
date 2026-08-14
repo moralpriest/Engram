@@ -40,7 +40,7 @@ fi
 
 # macOS Package
 echo "Packaging for macOS..."
-fyne package --target darwin --name Engram --app-version 0.6.7 --app-id com.engram.wallet --icon Icon.png --tags migrated_fynedo --executable engram
+fyne package --target darwin --name Engram --app-version 0.7.0 --app-id com.engram.wallet --icon Icon.png --tags migrated_fynedo --executable engram
 
 # Fix macOS camera permissions (required for QR scanning)
 ./fix_macos_permissions.sh Engram.app

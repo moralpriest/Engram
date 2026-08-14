@@ -71,7 +71,7 @@ const (
 
 // Version info - injected at build time via ldflags
 // Build with: go build -ldflags "-X main.versionString=1.0.0"
-var versionString = "0.6.9"
+var versionString = "0.7.0"
 var version semver.Version
 var a fyne.App
 var engram Engram

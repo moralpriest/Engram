@@ -115,7 +115,7 @@ This task automatically runs `./fix_macos_permissions.sh` to apply the necessary
 
 #### Building for Windows
 ```bash
-fyne package -name Engram -os windows -appVersion 0.6.9 -icon assets/Icon.png -tags migrated_fynedo
+fyne package -name Engram -os windows -appVersion 0.7.0 -icon assets/Icon.png -tags migrated_fynedo
 ```
 
 #### Building for Android
