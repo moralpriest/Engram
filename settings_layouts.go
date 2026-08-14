@@ -1201,9 +1201,11 @@ func layoutAppSettings() fyne.CanvasObject {
 	}
 
 	// Sort By radio buttons
+	// NOTE: intentionally vertical — a horizontal RadioGroup's min width is the
+	// SUM of all option labels (which don't wrap), so longer translations like
+	// German/Dutch/Greek would force the fixed 360px window wider. See docs/Theme.md.
 	sortByOptions := []string{i18n.T("settings.ratings"), i18n.T("settings.az"), i18n.T("settings.recent")}
 	wSortBy := widget.NewRadioGroup(sortByOptions, nil)
-	wSortBy.Horizontal = true
 	if storedSortBy, found := getTELADual("Sort By"); found {
 		if storedSortBy == "Z-A" {
 			wSortBy.SetSelected(i18n.T("settings.az"))
