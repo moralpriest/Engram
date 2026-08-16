@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"image/color"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +57,37 @@ func layoutTransition() fyne.CanvasObject {
 	return NewVScroll(res.cachedTransition)
 }
 
+// rateSample is one (elapsed, attempts) observation used by the countdown's
+// rolling hashrate window.
+type rateSample struct {
+	elapsed  float64
+	attempts int64
+}
+
+// rateWindow estimates the current hashrate from a sliding window of samples.
+// It keeps a short memory so the ETA converges to the machine's true speed
+// within a few seconds (see the countdown goroutine for the rationale), and
+// falls back to the lifetime average until the window spans minSpanSeconds.
+// Call rate() once per UI tick with the latest counter and elapsed time.
+type rateWindow struct {
+	samples []rateSample
+}
+
+func (w *rateWindow) rate(attempts int64, elapsed, windowSeconds, minSpanSeconds float64) float64 {
+	w.samples = append(w.samples, rateSample{elapsed: elapsed, attempts: attempts})
+	for len(w.samples) > 1 && elapsed-w.samples[0].elapsed > windowSeconds {
+		w.samples = w.samples[1:]
+	}
+
+	hashRate := float64(attempts) / elapsed
+	if span := elapsed - w.samples[0].elapsed; span >= minSpanSeconds {
+		if dN := float64(attempts - w.samples[0].attempts); dN > 0 {
+			hashRate = dN / span
+		}
+	}
+	return hashRate
+}
+
 func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, link *widget.Hyperlink) fyne.CanvasObject {
 	rect := canvas.NewRectangle(color.Transparent)
 	rect.SetMinSize(fyne.NewSize(ui.Width*0.6, ui.Height*0.35))
@@ -77,6 +109,20 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 	timeLabel.TextSize = scaleFont(12)
 
 	go func() {
+		// Rolling-window hashrate so the countdown tracks *current* mining
+		// speed. The window is deliberately short (6s) so the estimate
+		// converges within a few seconds: the first moments of mining are
+		// slow while workers spin up, and a long window keeps dragging the
+		// estimate down — which made the countdown overestimate on fast
+		// machines that finish in under a minute. It falls back to the
+		// lifetime average for the first couple of seconds until the window
+		// has enough span to be stable.
+		const (
+			rateWindowSeconds = 6.0
+			rateWindowMinSpan = 2.0
+		)
+		var window rateWindow
+
 		for engram.Disk != nil && session.Domain == "app.register" {
 			elapsed := time.Since(startTime).Seconds()
 			fyne.Do(func() {
@@ -93,19 +139,24 @@ func layoutWaiting(title *canvas.Text, heading *canvas.Text, sub *canvas.Text, l
 					return
 				}
 
-				if elapsed >= 2.0 && attempts > 0 {
-					hashRate := float64(attempts) / elapsed
-					expectedTotal := 16777216.0 / hashRate
-					remaining := expectedTotal - elapsed
+				if elapsed >= 1.0 && attempts > 0 {
+					hashRate := window.rate(attempts, elapsed, rateWindowSeconds, rateWindowMinSpan)
 
-					if remaining <= 0 {
-						timeLabel.Text = i18n.T("register.countdown_completing")
-					} else if remaining > 3600 {
-						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_hours"), int(remaining)/3600, (int(remaining)%3600)/60)
-					} else if remaining > 60 {
-						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_minutes"), int(remaining)/60, int(remaining)%60)
-					} else {
-						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_seconds"), int(remaining))
+					// Single upper-bound estimate: mining is a memoryless
+					// Poisson process, so the mean remaining time is constant
+					// until the winning hash is found. We show 2x the mean
+					// (what ~86% of runs finish by) — a reliable "expect it
+					// within this time" that rarely overruns, rounded up so
+					// it never under-promises.
+					eta := registrationETA(hashRate)
+					totalSec := int(math.Ceil(eta))
+					switch {
+					case totalSec >= 3600:
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_hours"), totalSec/3600, (totalSec%3600)/60)
+					case totalSec >= 60:
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_minutes"), totalSec/60, totalSec%60)
+					default:
+						timeLabel.Text = fmt.Sprintf(i18n.T("register.countdown_fmt_seconds"), totalSec)
 					}
 				} else {
 					timeLabel.Text = i18n.T("register.countdown_estimating")

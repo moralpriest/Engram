@@ -3266,6 +3266,46 @@ func confirmSendAsync(txid crypto.Hash, amount uint64, destination string) {
 	}()
 }
 
+// registrationPoWLeadingZeroBits is the number of leading zero bits a
+// registration transaction hash must carry to be accepted. Raised from 24 to
+// 28 bits (see the comment in registerAccount) to restore the anti-spam cost
+// of wallet registration after the increment-optimized mining loop made
+// hashing much faster. A 28-bit winner also satisfies the historical 24-bit
+// consensus check, so this works before and after the DEROHE HF4 target raise.
+const registrationPoWLeadingZeroBits = 28
+
+// registrationPoWSolved reports whether hash meets the registration PoW target.
+func registrationPoWSolved(hash crypto.Hash) bool {
+	fullBytes := registrationPoWLeadingZeroBits / 8 // 3
+	remBits := registrationPoWLeadingZeroBits % 8   // 4
+	for i := 0; i < fullBytes; i++ {
+		if hash[i] != 0 {
+			return false
+		}
+	}
+	mask := byte(0xFF << (8 - remBits))
+	return hash[fullBytes]&mask == 0
+}
+
+// registrationETA returns the estimated remaining seconds until the
+// registration PoW is solved, shown to the user as a countdown. Mining is a
+// memoryless Poisson process: every hash wins with probability
+// 2^-registrationPoWLeadingZeroBits, so a single run's duration is
+// exponentially distributed with mean 2^bits/hashRate — the honest expected
+// remaining time stays at the mean no matter how long you have already
+// mined. Reporting the mean directly feels optimistic to users because ~63%%
+// of runs take longer than it (the distribution's tail pulls the average
+// up), so we report the upper bound of the typical window instead:
+// 2.0 * mean, which ~86%% of runs finish by. It rarely overruns, which
+// reads as a reliable "expect it within this time".
+func registrationETA(hashRate float64) float64 {
+	if hashRate <= 0 {
+		return 0
+	}
+	mean := float64(uint64(1)<<registrationPoWLeadingZeroBits) / hashRate
+	return 2.0 * mean
+}
+
 // Go Routine for account registration
 func registerAccount() {
 	session.Domain = "app.register"
@@ -3308,8 +3348,15 @@ func registerAccount() {
 	// building a fresh tx per attempt (walletapi.GetRegistrationTX does a
 	// ScalarMult + two string formats + full IsRegistrationValid every try),
 	// sign once with a random nonce, then advance the nonce by one each
-	// attempt (point += G). The 24-bit target and wire format are unchanged.
+	// attempt (point += G). The wire format is unchanged.
 	// Sound because at most one registration is ever published per wallet.
+	//
+	// We search for a 28-bit target (3 zero bytes + zero high nibble of byte 3),
+	// raised from the historical 24-bit consensus target to restore the
+	// anti-spam cost of wallet registration after this optimization made
+	// mining ~10-20x faster. A 28-bit winner trivially satisfies the 24-bit
+	// check, so this is valid both before and after the network raises its
+	// target (see MAJOR_HF4_HEIGHT in derohe).
 	go func() {
 		var reg_tx *transaction.Transaction
 		successful_regs := make(chan *transaction.Transaction, 1)
@@ -3368,7 +3415,7 @@ func registerAccount() {
 					hash := ltx.GetHash()
 					atomic.AddInt64(&session.RegHashes, 1)
 
-					if hash[0] == 0 && hash[1] == 0 && hash[2] == 0 {
+					if registrationPoWSolved(hash) {
 						candidate := ltx
 						if candidate.IsRegistrationValid() {
 							select {

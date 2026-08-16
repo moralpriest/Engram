@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/DEROFDN/engram/i18n"
 	"github.com/civilware/tela"
+	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/rpc"
 	"github.com/deroproject/derohe/walletapi"
 )
@@ -31,6 +33,124 @@ func TestDecodeHex(t *testing.T) {
 				t.Fatalf("decodeHex(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRegistrationPoWSolved guards the raised registration PoW target: Engram
+// must search for 28 leading zero bits (not the historical 24), so a winner
+// with only three zero bytes but a set high nibble on byte 3 is rejected.
+func TestRegistrationPoWSolved(t *testing.T) {
+	hash := func(b0, b1, b2, b3 byte) crypto.Hash {
+		var h crypto.Hash
+		h[0] = b0
+		h[1] = b1
+		h[2] = b2
+		h[3] = b3
+		return h
+	}
+
+	tests := []struct {
+		name string
+		h    crypto.Hash
+		want bool
+	}{
+		{name: "28-bit winner", h: hash(0, 0, 0, 0x0F), want: true},
+		{name: "all zero", h: hash(0, 0, 0, 0), want: true},
+		{name: "only 24 bits (high nibble set)", h: hash(0, 0, 0, 0x10), want: false},
+		{name: "third byte set", h: hash(0, 0, 1, 0), want: false},
+		{name: "first byte set", h: hash(1, 0, 0, 0), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := registrationPoWSolved(tt.h); got != tt.want {
+				t.Fatalf("registrationPoWSolved(%x) = %v, want %v", tt.h, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRegistrationETA guards the countdown number shown on the registration
+// screen: it is 2x the memoryless mean (2^bits/hashRate), i.e. the upper bound
+// of the typical window that ~86%% of runs finish by, and must be zero for a
+// non-positive hashrate.
+func TestRegistrationETA(t *testing.T) {
+	mean := float64(uint64(1)<<registrationPoWLeadingZeroBits) / 1e6
+
+	tests := []struct {
+		name     string
+		hashRate float64
+		want     float64
+	}{
+		{name: "1 MH/s", hashRate: 1e6, want: 2.0 * mean},
+		{name: "double speed halves ETA", hashRate: 2e6, want: 2.0 * mean / 2},
+		{name: "zero hashrate", hashRate: 0, want: 0},
+		{name: "negative hashrate", hashRate: -5, want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := registrationETA(tt.hashRate)
+			if math.Abs(got-tt.want) > 1e-6 {
+				t.Fatalf("registrationETA(%v) = %v, want %v", tt.hashRate, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRateWindowConvergence guards the countdown's hashrate estimator: the
+// first seconds of mining are slow while workers spin up, and on a fast
+// machine the ETA must converge to the true steady-state rate within a few
+// seconds rather than staying dragged down by the warm-up (the old 20s window
+// kept the slow start in view for most of a sub-minute run). Simulates a
+// machine that ramps from 0.5M to 6M h/s over the first 3s, ticking every
+// 0.5s like the UI loop.
+func TestRateWindowConvergence(t *testing.T) {
+	const (
+		windowSeconds = 6.0
+		minSpanSeconds = 2.0
+	)
+
+	var w rateWindow
+	attempts := int64(0)
+	elapsed := 0.0
+	lastRate := 0.0
+
+	step := func(rate float64) {
+		attempts += int64(rate * 0.5)
+		elapsed += 0.5
+		lastRate = w.rate(attempts, elapsed, windowSeconds, minSpanSeconds)
+	}
+
+	// Warm-up: 0.5M h/s for the first 3 seconds.
+	for elapsed < 3.0 {
+		step(0.5e6)
+	}
+	// Steady state: 6M h/s for 12 more seconds.
+	for i := 0; i < 24; i++ {
+		step(6e6)
+	}
+
+	// The warm-up must have fully left the 6s window, so the estimate should
+	// be back at (or very near) the steady-state rate.
+	if lastRate < 5.5e6 {
+		t.Fatalf("rate window did not converge to steady-state 6M h/s: got %.0f h/s", lastRate)
+	}
+}
+
+// TestRateWindowFallback guards the pre-window fallback: before the window
+// spans minSpanSeconds it reports the lifetime average (attempts/elapsed), so
+// the countdown always has a sane value from the first tick.
+func TestRateWindowFallback(t *testing.T) {
+	var w rateWindow
+
+	// Two samples 0.5s apart, so the window spans only 0.5s < minSpan 2.0.
+	first := w.rate(100, 0.5, 6.0, 2.0)
+	if got := w.rate(200, 1.0, 6.0, 2.0); got != 200.0/1.0 {
+		t.Fatalf("expected lifetime-average fallback %v, got %v", 200.0/1.0, got)
+	}
+	if first <= 0 {
+		t.Fatalf("first sample rate must be positive, got %v", first)
 	}
 }
 
