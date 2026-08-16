@@ -68,6 +68,7 @@ var (
 	minerThreads            int
 	minerWalletAddr         string
 	minerDaemonAddr         string
+	minerEngine             MinerEngine            // DEROHE (default) or Dirtybird
 	daemonMode              string                 // "full" or "pruned" - persisted
 	daemonFastSync          bool                   // use --fastsync flag on startup - persisted
 	daemonIntegratorAddress string                 // optional integrator reward address
@@ -177,6 +178,11 @@ func loadDaemonConfig() {
 		daemonIntegratorAddress = string(val)
 	}
 
+	// Load persisted miner engine (DEROHE or Dirtybird)
+	if val, err := GetEncryptedValue("settings", []byte("miner_engine")); err == nil && len(val) > 0 {
+		minerEngine = engineFromString(string(val))
+	}
+
 	// Load force full mode preference
 	loadForceFullMode()
 }
@@ -198,6 +204,11 @@ func saveDaemonFastSync(fastSync bool) {
 func saveIntegratorAddress(addr string) {
 	daemonIntegratorAddress = addr
 	StoreEncryptedValue("settings", []byte("daemon_integrator"), []byte(addr))
+}
+
+func saveMinerEngine(e MinerEngine) {
+	minerEngine = e
+	StoreEncryptedValue("settings", []byte("miner_engine"), []byte(e.String()))
 }
 
 var forceFullMode bool
@@ -529,7 +540,7 @@ func resolveMinerDaemonAddr() string {
 	return fmt.Sprintf("%s:%d", host, daemonWorkPort())
 }
 
-// startMiner launches the embedded CPU miner.
+// startMiner launches the selected CPU miner engine.
 func startMiner() {
 	if minerWalletAddr == "" && engram.Disk != nil {
 		minerWalletAddr = engram.Disk.GetAddress().String()
@@ -544,14 +555,24 @@ func startMiner() {
 	// Resolve the miner daemon address from the connected node (supports remote nodes)
 	minerDaemonAddr = resolveMinerDaemonAddr()
 
-	// Start embedded CPU miner
-	logger.Printf("[Miner] Starting embedded CPU miner")
-	go startEmbeddedMiner()
+	// Start the selected embedded CPU miner engine.
+	switch minerEngine {
+	case MinerDirtybird:
+		logger.Printf("[Miner] Starting Dirtybird miner")
+		go startDirtybirdMiner()
+	default:
+		logger.Printf("[Miner] Starting embedded DEROHE miner")
+		go startEmbeddedMiner()
+	}
 }
 
-// stopMiner stops the embedded CPU miner.
+// stopMiner stops the active CPU miner engine.
 func stopMiner() {
-	stopEmbeddedMiner()
+	if minerEngine == MinerDirtybird {
+		stopDirtybirdMiner()
+	} else {
+		stopEmbeddedMiner()
+	}
 	miningStats.mu.Lock()
 	miningStats.StartTime = time.Time{}
 	miningStats.CurrentHashrate = 0

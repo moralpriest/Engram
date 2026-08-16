@@ -1117,11 +1117,43 @@ func layoutDaemonMiner() fyne.CanvasObject {
 		entryCustomThreads.Enable()
 	}
 
+	// Miner engine radio (DEROHE or Dirtybird), placed under the wallet address.
+	engineDEROHE := i18n.T("daemon_miner.engine_derohe")
+	engineDirtybird := i18n.T("daemon_miner.engine_dirtybird")
+	wEngine := widget.NewRadioGroup([]string{engineDEROHE, engineDirtybird}, func(s string) {
+		var e MinerEngine
+		switch s {
+		case engineDirtybird:
+			e = MinerDirtybird
+		default:
+			e = MinerDEROHE
+		}
+		if e == minerEngine {
+			return
+		}
+		minerEngine = e
+		saveMinerEngine(e)
+		// Restart any running miner under the newly selected engine.
+		if minerIsRunning() {
+			stopMiner()
+			startMiner()
+		}
+	})
+	wEngine.Horizontal = false
+	if minerEngine == MinerDirtybird {
+		wEngine.SetSelected(engineDirtybird)
+	} else {
+		wEngine.SetSelected(engineDEROHE)
+	}
+
 	// Build miner config section
 	minerConfigBox := container.NewVBox(
 		newRectSpacer(),
 		makeField(i18n.T("daemon_miner.wallet_address_label")),
 		addressBox,
+		newRectSpacer(),
+		makeField(i18n.T("daemon_miner.engine_label")),
+		wEngine,
 		newRectSpacer(),
 		makeField(i18n.T("daemon_miner.threads_label")),
 		wThreadPreset,
