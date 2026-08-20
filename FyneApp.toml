@@ -3,7 +3,7 @@ Icon = "assets/Icon.png"
 Name = "Engram"
 ID = "com.engram.wallet"
 Version = "0.7.0"
-Build = 622
+Build = 630
 
 [Migrations]
 fyneDo = true

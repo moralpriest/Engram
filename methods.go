@@ -11,6 +11,7 @@ import (
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/creachadair/jrpc2/handler"
+	"github.com/deroproject/derohe/walletapi"
 	"github.com/hypergnomon/hypergnomon/pkg/gnomes/structures"
 )
 
@@ -18,6 +19,7 @@ import (
 // Gnomon. methods passthrough and do not require permission
 var EngramHandler = map[string]handler.Func{
 	"GetPrimaryUsername":                         handler.New(GetPrimaryUsername),
+	"GetDaemon":                                  handler.New(GetDaemon),
 	"Gnomon.GetLastIndexHeight":                  handler.New(GetLastIndexHeight),
 	"Gnomon.GetTxCount":                          handler.New(GetTxCount),
 	"Gnomon.GetOwner":                            handler.New(GetOwner),
@@ -49,6 +51,28 @@ type SCID_Param struct {
 
 type Address_Param struct {
 	Address string `json:"address"`
+}
+
+// GetDaemon_Result is the XSWD GetDaemon response, per spec the endpoint the
+// wallet is connected to so the app can open its own node socket.
+type GetDaemon_Result struct {
+	Endpoint string `json:"endpoint"`
+}
+
+// GetDaemon returns the daemon endpoint Engram is connected to. It overrides
+// the derohe default (which only returns walletapi.Daemon_Endpoint_Active and
+// errors when that global is empty) so the endpoint is always passed back in
+// the response, as the XSWD spec requires.
+func GetDaemon(ctx context.Context) (result GetDaemon_Result, err error) {
+	if walletapi.Daemon_Endpoint_Active != "" {
+		result.Endpoint = walletapi.Daemon_Endpoint_Active
+	} else if session.Daemon != "" {
+		result.Endpoint = session.Daemon
+	} else {
+		err = fmt.Errorf("could not get daemon endpoint from wallet")
+	}
+
+	return
 }
 
 // GetPrimaryUsername result
