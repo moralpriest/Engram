@@ -2051,6 +2051,8 @@ func layoutRestore() fyne.CanvasObject {
 				}
 
 				engram.Disk = temp
+				session.Path = filePath
+				session.Name = strings.TrimSuffix(fileName, ".db")
 				session.Password = ""
 
 				if cachedNetwork == NETWORK_MAINNET || cachedNetwork == NETWORK_SIMULATOR {
