@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/civilware/tela/logger"
 
-	"github.com/DEROFDN/engram/internal/dirtybird/astrobwt"
-	"github.com/DEROFDN/engram/internal/dirtybird/getwork"
-	"github.com/DEROFDN/engram/internal/dirtybird/miner"
+	"github.com/DEROFDN/engram/pkg/engine"
 )
 
 // MinerEngine selects which in-process mining engine runs.
@@ -40,35 +38,32 @@ func engineFromString(s string) MinerEngine {
 }
 
 // dirtybirdKatHash is the AstroBWTv3("a") known-answer value the Dirtybird
-// miner gates startup on. The hash core is verified against it (and a real
-// 48-byte miniblock vector) before any mining starts.
+// miner gates startup on. The engine runs the same KAT before any mining
+// starts and refuses to run on a broken pipeline.
 const dirtybirdKatHash = "54e2324ddacc3f0383501a9e5760f85d63e9bc6705e9124ca7aef89016ab81ea"
 
-const (
-	dirtybirdStopped int64 = iota
-	dirtybirdActive
-)
-
 var (
-	dirtybirdMiner struct {
-		mission int64 // atomic: dirtybirdActive or dirtybirdStopped
-		ctx     context.Context
-		cancel  context.CancelFunc
-		state   *miner.State
-		submits chan getwork.Submit
-		client  *getwork.Client
-		backend astrobwt.Backend
-	}
+	// dirtybirdEngine is the running embeddable engine, or nil when stopped.
+	// Guarded by dirtybirdMu.
+	dirtybirdMu      sync.Mutex
+	dirtybirdEngine  *engine.Engine
+	dirtybirdStarted time.Time // when the current session began
+	dirtybirdReward  time.Time // when the last mini block was found
+	dirtybirdMini    uint64    // last observed MiniBlocks, for LastRewardTime
 )
 
 // startDirtybirdMiner launches the Dirtybird in-process miner. It mirrors
 // startEmbeddedMiner() in miner_embed.go: the same wallet, daemon, and thread
-// resolution feed the Dirtybird worker orchestration.
+// resolution feed the embeddable engine, which owns the getwork client, the
+// workers, and the hashrate window.
 func startDirtybirdMiner() {
-	if atomic.LoadInt64(&dirtybirdMiner.mission) == dirtybirdActive {
+	dirtybirdMu.Lock()
+	if dirtybirdEngine != nil {
+		dirtybirdMu.Unlock()
 		logger.Printf("[Miner] Dirtybird already running")
 		return
 	}
+	dirtybirdMu.Unlock()
 
 	walletAddr := minerWalletAddr
 	if walletAddr == "" && engram.Disk != nil {
@@ -91,176 +86,111 @@ func startDirtybirdMiner() {
 		threads = 1
 	}
 
-	// Verify the copied hash core before mining (Dirtybird's startup KAT).
-	backend := astrobwt.BackendV114 // structure-aware SA, ~2x faster, SAIS fallback
-	kat := fmt.Sprintf("%x", astrobwt.NewWithBackend(backend).Hash([]byte("a")))
-	if kat != dirtybirdKatHash {
-		logger.Printf("[Miner] Dirtybird KAT failed (pow(\"a\") = %s); refusing to mine", kat)
+	// engine.Start derives its own cancellable context and tears every
+	// goroutine down on Stop, so the caller passes a bare background context.
+	eng, err := engine.Start(context.Background(), engine.Config{
+		Endpoint: daemonAddr,
+		Wallet:   walletAddr,
+		Threads:  threads,
+		Backend:  engine.DefaultBackendName,
+		Logf: func(level, format string, args ...interface{}) {
+			logger.Printf("[Miner] "+format, args...)
+		},
+	})
+	if err != nil {
+		logger.Printf("[Miner] Dirtybird engine failed to start: %v", err)
 		dmState.minerState = dmStateError
 		uiDo(syncToggleStates)
 		return
 	}
 
-	// Reset shared counters and stats.
-	minerCounter = 0
-	minerDifficulty = 0
-	minerHeight = 0
-	blockCounter = 0
-	miniBlockCounter = 0
-	rejectedCounter = 0
-	miningStats.mu.Lock()
-	miningStats.StartTime = time.Now()
-	miningStats.MiniBlocks = 0
-	miningStats.Rejected = 0
-	miningStats.CurrentHashrate = 0
-	miningStats.NetHashrate = 0
-	miningStats.LastRewardTime = time.Time{}
-	miningStats.SpeedStr = ""
-	miningStats.NetHashStr = ""
-	miningStats.mu.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	st := &miner.State{}
-	submits := make(chan getwork.Submit, 16)
-
-	client := &getwork.Client{
-		Endpoint:     daemonAddr,
-		Wallet:       walletAddr,
-		Submits:      submits,
-		OnDisconnect: st.Invalidate,
-		SubmitValid: func(s getwork.Submit) bool {
-			return st.Active() && st.Epoch() == s.Epoch
-		},
-		Logf: func(format string, args ...interface{}) {
-			logger.Printf("[Miner] "+format, args...)
-		},
-		Errorf: func(format string, args ...interface{}) {
-			logger.Printf("[Miner] "+format, args...)
-		},
-	}
-	client.OnJob = func(j getwork.Job) bool {
-		if _, err := st.SetJob(j); err != nil {
-			logger.Printf("[Miner] Bad job: %v", err)
-			return false
-		}
-		return true
-	}
-
-	dirtybirdMiner.ctx = ctx
-	dirtybirdMiner.cancel = cancel
-	dirtybirdMiner.state = st
-	dirtybirdMiner.submits = submits
-	dirtybirdMiner.client = client
-	dirtybirdMiner.backend = backend
-	atomic.StoreInt64(&dirtybirdMiner.mission, dirtybirdActive)
+	dirtybirdMu.Lock()
+	dirtybirdEngine = eng
+	dirtybirdStarted = time.Now()
+	dirtybirdReward = time.Time{}
+	dirtybirdMini = 0
+	dirtybirdMu.Unlock()
 
 	logger.Printf("[Miner] Starting Dirtybird miner: %d threads, wallet=%s, daemon=%s", threads, walletAddr, daemonAddr)
 	dmState.minerState = dmStateRunning
-
-	for t := 0; t < threads; t++ {
-		go miner.Run(ctx, t, st, submits, nil, backend, false)
-	}
-	go client.Run(ctx)
-	go dirtybirdStatsLoop()
-
 	uiDo(syncToggleStates)
 }
 
-// stopDirtybirdMiner stops the Dirtybird in-process miner and resets stats.
+// stopDirtybirdMiner stops the Dirtybird in-process miner. Stop blocks until
+// every engine goroutine has exited.
 func stopDirtybirdMiner() {
-	if atomic.LoadInt64(&dirtybirdMiner.mission) != dirtybirdActive {
+	dirtybirdMu.Lock()
+	eng := dirtybirdEngine
+	dirtybirdEngine = nil
+	dirtybirdStarted = time.Time{}
+	dirtybirdReward = time.Time{}
+	dirtybirdMu.Unlock()
+
+	if eng == nil {
 		return
 	}
-	dirtybirdMiner.cancel()
-	atomic.StoreInt64(&dirtybirdMiner.mission, dirtybirdStopped)
+	eng.Stop()
+
 	dmState.minerState = dmStateStopped
-
-	miningStats.mu.Lock()
-	miningStats.StartTime = time.Time{}
-	miningStats.CurrentHashrate = 0
-	miningStats.SpeedStr = ""
-	miningStats.LastRewardTime = time.Time{}
-	miningStats.NetHashrate = 0
-	miningStats.NetHashStr = ""
-	miningStats.MiniBlocks = 0
-	miningStats.Rejected = 0
-	miningStats.mu.Unlock()
-
 	logger.Printf("[Miner] Dirtybird stopped")
 	uiDo(syncToggleStates)
 }
 
 // dirtybirdIsActive reports whether the Dirtybird engine is running.
 func dirtybirdIsActive() bool {
-	return atomic.LoadInt64(&dirtybirdMiner.mission) == dirtybirdActive
+	dirtybirdMu.Lock()
+	defer dirtybirdMu.Unlock()
+	return dirtybirdEngine != nil
 }
 
-// dirtybirdStatsLoop mirrors minerStatsLoop in miner_embed.go: it samples the
-// Dirtybird State atomics and feeds the shared MiningStats used by the live
-// stats panel.
-func dirtybirdStatsLoop() {
-	st := dirtybirdMiner.state
-	if st == nil {
-		return
+// getDirtybirdMiningStats builds the shared MiningStats projection directly
+// from engine.Stats(), which is the source of truth for the Dirtybird engine.
+// Only the engine's own 1Hz sampler advances the hashrate window, so reading
+// it here at UI cadence cannot perturb the figure.
+func getDirtybirdMiningStats() (MiningStats, bool) {
+	dirtybirdMu.Lock()
+	eng := dirtybirdEngine
+	started := dirtybirdStarted
+	reward := dirtybirdReward
+	mini := dirtybirdMini
+	dirtybirdMu.Unlock()
+	if eng == nil {
+		return MiningStats{}, false
 	}
 
-	var lastCounter uint64
-	var lastCounterTime = time.Now()
-
-	tick := time.NewTicker(2 * time.Second)
-	defer tick.Stop()
-
-	for atomic.LoadInt64(&dirtybirdMiner.mission) == dirtybirdActive {
-		select {
-		case <-dirtybirdMiner.ctx.Done():
-			return
-		case <-tick.C:
-		}
-
-		currentCounter := st.TotalHashes.Load()
-		now := time.Now()
-
-		// Mirror the daemon job counters into the shared counters.
-		blockCounter = st.Blocks.Load()
-		miniBlockCounter = st.MiniBlocks.Load()
-		rejectedCounter = st.Rejected.Load()
-		minerHeight = int64(st.Height.Load())
-		minerDifficulty = st.Diff.Load()
-
-		miningStats.mu.Lock()
-
-		if currentCounter > lastCounter {
-			elapsed := now.Sub(lastCounterTime).Seconds()
-			if elapsed > 0 {
-				speed := float64(currentCounter-lastCounter) / elapsed
-				miningStats.CurrentHashrate = speed
-				miningStats.SpeedStr = formatHashrate(speed)
-			}
-		}
-
-		// Network hashrate from job difficulty (job.Difficulty).
-		if minerDifficulty > 0 {
-			netHash := float64(minerDifficulty) / 1.8
-			if netHash > 0 {
-				miningStats.NetHashrate = netHash
-				miningStats.NetHashStr = formatHashrate(netHash)
-			}
-		}
-
-		miningStats.Rejected = int64(st.Rejected.Load())
-		miningStats.MiniBlocks = int64(st.MiniBlocks.Load())
-		if miningStats.LastRewardTime.IsZero() && st.MiniBlocks.Load() > 0 {
-			miningStats.LastRewardTime = now
-		}
-
-		miningStats.mu.Unlock()
-
-		lastCounter = currentCounter
-		lastCounterTime = now
-
-		uiDo(func() {
-			updateMinerStatsUI()
-		})
+	st := eng.Stats()
+	if !st.Running {
+		return MiningStats{}, false
 	}
+
+	// Record the reward time the first time MiniBlocks grows past what we saw.
+	if st.MiniBlocks > mini {
+		dirtybirdMu.Lock()
+		if st.MiniBlocks > dirtybirdMini {
+			dirtybirdMini = st.MiniBlocks
+			dirtybirdReward = time.Now()
+			reward = dirtybirdReward
+		}
+		dirtybirdMu.Unlock()
+	}
+
+	stats := MiningStats{
+		StartTime:       started,
+		MiniBlocks:      int64(st.MiniBlocks),
+		Rejected:        int64(st.Rejected),
+		CurrentHashrate: st.Hashrate,
+		SpeedStr:        formatHashrate(st.Hashrate),
+		LastRewardTime:  reward,
+	}
+
+	// Network hashrate from job difficulty, as the DEROHE path does.
+	if st.Difficulty > 0 {
+		netHash := float64(st.Difficulty) / 1.8
+		if netHash > 0 {
+			stats.NetHashrate = netHash
+			stats.NetHashStr = formatHashrate(netHash)
+		}
+	}
+
+	return stats, true
 }

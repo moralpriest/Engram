@@ -653,8 +653,16 @@ func formatHashrate(h float64) string {
 	}
 }
 
-// GetMiningStats returns a thread-safe copy of the current mining stats.
+// GetMiningStats returns a thread-safe copy of the current mining stats. For
+// the Dirtybird engine the embeddable engine.Stats() is the source of truth
+// (its own 1Hz sampler owns the hashrate window); the DEROHE engine fills the
+// shared miningStats snapshot as before.
 func GetMiningStats() MiningStats {
+	if minerEngine == MinerDirtybird {
+		if st, ok := getDirtybirdMiningStats(); ok {
+			return st
+		}
+	}
 	miningStats.mu.Lock()
 	defer miningStats.mu.Unlock()
 	cp := miningStats
