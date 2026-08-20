@@ -17,6 +17,12 @@ vars:
   BUILD_TAGS: migrated_fynedo
   BINARY: engram
   LDFLAGS: -X main.versionString={{.VERSION}}
+  # macOS cross-compilation toolchain (osxcross) for packaging macOS apps from Linux.
+  OSXCROSS_DIR: /home/matdero/osxcross/target
+  OSXCROSS_SDK: /home/matdero/osxcross/target/SDK/MacOSX14.5.sdk
+  OSXCROSS_TRIPLE_ARM64: aarch64-apple-darwin23.5
+  OSXCROSS_TRIPLE_AMD64: x86_64-apple-darwin23.5
+  MACOS_DEPLOYMENT_TARGET: 10.11
 
 tasks:
   default:
@@ -176,6 +182,7 @@ tasks:
   package-macos:
     desc: Package for macOS (native architecture)
     env:
+      GOOS: darwin
     cmds:
       - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - ./fix_macos_permissions.sh {{.APP_NAME}}.app
@@ -183,24 +190,18 @@ tasks:
       - mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app
 
   package-macos-arm64:
-    desc: Package for macOS Apple Silicon
-    env:
-      GOOS: darwin
-      GOARCH: arm64
+    desc: Package for macOS Apple Silicon (cross-compiled via osxcross)
     cmds:
-      - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./build_macos.sh arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - ./fix_macos_permissions.sh {{.APP_NAME}}.app
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz {{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz
 
   package-macos-amd64:
-    desc: Package for macOS Intel
-    env:
-      GOOS: darwin
-      GOARCH: amd64
+    desc: Package for macOS Intel (cross-compiled via osxcross)
     cmds:
-      - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./build_macos.sh amd64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - ./fix_macos_permissions.sh {{.APP_NAME}}.app
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
     generates:
