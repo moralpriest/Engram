@@ -3885,6 +3885,11 @@ func layoutTELA() fyne.CanvasObject {
 							return // If url is not valid, scid won't be saved in history
 						} else {
 							pushTELANavigation(s)
+							// Manually entered apps get the same dependent-SCID
+							// auto-indexing as search-result launches.
+							if gnomon.Index != nil {
+								AutoIndexDependentSCIDs(s)
+							}
 							// Guarantee XSWD is running on the correct dual-stack port before opening browser.
 							// Skip opening a tab that can never connect when it isn't ready.
 							if !EnsureXSWD() {
@@ -4459,6 +4464,12 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				errorText.Refresh()
 			} else {
 				pushTELANavigation(index.SCID)
+				// Server may predate an auto-index pass (or a fresh fastsync
+				// install): make sure dependent SCIDs are indexed before the
+				// app queries Gnomon. Async and idempotent.
+				if gnomon.Index != nil {
+					AutoIndexDependentSCIDs(index.SCID)
+				}
 				CleanStaleXSWDConnections()
 				// Guarantee XSWD is running on the correct dual-stack port before opening browser.
 				// Skip opening a tab that can never connect when it isn't ready.
@@ -4839,6 +4850,14 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 				if err == nil {
 					pushTELANavigation(index.SCID)
 
+					// Auto-index dependent SCIDs (e.g. song registries hardcoded in
+					// app JS or stored as contract variables) so apps like DeroBeats
+					// can query them through Gnomon. Async and idempotent: repeat
+					// launches skip already-indexed dependencies.
+					if gnomon.Index != nil {
+						AutoIndexDependentSCIDs(index.SCID)
+					}
+
 					if err := StoreEncryptedValue("TELA History", []byte(index.SCID), []byte("")); err != nil {
 						logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
 					}
@@ -4908,6 +4927,11 @@ func layoutTELAManager(index tela.INDEX, callback func(), autoLaunch ...bool) fy
 									errorText.Refresh()
 								} else {
 									pushTELANavigation(index.SCID)
+									// Updated content was just re-cloned: rescan for
+									// dependent SCIDs (see Start App branch above).
+									if gnomon.Index != nil {
+										AutoIndexDependentSCIDs(index.SCID)
+									}
 									CleanStaleXSWDConnections()
 									// Guarantee XSWD is running on the correct dual-stack port before opening browser.
 									// Skip opening a tab that can never connect when it isn't ready.
