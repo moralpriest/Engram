@@ -899,24 +899,18 @@ func layoutTELA() fyne.CanvasObject {
 
 				go func() {
 					openURLAfterDelay := func(link string) {
-						if verifyTELAServerIsUp(link) {
-							// Guarantee XSWD is running on the correct dual-stack port before opening browser.
-							// Skip opening a tab that can never connect when it isn't ready.
-							if !EnsureXSWD() {
-								logger.Errorf("[TELA] XSWD not ready, cannot open %s\n", link)
-								fyne.Do(func() {
-									errorText.Text = i18n.T("tela.error_cannot_open")
-									errorText.Color = apptheme.C.Red
-									errorText.Refresh()
-								})
-								return
-							}
-
+						// Parallelize verify + EnsureXSWD so villager opens near-instantly on remote nodes.
+						if verifyAndEnsureTELA(link, scid) {
 							if u, err := url.Parse(link); err == nil {
 								fyne.CurrentApp().OpenURL(u)
 							}
 						} else {
-							logger.Errorf("[TELA] Server did not come up in time for %s\n", link)
+							logger.Errorf("[TELA] XSWD or server not ready for %s (scid %s)\n", link, scid)
+							fyne.Do(func() {
+								errorText.Text = i18n.T("tela.error_cannot_open")
+								errorText.Color = apptheme.C.Red
+								errorText.Refresh()
+							})
 						}
 					}
 
@@ -939,9 +933,11 @@ func layoutTELA() fyne.CanvasObject {
 						}
 
 						go openURLAfterDelay(link)
-						if err := StoreEncryptedValue("TELA History", []byte(scid), []byte("")); err != nil {
-							logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
-						}
+						go func(s string) {
+							if err := StoreEncryptedValue("TELA History", []byte(s), []byte("")); err != nil {
+								logger.Errorf("[Engram] Error saving TELA app to history: %s\n", err)
+							}
+						}(scid)
 						cleanupLaunch(false, false)
 					} else {
 						if strings.Contains(err.Error(), "user defined no updates and content has been updated to") {

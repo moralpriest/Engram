@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -2125,6 +2126,46 @@ func getRPCCredentials() {
 }
 
 var xswdStateMu sync.RWMutex
+
+// ensureXSWDmu serializes EnsureXSWD so concurrent TELA opens (villager flow
+// calls it twice) don't race to create two XSWD servers on :44326. The first
+// caller does the prompt + server start while the second waits; when it wakes
+// the server is already running so no second bind + 5s "port in use" probe.
+var ensureXSWDmu sync.Mutex
+
+// xswdPromptDeclineMu guards xswdPromptDeclinedAt, which records the last time
+// the user declined the XSWD connection prompt. A single user action (e.g.
+// opening a TELA app) can call EnsureXSWD more than once, so the decline
+// timestamp stops a second prompt from stacking right after a decline.
+var xswdPromptDeclineMu sync.Mutex
+var xswdPromptDeclinedAt time.Time
+
+// xswdApprovedCache remembers recently-approved TELA apps so a mobile
+// WebSocket that was killed by Android on app-switch can reconnect without a
+// second connection dialog. The shim auto-reconnects within seconds, but the
+// user already approved the app — reprompting is just friction.
+var xswdApprovedCacheMu sync.Mutex
+var xswdApprovedCache = map[string]time.Time{}
+
+// xswdMethodAllowCache remembers per-method Allow decisions for the current
+// wallet session so that a WS that was killed by Android on app-switch does
+// not require the user to re-approve the same method after shim reconnect.
+// Single Allow is memory-only and expires after 10m (mirrors connection cache).
+// AlwaysAllow is also persisted to disk via persistAppPermissionsAsync.
+var xswdMethodAllowCacheMu sync.Mutex
+var xswdMethodAllowCache = map[string]time.Time{}
+
+// telaPatchCache remembers SCIDs whose mobile patches have already been applied
+// in this process, so re-opening the same TELA app (villager) is instant.
+var telaPatchCacheMu sync.Mutex
+var telaPatchCache = map[string]struct{}{}
+
+// Villager TELA SCID - the avatar editor app. Cached separately so villager
+// loads near-instantly even on remote nodes without waiting for gnomon sync.
+// We do NOT pre-seed a general TELA SCID list (hypergnomon is fast enough).
+const villagerTelaSCID = "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
+
+func isVillagerTelaSCID(scid string) bool { return scid == villagerTelaSCID }
 
 /*
 func getAuthMode() (result string, err error) {
@@ -7314,6 +7355,13 @@ func toggleRPCServer(port string) {
 
 // Get the latest smart contract header data (must follow the standard here: https://github.com/civilware/artificer-nfa-standard/blob/main/Headers/README.md)
 func getContractHeader(scid crypto.Hash) (name string, desc string, icon string, owner string, code string) {
+	// Gnomon's indexer is created asynchronously at startup and cleared on
+	// stop; UI goroutines (TELA manager, asset lists) may call this before it
+	// exists or while it is stopped, so bail out instead of dereferencing nil.
+	if gnomon.Index == nil {
+		return
+	}
+
 	var headerData []*structures.SCIDVariable
 	var found bool
 
@@ -7938,12 +7986,15 @@ func GetPermissionGroup(method string) *PermissionGroup {
 }
 
 // getSimpleDefault returns the default permission for a category in Simple Mode
+// Utility stays AlwaysAllow so the Villager read-only burst doesn't ping-pong
+// on mobile. Mining (EPOCH) and readonly stay Ask: dApps must prompt per
+// method, matching the "all Ask except utility" permission posture.
 func getSimpleDefault(category string) xswd.Permission {
 	switch category {
 	case "utility":
 		return xswd.AlwaysAllow
 	case "mining":
-		return xswd.AlwaysAllow
+		return xswd.Ask
 	case "readonly":
 		return xswd.Ask
 	default:
@@ -8113,7 +8164,9 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 		"transfer_split",
 	}
 
-	// First, try dynamic registration from epoch.GetHandler()
+	// All EPOCH methods default to Ask; dApps must prompt per method.
+	// Register all expected EPOCH methods (fallback for methods not in the
+	// dynamic handler).
 	dynamicMethods := make(map[string]bool)
 	if epochHandler := epoch.GetHandler(); epochHandler != nil {
 		for method := range epochHandler {
@@ -8129,10 +8182,9 @@ func SetDefaultPermissions() (defaults map[string]xswd.Permission) {
 		}
 	}
 
-	// Add specific methods that might be missing from your list
-	defaults["Echo"] = xswd.Ask
-	// Explicitly add methods that were missing from your list
+	// Explicitly register methods that might be missing from the dynamic handler
 	defaults["AttemptEPOCH"] = xswd.Ask
+	defaults["AttemptEPOCHWithAddr"] = xswd.Ask
 	defaults["CheckSignature"] = xswd.Ask
 	defaults["GetAddress"] = xswd.Ask
 	defaults["GetAddressEPOCH"] = xswd.Ask
@@ -8279,6 +8331,13 @@ func EnsureXSWD() bool {
 		return false
 	}
 
+	// Serialize concurrent calls so two TELA opens don't both try to bind :44326.
+	// The second caller blocks here until the first has finished the prompt and
+	// the server is up, so it sees server.IsRunning() and returns without a
+	// second bind / 5s probe.
+	ensureXSWDmu.Lock()
+	defer ensureXSWDmu.Unlock()
+
 	// Always use port 44326 for modern XSWD/Villager compatibility
 	const targetPort = ":44326"
 	if remoteAccess.WS.port != targetPort {
@@ -8287,20 +8346,40 @@ func EnsureXSWD() bool {
 		setRemoteAccessDual(targetPort, "WS")
 	}
 
-	// If not enabled, we may need to prompt (if calling from a goroutine)
+	// Fast path: already enabled and running -> no prompt, no wait.
+	xswdStateMu.RLock()
+	if remoteAccess.WS.global.enabled && remoteAccess.WS.server != nil && remoteAccess.WS.server.IsRunning() {
+		xswdStateMu.RUnlock()
+		return true
+	}
+	xswdStateMu.RUnlock()
+
+	// If not enabled, prompt the user to allow WebSocket connections so the
+	// TELA app can talk to the wallet. Re-ask on each explicit attempt: a
+	// one-time decline (or a state saved while the permission toggle was
+	// locked) must not permanently block TELA apps with no way to recover.
 	if !remoteAccess.WS.global.enabled {
-		if !hasAskedXSWD() {
-			if showXSWDPrompt() {
-				remoteAccess.WS.global.enabled = true
-				setPermissions()
-			} else {
-				logger.Printf("[Engram] EnsureXSWD: user declined WebSocket connections\n")
-				return false // User declined
-			}
-		} else {
-			// Already asked before. If it's disabled, we respect that.
-			logger.Printf("[Engram] EnsureXSWD: WebSocket disabled by user, not starting\n")
+		// A single user action (e.g. the villager flow) can call EnsureXSWD
+		// twice; don't stack a second prompt right after a decline. Short 2s
+		// window lets user retry quickly after a mis-tap; WORSE log showed 7s
+		// gap still blocked second caller for 10s.
+		xswdPromptDeclineMu.Lock()
+		recentlyDeclined := time.Since(xswdPromptDeclinedAt) < 2*time.Second
+		xswdPromptDeclineMu.Unlock()
+		if recentlyDeclined {
+			logger.Printf("[Engram] EnsureXSWD: WebSocket connections declined, not re-asking\n")
 			return false
+		}
+
+		if showXSWDPrompt() {
+			remoteAccess.WS.global.enabled = true
+			setPermissions()
+		} else {
+			xswdPromptDeclineMu.Lock()
+			xswdPromptDeclinedAt = time.Now()
+			xswdPromptDeclineMu.Unlock()
+			logger.Printf("[Engram] EnsureXSWD: user declined WebSocket connections\n")
+			return false // User declined
 		}
 	}
 
@@ -8323,16 +8402,32 @@ func EnsureXSWD() bool {
 		logger.Printf("[Engram] EnsureXSWD: Starting server on %s\n", targetPort)
 		toggleXSWD(targetPort)
 
-		// Wait up to 5 seconds for server to be ready
+		// Wait up to 5 seconds for server to be ready — tight poll, no extra
+		// 5s probe inside toggleXSWD anymore (probe is now single-shot).
 		for i := 0; i < 50; i++ {
 			xswdStateMu.RLock()
 			server := remoteAccess.WS.server
 			xswdStateMu.RUnlock()
-			if server != nil && server.IsRunning() {
-				logger.Printf("[Engram] EnsureXSWD: Server is ready after %dms\n", i*100)
-				return true
+			if server != nil {
+				if server.IsRunning() {
+					logger.Printf("[Engram] EnsureXSWD: Server is ready after %dms\n", i*100)
+					return true
+				}
+				// Server object exists but not running -> bind failed (port held
+				// externally). Break early instead of burning full 5s.
+				if i > 5 {
+					break
+				}
 			}
 			time.Sleep(100 * time.Millisecond)
+		}
+		// Final check before giving up
+		xswdStateMu.RLock()
+		srv := remoteAccess.WS.server
+		xswdStateMu.RUnlock()
+		if srv != nil && srv.IsRunning() {
+			logger.Printf("[Engram] EnsureXSWD: Server is ready (late)\n")
+			return true
 		}
 		logger.Printf("[Engram] EnsureXSWD: server did not become ready within 5s\n")
 		return false
@@ -8418,20 +8513,21 @@ func toggleXSWD(endpoint string) {
 		remoteAccess.WS.advanced = true
 
 		go func() {
-			// Check if port is already in use and wait up to 5 seconds for release
+			// Quick availability check: if the port is held by an external process
+			// (e.g. adb on some Linux installs grabs 44326), fail fast instead of
+			// blocking EnsureXSWD's 5s poll + 5s probe = 10s deadlock. The probe is
+			// best-effort — ListenAndServe will surface the real bind error via
+			// IsRunning() if we race.
 			if addr, err := net.ResolveTCPAddr("tcp", endpoint); err == nil {
-				for i := 0; i < 5; i++ {
-					if listener, err := net.ListenTCP("tcp", addr); err == nil {
-						listener.Close()
-						logger.Printf("[Engram] Port %s is available\n", endpoint)
-						break
-					}
-					if i < 4 {
-						logger.Printf("[Engram] Port %s in use (Socket Refused likely if client tries now), retrying in 1s... (%d/5)\n", endpoint, i+1)
-						time.Sleep(time.Second)
-					} else {
-						logger.Errorf("[Engram] Port %s still in use after 5 seconds - check for other running instances\n", endpoint)
-					}
+				if listener, err := net.ListenTCP("tcp", addr); err == nil {
+					listener.Close()
+					logger.Printf("[Engram] Port %s is available\n", endpoint)
+				} else {
+					// Port held externally — log once and let the http.Server
+					// attempt still run so IsRunning()/Stop() reflects reality;
+					// EnsureXSWD will see the zombie and surface the error
+					// without a 5s stall.
+					logger.Errorf("[Engram] Port %s in use - check for other instances (e.g. adb) holding it: %v\n", endpoint, err)
 				}
 			}
 
@@ -8522,6 +8618,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	if !isWalletGenerationActive(generation) || session.Window == nil {
 		return false
 	}
+	logger.Printf("[XSWD-PERM] connection prompt start app=%s\n", ad.Name)
 
 	if remoteAccess.WS.advanced {
 		// If global permissions enabled set them here
@@ -8553,6 +8650,21 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			go refreshXSWDList()
 			return true
 		}
+
+		// Mobile reconnect cache: if this app was approved within the last
+		// 10 minutes, auto-approve without a second dialog. On Android the
+		// TELA WebSocket is killed on every app-switch (permission prompt),
+		// and the shim reconnects within seconds — reprompting the user for
+		// the same app is the "WTF CONNECT" loop seen inVillager (closed 1000
+		// -> Connected -> prompt again). The cache makes the shim seamless.
+		xswdApprovedCacheMu.Lock()
+		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+			xswdApprovedCacheMu.Unlock()
+			logger.Printf("[Engram] Auto-approved reconnect for %s (approved %v ago)\n", ad.Name, time.Since(ts).Round(time.Second))
+			go refreshXSWDList()
+			return true
+		}
+		xswdApprovedCacheMu.Unlock()
 	} else {
 		// Restrictive mode overwrites any requested permissions to default Ask, and sets certain methods to AlwaysDeny
 		ad.Permissions = map[string]xswd.Permission{}
@@ -8819,12 +8931,14 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		overlay.Add(backdrop)
 		overlay.Add(dialog)
 
+		// SendNotification -> RunOnJVM blocks until the JNI call returns; run it
+		// off the UI thread so it can never stall prompt rendering on mobile.
 		if a.Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.connection_received")})
-			session.Window.RequestFocus()
-		} else {
-			session.Window.RequestFocus()
+			title, content := ad.Name, i18n.T("xswd.connection_received")
+			go fyne.CurrentApp().SendNotification(&fyne.Notification{Title: title, Content: content})
 		}
+		session.Window.RequestFocus()
+		logger.Printf("[XSWD-PERM] connection prompt shown app=%s\n", ad.Name)
 	})
 
 	// Wait for user input or socket close
@@ -8837,12 +8951,41 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		return false
 	}
 
+	logger.Printf("[XSWD-PERM] connection prompt resolved app=%s confirmed=%v\n", ad.Name, confirmed)
+
 	fyne.Do(func() {
 		overlay.Remove(promptLayers[0])
 		overlay.Remove(promptLayers[1])
 	})
 
 	go refreshXSWDList()
+
+	if confirmed && ad.Name != "" {
+		xswdApprovedCacheMu.Lock()
+		xswdApprovedCache[ad.Name] = time.Now()
+		xswdApprovedCacheMu.Unlock()
+		// Batch-allow all methods that were Ask at connection time so that a
+		// single "Allow" on the connection dialog is enough for the app's
+		// initial burst (GetAddress/GetBalance/etc). This restores 0.6.9
+		// fluidity where permissions appeared one after other without a
+		// per-method app-switch. Only sensitive transactions still prompt
+		// individually afterwards.
+		if ad.Permissions != nil {
+			xswdMethodAllowCacheMu.Lock()
+			now := time.Now()
+			for m, p := range ad.Permissions {
+				if p == xswd.Ask {
+					// Sensitive methods always prompt individually, even when
+					// the rest of the burst is batch-allowed.
+					if isSensitiveAutoAllowExcluded(m) {
+						continue
+					}
+					xswdMethodAllowCache[ad.Name+"|"+m] = now
+				}
+			}
+			xswdMethodAllowCacheMu.Unlock()
+		}
+	}
 
 	return confirmed
 }
@@ -8946,6 +9089,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	method := request.Method()
+	logger.Printf("[XSWD-PERM] permission prompt start app=%s method=%s\n", ad.Name, method)
 
 	var raw json.RawMessage
 	_ = request.UnmarshalParams(&raw)
@@ -8979,6 +9123,38 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		}
 	}
 
+	// Session cache for plain Allow (not yet persisted): if the same app+method
+	// was Allowed within the last 10m, auto-allow without re-prompting. This is
+	// critical on mobile where the WS is killed on every app-switch while a
+	// permission dialog is showing (Android suspends the browser). Without this,
+	// each sequential villager request (GetAddress, GetBalance, ...) would need
+	// its own app-switch round-trip.
+	cacheKey := ad.Name + "|" + method
+	xswdMethodAllowCacheMu.Lock()
+	if ts, ok := xswdMethodAllowCache[cacheKey]; ok && time.Since(ts) < 10*time.Minute {
+		xswdMethodAllowCacheMu.Unlock()
+		logger.Printf("[Engram] Auto-allowed cached method %s for %s (allowed %v ago)\n", method, ad.Name, time.Since(ts).Round(time.Second))
+		return xswd.Allow
+	}
+	xswdMethodAllowCacheMu.Unlock()
+
+	// Recently-approved connection implies consent for low-risk read-only
+	// methods for the next 10m, so villager's burst does not require
+	// per-method dialogs if the user just approved the connection. This
+	// restores v0.6.9 "connections appear one after other without delays" on
+	// mobile where each prompt would otherwise require an app-switch (browser
+	// WS is killed while Engram is foreground). Sensitive methods (signing,
+	// key access, transactions) are never auto-allowed this way.
+	if isSafeAutoAllowMethod(method) {
+		xswdApprovedCacheMu.Lock()
+		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+			xswdApprovedCacheMu.Unlock()
+			logger.Printf("[Engram] Auto-allowed %s for %s via recent connection approval\n", method, ad.Name)
+			return xswd.Allow
+		}
+		xswdApprovedCacheMu.Unlock()
+	}
+
 	// Gnomon methods behave as AlwaysAllow
 	if strings.HasPrefix(method, "Gnomon.") {
 		return xswd.Allow
@@ -8986,25 +9162,6 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 
 	// All other methods require approval
 	choice = xswd.Deny
-
-	// EPOCH methods - auto-start EPOCH if not active (HOLOGRAM-style, no dialog)
-	if strings.HasSuffix(method, "EPOCH") {
-		if !epoch.IsActive() {
-			// Auto-start EPOCH with user's address or dApp address
-			// Start with user's default address - dApp can use AttemptEPOCHWithAddr to specify different address
-			err := epoch.StartGetWork(engram.Disk.GetAddress().String(), session.Daemon)
-			if err != nil {
-				logger.Errorf("[EPOCH] Auto-start failed: %s\n", err)
-				return xswd.Deny
-			}
-			remoteAccess.EPOCH.enabled = true
-			remoteAccess.EPOCH.err = nil
-			setRemoteAccess(epoch.GetPort(), "EPOCH")
-			logger.Printf("[EPOCH] Auto-started for dApp request\n")
-		}
-		// Auto-allow EPOCH methods (no permission dialog needed)
-		return xswd.Allow
-	}
 
 	overlay := session.Window.Canvas().Overlays()
 
@@ -9211,40 +9368,77 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		overlay.Add(backdrop)
 		overlay.Add(dialog)
 
+		// SendNotification -> RunOnJVM blocks until the JNI call returns; run it
+		// off the UI thread so it can never stall prompt rendering on mobile.
 		if fyne.CurrentApp().Driver().Device().IsMobile() {
-			fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: i18n.T("xswd.new_permission_notification")})
-			session.Window.RequestFocus()
-		} else {
-			session.Window.RequestFocus()
+			title, content := ad.Name, i18n.T("xswd.new_permission_notification")
+			go fyne.CurrentApp().SendNotification(&fyne.Notification{Title: title, Content: content})
 		}
+		session.Window.RequestFocus()
+		logger.Printf("[XSWD-PERM] permission prompt shown app=%s method=%s\n", ad.Name, method)
 	})
 
-	// Wait for user input or socket close
-	select {
-	case <-done:
-	case <-ad.OnClose:
+	// Wait for user input. On mobile the browser WS is killed as soon as
+	// Engram comes to foreground to show the prompt (Android suspends the
+	// background tab). Waking on ad.OnClose would auto-dismiss and return
+	// Deny before the user can answer, forcing a per-permission app-switch
+	// ping-pong — so a socket close only logs and the dialog stays up; the
+	// shim reconnects and the decision gets cached for the retry.
+	//
+	// OnClose is still drained here because the xswd server sends it via a
+	// blocking unbuffered channel from Stop()/RemoveApplication(); leaving it
+	// unreceived would hang those calls. A 200ms poll wakes the waiter when
+	// the wallet generation changes so closing/switching a wallet can never
+	// wedge this goroutine (and with it the FIFO prompt queue).
+	wsClosed := false
+	for resolved := false; !resolved; {
+		select {
+		case <-done:
+			resolved = true
+		case <-ad.OnClose:
+			wsClosed = true
+			logger.Printf("[XSWD-PERM] method=%s WS closed while prompt showing, keeping dialog open\n", method)
+		case <-time.After(200 * time.Millisecond):
+			if !isWalletGenerationActive(generation) || session.Window == nil {
+				resolved = true
+			}
+		}
+	}
+	if wsClosed {
+		logger.Printf("[XSWD-PERM] method=%s prompt was showing when WS closed, decision %s kept for retry\n", method, choice)
+	}
+
+	// Always tear down this prompt's layers first so a wallet switch/close
+	// can never leave a stale backdrop swallowing touches.
+	if session.Window != nil {
+		fyne.Do(func() {
+			overlay.Remove(promptLayers[0])
+			overlay.Remove(promptLayers[1])
+		})
 	}
 
 	if !isWalletGenerationActive(generation) || session.Window == nil {
 		return xswd.Deny
 	}
 
-	fyne.Do(func() {
-		overlay.Remove(promptLayers[0])
-		overlay.Remove(promptLayers[1])
-	})
+	logger.Printf("[XSWD-PERM] permission prompt resolved app=%s method=%s choice=%s\n", ad.Name, method, choice)
 
 	go refreshXSWDList()
 
-	// Persist permission for this app if applicable
+	// Cache plain Allow in-memory so a reconnected WS that retries the same
+	// method does not re-prompt. Always* is also persisted to disk async.
+	if choice.IsPositive() {
+		cacheKey := ad.Name + "|" + method
+		xswdMethodAllowCacheMu.Lock()
+		xswdMethodAllowCache[cacheKey] = time.Now()
+		xswdMethodAllowCacheMu.Unlock()
+	}
 	if choice == xswd.AlwaysAllow || choice == xswd.AlwaysDeny {
 		if ad.Permissions == nil {
 			ad.Permissions = make(map[string]xswd.Permission)
 		}
 		ad.Permissions[method] = choice
-		StoreAppPermissions(ad.Name, ad.Permissions)
-	} else if choice.IsPositive() {
-		StoreAppPermissions(ad.Name, ad.Permissions)
+		persistAppPermissionsAsync(ad.Name, ad.Permissions)
 	}
 
 	return choice
@@ -9411,7 +9605,9 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 	overlay.Add(promptDialog)
 
 	if a.Driver().Device().IsMobile() {
-		fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
+		// SendNotification -> RunOnJVM blocks until the JNI call returns; run it
+		// off the UI thread so it can never stall prompt rendering on mobile.
+		go fyne.CurrentApp().SendNotification(&fyne.Notification{Title: ad.Name, Content: "EPOCH permission request"})
 	} else {
 		session.Window.RequestFocus()
 	}
@@ -9432,9 +9628,10 @@ func askEnableEPOCH(ad *xswd.ApplicationData, method string) (choice xswd.Permis
 
 	go refreshXSWDList()
 
-	// Persist permission for this app if granted
-	if choice.IsPositive() {
-		StoreAppPermissions(ad.Name, ad.Permissions)
+	// Persist remembered permissions (AlwaysAllow/AlwaysDeny) only; a plain
+	// Allow leaves the permission map unchanged (see persistAppPermissionsAsync).
+	if choice == xswd.AlwaysAllow || choice == xswd.AlwaysDeny {
+		persistAppPermissionsAsync(ad.Name, ad.Permissions)
 	}
 
 	return choice
@@ -9477,13 +9674,45 @@ func StoreAppPermissions(appName string, permissions map[string]xswd.Permission)
 		logger.Errorf("[Engram] StoreAppPermissions: marshal error: %s\n", err)
 		return err
 	}
-	err = StoreEncryptedValue("XSWD", []byte("AppName:"+appName), data)
+	return StoreAppPermissionsData(appName, data)
+}
+
+// StoreAppPermissionsData writes already-marshaled per-app permissions to
+// encrypted storage.
+func StoreAppPermissionsData(appName string, data []byte) error {
+	err := StoreEncryptedValue("XSWD", []byte("AppName:"+appName), data)
 	if err != nil {
 		logger.Errorf("[Engram] StoreAppPermissions: storage error: %s\n", err)
 		return err
 	}
-	logger.Printf("[Engram] Stored permissions for app %s: %d methods\n", appName, len(permissions))
+	logger.Printf("[Engram] Stored permissions for app %s\n", appName)
 	return nil
+}
+
+// persistAppPermissionsAsync stores per-app permissions without blocking the
+// XSWD request path. The graviton disk commit is slow on mobile flash storage;
+// blocking the store would delay the response to the app and therefore every
+// subsequent permission prompt. The map is marshaled on the caller's goroutine
+// to avoid races, and the write is skipped if the wallet was switched before it
+// ran so it can never land in the wrong wallet's storage.
+func persistAppPermissionsAsync(appName string, permissions map[string]xswd.Permission) {
+	if appName == "" || len(permissions) == 0 {
+		return
+	}
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		logger.Errorf("[Engram] StoreAppPermissions: marshal error: %s\n", err)
+		return
+	}
+	gen := currentWalletGeneration()
+	go func() {
+		if !isWalletGenerationActive(gen) {
+			return
+		}
+		if err := StoreAppPermissionsData(appName, data); err != nil {
+			logger.Errorf("[Engram] StoreAppPermissions: storage error: %s\n", err)
+		}
+	}()
 }
 
 // GetAppPermissions retrieves per-app permissions from encrypted storage
@@ -9740,25 +9969,45 @@ func cleanTELALink(link string) string {
 }
 
 // verifyTELAServerIsUp polls the TELA server for up to 5 seconds to ensure it is ready.
+// For the villager TELA SCID the timeout is reduced to 2s (20x50ms) so the
+// external browser opens near-instantly even on remote nodes, matching v0.6.9.
 func verifyTELAServerIsUp(link string) bool {
+	return verifyTELAServerIsUpWithTimeout(link, 50, 100*time.Millisecond)
+}
+
+func verifyTELAServerIsUpVillager(link string) bool {
+	return verifyTELAServerIsUpWithTimeout(link, 20, 50*time.Millisecond)
+}
+
+func verifyTELAServerIsUpWithTimeout(link string, attempts int, interval time.Duration) bool {
 	if link == "" {
 		return false
 	}
-
-	client := http.Client{
-		Timeout: 1 * time.Second,
-	}
-
-	for i := 0; i < 50; i++ {
+	client := http.Client{Timeout: 1 * time.Second}
+	for i := 0; i < attempts; i++ {
 		resp, err := client.Get(link)
 		if err == nil {
 			resp.Body.Close()
 			return true
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(interval)
 	}
-
 	return false
+}
+
+// verifyAndEnsureTELA verifies the TELA server and ensures XSWD concurrently
+// so the total wait is max(verify, EnsureXSWD) not sum, matching v0.6.9 feel.
+func verifyAndEnsureTELA(link, scid string) bool {
+	ensureCh := make(chan bool, 1)
+	go func() { ensureCh <- EnsureXSWD() }()
+	var verified bool
+	if isVillagerTelaSCID(scid) {
+		verified = verifyTELAServerIsUpVillager(link)
+	} else {
+		verified = verifyTELAServerIsUp(link)
+	}
+	ensureOK := <-ensureCh
+	return verified && ensureOK
 }
 
 // serveTELAWithCancel runs tela.ServeTELA in a background goroutine and returns
@@ -9773,7 +10022,25 @@ func serveTELAWithCancel(scid, endpoint string, cancelled *atomic.Bool) (string,
 	go func() {
 		link, err := tela.ServeTELA(scid, endpoint)
 		if err == nil {
-			PatchTELAAppSourceFiles(scid)
+			// Patching is I/O heavy (Walk + ReadFile + WriteFile per .js).
+			// Run it async so verifyTELAServerIsUp / OpenURL are not delayed.
+			// Villager SCID is patched async as well - serve returns immediately.
+			if isVillagerTelaSCID(scid) {
+				go PatchTELAAppSourceFiles(scid)
+			} else {
+				// For non-villager, check cache so re-opens are instant
+				telaPatchCacheMu.Lock()
+				_, already := telaPatchCache[scid]
+				telaPatchCacheMu.Unlock()
+				if already {
+					go PatchTELAAppSourceFiles(scid)
+				} else {
+					PatchTELAAppSourceFiles(scid)
+					telaPatchCacheMu.Lock()
+					telaPatchCache[scid] = struct{}{}
+					telaPatchCacheMu.Unlock()
+				}
+			}
 		}
 		done <- result{link, err}
 	}()
@@ -9860,8 +10127,16 @@ func serveTELAWithStaleRecovery(scid, endpoint string, cancelled ...*atomic.Bool
 
 	for _, s := range getTelaActiveServers() {
 		if s.SCID == scid {
-			PatchTELAAppSourceFiles(scid)
-			return cleanTELALink(fmt.Sprintf("http://localhost%s/%s", s.Address, s.Entrypoint)), nil
+			// Patch async for villager so returning the link is instant
+			if isVillagerTelaSCID(scid) {
+				go PatchTELAAppSourceFiles(scid)
+			} else {
+				PatchTELAAppSourceFiles(scid)
+			}
+			// The server binds 127.0.0.1, but the link must use localhost so the
+			// page origin matches the "http://localhost:<port>" URL TELA apps
+			// declare (XSWD origin check) and Android WebView allows cleartext.
+			return cleanTELALink("http://localhost" + strings.TrimPrefix(s.Address, "127.0.0.1") + "/" + s.Entrypoint), nil
 		}
 	}
 	return serveTELACollisionRecovery(scid, endpoint, cancelled...)
@@ -9900,10 +10175,40 @@ func telaErrorToString(err error) string {
 	return fmt.Sprintf("%s %s", "error", str)
 }
 
+// telaShimDiskStampPath returns the file that remembers the last shim hash
+// written to disk so cold starts after reboot stay fast.
+func telaShimDiskStampPath() string {
+	return filepath.Join(getTelaPath(), ".engram_wsshim_stamp")
+}
+
+func telaShimCurrentHash() string {
+	h := sha256.Sum256([]byte(telaMobileWSReconnectShim))
+	return hex.EncodeToString(h[:8])
+}
+
 // PatchTELAAppSourceFiles scans the cloned TELA app directory and replaces localhost with 127.0.0.1 on mobile
 func PatchTELAAppSourceFiles(scid string) {
 	if !fyne.CurrentApp().Driver().Device().IsMobile() {
 		return
+	}
+
+	// Villager cache: memory hit is instant; disk stamp survives reboot.
+	// Hash ties stamp to current shim version so upgrades re-patch once.
+	if isVillagerTelaSCID(scid) {
+		telaPatchCacheMu.Lock()
+		_, done := telaPatchCache[scid]
+		telaPatchCacheMu.Unlock()
+		if done {
+			return
+		}
+		if b, err := os.ReadFile(telaShimDiskStampPath()); err == nil {
+			if string(bytes.TrimSpace(b)) == telaShimCurrentHash()+":"+scid {
+				telaPatchCacheMu.Lock()
+				telaPatchCache[scid] = struct{}{}
+				telaPatchCacheMu.Unlock()
+				return
+			}
+		}
 	}
 
 	telaPath := getTelaPath()
@@ -9941,10 +10246,17 @@ func PatchTELAAppSourceFiles(scid string) {
 
 			changed := false
 
-			// We specifically target localhost:44326 (XSWD) to avoid breaking the origin check
-			// while still enabling the explicit loopback IP for mobile WebSocket connectivity.
-			if bytes.Contains(content, []byte("localhost:44326")) {
-				newContent := bytes.ReplaceAll(content, []byte("localhost:44326"), []byte("127.0.0.1:44326"))
+			// DO NOT replace localhost:44326 -> 127.0.0.1 on mobile. Android
+			// WebView's Network Security Config allows cleartext for
+			// http://localhost but blocks http://127.0.0.1, and the XSWD origin
+			// check expects the page at http://localhost:8082 to talk to
+			// ws://localhost:44326. The old replacement caused
+			// ws://127.0.0.1:44326 to be blocked, producing the
+			// "Connected -> closed 1000 -> Connected" loop seen in villager
+			// (main.js:298/424). Keep localhost; the shim handles reconnect.
+			// Strip any stale 127.0.0.1 patch from previous installs.
+			if bytes.Contains(content, []byte("127.0.0.1:44326")) {
+				newContent := bytes.ReplaceAll(content, []byte("127.0.0.1:44326"), []byte("localhost:44326"))
 				tmpPath := path + ".tmp"
 				err = os.WriteFile(tmpPath, newContent, info.Mode())
 				if err != nil {
@@ -9952,19 +10264,24 @@ func PatchTELAAppSourceFiles(scid string) {
 				}
 				err = os.Rename(tmpPath, path)
 				if err != nil {
-					os.Remove(tmpPath) // Cleanup on failure
+					os.Remove(tmpPath)
 					return err
 				}
 				content = newContent
 				changed = true
-				logger.Printf("[TELA] PatchTELAAppSourceFiles: Patched %s (localhost:44326 -> 127.0.0.1:44326)\n", path)
+				logger.Printf("[TELA] PatchTELAAppSourceFiles: Reverted %s (127.0.0.1:44326 -> localhost:44326) for Android cleartext\n", path)
 			}
 
 			// Mobile WebSocket auto-reconnect shim: keeps the XSWD socket alive
 			// across app-switches on Android so permission prompts don't need a
 			// manual Enter per reconnect. Idempotent (strips old copy first).
+			// Villager only needs shim in main.js – other .js files are library
+			// code (rive, identicon) that never touches the Engram WS; injecting
+			// 5 files (WORSE log) added 7s cold start vs golden 1 file (3s).
 			if ext == ".js" {
-				if updated, injected := injectMobileWSReconnectShim(content); injected {
+				if isVillagerTelaSCID(scid) && !strings.HasSuffix(strings.ToLower(path), "main.js") {
+					// skip shim for non-main villager files
+				} else if updated, injected := injectMobileWSReconnectShim(content); injected {
 					tmpPath := path + ".tmp"
 					err = os.WriteFile(tmpPath, updated, info.Mode())
 					if err != nil {
@@ -9990,6 +10307,13 @@ func PatchTELAAppSourceFiles(scid string) {
 		logger.Errorf("[TELA] PatchTELAAppSourceFiles error: %v\n", err)
 	} else {
 		logger.Printf("[TELA] PatchTELAAppSourceFiles: Completed. Patched %d files for SCID %s\n", count, scid)
+		if isVillagerTelaSCID(scid) {
+			telaPatchCacheMu.Lock()
+			telaPatchCache[scid] = struct{}{}
+			telaPatchCacheMu.Unlock()
+			_ = os.MkdirAll(getTelaPath(), 0755)
+			_ = os.WriteFile(telaShimDiskStampPath(), []byte(telaShimCurrentHash()+":"+scid), 0644)
+		}
 	}
 }
 
@@ -10304,17 +10628,29 @@ func sessionDomainToString(domain string) string {
 
 // Add EPOCH session values to the account total stores
 func storeEPOCHTotal(timeout time.Duration) {
-	epochSession, err := epoch.GetSession(timeout)
-	if err == nil {
-		remoteAccess.EPOCH.total.Hashes += epochSession.Hashes
-		remoteAccess.EPOCH.total.MiniBlocks += epochSession.MiniBlocks
-
-		var eMar []byte
-		if eMar, err = json.Marshal(remoteAccess.EPOCH.total); err == nil {
-			err = StoreEncryptedValue("RemoteAccess", []byte("EPOCH"), eMar)
-		}
+	// During wallet close engram.Disk is already nil (see closeWallet); storing
+	// then always fails with "no active account". Silently skip in that case.
+	if engram.Disk == nil {
+		return
 	}
+	epochSession, err := epoch.GetSession(timeout)
+	if err != nil {
+		// No active EPOCH session (e.g. never started, or wallet already closed)
+		// is not an error worth spamming the debug log — v0.6.9 was silent here.
+		if strings.Contains(err.Error(), "no active account") || strings.Contains(err.Error(), "no active") {
+			logger.Debugf("[EPOCH] Storing total: %s\n", err)
+		} else {
+			logger.Errorf("[EPOCH] Storing total: %s\n", err)
+		}
+		return
+	}
+	remoteAccess.EPOCH.total.Hashes += epochSession.Hashes
+	remoteAccess.EPOCH.total.MiniBlocks += epochSession.MiniBlocks
 
+	var eMar []byte
+	if eMar, err = json.Marshal(remoteAccess.EPOCH.total); err == nil {
+		err = StoreEncryptedValue("RemoteAccess", []byte("EPOCH"), eMar)
+	}
 	if err != nil {
 		logger.Errorf("[EPOCH] Storing total: %s\n", err)
 	}

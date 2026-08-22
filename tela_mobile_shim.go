@@ -11,9 +11,20 @@ import "bytes"
 // The shim auto-reconnects the XSWD socket (port 44326) when the tab becomes
 // visible again (focus / visibilitychange / interval probes), so the permission
 // flow advances without a manual Enter per permission. It is gated and safe by
-// design: it only acts on port-44326 sockets, only when the site exposes
-// connectWallet() / isConnected, and is a no-op otherwise. An unexpected-close
-// latch distinguishes a deliberate user disconnect from an Android kill.
+// design: it only acts on port-44326 sockets and is a no-op if the site does
+// not expose a connect function.
+//
+// TELA apps expose different connect APIs, so the shim resolves the function
+// defensively: it prefers window.connectWallet (the de-facto XSWD convention)
+// and falls back to window.connectWebSocket, which the Engram villager app
+// exposes. Connection state is read from window.isConnected when the site
+// provides it, otherwise from the socket's readyState (window.socket or the
+// bare `socket` global, which classic scripts expose to later code). An
+// unexpected-close latch distinguishes a deliberate user disconnect (site calls
+// socket.close()) from an Android kill: closes that come through a wrapped
+// addEventListener('close', ...) or an OPEN->CLOSED transition observed by the
+// probe are treated as unexpected, while a recent deliberate close() suppresses
+// the latch so the shim never fights the user's own disconnect.
 const telaMobileWSReconnectShim = `/*__engramWsReconnect__*/
 (function () {
   if (window.__engramWsReconnect) return;
@@ -21,6 +32,10 @@ const telaMobileWSReconnectShim = `/*__engramWsReconnect__*/
 
   var ENG_WS_PORT = ':44326';
   var unexpectedClose = false;
+  var lastDeliberateClose = 0;
+  var lastState = null;
+  var reconnectScheduled = false;
+  var pendingSends = [];
 
   function isEngramSocket(s) {
     try {
@@ -28,49 +43,221 @@ const telaMobileWSReconnectShim = `/*__engramWsReconnect__*/
     } catch (e) { return false; }
   }
 
+  function currentSocket() {
+    try {
+      if (window.socket) return window.socket;
+    } catch (e) {}
+    try {
+      if (typeof socket !== 'undefined' && socket) return socket;
+    } catch (e) {}
+    return null;
+  }
+
+  function socketIsOpen() {
+    var s = currentSocket();
+    return !!s && s.readyState === WebSocket.OPEN;
+  }
+
+  function socketIsConnecting() {
+    var s = currentSocket();
+    return !!s && s.readyState === WebSocket.CONNECTING;
+  }
+
+  function isConnected() {
+    try {
+      if (typeof window.isConnected === 'function') return window.isConnected();
+    } catch (e) {}
+    return socketIsOpen() || socketIsConnecting();
+  }
+
+  function getConnectFn() {
+    try {
+      if (typeof window.connectWallet === 'function') return window.connectWallet;
+    } catch (e) {}
+    try {
+      if (typeof window.connectWebSocket === 'function') return window.connectWebSocket;
+    } catch (e) {}
+    return null;
+  }
+
   function canAutoConnect() {
-    return typeof window.connectWallet === 'function' &&
-           typeof window.isConnected === 'function';
+    return getConnectFn() !== null;
+  }
+
+  function scheduleReconnect(delay) {
+    if (reconnectScheduled) return;
+    reconnectScheduled = true;
+    setTimeout(function () {
+      reconnectScheduled = false;
+      tryReconnect();
+    }, delay || 80);
+  }
+
+  function flushPending() {
+    if (!pendingSends.length) return;
+    var s = currentSocket();
+    if (!s || s.readyState !== WebSocket.OPEN) return;
+    try {
+      for (var i = 0; i < pendingSends.length; i++) s.send(pendingSends[i]);
+    } catch (e) {}
+    pendingSends = [];
   }
 
   function tryReconnect() {
     if (!unexpectedClose || !canAutoConnect()) return;
     try {
-      if (window.isConnected()) { unexpectedClose = false; return; }
-      window.connectWallet();
+      if (isConnected()) { unexpectedClose = false; flushPending(); return; }
+      getConnectFn()();
+      // Flush will happen via onopen wrapper (immediate) – no 1200ms delay.
+      // Keep latch until OPEN so probe doesn't clear it prematurely.
     } catch (e) {}
   }
 
+  // Queue sends that occur while the Engram socket is not OPEN (e.g. the
+  // app sent GetBalance while Engram was foreground showing the GetAddress
+  // permission dialog and the WS was killed). When the shim reconnects, the
+  // queue is flushed, so the app's sequential logic does not need a manual
+  // retry or app-switch per permission.
+  var _send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    if (isEngramSocket(this) && this.readyState !== WebSocket.OPEN) {
+      try { pendingSends.push(data); } catch (e) {}
+      // Trigger a reconnect attempt; tryReconnect will flush on OPEN. Do not
+      // re-latch inside the deliberate-close window, or we would fight the
+      // site's own disconnect (user tapped disconnect, app still sends).
+      if (Date.now() - lastDeliberateClose > 2000) {
+        unexpectedClose = true;
+        scheduleReconnect(80);
+      }
+      return;
+    }
+    return _send.apply(this, arguments);
+  };
+
   // Latch unexpected closes on the Engram socket. A deliberate close() from the
-  // site (user disconnect) clears the latch so we don't fight the user.
+  // site (user disconnect) clears the latch and stamps a timestamp so the probe
+  // below does not immediately re-latch the same close.
   var _close = WebSocket.prototype.close;
   WebSocket.prototype.close = function () {
-    if (isEngramSocket(this)) unexpectedClose = false;
+    if (isEngramSocket(this)) {
+      unexpectedClose = false;
+      lastDeliberateClose = Date.now();
+    }
     return _close.apply(this, arguments);
   };
 
-  // Observe close events on Engram sockets via addEventListener, which is what
-  // most TELA apps use for their reconnect-on-close handler.
+  // Observe close events on Engram sockets. Many TELA apps (including villager)
+  // use socket.onclose = fn or addEventListener('close'), both of which fire
+  // when Android kills the WS on app-switch. We latch unexpectedClose and
+  // trigger a fast reconnect. Unlike v0.6.9 which required manual Enter, the
+  // shim reconnects silently; we still call the app's handler so its retry
+  // logic (if any) can resend pending RPCs that were lost when the WS died
+  // while a permission dialog was showing in Engram.
   var _add = EventTarget.prototype.addEventListener;
   EventTarget.prototype.addEventListener = function (type, fn, opts) {
     if (type === 'close' && isEngramSocket(this)) {
       var orig = fn;
       fn = function (e) {
-        unexpectedClose = true;
+        var isDeliberate = Date.now() - lastDeliberateClose < 2000;
+        if (!isDeliberate && lastState === WebSocket.OPEN) {
+          unexpectedClose = true;
+          scheduleReconnect(80);
+        }
         return orig ? orig.apply(this, arguments) : undefined;
+      };
+    } else if (type === 'open' && isEngramSocket(this)) {
+      var origO = fn;
+      fn = function (e) {
+        try { unexpectedClose = false; flushPending(); } catch (ex) {}
+        return origO ? origO.apply(this, arguments) : undefined;
       };
     }
     return _add.call(this, type, fn, opts);
   };
 
-  function onVisible() {
-    if (document.visibilityState === 'visible') setTimeout(tryReconnect, 150);
+  // Also wrap onclose setter (villager uses socket.onclose = ...) for same reason.
+  try {
+    var desc = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'onclose');
+    if (desc && desc.set) {
+      var origSet = desc.set;
+      Object.defineProperty(WebSocket.prototype, 'onclose', {
+        set: function (fn) {
+          if (isEngramSocket(this) && typeof fn === 'function') {
+            var orig = fn;
+            fn = function (e) {
+              var isDeliberate = Date.now() - lastDeliberateClose < 2000;
+              if (!isDeliberate && lastState === WebSocket.OPEN) {
+                unexpectedClose = true;
+                scheduleReconnect(80);
+              }
+              return orig.apply(this, arguments);
+            };
+          }
+          return origSet.call(this, fn);
+        },
+        get: desc.get,
+        configurable: true
+      });
+    }
+  } catch (e) {}
+
+  // Wrap onopen to flush queued RPCs immediately when socket opens (fixes
+  // WORSEVILLAGER 1200ms flush delay that lost requests after Allow).
+  try {
+    var descO = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'onopen');
+    if (descO && descO.set) {
+      var origSetO = descO.set;
+      Object.defineProperty(WebSocket.prototype, 'onopen', {
+        set: function (fn) {
+          if (isEngramSocket(this) && typeof fn === 'function') {
+            var orig = fn;
+            fn = function (e) {
+              try { unexpectedClose = false; flushPending(); } catch (ex) {}
+              return orig.apply(this, arguments);
+            };
+          }
+          return origSetO.call(this, fn);
+        },
+        get: descO.get,
+        configurable: true
+      });
+    }
+  } catch (e) {}
+
+  // Probe the socket state every tick: an OPEN -> CLOSED transition that was
+  // not a deliberate close() (e.g. Android killed the WS while the tab was
+  // backgrounded) latches unexpectedClose so tryReconnect fires. Faster 500ms
+  // probe reduces the blackout after returning from Engram permission dialog.
+  function probe() {
+    if (!canAutoConnect()) return;
+    try {
+      var s = currentSocket();
+      if (!s) { lastState = null; return; }
+      var st = s.readyState;
+      if (st === WebSocket.OPEN || st === WebSocket.CONNECTING) {
+        unexpectedClose = false;
+        lastState = st;
+      } else if (st === WebSocket.CLOSED) {
+        if (lastState === WebSocket.OPEN && Date.now() - lastDeliberateClose > 2000) {
+          unexpectedClose = true;
+          scheduleReconnect(80);
+        }
+        lastState = st;
+      }
+    } catch (e) {}
   }
-  document.addEventListener('visibilitychange', onVisible);
-  window.addEventListener('focus', function () { setTimeout(tryReconnect, 150); });
-  setInterval(tryReconnect, 2000);
-})();
-/*__engramWsReconnect__*/`
+
+   function onVisible() {
+     if (document.visibilityState === 'visible') scheduleReconnect(80);
+   }
+   document.addEventListener('visibilitychange', onVisible);
+   window.addEventListener('focus', function () { scheduleReconnect(80); });
+   window.addEventListener('pageshow', function () { scheduleReconnect(80); });
+   // Probe interval: 500ms balances fast reconnect (Android permission dialog)
+   // vs battery. Tune here in the shim string; a rebuild is required either way.
+   setInterval(function () { probe(); tryReconnect(); }, 500);
+ })();
+ /*__engramWsReconnect__*/`
 
 // shimMarker delimits a previously injected telaMobileWSReconnectShim block so
 // upgrades strip the old copy before injecting the new one (never stacking).

@@ -1,12 +1,46 @@
 package main
 
 import (
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/civilware/tela/logger"
 	"github.com/creachadair/jrpc2"
 	"github.com/deroproject/derohe/walletapi/xswd"
 )
+
+// isSafeAutoAllowMethod reports whether a method is low-risk read-only and may
+// be auto-allowed for a grace period after the user approved the connection.
+// Sensitive methods (signing, key access, transactions) must never appear here;
+// they always get an explicit per-method prompt via isSensitiveAutoAllowExcluded.
+func isSafeAutoAllowMethod(method string) bool {
+	switch method {
+	case "GetAddress", "getaddress", "GetAddressEPOCH",
+		"GetBalance", "getbalance",
+		"GetHeight", "getheight",
+		"GetDaemon", "GetPrimaryUsername",
+		"GetTransfers", "get_transfers", "GetTransferbyTXID", "get_transfer_by_txid", "get-transfer_by_txid",
+		"MakeIntegratedAddress", "make_integrated_address", "SplitIntegratedAddress", "split_integrated_address",
+		"HasMethod", "Echo", "GetSessionEPOCH", "GetMaxHashesEPOCH", "HandleTELALinks", "Subscribe", "Unsubscribe":
+		return true
+	}
+	return false
+}
+
+// isSensitiveAutoAllowExcluded reports whether a method must never be
+// batch-allowed by a connection approval alone. These always require an
+// explicit per-method prompt, even when every other Ask method was
+// auto-allowed at connect time.
+func isSensitiveAutoAllowExcluded(method string) bool {
+	switch method {
+	case "Transfer", "transfer", "transfer_split", "scinvoke",
+		"SignData", "CheckSignature",
+		"QueryKey", "query_key":
+		return true
+	}
+	return false
+}
 
 // xswdPromptQueue serializes XSWD connection/permission prompts so they are
 // presented strictly one-at-a-time. XSWDPrompt and AskPermissionForRequest each
@@ -81,7 +115,42 @@ func queuedXSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 
 // queuedAskPermissionForRequest is the per-method permission prompt handler
 // wired into the XSWD server; it routes through the FIFO queue.
+// Fast-path: if the method was already Allow-cached (batch-allow at connection
+// or prior Allow) or is safe-auto-allowed via recent connection approval,
+// return immediately without queuing a dialog. This restores 0.6.9 fluidity
+// where Villager's burst appeared "one after other without delays" instead
+// of one app-switch per permission on mobile.
 func queuedAskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) xswd.Permission {
+	method := request.Method()
+	// Stored AlwaysAllow / AlwaysDeny – no prompt needed.
+	if ad.Permissions != nil {
+		if p, ok := ad.Permissions[method]; ok && p != xswd.Ask {
+			return p
+		}
+	}
+	// Gnomon always-allow – no prompt.
+	if strings.HasPrefix(method, "Gnomon.") {
+		return xswd.Allow
+	}
+	// Method Allow cache (10m) from prior Allow tap.
+	xswdMethodAllowCacheMu.Lock()
+	if ts, ok := xswdMethodAllowCache[ad.Name+"|"+method]; ok && len(method) > 0 {
+		if time.Since(ts) < 10*time.Minute {
+			xswdMethodAllowCacheMu.Unlock()
+			return xswd.Allow
+		}
+	}
+	xswdMethodAllowCacheMu.Unlock()
+	// Safe methods auto-allowed for 10m after connection approval (Villager burst).
+	if isSafeAutoAllowMethod(method) {
+		xswdApprovedCacheMu.Lock()
+		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+			xswdApprovedCacheMu.Unlock()
+			return xswd.Allow
+		}
+		xswdApprovedCacheMu.Unlock()
+	}
+
 	result := make(chan xswd.Permission, 1)
 	enqueueXSWDPrompt(func() {
 		defer func() {

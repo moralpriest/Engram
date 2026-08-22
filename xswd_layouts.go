@@ -388,6 +388,8 @@ func translatePermissionString(s string) string {
 		return i18n.T("settings.permissions.always_allow")
 	case xswd.AlwaysDeny.String():
 		return i18n.T("settings.permissions.always_deny")
+	case xswd.Allow.String():
+		return i18n.T("settings.permissions.allow")
 	case xswd.Ask.String():
 		return i18n.T("settings.permissions.ask")
 	default:
@@ -401,6 +403,8 @@ func getPermissionFromTranslated(s string) xswd.Permission {
 		return xswd.AlwaysAllow
 	case i18n.T("settings.permissions.always_deny"):
 		return xswd.AlwaysDeny
+	case i18n.T("settings.permissions.allow"):
+		return xswd.Allow
 	case i18n.T("settings.permissions.ask"):
 		return xswd.Ask
 	default:
@@ -470,41 +474,39 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 
 	wEpochAddress := widget.NewSelect([]string{i18n.T("settings.epoch.my_address"), i18n.T("settings.epoch.dapp_chooses")}, nil)
 
-	/*
-		if remoteAccess.EPOCH.enabled {
-			wEpoch.SetSelectedIndex(1)
-		} else {
-			wEpoch.SetSelectedIndex(0)
-			wEpochAddress.Disable()
+	if remoteAccess.EPOCH.enabled {
+		wEpoch.SetSelectedIndex(1)
+	} else {
+		wEpoch.SetSelectedIndex(0)
+		wEpochAddress.Disable()
+	}
+
+	if remoteAccess.EPOCH.allowWithAddress {
+		wEpochAddress.SetSelectedIndex(1)
+	} else {
+		wEpochAddress.SetSelectedIndex(0)
+	}
+
+	wEpoch.OnChanged = func(s string) {
+		if s == i18n.T("settings.permissions.allow") {
+			remoteAccess.EPOCH.enabled = true
+			wEpochAddress.Enable()
+			return
 		}
 
-		if remoteAccess.EPOCH.allowWithAddress {
-			wEpochAddress.SetSelectedIndex(1)
-		} else {
-			wEpochAddress.SetSelectedIndex(0)
+		remoteAccess.EPOCH.enabled = false
+		wEpochAddress.SetSelectedIndex(0)
+		wEpochAddress.Disable()
+	}
+
+	wEpochAddress.OnChanged = func(s string) {
+		if s == i18n.T("settings.epoch.dapp_chooses") {
+			remoteAccess.EPOCH.allowWithAddress = true
+			return
 		}
 
-		wEpoch.OnChanged = func(s string) {
-			if s == xswd.Allow.String() {
-				remoteAccess.EPOCH.enabled = true
-				wEpochAddress.Enable()
-				return
-			}
-
-			remoteAccess.EPOCH.enabled = false
-			wEpochAddress.SetSelectedIndex(0)
-			wEpochAddress.Disable()
-		}
-
-		wEpochAddress.OnChanged = func(s string) {
-			if s == "dApp Chooses" {
-				remoteAccess.EPOCH.allowWithAddress = true
-				return
-			}
-
-			remoteAccess.EPOCH.allowWithAddress = false
-		}
-	*/
+		remoteAccess.EPOCH.allowWithAddress = false
+	}
 
 	spacerEpoch := canvas.NewRectangle(color.Transparent)
 	spacerEpoch.SetMinSize(fyne.NewSize(140, 0))
@@ -587,17 +589,17 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 		wConnection.SetSelectedIndex(0)
 		wConnection.Disable()
 		wGlobalPermissions.SetSelectedIndex(0)
-		wGlobalPermissions.Disable()
 		btnDefaults.Disable()
 	}
 
 	wMode.OnChanged = func(b bool) {
 		remoteAccess.WS.advanced = !b // inverse as check box is for restrictive mode on/off
-		if remoteAccess.WS.advanced {
-			wGlobalPermissions.Enable()
-		} else {
-			wGlobalPermissions.SetSelectedIndex(0) // calling this here resets and disables wConnection
-			wGlobalPermissions.Disable()
+		// The Global Permissions toggle stays usable in every mode so the user
+		// is never locked out of enabling WebSocket permission management.
+		wGlobalPermissions.Enable()
+		if !remoteAccess.WS.advanced {
+			wConnection.SetSelectedIndex(0) // calling this here resets and disables wConnection
+			wConnection.Disable()
 		}
 	}
 
@@ -614,6 +616,7 @@ func layoutXSWDPermissions() fyne.CanvasObject {
 	// Permission options for select widgets
 	permissions := []string{
 		i18n.T("settings.permissions.ask"),
+		i18n.T("settings.permissions.allow"),
 		i18n.T("settings.permissions.always_allow"),
 		i18n.T("settings.permissions.always_deny"),
 	}

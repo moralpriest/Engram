@@ -50,7 +50,7 @@ func showVillagerPopup(parent *fyne.Container) {
 	rect.CornerRadius = scaleSize(10)
 	rect.SetMinSize(fyne.NewSize(scaleSize(220), scaleSize(40)))
 
-	text := canvas.NewText(i18n.T("villager.click_edit"), apptheme.C.Green)
+	text := canvas.NewText(i18n.T("villager.click_edit"), apptheme.C.LightBlue)
 	text.Alignment = fyne.TextAlignCenter
 	text.TextSize = scaleFont(14)
 
@@ -92,10 +92,16 @@ func showVillagerMenu(updateLogo func()) {
 		closeMenu()
 		showLoadingOverlay()
 		go func() {
-			EnsureXSWD()
-
-			scid := "986fc20fefeda2227e5722af66390c57f3606468a485215f773326aa872697c8"
+			// Run EnsureXSWD and GetINDEXInfo concurrently so remote-node
+			// villager opens near-instantly (v0.6.9 feel). Total wait is max, not sum.
+			scid := villagerTelaSCID
+			ensureCh := make(chan bool, 1)
+			go func() { ensureCh <- EnsureXSWD() }()
 			index, err := tela.GetINDEXInfo(scid, session.Daemon)
+			ensureOK := <-ensureCh
+			if !ensureOK {
+				logger.Printf("[Villager] EnsureXSWD not ready, proceeding to manager anyway\n")
+			}
 			if err != nil {
 				logger.Errorf("[Villager] Error getting index for %s: %v", scid, err)
 				removeOverlays()
