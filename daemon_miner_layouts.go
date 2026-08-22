@@ -255,6 +255,13 @@ func startBackgroundDaemonRefresh() {
 			var lastHeight uint64
 			var lastSynced bool
 			for {
+				// Remote-only mode (no embedded daemon) – don't hammer localhost RPC
+				if globalChain == nil {
+					updateDaemonStateFromDetection()
+					uiDo(syncToggleStates)
+					time.Sleep(10 * time.Second)
+					continue
+				}
 				info, err := fetchDaemonInfo()
 				if err == nil {
 					if info.Height != lastHeight || info.Synchronized != lastSynced {
@@ -264,7 +271,8 @@ func startBackgroundDaemonRefresh() {
 					}
 					uiDo(func() { updateInfoUILabels(info) })
 				} else {
-					logger.Printf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
+					// Only log verbosely when embedded daemon is actually running
+					logger.Debugf("[Daemon RPC] Background refresh: fetchDaemonInfo failed - %v", err)
 				}
 				updateDaemonStateFromDetection()
 				uiDo(syncToggleStates)

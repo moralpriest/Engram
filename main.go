@@ -297,7 +297,10 @@ func main() {
 		now := time.Now().Unix()
 		if telaViewActive.Load() {
 			logger.Printf("[Lifecycle] Active TELA bootstrap foreground event - bypassing cooldown")
-		} else if now-lastForegroundTime < 5 && lastForegroundTime > 0 {
+		} else if isMobileDevice && now-lastForegroundTime < 30 && lastForegroundTime > 0 {
+			logger.Printf("[Lifecycle] Foreground cooldown active, skipping heavy refresh (mobile: true) – 30s gate")
+			return
+		} else if !isMobileDevice && now-lastForegroundTime < 5 && lastForegroundTime > 0 {
 			return
 		}
 		lastForegroundTime = now

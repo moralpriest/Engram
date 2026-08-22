@@ -178,9 +178,11 @@ func loadDaemonConfig() {
 		daemonIntegratorAddress = string(val)
 	}
 
-	// Load persisted miner engine (DEROHE or Dirtybird)
+	// Load persisted miner engine (DEROHE or Dirtybird) — default Dirtybird per user request
 	if val, err := GetEncryptedValue("settings", []byte("miner_engine")); err == nil && len(val) > 0 {
 		minerEngine = engineFromString(string(val))
+	} else {
+		minerEngine = MinerDirtybird
 	}
 
 	// Load force full mode preference
@@ -686,7 +688,12 @@ var (
 )
 
 // fetchDaemonInfo calls get_info RPC and caches the result.
+// When embedded daemon is not running (globalChain==nil) and user is on a
+// remote node, the localhost RPC will always fail – don't spam the debug log.
 func fetchDaemonInfo() (DaemonInfo, error) {
+	if globalChain == nil {
+		return DaemonInfo{}, fmt.Errorf("embedded daemon not running")
+	}
 	addr := daemonRPCAddress()
 	url := fmt.Sprintf("http://%s/json_rpc", addr)
 
@@ -895,7 +902,19 @@ func updateDaemonStateFromDetection() {
 		return
 	}
 
-	// Check if an external daemon is reachable (user configured remote node)
+	// Remote daemon – don't probe localhost RPC. For dashboard icon,
+	// remote should NOT show daemon running (expected hidden). Keep state
+	// as Stopped so daemonIsRunning() is false – matches 0.6.9 behavior
+	// where remote had no local daemon. External state is only for local
+	// embedded daemon that is reachable.
+	if session.Daemon != "" && session.Daemon != daemonRPCAddress() {
+		dmState.daemonState = dmStateStopped
+		if detectChainCorruption() {
+			dmState.daemonState = dmStateCorrupt
+		}
+		return
+	}
+	// Fallback: try localhost probe (only when no remote configured)
 	if info, err := fetchDaemonInfo(); err == nil {
 		totalPeers := info.InPeers + info.OutPeers
 		if totalPeers == 0 && (info.Height == 0 || info.Topoheight == 0) {
