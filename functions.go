@@ -6210,6 +6210,24 @@ func ScanDependentSCIDs(scid string) []string {
 	return scanSCIDVariablesForDeps(scid, vars)
 }
 
+// telaAppDirForDURL resolves a TELA app's clone directory under the TELA data
+// path, refusing any path that escapes it. dURL comes from the TELA-INDEX
+// contract header and is therefore attacker-controlled for malicious
+// contracts: without this check a dURL like "../x" would let source scans
+// read — and mobile patches write — outside datashards/tela.
+func telaAppDirForDURL(dURL string) string {
+	base := getTelaPath()
+	if dURL == "" {
+		return ""
+	}
+	p := filepath.Join(base, dURL)
+	if p == base || !strings.HasPrefix(p, base+string(os.PathSeparator)) {
+		logger.Printf("[TELA] Refusing unsafe dURL %q: path escapes %s\n", dURL, base)
+		return ""
+	}
+	return p
+}
+
 // ScanTELAAppSourceFiles scans cloned TELA app files (.js, .html) for hardcoded SCIDs.
 // It looks for 64-character hex strings that match valid SCID format.
 // dURL is looked up first from Gnomon's local DB, then falls back to the active TELA server list.
@@ -6250,7 +6268,10 @@ func ScanTELAAppSourceFiles(scid string) []string {
 		return nil
 	}
 
-	clonePath := filepath.Join(AppPath(), "datashards", "tela", dURL)
+	clonePath := telaAppDirForDURL(dURL)
+	if clonePath == "" {
+		return nil
+	}
 	if _, err := os.Stat(clonePath); os.IsNotExist(err) {
 		logger.Debugf("[Engram] AutoIndex: clone path does not exist: %s", clonePath)
 		return nil
@@ -8618,7 +8639,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	if !isWalletGenerationActive(generation) || session.Window == nil {
 		return false
 	}
-	logger.Printf("[XSWD-PERM] connection prompt start app=%s\n", ad.Name)
+	logger.Printf("[XSWD-PERM] connection prompt start app=%s origin=%s\n", ad.Name, ad.Url)
 
 	if remoteAccess.WS.advanced {
 		// If global permissions enabled set them here
@@ -8658,7 +8679,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		// the same app is the "WTF CONNECT" loop seen inVillager (closed 1000
 		// -> Connected -> prompt again). The cache makes the shim seamless.
 		xswdApprovedCacheMu.Lock()
-		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+		if ts, ok := xswdApprovedCache[xswdAppCacheKey(ad)]; ok && time.Since(ts) < 10*time.Minute {
 			xswdApprovedCacheMu.Unlock()
 			logger.Printf("[Engram] Auto-approved reconnect for %s (approved %v ago)\n", ad.Name, time.Since(ts).Round(time.Second))
 			go refreshXSWDList()
@@ -8938,7 +8959,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			go fyne.CurrentApp().SendNotification(&fyne.Notification{Title: title, Content: content})
 		}
 		session.Window.RequestFocus()
-		logger.Printf("[XSWD-PERM] connection prompt shown app=%s\n", ad.Name)
+		logger.Printf("[XSWD-PERM] connection prompt shown app=%s origin=%s\n", ad.Name, ad.Url)
 	})
 
 	// Wait for user input or socket close
@@ -8951,7 +8972,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 		return false
 	}
 
-	logger.Printf("[XSWD-PERM] connection prompt resolved app=%s confirmed=%v\n", ad.Name, confirmed)
+	logger.Printf("[XSWD-PERM] connection prompt resolved app=%s origin=%s confirmed=%v\n", ad.Name, ad.Url, confirmed)
 
 	fyne.Do(func() {
 		overlay.Remove(promptLayers[0])
@@ -8961,8 +8982,9 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 	go refreshXSWDList()
 
 	if confirmed && ad.Name != "" {
+		appKey := xswdAppCacheKey(ad)
 		xswdApprovedCacheMu.Lock()
-		xswdApprovedCache[ad.Name] = time.Now()
+		xswdApprovedCache[appKey] = time.Now()
 		xswdApprovedCacheMu.Unlock()
 		// Batch-allow all methods that were Ask at connection time so that a
 		// single "Allow" on the connection dialog is enough for the app's
@@ -8980,7 +9002,7 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 					if isSensitiveAutoAllowExcluded(m) {
 						continue
 					}
-					xswdMethodAllowCache[ad.Name+"|"+m] = now
+					xswdMethodAllowCache[appKey+"|"+m] = now
 				}
 			}
 			xswdMethodAllowCacheMu.Unlock()
@@ -9089,7 +9111,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	}
 
 	method := request.Method()
-	logger.Printf("[XSWD-PERM] permission prompt start app=%s method=%s\n", ad.Name, method)
+	logger.Printf("[XSWD-PERM] permission prompt start app=%s origin=%s method=%s\n", ad.Name, ad.Url, method)
 
 	var raw json.RawMessage
 	_ = request.UnmarshalParams(&raw)
@@ -9129,7 +9151,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	// permission dialog is showing (Android suspends the browser). Without this,
 	// each sequential villager request (GetAddress, GetBalance, ...) would need
 	// its own app-switch round-trip.
-	cacheKey := ad.Name + "|" + method
+	cacheKey := xswdAppCacheKey(ad) + "|" + method
 	xswdMethodAllowCacheMu.Lock()
 	if ts, ok := xswdMethodAllowCache[cacheKey]; ok && time.Since(ts) < 10*time.Minute {
 		xswdMethodAllowCacheMu.Unlock()
@@ -9147,7 +9169,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 	// key access, transactions) are never auto-allowed this way.
 	if isSafeAutoAllowMethod(method) {
 		xswdApprovedCacheMu.Lock()
-		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+		if ts, ok := xswdApprovedCache[xswdAppCacheKey(ad)]; ok && time.Since(ts) < 10*time.Minute {
 			xswdApprovedCacheMu.Unlock()
 			logger.Printf("[Engram] Auto-allowed %s for %s via recent connection approval\n", method, ad.Name)
 			return xswd.Allow
@@ -9375,7 +9397,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 			go fyne.CurrentApp().SendNotification(&fyne.Notification{Title: title, Content: content})
 		}
 		session.Window.RequestFocus()
-		logger.Printf("[XSWD-PERM] permission prompt shown app=%s method=%s\n", ad.Name, method)
+		logger.Printf("[XSWD-PERM] permission prompt shown app=%s origin=%s method=%s\n", ad.Name, ad.Url, method)
 	})
 
 	// Wait for user input. On mobile the browser WS is killed as soon as
@@ -9421,14 +9443,14 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 		return xswd.Deny
 	}
 
-	logger.Printf("[XSWD-PERM] permission prompt resolved app=%s method=%s choice=%s\n", ad.Name, method, choice)
+	logger.Printf("[XSWD-PERM] permission prompt resolved app=%s origin=%s method=%s choice=%s\n", ad.Name, ad.Url, method, choice)
 
 	go refreshXSWDList()
 
 	// Cache plain Allow in-memory so a reconnected WS that retries the same
 	// method does not re-prompt. Always* is also persisted to disk async.
 	if choice.IsPositive() {
-		cacheKey := ad.Name + "|" + method
+		cacheKey := xswdAppCacheKey(ad) + "|" + method
 		xswdMethodAllowCacheMu.Lock()
 		xswdMethodAllowCache[cacheKey] = time.Now()
 		xswdMethodAllowCacheMu.Unlock()
@@ -10005,12 +10027,11 @@ func PatchTELAAppSourceFiles(scid string) {
 		}
 	}
 
-	telaPath := getTelaPath()
 	var appDir string
 	// Use tela.GetServerInfo() directly to avoid race conditions with the global cached info
 	for _, s := range tela.GetServerInfo() {
 		if s.SCID == scid {
-			appDir = filepath.Join(telaPath, s.Name)
+			appDir = telaAppDirForDURL(s.Name)
 			break
 		}
 	}

@@ -10,17 +10,38 @@ import (
 	"github.com/deroproject/derohe/walletapi/xswd"
 )
 
+// xswdAppCacheKey returns the identity used for XSWD approval caches.
+//
+// For browser clients the xswd library validates ad.Url against the HTTP
+// Origin header (rejects the handshake when both are present and differ), so
+// ad.Url is a spoof-resistant cache key: each TELA app is served from its own
+// localhost port, giving every app a distinct origin. ad.Name and ad.Id are
+// both self-declared handshake JSON and must never key a cache alone — any
+// page open in the user's browser could otherwise declare a trusted app's
+// name and silently inherit its recent approvals (the xswd server accepts
+// connections from any origin).
+//
+// Clients that send no Origin header keep whatever Url they declared, so this
+// fallback is weaker; it is namespaced so it can never collide with a real
+// origin key.
+func xswdAppCacheKey(ad *xswd.ApplicationData) string {
+	if ad.Url != "" {
+		return "origin:" + ad.Url
+	}
+	return "name:" + ad.Name
+}
+
 // isSafeAutoAllowMethod reports whether a method is low-risk read-only and may
 // be auto-allowed for a grace period after the user approved the connection.
-// Sensitive methods (signing, key access, transactions) must never appear here;
-// they always get an explicit per-method prompt via isSensitiveAutoAllowExcluded.
+// Sensitive methods (signing, key access, transactions, transfer history) must
+// never appear here; they always get an explicit per-method prompt via
+// isSensitiveAutoAllowExcluded.
 func isSafeAutoAllowMethod(method string) bool {
 	switch method {
 	case "GetAddress", "getaddress", "GetAddressEPOCH",
 		"GetBalance", "getbalance",
 		"GetHeight", "getheight",
 		"GetDaemon", "GetPrimaryUsername",
-		"GetTransfers", "get_transfers", "GetTransferbyTXID", "get_transfer_by_txid", "get-transfer_by_txid",
 		"MakeIntegratedAddress", "make_integrated_address", "SplitIntegratedAddress", "split_integrated_address",
 		"HasMethod", "Echo", "GetSessionEPOCH", "GetMaxHashesEPOCH", "HandleTELALinks", "Subscribe", "Unsubscribe":
 		return true
@@ -31,12 +52,16 @@ func isSafeAutoAllowMethod(method string) bool {
 // isSensitiveAutoAllowExcluded reports whether a method must never be
 // batch-allowed by a connection approval alone. These always require an
 // explicit per-method prompt, even when every other Ask method was
-// auto-allowed at connect time.
+// auto-allowed at connect time. This covers fund movement, signing/key
+// access, transfer-history reads, and EPOCH mining triggers (which would
+// otherwise let a freshly-connected app start mining without consent).
 func isSensitiveAutoAllowExcluded(method string) bool {
 	switch method {
 	case "Transfer", "transfer", "transfer_split", "scinvoke",
 		"SignData", "CheckSignature",
-		"QueryKey", "query_key":
+		"QueryKey", "query_key",
+		"GetTransfers", "get_transfers", "GetTransferbyTXID", "get_transfer_by_txid", "get-transfer_by_txid",
+		"AttemptEPOCH", "AttemptEPOCHWithAddr", "SubmitEPOCH":
 		return true
 	}
 	return false
@@ -133,8 +158,9 @@ func queuedAskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Requ
 		return xswd.Allow
 	}
 	// Method Allow cache (10m) from prior Allow tap.
+	appKey := xswdAppCacheKey(ad)
 	xswdMethodAllowCacheMu.Lock()
-	if ts, ok := xswdMethodAllowCache[ad.Name+"|"+method]; ok && len(method) > 0 {
+	if ts, ok := xswdMethodAllowCache[appKey+"|"+method]; ok && len(method) > 0 {
 		if time.Since(ts) < 10*time.Minute {
 			xswdMethodAllowCacheMu.Unlock()
 			return xswd.Allow
@@ -144,7 +170,7 @@ func queuedAskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Requ
 	// Safe methods auto-allowed for 10m after connection approval (Villager burst).
 	if isSafeAutoAllowMethod(method) {
 		xswdApprovedCacheMu.Lock()
-		if ts, ok := xswdApprovedCache[ad.Name]; ok && time.Since(ts) < 10*time.Minute {
+		if ts, ok := xswdApprovedCache[appKey]; ok && time.Since(ts) < 10*time.Minute {
 			xswdApprovedCacheMu.Unlock()
 			return xswd.Allow
 		}
