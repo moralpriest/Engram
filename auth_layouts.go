@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -44,6 +45,47 @@ import (
 	"github.com/deroproject/derohe/walletapi/mnemonics"
 	qrcode "github.com/skip2/go-qrcode"
 )
+
+// Compact chevron icons for the wallet carousel spin buttons. Custom SVGs
+// (Material chevron paths) instead of the chunky NavigateBack/NavigateNext
+// theme icons; wrapped in a ThemedResource so they follow the active color
+// scheme exactly like built-in icons.
+var (
+	chevronLeftIcon  = theme.NewThemedResource(fyne.NewStaticResource("chevron-left.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>`)))
+	chevronRightIcon = theme.NewThemedResource(fyne.NewStaticResource("chevron-right.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M8.59 16.59 10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>`)))
+)
+
+// Shared carousel chrome metrics: gap between form edge and spin button, and
+// the mobile button size (docs/Theme.md §X minimum 48×48 tap target; desktop
+// uses 36).
+const (
+	ringChevronInset = float32(24)
+	ringChevronSide  = float32(48)
+)
+
+// newSpinChevron builds a small square icon-only button for the carousel —
+// deliberately much smaller than newSizedIconButton so the row stays lean.
+// Mobile sizing uses ringChevronSide which keeps the tap target compliant.
+func newSpinChevron(icon fyne.Resource, onTap func()) fyne.CanvasObject {
+	btn := widget.NewButtonWithIcon("", icon, onTap)
+	btn.Importance = widget.LowImportance
+	side := float32(36)
+	if isMobile() {
+		side = ringChevronSide
+	}
+	enforcer := canvas.NewRectangle(color.Transparent)
+	enforcer.SetMinSize(fyne.NewSize(scaleSize(side), scaleSize(side)))
+	return container.NewStack(enforcer, btn)
+}
+
+// truncateName shortens long wallet names (rune-safe) for carousel slots.
+func truncateName(name string, max int) string {
+	r := []rune(name)
+	if len(r) <= max {
+		return name
+	}
+	return string(r[:max-1]) + "…"
+}
 
 func layoutMain() fyne.CanvasObject {
 	// Set theme
@@ -219,9 +261,18 @@ func layoutMain() fyne.CanvasObject {
 		}()
 	}
 
-	// Wallet selection buttons (up to 3) with dropdown for remaining
+	// Wallet selection ring — a Hitman-style inventory carousel: the active
+	// wallet rides the front of a circle at full size while neighbours recede
+	// smaller and fainter along the curve, wrapping around infinitely. The
+	// chevrons spin it, tapping any visible wallet jumps straight to it, and
+	// every wallet reaching the front instantly becomes the login target.
+	// The last wallet used is restored on launch.
 	walletButtons := container.NewVBox()
-	var walletBtns []*walletBtn
+	carouselIdx := 0
+
+	// Declared before selectWallet so the selection path can reference the
+	// debounced writer defined below.
+	var queueLastWalletPersist func(key, name string)
 
 	selectWallet := func(walletName string) {
 		session.Error = ""
@@ -241,16 +292,39 @@ func layoutMain() fyne.CanvasObject {
 		btnLogin.Enable()
 		safeCanvasFocus(wPassword)
 		lastWalletKey := "last_wallet_" + session.Network
-		StoreValue("settings", []byte(lastWalletKey), []byte(walletName))
+		queueLastWalletPersist(lastWalletKey, walletName)
 	}
 
-	unselectButtons := func() {
-		for _, b := range walletBtns {
-			b.SetColors(apptheme.C.DarkMatter, apptheme.C.Gray)
+	// queueLastWalletPersist debounces the last-wallet hint to disk. The
+	// synchronous StoreValue this replaces runs a full Graviton commit per
+	// call — slow on mobile flash (see persistAppPermissionsAsync for the
+	// same lesson) and it stalled the very first spin of a session. Rapid
+	// spins coalesce: only the newest name is written, once, 300ms after the
+	// last change. A lost write here costs nothing — the value is only a
+	// convenience hint re-written on every future selection.
+	var lastWalletMu sync.Mutex
+	lastWalletPending := ""
+	var lastWalletTimer *time.Timer
+	queueLastWalletPersist = func(key, name string) {
+		lastWalletMu.Lock()
+		lastWalletPending = name
+		if lastWalletTimer == nil {
+			lastWalletTimer = time.AfterFunc(300*time.Millisecond, func() {
+				lastWalletMu.Lock()
+				name := lastWalletPending
+				lastWalletPending = ""
+				lastWalletTimer = nil
+				lastWalletMu.Unlock()
+				if name == "" {
+					return
+				}
+				_ = StoreValue("settings", []byte(key), []byte(name))
+			})
 		}
+		lastWalletMu.Unlock()
 	}
 
-	// Wallet selection highlight color - theme aware
+	// Theme-aware selection color for the active wallet display
 	var logoGreen color.Color
 	switch apptheme.ThemeMode {
 	case apptheme.ThemeDerotopia:
@@ -265,58 +339,77 @@ func layoutMain() fyne.CanvasObject {
 		logoGreen = color.RGBA{R: 70, G: 184, B: 104, A: 0xff} // original green for Engram Classic
 	}
 
-	for i, walletName := range list {
-		if i >= 3 {
-			break
+	// Wallet selection carousel — deliberately minimal so it can never lag:
+	// one centered title for the active wallet plus left/right chevrons. A
+	// press swaps the name instantly (no animation objects, no per-frame
+	// projection work) and makes that wallet the login target. The last
+	// wallet used is restored on launch.
+	if len(list) > 0 {
+		displayNames := make([]string, len(list))
+		for i, name := range list {
+			// 16 chars max: canvas.Text never wraps, it bleeds (docs/Theme.md §V).
+			displayNames[i] = truncateName(strings.TrimSuffix(name, ".db"), 16)
 		}
-		selectedWallet := walletName
-		btn := newWalletBtn(strings.TrimSuffix(walletName, ".db"), nil)
-		btn.onTapped = func() {
-			unselectButtons()
-			btn.SetColors(logoGreen, color.Black)
-			selectWallet(selectedWallet)
-		}
-		walletBtns = append(walletBtns, btn)
-		walletButtons.Add(container.New(layout.NewGridLayout(1), btn))
-	}
 
-	if len(list) > 3 {
-		extraList := list[3:]
-		displayNames := make([]string, len(extraList))
-		displayToWallet := make(map[string]string, len(extraList))
-		for i, name := range extraList {
-			display := strings.TrimSuffix(name, ".db")
-			displayNames[i] = display
-			displayToWallet[display] = name
-		}
-		extraDropdown := widget.NewSelect(displayNames, func(s string) {
-			unselectButtons()
-			selectWallet(displayToWallet[s])
-		})
-		extraDropdown.PlaceHolder = fmt.Sprintf("More wallets (%d)", len(extraList))
-		walletButtons.Add(extraDropdown)
-	}
+		ringLabel := canvas.NewText("", apptheme.C.Gray)
+		ringLabel.Alignment = fyne.TextAlignCenter
+		ringLabel.TextStyle = fyne.TextStyle{Bold: true}
+		ringLabel.TextSize = scaleFont(15)
 
-	// Auto-select last used wallet if available, otherwise first wallet
-	if len(list) >= 1 {
-		autoSelectWallet := list[0]
+		setWalletAt := func(i int) {
+			n := len(list)
+			carouselIdx = ((i % n) + n) % n
+			ringLabel.Text = displayNames[carouselIdx]
+			ringLabel.Color = logoGreen
+			ringLabel.Refresh()
+			selectWallet(list[carouselIdx])
+		}
+
+		// Fixed-size backing keeps the row height stable across names.
+		titleBlock := container.NewStack(
+			func() *canvas.Rectangle {
+				r := canvas.NewRectangle(color.Transparent)
+				r.SetMinSize(fyne.NewSize(scaleSize(140), scaleSize(34)))
+				return r
+			}(),
+			container.NewCenter(ringLabel),
+		)
+
+		var row fyne.CanvasObject
+		if len(list) > 1 {
+			// Side insets pull the chevrons in from the window edges so the
+			// row sits inside the form column like every other login element
+			// (docs/Theme.md §V — the fixed window must never grow).
+			insetL := canvas.NewRectangle(color.Transparent)
+			insetL.SetMinSize(fyne.NewSize(scaleSize(ringChevronInset), 1))
+			insetR := canvas.NewRectangle(color.Transparent)
+			insetR.SetMinSize(fyne.NewSize(scaleSize(ringChevronInset), 1))
+			row = container.NewBorder(nil, nil,
+				container.NewHBox(insetL, newSpinChevron(chevronLeftIcon, func() { setWalletAt(carouselIdx - 1) })),
+				container.NewHBox(newSpinChevron(chevronRightIcon, func() { setWalletAt(carouselIdx + 1) }), insetR),
+				titleBlock)
+		} else {
+			row = container.NewBorder(nil, nil, nil, nil, titleBlock)
+		}
+		// Center the row at its designed width instead of letting it stretch:
+		// on phones/tablets the canvas is often wider than the form column,
+		// and a stretched Border would pin the chevron cells out to the
+		// physical screen edges.
+		walletButtons.Add(container.NewCenter(row))
+
+		// Restore the last wallet used so it is ready to login; fall back to
+		// the first account when nothing was persisted yet.
+		startIdx := 0
 		lastWalletKey := "last_wallet_" + session.Network
 		if lastWallet, err := GetValue("settings", []byte(lastWalletKey)); err == nil && len(lastWallet) > 0 {
-			lastWalletName := string(lastWallet)
-			for _, name := range list {
-				if name == lastWalletName {
-					autoSelectWallet = lastWalletName
+			for i, name := range list {
+				if name == string(lastWallet) {
+					startIdx = i
 					break
 				}
 			}
 		}
-		for i, btn := range walletBtns {
-			if list[i] == autoSelectWallet {
-				btn.SetColors(logoGreen, color.Black)
-				break
-			}
-		}
-		selectWallet(autoSelectWallet)
+		setWalletAt(startIdx)
 	} else {
 		wPassword.Disable()
 	}
