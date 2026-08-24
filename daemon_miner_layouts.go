@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -591,7 +592,21 @@ const (
 )
 
 // defaultSectionOrder is the initial order sections appear in.
+// Mining is prioritised by default: Miner stats first, then Miner config,
+// with the daemon sections below. A user's own saved SectionOrder (from the
+// drag handles) always takes precedence over this default.
 var defaultSectionOrder = []string{
+	sectionKeyMinerStats,
+	sectionKeyMinerConfig,
+	sectionKeyDaemonConfig,
+	sectionKeyDaemonInfo,
+}
+
+// legacyDefaultSectionOrder is the pre-mining-first default. saveSectionCollapsed
+// persists the whole UIState, so installs that only ever collapsed a section
+// wrote the then-default order to disk verbatim; such orders are migrated to
+// the new default. Deliberately dragged orders never match and are preserved.
+var legacyDefaultSectionOrder = []string{
 	sectionKeyDaemonConfig,
 	sectionKeyDaemonInfo,
 	sectionKeyMinerConfig,
@@ -1331,6 +1346,15 @@ func layoutDaemonMiner() fyne.CanvasObject {
 	// Build section order from persisted state
 	sectionOrder := cloneSlice(uiState.SectionOrder)
 	if len(sectionOrder) == 0 {
+		sectionOrder = cloneSlice(defaultSectionOrder)
+	} else if slices.Equal(sectionOrder, legacyDefaultSectionOrder) {
+		// Persisted order is byte-for-byte the old default: it came from
+		// collapsing a section, not from a deliberate drag. Migrate to the
+		// mining-first default (and fix in-memory state so later saves of the
+		// whole UIState persist the new order).
+		uiStateMu.Lock()
+		uiState.SectionOrder = cloneSlice(defaultSectionOrder)
+		uiStateMu.Unlock()
 		sectionOrder = cloneSlice(defaultSectionOrder)
 	}
 
