@@ -115,7 +115,7 @@ jobs:
           ls -la "${MINER_BIN}"
 
       - name: 🔨 Build
-        run: go build -v -trimpath -tags migrated_fynedo -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
+        run: go build -v -trimpath -tags "migrated_fynedo x11" -ldflags "-X main.versionString=${{ steps.version.outputs.version }}" -o bin/${{ matrix.artifact }} .
 
       - name: ✅ Verify binary
         run: |

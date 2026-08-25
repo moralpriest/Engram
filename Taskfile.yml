@@ -14,7 +14,7 @@ vars:
     sh: git describe --tags --always 2>/dev/null | sed 's/^v//' | sed 's/-[0-9].*//' || echo "0.0.0"
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
-  BUILD_TAGS: migrated_fynedo
+  BUILD_TAGS: migrated_fynedo x11
   BINARY: engram
   LDFLAGS: -X main.versionString={{.VERSION}}
   # macOS cross-compilation toolchain (osxcross) for packaging macOS apps from Linux.
@@ -42,8 +42,14 @@ tasks:
     generates:
       - bin/dero-miner-{{.OS}}-{{.ARCH}}
 
+  generate:
+    desc: Regenerate GLFW Wayland protocol headers (run after go mod vendor)
+    cmds:
+      - bash scripts/gen_glfw_wayland.sh
+
   build:
     desc: Build the application
+    deps: [generate]
     cmds:
       - go build -v -tags {{.BUILD_TAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
     sources:
@@ -55,12 +61,13 @@ tasks:
 
   run:
     desc: Build and run the application
-    deps: [build]
+    deps: [generate, build]
     cmds:
       - ./bin/{{.BINARY}}
 
   test:
     desc: Run tests with race detector
+    deps: [generate]
     cmds:
       - go test -v -race -tags {{.BUILD_TAGS}} -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html

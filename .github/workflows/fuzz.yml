@@ -91,7 +91,7 @@ jobs:
             echo "=========================================="
             echo "Fuzzing: $target"
             echo "=========================================="
-            if ! go test -fuzz="^${target}$" -fuzztime="$FUZZ_TIME" -tags migrated_fynedo ./... 2>&1; then
+            if ! go test -fuzz="^${target}$" -fuzztime="$FUZZ_TIME" -tags "migrated_fynedo x11" ./... 2>&1; then
               echo "FAILED: $target"
               FAILED=1
             fi
