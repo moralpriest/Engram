@@ -11,6 +11,7 @@ var stringsEN = map[string]string{
 	"main.offline_mode":        " Offline Mode",
 	"main.password":            "Password",
 	"main.more_wallets":        "More wallets (%d)",
+	"main.select_wallet":       "Select Wallet",
 	"main.daemon_miner":        "Daemon & Miner",
 
 	"registration.title":     "R E G I S T R A T I O N",

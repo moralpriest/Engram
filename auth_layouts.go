@@ -365,6 +365,70 @@ func layoutMain() fyne.CanvasObject {
 			selectWallet(list[carouselIdx])
 		}
 
+		showWalletDropdown := func() {
+			if len(list) <= 1 || session.Window == nil {
+				return
+			}
+			var overlay, blocker *fyne.Container
+			dismiss := func() {
+				if overlay != nil {
+					session.Window.Canvas().Overlays().Remove(overlay)
+				}
+				if blocker != nil {
+					session.Window.Canvas().Overlays().Remove(blocker)
+				}
+			}
+
+			rows := container.NewVBox()
+			for i, name := range displayNames {
+				idx := i
+				b := widget.NewButton(name, func() {
+					setWalletAt(idx)
+					dismiss()
+				})
+				if idx == carouselIdx {
+					b.Importance = widget.MediumImportance
+				} else {
+					b.Importance = widget.LowImportance
+				}
+				if isMobile() {
+					rows.Add(wrapMobileButton(b))
+				} else {
+					rows.Add(b)
+				}
+			}
+			scroll := container.NewVScroll(rows)
+			scroll.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.45))
+
+			widthRect := canvas.NewRectangle(color.Transparent)
+			widthRect.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, 0))
+
+			spacer := canvas.NewRectangle(color.Transparent)
+			spacer.SetMinSize(fyne.NewSize(0, scaleSize(8)))
+
+			backBtn := newSizedIconButton(theme.NavigateBackIcon(), dismiss)
+			content := container.NewVBox(
+				scroll,
+				spacer,
+				container.NewCenter(backBtn),
+			)
+
+			panelBg := canvas.NewRectangle(buttonCardColor())
+			panelBg.CornerRadius = scaleSize(8)
+			panel := container.NewStack(panelBg, container.NewPadded(content))
+
+			blockerBg := canvas.NewRectangle(color.NRGBA{R: 21, G: 23, B: 30, A: 220})
+			blockerTap := widget.NewButton("", dismiss)
+			blockerTap.Importance = widget.LowImportance
+			blocker = container.NewStack(&iframe{}, blockerBg, blockerTap)
+
+			overlay = container.NewStack(&iframe{},
+				container.NewCenter(container.NewStack(widthRect, panel)))
+
+			session.Window.Canvas().Overlays().Add(blocker)
+			session.Window.Canvas().Overlays().Add(overlay)
+		}
+
 		// Fixed-size backing keeps the row height stable across names.
 		titleBlock := container.NewStack(
 			func() *canvas.Rectangle {
@@ -374,6 +438,18 @@ func layoutMain() fyne.CanvasObject {
 			}(),
 			container.NewCenter(ringLabel),
 		)
+
+		// Make the wallet name tappable to open a simple select dropdown
+		// (current order, no search) for users with many wallets; carousel
+		// remains for quick single-step navigation.
+		tappableTitle := titleBlock
+		if len(list) > 1 {
+			tapBtn := widget.NewButton("", showWalletDropdown)
+			tapBtn.Importance = widget.LowImportance
+			sizeEnforcer := canvas.NewRectangle(color.Transparent)
+			sizeEnforcer.SetMinSize(fyne.NewSize(scaleSize(140), scaleSize(34)))
+			tappableTitle = container.NewStack(sizeEnforcer, titleBlock, tapBtn)
+		}
 
 		var row fyne.CanvasObject
 		if len(list) > 1 {
@@ -387,7 +463,7 @@ func layoutMain() fyne.CanvasObject {
 			row = container.NewBorder(nil, nil,
 				container.NewHBox(insetL, newSpinChevron(chevronLeftIcon, func() { setWalletAt(carouselIdx - 1) })),
 				container.NewHBox(newSpinChevron(chevronRightIcon, func() { setWalletAt(carouselIdx + 1) }), insetR),
-				titleBlock)
+				tappableTitle)
 		} else {
 			row = container.NewBorder(nil, nil, nil, nil, titleBlock)
 		}

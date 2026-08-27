@@ -53,6 +53,7 @@ var stringsTemplate = map[string]string{
 	"main.offline_mode":        "",
 	"main.password":            "",
 	"main.more_wallets":        "",
+	"main.select_wallet":       "",
 	"main.daemon_miner":        "",
 
 	"create.title":            "",
