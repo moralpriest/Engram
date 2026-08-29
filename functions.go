@@ -7790,6 +7790,18 @@ func engramNoStoreMethods() []string {
 		"HandleTELALinks"}
 }
 
+// xswdAppPermissionKey uses the verified app origin for persisted grants.
+// The app name is display metadata and is not an identity boundary.
+func xswdAppPermissionKey(ad *xswd.ApplicationData) string {
+	if ad == nil {
+		return ""
+	}
+	if strings.TrimSpace(ad.Url) != "" {
+		return "origin:" + strings.TrimSpace(ad.Url)
+	}
+	return "name:" + strings.TrimSpace(ad.Name)
+}
+
 // Check if method is in Engram's noStore list
 func engramCanStoreMethod(method string) bool {
 	noStoreMethods := engramNoStoreMethods()
@@ -8656,11 +8668,14 @@ func XSWDPrompt(ad *xswd.ApplicationData) (confirmed bool) {
 			remoteAccess.WS.RUnlock()
 
 			// Load stored per-app permissions (they persist across reconnections and override globals)
-			if storedPerms, _ := GetAppPermissions(ad.Name); storedPerms != nil {
+			// Stored grants are keyed by the verified origin, not the app's
+			// self-declared name. Names are presentation-only and can be reused
+			// by an unrelated TELA page.
+			if storedPerms, _ := GetAppPermissions(xswdAppPermissionKey(ad)); storedPerms != nil {
 				for k, v := range storedPerms {
 					ad.Permissions[k] = v
 				}
-				logger.Printf("[Engram] Loaded %d stored permissions for app %s\n", len(storedPerms), ad.Name)
+				logger.Printf("[Engram] Loaded %d stored permissions for origin %s\n", len(storedPerms), xswdAppPermissionKey(ad))
 			}
 		}
 
@@ -9460,7 +9475,7 @@ func AskPermissionForRequest(ad *xswd.ApplicationData, request *jrpc2.Request) (
 			ad.Permissions = make(map[string]xswd.Permission)
 		}
 		ad.Permissions[method] = choice
-		persistAppPermissionsAsync(ad.Name, ad.Permissions)
+		persistAppPermissionsAsync(xswdAppPermissionKey(ad), ad.Permissions)
 	}
 
 	return choice
@@ -10002,11 +10017,11 @@ func telaShimCurrentHash() string {
 	return hex.EncodeToString(h[:8])
 }
 
+const telaRegistryHttpFallbackMarker = "__engramRegistryHttpFallback__"
+
 // PatchTELAAppSourceFiles scans the cloned TELA app directory and replaces localhost with 127.0.0.1 on mobile
 func PatchTELAAppSourceFiles(scid string) {
-	if !fyne.CurrentApp().Driver().Device().IsMobile() {
-		return
-	}
+	// Always run for registry fallback (desktop + mobile); mobile shim still gated below
 
 	// Villager cache: memory hit is instant; disk stamp survives reboot.
 	// Hash ties stamp to current shim version so upgrades re-patch once.
@@ -10110,6 +10125,26 @@ func PatchTELAAppSourceFiles(scid string) {
 					content = updated
 					changed = true
 					logger.Printf("[TELA] PatchTELAAppSourceFiles: Injected WS reconnect shim into %s\n", path)
+				}
+			}
+
+			if strings.HasSuffix(strings.ToLower(filepath.Base(path)), "chain.js") {
+				if !bytes.Contains(content, []byte(telaRegistryHttpFallbackMarker)) {
+					patch := []byte("\n/*" + telaRegistryHttpFallbackMarker + "*/\n(function(){var w=window;var c=w.DD_CHAIN;if(!c||!c.registry)return;var orig=c.registry;c.registry=function(){var b=JSON.stringify({jsonrpc:\"2.0\",id:\"1\",method:\"DERO.GetSC\",params:{scid:c.cfg.REGISTRY_SCID,code:false,variables:true,topoheight:-1}});return fetch(w.location.origin+\"/__tela/json_rpc\",{method:\"POST\",headers:{\"Content-Type\":\"application/json\"},body:b}).then(function(r){if(!r.ok)throw new Error(\"http \"+r.status);return r.json();}).then(function(j){if(j.error)throw new Error(j.error.message);var m=(function(s){var o={};var t=s||{};if(t.stringkeys&&typeof t.stringkeys===\"object\")t=t.stringkeys;else if(t.variables&&typeof t.variables===\"object\")t=t.variables.stringkeys||t.variables;if(Array.isArray(t)){t.forEach(function(x){var k=x.key!==undefined?x.key:x.Key;var v=x.value!==undefined?x.value:x.Value;if(k!==void 0)o[k]=v;});}else Object.keys(t).forEach(function(k){var v=t[k];if(v===null||typeof v!==\"object\")o[k]=v;});return o;})(j.result);var n=(function(raw){var KEYPAT=/^(scid|title|author|created|cat|pay|ser|prt|h):\\d+$/;function isHex(s){return typeof s===\"string\"&&s.length>0&&s.length%2===0&&/^[0-9a-fA-F]+$/.test(s);}function unhex(s){var o=\"\";for(var i=0;i<s.length;i+=2)o+=String.fromCharCode(parseInt(s.substr(i,2),16));return o;}function known(k){return KEYPAT.test(k)||/^ctg:/.test(k);}var keys=Object.keys(raw),m={};var keysHex=!keys.some(known)&&keys.some(function(k){return isHex(k)&&known(unhex(k));});keys.forEach(function(k){m[keysHex&&isHex(k)?unhex(k):k]=raw[k];});var valsHex=false;Object.keys(m).some(function(k){if(!/^scid:\\d+$/.test(k))return false;var v=String(m[k]);valsHex=v.length===128&&isHex(v);return true;});if(valsHex){Object.keys(m).forEach(function(k){if(isHex(m[k]))m[k]=unhex(m[k]);});}return m;})(m);var byN={},cats=[];Object.keys(n).forEach(function(k){var c=k.match(/^ctg:(.+)$/);if(c){cats.push(c[1]);return;}if(!KEYPAT.test(k))return;var f=k.split(\":\")[0],nn=k.split(\":\")[1];byN[nn]=byN[nn]||{};byN[nn][f]=n[k];});var out=[];Object.keys(byN).forEach(function(nn){var e=byN[nn];if(!e.scid)return;out.push({scid:String(e.scid),title:String(e.title||\"[untitled]\"),author:String(e.author||\"unknown\"),created:String(e.created||\"-\"),category:String(e.cat||\"\"),payout:String(e.pay||\"\"),series:String(e.ser||\"\"),part:String(e.prt||\"\"),added:e.h||null,n:+nn});});out.sort(function(a,b){return b.n-a.n;});cats.sort();if(c&&c.diag)c.diag(\"same-origin parsed: \"+out.length+\" volumes\");return {vols:out,cats:cats};}).catch(function(e){return orig.apply(c,arguments);});};})();\n")
+					newContent := append(content, patch...)
+					tmpPath := path + ".tmp"
+					err = os.WriteFile(tmpPath, newContent, info.Mode())
+					if err != nil {
+						return err
+					}
+					err = os.Rename(tmpPath, path)
+					if err != nil {
+						os.Remove(tmpPath)
+						return err
+					}
+					content = newContent
+					changed = true
+					logger.Printf("[TELA] PatchTELAAppSourceFiles: Injected same-origin registry fallback into %s\n", path)
 				}
 			}
 

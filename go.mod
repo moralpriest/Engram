@@ -18,7 +18,7 @@ require (
 	github.com/civilware/tela v0.0.0-20260530200926-176ee608babd
 	github.com/creachadair/jrpc2 v1.3.4
 	github.com/dchest/siphash v1.2.3
-	github.com/deroproject/derohe v0.0.0-20260820043925-161c7d8af5cb
+	github.com/deroproject/derohe v0.0.0-20260829042927-60072f354b51
 	github.com/deroproject/graviton v0.0.0-20220130070622-2c248a53b2e1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hypergnomon/hypergnomon v0.0.0
@@ -107,4 +107,4 @@ require (
 
 replace github.com/civilware/tela => ../tela
 
-replace github.com/deroproject/derohe => github.com/DEROFDN/derohe v0.0.0-20260820043925-161c7d8af5cb
+replace github.com/deroproject/derohe v0.0.0-20260829042927-60072f354b51 => github.com/moralpriest/derohe v0.0.0-20260829042927-60072f354b51

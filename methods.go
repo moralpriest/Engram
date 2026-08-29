@@ -2,15 +2,22 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"github.com/civilware/epoch"
 	"github.com/civilware/tela"
 	"github.com/creachadair/jrpc2/handler"
+	"github.com/deroproject/derohe/globals"
+	"github.com/deroproject/derohe/rpc"
 	"github.com/deroproject/derohe/walletapi"
 	"github.com/hypergnomon/hypergnomon/pkg/gnomes/structures"
 )
@@ -18,6 +25,8 @@ import (
 // Further methods to add to XSWD,
 // Gnomon. methods passthrough and do not require permission
 var EngramHandler = map[string]handler.Func{
+	"DERO.GetSC":                                 handler.New(HandleDEROGetSC),
+	"GetSC":                                      handler.New(HandleDEROGetSC),
 	"GetPrimaryUsername":                         handler.New(GetPrimaryUsername),
 	"GetDaemon":                                  handler.New(GetDaemon),
 	"Gnomon.GetLastIndexHeight":                  handler.New(GetLastIndexHeight),
@@ -72,6 +81,66 @@ func GetDaemon(ctx context.Context) (result GetDaemon_Result, err error) {
 		err = fmt.Errorf("could not get daemon endpoint from wallet")
 	}
 
+	return
+}
+
+// HandleDEROGetSC proxies DERO.GetSC via direct HTTP to the daemon with timeout,
+// bypassing the wallet's single WS which can be contended. This is the same
+// route Hologram uses (daemonClient) and ensures DEADDROP registry loads even
+// when the wallet WS is slow. Works on desktop and mobile.
+func HandleDEROGetSC(ctx context.Context, p rpc.GetSC_Params) (result rpc.GetSC_Result, err error) {
+	daemonEndpoint := session.Daemon
+	if daemonEndpoint == "" {
+		daemonEndpoint = walletapi.Daemon_Endpoint
+	}
+	if daemonEndpoint == "" {
+		if v, ok := globals.Arguments["--daemon-address"]; ok {
+			if s, ok := v.(string); ok {
+				daemonEndpoint = s
+			}
+		}
+	}
+	if daemonEndpoint == "" {
+		daemonEndpoint = "127.0.0.1:10102"
+	}
+	if !strings.HasPrefix(daemonEndpoint, "http") {
+		daemonEndpoint = "http://" + daemonEndpoint
+	}
+	url := strings.TrimSuffix(daemonEndpoint, "/") + "/json_rpc"
+	body, _ := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      "1",
+		"method":  "DERO.GetSC",
+		"params":  p,
+	})
+	httpCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(httpCtx, "POST", url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, reqErr := client.Do(req)
+	if reqErr != nil {
+		err = fmt.Errorf("daemon http failed: %w", reqErr)
+		return
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	var rpcResp struct {
+		Result rpc.GetSC_Result `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err = json.Unmarshal(b, &rpcResp); err != nil {
+		err = fmt.Errorf("unmarshal daemon response: %w", err)
+		return
+	}
+	if rpcResp.Error != nil {
+		err = fmt.Errorf("daemon error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
+		return
+	}
+	result = rpcResp.Result
 	return
 }
 

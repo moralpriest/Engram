@@ -46,6 +46,33 @@ func isSafeAutoAllowMethod(method string) bool {
 		"HasMethod", "Echo", "GetSessionEPOCH", "GetMaxHashesEPOCH", "HandleTELALinks", "Subscribe", "Unsubscribe":
 		return true
 	}
+	if isReadPublicDataMethod(method) {
+		return true
+	}
+	return false
+}
+
+// isReadPublicDataMethod reports whether a method is a public daemon read
+// (DERO.* and related) that reveals no wallet state. These are wallet-independent
+// and may be auto-allowed after a single connection approval, matching the XSWD
+// spec (walletapi/xswd/xswd.go:651 DERO.* proxy is always-permitted post-handshake
+// when the daemon is online) and Hologram's GetRequiredPermission mapping
+// (PermissionReadPublicData). This does NOT include GetBalance/GetTransfers/etc.
+func isReadPublicDataMethod(method string) bool {
+	switch method {
+	case "GetSC", "DERO.GetSC",
+		"GetInfo", "DERO.GetInfo",
+		"GetBlock", "DERO.GetBlock",
+		"GetBlockHeaderByHash", "DERO.GetBlockHeaderByHash",
+		"GetBlockHeaderByTopoHeight", "DERO.GetBlockHeaderByTopoHeight",
+		"DERO.GetHeight",
+		"GetTxPool", "DERO.GetTxPool",
+		"GetTransaction", "DERO.GetTransaction",
+		"GetRandomAddress", "DERO.GetRandomAddress",
+		"GetGasEstimate", "DERO.GetGasEstimate",
+		"NameToAddress", "DERO.NameToAddress":
+		return true
+	}
 	return false
 }
 
