@@ -115,6 +115,13 @@ func (t *tappableText) SetColor(c color.Color) {
 	}
 }
 
+func (t *tappableText) SetItalic(italic bool) {
+	if t.lbl != nil {
+		t.lbl.TextStyle = fyne.TextStyle{Bold: true, Italic: italic}
+		t.lbl.Refresh()
+	}
+}
+
 type tappableTextRenderer struct {
 	label *tappableText
 }

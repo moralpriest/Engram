@@ -238,13 +238,12 @@ type Engram struct {
 }
 
 type Gnomon struct {
-	Active   int
-	Index    *indexer.Indexer
-	BBolt    *storage.BboltStore
-	Graviton *storage.GravitonStore
-	Path     string
-	bootMu   sync.RWMutex
-	boot     GnomonBootstrapState
+	Active int
+	Index  *indexer.Indexer
+	BBolt  *storage.BboltStore
+	Path   string
+	bootMu sync.RWMutex
+	boot   GnomonBootstrapState
 }
 
 type GnomonBootstrapState struct {
@@ -1712,6 +1711,10 @@ func StartPulse() {
 		// Connection successful - set state immediately before goroutine
 		setDaemonConnected(true)
 		engram.Disk.SetOnlineMode()
+		// Pre-warm owned-token cache (wallet Balance + persisted OwnedSCIDs) in
+		// background so dashboard/SEND pickers render instantly without RPC.
+		// prewarmOwnedTokens is idempotent per wallet address.
+		go prewarmOwnedTokens()
 
 		// Update UI to show connected status immediately
 		uiDo(func() {
@@ -2508,6 +2511,11 @@ func login() {
 		_, _ = getGnomon()
 
 		go StartPulse()
+		// Kick owned-token cache early (persisted OwnedSCIDs + wallet Balance)
+		// so the first dashboard/SEND render is instant even before the daemon
+		// websocket is fully up. The expensive probe, if needed, also starts now
+		// rather than waiting for the user to open the picker.
+		go prewarmOwnedTokens()
 	} else {
 		engram.Disk.SetOfflineMode()
 		status.Connection.FillColor = apptheme.C.Gray
@@ -3025,12 +3033,14 @@ func addTransfer() error {
 	if tx.Address.Arguments.Has(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64) {
 		tx.Amount = tx.Address.Arguments.Value(rpc.RPC_VALUE_TRANSFER, rpc.DataUint64).(uint64)
 	} else {
-		balance, _ := engram.Disk.Get_Balance()
+		balance := getSendBalance()
 
 		if tx.Amount > balance {
 			logger.Errorf("[Send] Error: Insufficient funds\n")
 			err = errors.New("insufficient funds")
 			return err
+		} else if !sendSelectedSCID.IsZero() && tx.Amount == balance {
+			tx.SendAll = false
 		} else if tx.Amount == balance {
 			tx.SendAll = true
 		} else {
@@ -3065,7 +3075,7 @@ func addTransfer() error {
 
 	tx.Status = "Unsent"
 
-	tx.Pending = append(tx.Pending, rpc.Transfer{Amount: tx.Amount, Destination: tx.Address.String(), Payload_RPC: arguments})
+	tx.Pending = append(tx.Pending, rpc.Transfer{SCID: sendSelectedSCID, Amount: tx.Amount, Destination: tx.Address.String(), Payload_RPC: arguments})
 
 	return nil
 }
@@ -3083,11 +3093,28 @@ func estimateTransferFee(ringsize uint64) uint64 {
 // formatAvailableBalance renders the "Available" label shown under the
 // amount field on the send page, following the BalanceHidden setting.
 // It includes the estimated fee for the currently selected ring size.
+// When a token is selected, the available amount is always the token's
+// decrypted balance (not the DERO balance passed by callers that may be stale).
 func formatAvailableBalance(balance uint64) string {
 	if session.BalanceHidden {
 		return "••••••"
 	}
-	return fmt.Sprintf("%s: %s · %s: %s", i18n.T("send.available"), globals.FormatMoney(balance), i18n.T("send.fee"), globals.FormatMoney(estimateTransferFee(tx.Ringsize)))
+	var balStr string
+	if !sendSelectedSCID.IsZero() {
+		tokenBal := getSendBalance()
+		// getSendBalance already returns the token's decrypted balance; fall back
+		// to the passed balance only if the token query unexpectedly returns 0
+		// while the wallet still shows a non-zero DERO balance (avoids "0 DST").
+		if tokenBal == 0 && balance != 0 {
+			// Keep token label but don't hide the fact we couldn't fetch token balance
+			balStr = formatSendAmount(balance) + " " + sendSelectedLabel()
+		} else {
+			balStr = formatSendAmount(tokenBal) + " " + sendSelectedLabel()
+		}
+	} else {
+		balStr = globals.FormatMoney(balance)
+	}
+	return fmt.Sprintf("%s: %s · %s: %s", i18n.T("send.available"), balStr, i18n.T("send.fee"), globals.FormatMoney(estimateTransferFee(tx.Ringsize)))
 }
 
 // Send all batched transfers (TODO: export offline transactions to file in Offline mode)
@@ -4242,6 +4269,14 @@ func syncHistoryRows() (transfers []rpc.Entry, normalRows []string, coinbaseRows
 	}()
 	wg.Wait()
 	newEntries = append(newEntries, newCoinbase...)
+	// Include token transfers for all known SCIDs (EntriesNative keys non-zero).
+	// The zero hash path only yields DERO; tokens live under their own SCID.
+	for _, scid := range getAllTokenSCIDs() {
+		tokEntries := engram.Disk.Show_Transfers(scid, false, true, true, startHeight, walletHeight, "", "", 0, 0)
+		if len(tokEntries) > 0 {
+			newEntries = append(newEntries, tokEntries...)
+		}
+	}
 
 	// Incremental cache update after normal+coinbase transfers
 	{
@@ -4412,13 +4447,41 @@ func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows
 		}
 
 		currentDateLabel := getDateLabel(entries[e].Time)
+		scid := getSCIDForTXID(txid)
+		isToken := !scid.IsZero() && IsTokenLikeClass(getSCIDClass(scid.String()))
+		tokenLabel := ""
+		amountStr := globals.FormatMoney(entries[e].Amount)
+		if isToken {
+			dec := getTokenDecimals(scid)
+			amountStr = formatTokenAmount(entries[e].Amount, dec)
+			tokenLabel = resolveTokenDisplayName(scid)
+			if tokenLabel != "" {
+				amountStr = amountStr + " " + tokenLabel
+			}
+			// trigger async hydration if still truncated
+			if tokenLabel == scid.String()[:8]+"…" {
+				s := scid.String()
+				go func(s string) {
+					info := fetchTokenMetadata(context.Background(), s)
+					if info.Name != "" || info.Ticker != "" {
+						// invalidate history cache so next draw shows name
+						historyRowCache.Lock()
+						historyRowCache.Loaded = false
+						historyRowCache.Unlock()
+					}
+				}(s)
+			}
+		}
 
 		if entries[e].Coinbase {
 			if currentDateLabel != lastCoinbaseDate {
 				coinbaseRows = append(coinbaseRows, "HEADER;;;"+currentDateLabel+";;; ;;; ;;; ")
 			}
-			amount := entries[e].Amount
-			coinbaseRows = append(coinbaseRows, "Received;;;"+globals.FormatMoney(amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+			displayAmt := amountStr
+			if !isToken {
+				displayAmt = globals.FormatMoney(entries[e].Amount)
+			}
+			coinbaseRows = append(coinbaseRows, "Received;;;"+displayAmt+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
 			lastCoinbaseDate = currentDateLabel
 		} else {
 			if currentDateLabel != lastNormalDate {
@@ -4426,10 +4489,18 @@ func buildHistoryRows(entries []rpc.Entry, messages []MessageRecord) (normalRows
 			}
 			if !entries[e].Incoming {
 				direction = "Sent"
-				normalRows = append(normalRows, direction+";;;("+globals.FormatMoney(entries[e].Amount)+");;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				if isToken {
+					normalRows = append(normalRows, direction+";;;("+amountStr+");;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				} else {
+					normalRows = append(normalRows, direction+";;;("+globals.FormatMoney(entries[e].Amount)+");;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				}
 			} else {
 				direction = "Received"
-				normalRows = append(normalRows, direction+";;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				if isToken {
+					normalRows = append(normalRows, direction+";;;"+amountStr+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				} else {
+					normalRows = append(normalRows, direction+";;;"+globals.FormatMoney(entries[e].Amount)+";;;"+height+";;;"+stamp+";;;"+txid+";;;"+status+";;;"+comment)
+				}
 			}
 			lastNormalDate = currentDateLabel
 		}
@@ -5489,21 +5560,15 @@ func queryUsernames(address string) (result []string, err error) {
 		if !isWalletGenerationActive(generation) {
 			return nil, nil
 		}
-		result, _ = gnomon.Graviton.GetSCIDKeysByValue("0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight(), false)
+		result, _, err = gnomon.Index.GetSCIDKeysByValue(nil, "0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight())
 		if !isWalletGenerationActive(generation) {
 			return nil, nil
 		}
-		if len(result) <= 0 {
-			result, _, err = gnomon.Index.GetSCIDKeysByValue(nil, "0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight())
-			if !isWalletGenerationActive(generation) {
-				return nil, nil
+		if err != nil {
+			if !strings.Contains(err.Error(), "closed network connection") {
+				logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
 			}
-			if err != nil {
-				if !strings.Contains(err.Error(), "closed network connection") {
-					logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
-				}
-				return
-			}
+			return
 		}
 
 		sort.Strings(result)
@@ -5683,13 +5748,7 @@ func startGnomon() {
 			if err := os.WriteFile(filepath.Join(path, "indexed_endpoint"), []byte(session.Daemon), 0600); err != nil {
 				logger.Printf("[Gnomon] Could not record indexed endpoint: %v\n", err)
 			}
-			gnomon.Graviton, err = storage.NewGravDB(path, "25ms")
-			if err != nil {
-				gnomon.setBootstrapError("Connection timeout")
-				logger.Printf("[Gmonon] Error creating GravDB: %v\n", err)
-				return
-			}
-
+			// HyperGnomon is bbolt-only; there is no GravDB handle to open.
 			term := []string(nil)
 			term = append(term, "Function Initialize")
 			// Resume height comes from the real bbolt store. The vestigial
@@ -5719,7 +5778,7 @@ func startGnomon() {
 				return
 			}
 
-			gnomon.Index = indexer.NewIndexer(gnomon.Graviton, gnomon.BBolt, "gravdb", term, height, session.Daemon, "daemon", false, false, config, exclusions, false)
+			gnomon.Index = indexer.NewIndexer(nil, gnomon.BBolt, "boltdb", term, height, session.Daemon, "daemon", false, false, config, exclusions, false)
 			gnomon.setBootstrapPhase("Validating fastsync contract...", 0, 0)
 			indexer.InitLog(globals.Arguments, os.Stdout)
 			parallelBlocks := 8
@@ -7409,36 +7468,51 @@ func getContractHeader(scid crypto.Hash) (name string, desc string, icon string,
 	for _, h := range headerData {
 		switch key := h.Key.(type) {
 		case string:
-			if key == "var_header_name" {
-				found = true
-				name = h.Value.(string)
-			} else if name == "" && key == "nameHdr" {
-				found = true
-				name = h.Value.(string)
-			}
-
-			if key == "var_header_description" {
-				found = true
-				desc = h.Value.(string)
-			} else if desc == "" && key == "descrHdr" {
-				found = true
-				desc = h.Value.(string)
-			}
-
-			if key == "var_header_icon" {
-				found = true
-				icon = h.Value.(string)
-			} else if icon == "" && key == "iconURLHdr" {
-				found = true
-				icon = h.Value.(string)
-			}
-
-			if key == "owner" {
-				owner = h.Value.(string)
-			}
-
-			if key == "C" {
-				code = strings.ReplaceAll(h.Value.(string), "\x00", "")
+			valStr := storeVariableToString(h.Value)
+			lk := strings.ToLower(key)
+			switch lk {
+			case "var_header_name", "namehdr":
+				if name == "" || key == "var_header_name" {
+					found = true
+					name = valStr
+				}
+			case "var_header_description", "descrhdr":
+				if desc == "" || key == "var_header_description" {
+					found = true
+					desc = valStr
+				}
+			case "var_header_icon", "iconurlhdr":
+				if icon == "" || key == "var_header_icon" {
+					found = true
+					icon = valStr
+				}
+			case "owner":
+				owner = valStr
+			case "c":
+				code = strings.ReplaceAll(valStr, "\x00", "")
+			case "name", "n":
+				if name == "" && valStr != "" {
+					name = valStr
+					found = true
+				}
+			case "symbol", "ticker", "s":
+				if name == "" && valStr != "" {
+					name = valStr
+					found = true
+				}
+			case "metadata":
+				if name == "" && valStr != "" {
+					var blob map[string]interface{}
+					if err := json.Unmarshal([]byte(valStr), &blob); err == nil {
+						if s, _ := blob["name"].(string); strings.TrimSpace(s) != "" {
+							name = strings.TrimSpace(s)
+							found = true
+						} else if s, _ := blob["symbol"].(string); strings.TrimSpace(s) != "" {
+							name = strings.TrimSpace(s)
+							found = true
+						}
+					}
+				}
 			}
 		}
 	}

@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"image/color"
@@ -135,10 +136,13 @@ func layoutDashboard() fyne.CanvasObject {
 	session.Dashboard = "main"
 	session.Domain = "app.wallet"
 	session.SendBalanceText = nil
+	loadPersistedSelectedAsset()
+	prewarmOwnedTokens()
 
 	session.BalanceText = canvas.NewText("...", apptheme.BalanceColor())
 	session.BalanceText.TextSize = scaleFont(28)
 	session.BalanceText.TextStyle = fyne.TextStyle{Bold: true}
+	session.BalanceText.Alignment = fyne.TextAlignCenter
 
 	if balanceHiddenVal, err := GetEncryptedValue("settings", []byte("BalanceHidden")); err == nil {
 		session.BalanceHidden = string(balanceHiddenVal) == "true"
@@ -214,12 +218,256 @@ func layoutDashboard() fyne.CanvasObject {
 
 	frame := &iframe{}
 
+	// Balance row: only the amount text is tappable — keep the eye toggle separate so both stay usable.
+	tapBtn := widget.NewButton("", nil)
+	tapBtn.Importance = widget.LowImportance
+	// Fixed tap target so the balance text stays centered even when hidden (•••••• is narrower than "123.45678").
+	// BalanceText itself is centered via Alignment; the outer Center keeps the HBox centered on the dashboard.
+	sizeEnforcerBal := canvas.NewRectangle(color.Transparent)
+	sizeEnforcerBal.SetMinSize(fyne.NewSize(scaleSize(140), scaleSize(36)))
+	balanceTextTap := container.NewStack(
+		sizeEnforcerBal,
+		container.NewCenter(session.BalanceText),
+		tapBtn,
+	)
 	balanceCenter := container.NewCenter(
 		container.NewHBox(
-			session.BalanceText,
+			balanceTextTap,
 			balanceToggleBtn,
 		),
 	)
+
+	showTokenOverlay := func() {
+		if session.Window == nil || engram.Disk == nil {
+			return
+		}
+		var overlay, blocker *fyne.Container
+		var overlayRemoved bool
+		dismiss := func() {
+			overlayRemoved = true
+			if overlay != nil {
+				session.Window.Canvas().Overlays().Remove(overlay)
+			}
+			if blocker != nil {
+				session.Window.Canvas().Overlays().Remove(blocker)
+			}
+		}
+		rows := container.NewVBox()
+		// Loading placeholder shown immediately; real rows populate async so the tap never freezes.
+		loadingLbl := canvas.NewText(i18n.T("common.loading"), apptheme.C.Gray)
+		loadingLbl.Alignment = fyne.TextAlignCenter
+		loadingLbl.TextSize = scaleFont(12)
+		rows.Add(container.NewCenter(loadingLbl))
+		scroll := container.NewVScroll(rows)
+		scroll.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.45))
+		widthRect := canvas.NewRectangle(color.Transparent)
+		widthRect.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, 0))
+		spacer := canvas.NewRectangle(color.Transparent)
+		spacer.SetMinSize(fyne.NewSize(0, scaleSize(8)))
+		backBtn := newSizedIconButton(theme.NavigateBackIcon(), dismiss)
+		header := canvas.NewText(i18n.T("dashboard.tokens_title"), apptheme.C.Gray)
+		header.Alignment = fyne.TextAlignCenter
+		header.TextStyle = fyne.TextStyle{Bold: true}
+		header.TextSize = scaleFont(14)
+		content := container.NewVBox(header, spacer, scroll, spacer, container.NewCenter(backBtn))
+		panelBg := canvas.NewRectangle(buttonCardColor())
+		panelBg.CornerRadius = scaleSize(8)
+		panel := container.NewStack(panelBg, container.NewPadded(content))
+		blockerBg := canvas.NewRectangle(color.NRGBA{R: 21, G: 23, B: 30, A: 220})
+		blockerTap := widget.NewButton("", dismiss)
+		blockerTap.Importance = widget.LowImportance
+		blocker = container.NewStack(&iframe{}, blockerBg, blockerTap)
+		overlay = container.NewStack(&iframe{}, container.NewCenter(container.NewStack(widthRect, panel)))
+		session.Window.Canvas().Overlays().Add(blocker)
+		session.Window.Canvas().Overlays().Add(overlay)
+
+		// Populate rows off the UI thread. On mobile/remote the wallet may still
+		// be syncing when the overlay opens, so discovery can return empty the
+		// first time; the bounded poll in the trigger goroutine re-renders as
+		// soon as the owned tokens finish scanning in.
+		// P1: show loading placeholder while still polling, not "no tokens".
+		pollDeadline := time.Now().Add(ownedTokenPollBudget)
+		render := func() uint {
+			deroBal, _ := engram.Disk.Get_Balance()
+			deroBalStr := "••••••"
+			if !session.BalanceHidden {
+				deroBalStr = walletapi.FormatMoney(deroBal)
+			}
+			tokens := listOwnedTokens()
+			fyne.Do(func() {
+				rows.RemoveAll()
+				deroL := widget.NewLabel("DERO: " + deroBalStr)
+				deroL.Alignment = fyne.TextAlignLeading
+				deroL.TextStyle = fyne.TextStyle{Bold: true}
+				if isMobile() {
+					rows.Add(wrapMobileButton(container.NewCenter(deroL)))
+				} else {
+					rows.Add(container.NewCenter(deroL))
+				}
+				if len(tokens) == 0 {
+					// On mobile, keep "Loading…" while the background probe
+					// (prewarm + Tier1/Tier2) is still in flight. Only show
+					// "no tokens" after the poll budget expires.
+					if isMobile() && time.Now().Before(pollDeadline) && !overlayRemoved {
+						loading := canvas.NewText(i18n.T("common.loading"), apptheme.C.Gray)
+						loading.Alignment = fyne.TextAlignCenter
+						loading.TextSize = scaleFont(12)
+						rows.Add(container.NewCenter(loading))
+					} else {
+						empty := canvas.NewText(i18n.T("dashboard.no_tokens"), apptheme.C.Gray)
+						empty.Alignment = fyne.TextAlignCenter
+						empty.TextSize = scaleFont(12)
+						rows.Add(container.NewCenter(empty))
+					}
+				} else {
+					for _, h := range tokens {
+						hash := h
+						cachedBal, cachedOk := getCachedTokenBalance(hash)
+						labelName := resolveTokenDisplayName(hash)
+						dec := getTokenDecimals(hash)
+						var amtStr string
+						if session.BalanceHidden {
+							amtStr = "••••••"
+						} else if !cachedOk {
+							amtStr = "···"
+						} else {
+							amtStr = formatTokenAmount(cachedBal, dec)
+						}
+						txt := labelName + ": " + amtStr
+						if len(txt) > 38 {
+							txt = txt[:35] + "…"
+						}
+						// Each token row is a button that expands to Send + X (icon-only, no translation)
+						tokenBtn := widget.NewButton(txt, nil)
+						tokenBtn.Importance = widget.LowImportance
+						if hash == sendSelectedSCID {
+							tokenBtn.Importance = widget.MediumImportance
+						}
+						// Action row with Send (Upload) and Cancel (X) icons - icon-only to avoid translation
+						sendBtn := widget.NewButtonWithIcon("", theme.UploadIcon(), nil)
+						sendBtn.Importance = widget.LowImportance
+						cancelBtn := widget.NewButtonWithIcon("", theme.CancelIcon(), nil)
+						cancelBtn.Importance = widget.LowImportance
+						actionRow := container.NewCenter(container.NewHBox(sendBtn, cancelBtn))
+						actionRow.Hide()
+						tokenRow := container.NewVBox(tokenBtn, actionRow)
+						// Capture for closure
+						tb := tokenBtn
+						ar := actionRow
+						hCopy := hash
+						tb.OnTapped = func() {
+							if ar.Visible() {
+								ar.Hide()
+							} else {
+								ar.Show()
+							}
+							tokenRow.Refresh()
+							rows.Refresh()
+							scroll.Refresh()
+						}
+						sendBtn.OnTapped = func() {
+							persistSelectedAsset(hCopy)
+							dismiss()
+							session.LastDomain = session.Window.Content()
+							session.Window.SetContent(layoutTransition())
+							session.Window.SetContent(layoutSend())
+							removeOverlays()
+						}
+						cancelBtn.OnTapped = func() {
+							if sendSelectedSCID == hCopy {
+								persistSelectedAsset(crypto.Hash{})
+							}
+							ar.Hide()
+							tokenRow.Refresh()
+							rows.Refresh()
+						}
+						if isMobile() {
+							rows.Add(wrapMobileButton(tokenRow))
+						} else {
+							rows.Add(tokenRow)
+						}
+						if labelName == hash.String()[:8]+"…" {
+							go func(s string, btn *widget.Button, bal uint64, hasBal bool) {
+								info := fetchTokenMetadata(context.Background(), s)
+								if info.Name == "" && info.Ticker == "" {
+									return
+								}
+								display := info.Ticker
+								if display == "" {
+									display = info.Name
+								}
+								// Use cached balance if we had it; otherwise try to get a fresh one for display.
+								amtBal := bal
+								if !hasBal {
+									if cb, ok := getCachedTokenBalance(crypto.HashHexToHash(s)); ok {
+										amtBal = cb
+									}
+								}
+								amt := formatTokenAmount(amtBal, info.Decimals)
+								if !hasBal && amtBal == 0 {
+									amt = "···"
+								}
+								if session.BalanceHidden {
+									amt = "••••••"
+								}
+								fyne.Do(func() {
+									btn.SetText(display + ": " + amt)
+									btn.Refresh()
+								})
+							}(hash.String(), tokenBtn, cachedBal, cachedOk)
+						}
+						if !cachedOk && !session.BalanceHidden {
+							go func(s string, btn *widget.Button) {
+								h := crypto.HashHexToHash(s)
+								bal, _, _ := engram.Disk.GetDecryptedBalanceAtTopoHeight(h, -1, engram.Disk.GetAddress().String())
+								// Re-resolve label/dec after potential metadata hydration.
+								lbl := resolveTokenDisplayName(h)
+								d := getTokenDecimals(h)
+								if d == 0 {
+									if _, _, dd, ok := tokenMetadataFromStore(s); ok && dd != 0 {
+										d = dd
+									}
+								}
+								amt := formatTokenAmount(bal, d)
+								fyne.Do(func() {
+									if session.BalanceHidden {
+										return
+									}
+									btn.SetText(lbl + ": " + amt)
+									btn.Refresh()
+								})
+							}(hash.String(), tokenBtn)
+						}
+					}
+				}
+				rows.Refresh()
+				scroll.Refresh()
+			})
+			return uint(len(tokens))
+		}
+		go func() {
+			if render() == 0 && isMobile() {
+				// Mobile/remote: wallet sync + gnomon index build in background.
+				// Poll until tokens appear or budget expires; final render will
+				// show "no tokens" after deadline (render checks pollDeadline).
+				for time.Now().Before(pollDeadline) {
+					if overlayRemoved {
+						break
+					}
+					time.Sleep(ownedTokenPollInterval)
+					if overlayRemoved || render() > 0 {
+						break
+					}
+				}
+				// If still empty after budget, ensure "no tokens" is shown.
+				if !overlayRemoved && time.Now().After(pollDeadline) {
+					render()
+				}
+			}
+		}()
+	}
+
+	tapBtn.OnTapped = func() { showTokenOverlay() }
 
 	path := strings.Split(session.Path, string(filepath.Separator))
 	accountName := canvas.NewText(path[len(path)-1], apptheme.C.Green)
@@ -972,10 +1220,13 @@ func layoutDashboard() fyne.CanvasObject {
 
 func layoutSend() fyne.CanvasObject {
 	session.Domain = "app.send"
+	loadPersistedSelectedAsset()
+	prewarmOwnedTokens()
 
 	frame := &iframe{}
 
-	btnSend := widget.NewButtonWithIcon(i18n.T("send.save"), theme.DocumentSaveIcon(), nil)
+	btnSend := widget.NewButtonWithIcon("", theme.DocumentSaveIcon(), nil)
+	btnSend.Importance = widget.MediumImportance
 	btnSend.Disable()
 
 	btnSendNow := widget.NewButtonWithIcon(i18n.T("send.send"), theme.UploadIcon(), nil)
@@ -996,8 +1247,16 @@ func layoutSend() fyne.CanvasObject {
 		if engram.Disk == nil {
 			return
 		}
-		balance, _ := engram.Disk.Get_Balance()
+		balance := getSendBalance()
 		fees := estimateTransferFee(tx.Ringsize)
+		if isSendToken() {
+			if balance == 0 {
+				return
+			}
+			// for tokens, fill full balance (fees paid in DERO, not token)
+			wAmount.SetText(formatSendAmount(balance))
+			return
+		}
 		if balance <= fees {
 			return
 		}
@@ -1006,7 +1265,7 @@ func layoutSend() fyne.CanvasObject {
 	session.SendBalanceText = availableText
 	go func() {
 		if engram.Disk != nil {
-			balance, _ := engram.Disk.Get_Balance()
+			balance := getSendBalance()
 			fyne.Do(func() {
 				availableText.SetText(formatAvailableBalance(balance))
 			})
@@ -1027,9 +1286,12 @@ func layoutSend() fyne.CanvasObject {
 			availableToggleBtn.Refresh()
 			go func() {
 				if engram.Disk != nil {
-					currentBalance, _ := engram.Disk.Get_Balance()
+					bal := getCachedSendBalance()
+					if bal == 0 && isSendToken() {
+						bal = getSendBalance()
+					}
 					fyne.Do(func() {
-						availableText.SetText(formatAvailableBalance(currentBalance))
+						availableText.SetText(formatAvailableBalance(bal))
 					})
 				}
 				StoreEncryptedValue("settings", []byte("BalanceHidden"), []byte("false"))
@@ -1103,7 +1365,7 @@ func layoutSend() fyne.CanvasObject {
 						wReceiver.SetValidationError(nil)
 						tx.Address, _ = globals.ParseValidateAddress(addr)
 						if tx.Amount != 0 {
-							balance, _ := engram.Disk.Get_Balance()
+							balance := getSendBalance()
 							if tx.Amount <= balance {
 								btnSend.Enable()
 								btnSendNow.Enable()
@@ -1147,7 +1409,7 @@ func layoutSend() fyne.CanvasObject {
 						}
 
 						if tx.Amount != 0 {
-							balance, _ := engram.Disk.Get_Balance()
+							balance := getSendBalance()
 							if tx.Amount <= balance {
 								btnSend.Enable()
 								btnSendNow.Enable()
@@ -1157,7 +1419,7 @@ func layoutSend() fyne.CanvasObject {
 						tx.Address = address
 						wReceiver.SetValidationError(nil)
 						if tx.Amount != 0 {
-							balance, _ := engram.Disk.Get_Balance()
+							balance := getSendBalance()
 							if tx.Amount <= balance {
 								btnSend.Enable()
 								btnSendNow.Enable()
@@ -1195,8 +1457,8 @@ func layoutSend() fyne.CanvasObject {
 					return
 				}
 
-				balance, _ := engram.Disk.Get_Balance()
-				entry, err := globals.ParseAmount(s)
+				balance := getSendBalance()
+				entry, err := parseSendAmount(s)
 				if err != nil {
 					tx.Amount = 0
 					wAmount.SetValidationError(errors.New("invalid transaction amount"))
@@ -1269,7 +1531,7 @@ func layoutSend() fyne.CanvasObject {
 		if session.SendBalanceText != nil && !session.BalanceHidden {
 			go func() {
 				if engram.Disk != nil {
-					balance, _ := engram.Disk.Get_Balance()
+					balance := getSendBalance()
 					fyne.Do(func() {
 						session.SendBalanceText.SetText(formatAvailableBalance(balance))
 					})
@@ -1280,7 +1542,7 @@ func layoutSend() fyne.CanvasObject {
 	}
 
 	btnSend.OnTapped = func() {
-		_, err := globals.ParseAmount(wAmount.Text)
+		_, err := parseSendAmount(wAmount.Text)
 		if tx.Address != nil {
 			if wRings != nil && err == nil && tx.Address != nil {
 				err = addTransfer()
@@ -1297,7 +1559,8 @@ func layoutSend() fyne.CanvasObject {
 		}
 	}
 
-	btnTransfers := widget.NewButtonWithIcon(i18n.T("send.transfers"), theme.ListIcon(), nil)
+	btnTransfers := widget.NewButtonWithIcon("", theme.ListIcon(), nil)
+	btnTransfers.Importance = widget.MediumImportance
 	if len(tx.Pending) == 0 {
 		btnTransfers.Disable()
 	}
@@ -1312,7 +1575,7 @@ func layoutSend() fyne.CanvasObject {
 	}
 
 	btnSendNow.OnTapped = func() {
-		_, err := globals.ParseAmount(wAmount.Text)
+		_, err := parseSendAmount(wAmount.Text)
 		if tx.Address != nil {
 			if wRings != nil && err == nil && tx.Address != nil {
 				sendAmount := tx.Amount
@@ -1362,7 +1625,11 @@ func layoutSend() fyne.CanvasObject {
 				}
 
 				// Step 1: Show confirmation overlay (like CONFIRM RATING)
-				confBody := fmt.Sprintf(i18n.T("tela.confirm_transaction_body"), globals.FormatMoney(sendAmount), shortDest)
+				amtStr := globals.FormatMoney(sendAmount)
+				if !sendSelectedSCID.IsZero() {
+					amtStr = formatSendAmount(sendAmount) + " " + sendSelectedLabel()
+				}
+				confBody := fmt.Sprintf(i18n.T("tela.confirm_transaction_body"), amtStr, shortDest)
 				verificationOverlay(false, i18n.T("tela.confirm_transaction_header"), confBody, "Yes", func(confirm bool) {
 					if !confirm {
 						return
@@ -1432,8 +1699,8 @@ func layoutSend() fyne.CanvasObject {
 	rectList := canvas.NewRectangle(color.Transparent)
 	rectList.SetMinSize(fyne.NewSize(ui.Width, 260))
 
-	rect300 := canvas.NewRectangle(color.Transparent)
-	rect300.SetMinSize(fyne.NewSize(ui.Width, scaleSize(30)))
+	rectSendBtn := canvas.NewRectangle(color.Transparent)
+	rectSendBtn.SetMinSize(fyne.NewSize(ui.Width*0.95, scaleSize(30)))
 
 	rectSpacer := canvas.NewRectangle(color.Transparent)
 	rectSpacer.SetMinSize(standardSpacerSize())
@@ -1448,7 +1715,221 @@ func layoutSend() fyne.CanvasObject {
 		rectSpacer,
 	)
 
+	// Asset selector: DERO or owned tokens
+	assetBtn := widget.NewButton("Asset: "+sendSelectedLabel(), nil)
+	assetBtn.Importance = widget.LowImportance
+	// Token indicator shown only when a token is selected (white/black + italic per theme)
+	tokenIndicator := canvas.NewText("", apptheme.TokenSendColor())
+	tokenIndicator.Alignment = fyne.TextAlignCenter
+	tokenIndicator.TextSize = scaleFont(11)
+	tokenIndicator.TextStyle = fyne.TextStyle{Bold: true, Italic: true}
+	if isSendToken() {
+		tokenIndicator.Text = sendSelectedLabel() + " • " + sendSelectedSCID.String()[:8] + "…"
+		tokenIndicator.Color = apptheme.TokenSendColor()
+	} else {
+		tokenIndicator.Hide()
+	}
+	refreshSendTokenCue := func() {
+		if isSendToken() {
+			availableText.SetColor(apptheme.TokenSendColor())
+			availableText.SetItalic(true)
+			tokenIndicator.Text = sendSelectedLabel() + " • " + sendSelectedSCID.String()[:8] + "…"
+			tokenIndicator.Color = apptheme.TokenSendColor()
+			tokenIndicator.Show()
+		} else {
+			availableText.SetColor(apptheme.BalanceColor())
+			availableText.SetItalic(false)
+			tokenIndicator.Hide()
+		}
+		tokenIndicator.Refresh()
+		availableText.Refresh()
+	}
+	showAssetPicker := func() {
+		if session.Window == nil || engram.Disk == nil {
+			return
+		}
+		var overlay, blocker *fyne.Container
+		var overlayRemoved bool
+		dismiss := func() {
+			overlayRemoved = true
+			if overlay != nil {
+				session.Window.Canvas().Overlays().Remove(overlay)
+			}
+			if blocker != nil {
+				session.Window.Canvas().Overlays().Remove(blocker)
+			}
+		}
+		rows := container.NewVBox()
+		loadingLbl2 := canvas.NewText(i18n.T("common.loading"), apptheme.C.Gray)
+		loadingLbl2.Alignment = fyne.TextAlignCenter
+		loadingLbl2.TextSize = scaleFont(11)
+		rows.Add(container.NewCenter(loadingLbl2))
+		scroll := container.NewVScroll(rows)
+		scroll.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, ui.MaxHeight*0.45))
+		widthRect := canvas.NewRectangle(color.Transparent)
+		widthRect.SetMinSize(fyne.NewSize(ui.MaxWidth*0.90, 0))
+		spacer2 := canvas.NewRectangle(color.Transparent)
+		spacer2.SetMinSize(fyne.NewSize(0, scaleSize(8)))
+		backBtn2 := newSizedIconButton(theme.NavigateBackIcon(), dismiss)
+		header2 := canvas.NewText(i18n.T("dashboard.tokens_title"), apptheme.C.Gray)
+		header2.Alignment = fyne.TextAlignCenter
+		header2.TextStyle = fyne.TextStyle{Bold: true}
+		header2.TextSize = scaleFont(14)
+		content2 := container.NewVBox(header2, spacer2, scroll, spacer2, container.NewCenter(backBtn2))
+		panelBg2 := canvas.NewRectangle(buttonCardColor())
+		panelBg2.CornerRadius = scaleSize(8)
+		panel2 := container.NewStack(panelBg2, container.NewPadded(content2))
+		blockerBg2 := canvas.NewRectangle(color.NRGBA{R: 21, G: 23, B: 30, A: 220})
+		blockerTap2 := widget.NewButton("", dismiss)
+		blockerTap2.Importance = widget.LowImportance
+		blocker = container.NewStack(&iframe{}, blockerBg2, blockerTap2)
+		overlay = container.NewStack(&iframe{}, container.NewCenter(container.NewStack(widthRect, panel2)))
+		session.Window.Canvas().Overlays().Add(blocker)
+		session.Window.Canvas().Overlays().Add(overlay)
+		// P1: same loading semantics as dashboard.
+		pollDeadline2 := time.Now().Add(ownedTokenPollBudget)
+		render := func() uint {
+			deroBal, _ := engram.Disk.Get_Balance()
+			tokens := listOwnedTokens()
+			fyne.Do(func() {
+				rows.RemoveAll()
+				deroLabel := "DERO: " + globals.FormatMoney(deroBal)
+				bDero := widget.NewButton(deroLabel, func() {
+					persistSelectedAsset(crypto.Hash{})
+					assetBtn.SetText("Asset: DERO")
+					assetBtn.Refresh()
+					bal := getSendBalance()
+					availableText.SetText(formatAvailableBalance(bal))
+					refreshSendTokenCue()
+					wAmount.SetPlaceHolder(i18n.T("send.amount") + " (DERO)")
+					wAmount.SetText("")
+					tx.Amount = 0
+					dismiss()
+				})
+				if sendSelectedSCID.IsZero() {
+					bDero.Importance = widget.MediumImportance
+				} else {
+					bDero.Importance = widget.LowImportance
+				}
+				if isMobile() {
+					rows.Add(wrapMobileButton(bDero))
+				} else {
+					rows.Add(bDero)
+				}
+				for _, h := range tokens {
+					hash := h
+					cachedBal, cachedOk := getCachedTokenBalance(hash)
+					lbl := resolveTokenDisplayName(hash)
+					dec := getTokenDecimals(hash)
+					var amtStr string
+					if !cachedOk {
+						amtStr = "···"
+					} else {
+						amtStr = formatTokenAmount(cachedBal, dec)
+					}
+					txt := lbl + ": " + amtStr
+					if len(txt) > 36 {
+						txt = txt[:33] + "…"
+					}
+					b := widget.NewButton(txt, nil)
+					// Capture hash for closure; set handler below to avoid loop var capture.
+					hCopy2 := hash
+					b.OnTapped = func() {
+						persistSelectedAsset(hCopy2)
+						assetBtn.SetText("Asset: " + resolveTokenDisplayName(hCopy2))
+						assetBtn.Refresh()
+						bal2 := getSendBalance()
+						availableText.SetText(formatAvailableBalance(bal2))
+						refreshSendTokenCue()
+						wAmount.SetPlaceHolder(i18n.T("send.amount") + " (" + resolveTokenDisplayName(hCopy2) + ")")
+						wAmount.SetText("")
+						tx.Amount = 0
+						dismiss()
+					}
+					if hash == sendSelectedSCID {
+						b.Importance = widget.MediumImportance
+					} else {
+						b.Importance = widget.LowImportance
+					}
+					if isMobile() {
+						rows.Add(wrapMobileButton(b))
+					} else {
+						rows.Add(b)
+					}
+					if !cachedOk {
+						go func(s string, btn *widget.Button) {
+							h := crypto.HashHexToHash(s)
+							bal, _, _ := engram.Disk.GetDecryptedBalanceAtTopoHeight(h, -1, engram.Disk.GetAddress().String())
+							lbl2 := resolveTokenDisplayName(h)
+							d2 := getTokenDecimals(h)
+							if d2 == 0 {
+								if _, _, dd, ok := tokenMetadataFromStore(s); ok && dd != 0 {
+									d2 = dd
+								}
+							}
+							amt2 := formatTokenAmount(bal, d2)
+							if bal == 0 {
+								// Keep placeholder if still zero; wallet sync will populate cache shortly.
+								return
+							}
+							fyne.Do(func() {
+								btn.SetText(lbl2 + ": " + amt2)
+								btn.Refresh()
+							})
+						}(hash.String(), b)
+					}
+				}
+				if len(tokens) == 0 {
+					if isMobile() && time.Now().Before(pollDeadline2) && !overlayRemoved {
+						loading := canvas.NewText(i18n.T("common.loading"), apptheme.C.Gray)
+						loading.Alignment = fyne.TextAlignCenter
+						loading.TextSize = scaleFont(11)
+						rows.Add(container.NewCenter(loading))
+					} else {
+						empty := canvas.NewText(i18n.T("dashboard.no_tokens"), apptheme.C.Gray)
+						empty.Alignment = fyne.TextAlignCenter
+						empty.TextSize = scaleFont(11)
+						rows.Add(container.NewCenter(empty))
+					}
+				}
+				rows.Refresh()
+				scroll.Refresh()
+			})
+			return uint(len(tokens))
+		}
+		go func() {
+			if render() == 0 && isMobile() {
+				for time.Now().Before(pollDeadline2) {
+					if overlayRemoved {
+						break
+					}
+					time.Sleep(ownedTokenPollInterval)
+					if overlayRemoved || render() > 0 {
+						break
+					}
+				}
+				if !overlayRemoved && time.Now().After(pollDeadline2) {
+					render()
+				}
+			}
+		}()
+	}
+	assetBtn.OnTapped = showAssetPicker
+	if isMobile() {
+		assetBtn.Importance = widget.MediumImportance
+	}
+	refreshSendTokenCue()
+	// Reflect current asset in amount placeholder
+	wAmount.SetPlaceHolder(i18n.T("send.amount") + " (" + sendSelectedLabel() + ")")
+	// Ensure available text reflects current asset
+	if engram.Disk != nil {
+		availableText.SetText(formatAvailableBalance(getSendBalance()))
+	}
+
 	form := container.NewVBox(
+		wrapMobileButton(assetBtn),
+		container.NewCenter(tokenIndicator),
+		rectSpacer,
 		wRings,
 		rectSpacer,
 		wrapMobileButton(widget.NewButtonWithIcon(i18n.T("send.scan_qr"), theme.MediaPhotoIcon(), func() {
@@ -1498,32 +1979,34 @@ func layoutSend() fyne.CanvasObject {
 		layout.NewSpacer(),
 	)
 
+	// Footer action row: SAVE (left) | back (centre) | TRANSFERS (right), the
+	// same grid layout and icon-button sizing used on the TELA footer.
+	wrapIconBtn := func(btn *widget.Button) fyne.CanvasObject {
+		sizeEnforcer := canvas.NewRectangle(color.Transparent)
+		h := float32(40)
+		if isMobile() {
+			h = 48
+		}
+		sizeEnforcer.SetMinSize(scalePoint(100, h))
+		return container.NewStack(sizeEnforcer, btn)
+	}
+
 	bottom := container.NewStack(
 		container.NewVBox(
 			rectSpacer,
 			container.NewCenter(
 				container.NewStack(
-					rect300,
+					rectSendBtn,
 					wrapMobileButton(btnSendNow),
 				),
 			),
 			rectSpacer,
 			container.NewCenter(
-				container.NewStack(
-					rect300,
-					wrapMobileButton(btnTransfers),
+				container.New(layout.NewGridLayoutWithColumns(3),
+					wrapIconBtn(btnSend),
+					linkCancel,
+					wrapIconBtn(btnTransfers),
 				),
-			),
-			rectSpacer,
-			container.NewCenter(
-				container.NewStack(
-					rect300,
-					wrapMobileButton(btnSend),
-				),
-			),
-			rectSpacer,
-			container.NewCenter(
-				container.New(layout.NewGridLayoutWithColumns(1), linkCancel),
 			),
 			rectSpacer,
 		),

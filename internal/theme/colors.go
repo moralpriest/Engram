@@ -156,6 +156,15 @@ func IsLightTheme() bool {
 	}
 }
 
+// TokenSendColor returns the color for the SEND page when a token (not DERO) is selected.
+// White on dark themes, black (dark slate) on Crystallina for contrast on white background.
+func TokenSendColor() color.Color {
+	if IsLightTheme() {
+		return C.Account // #38384A dark slate on #F0F2F5
+	}
+	return color.White
+}
+
 // PulseHighlightColor returns a brightened highlight version of the current
 // theme's accent color, used for card pulse animations and press feedback.
 func PulseHighlightColor() color.Color {
