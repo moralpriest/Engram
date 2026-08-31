@@ -18,8 +18,8 @@ vars:
   BINARY: engram
   LDFLAGS: -X main.versionString={{.VERSION}}
   # macOS cross-compilation toolchain (osxcross) for packaging macOS apps from Linux.
-  OSXCROSS_DIR: /home/matdero/osxcross/target
-  OSXCROSS_SDK: /home/matdero/osxcross/target/SDK/MacOSX14.5.sdk
+  OSXCROSS_DIR: ${HOME}/osxcross/target
+  OSXCROSS_SDK: ${HOME}/osxcross/target/SDK/MacOSX14.5.sdk
   OSXCROSS_TRIPLE_ARM64: aarch64-apple-darwin23.5
   OSXCROSS_TRIPLE_AMD64: x86_64-apple-darwin23.5
   MACOS_DEPLOYMENT_TARGET: 10.11
@@ -218,8 +218,14 @@ tasks:
     desc: Package for Android
     deps: [patch-android, build-fyne]
     env:
-      ANDROID_HOME: /home/matdero/Android/Sdk
-      ANDROID_NDK_HOME: /home/matdero/Android/Sdk/ndk-bundle
+      ANDROID_HOME: ${HOME}/Android/Sdk
+      ANDROID_NDK_HOME: ${HOME}/Android/Sdk/ndk-bundle
+      # 16 KB page-size support: modern Android (API 36+, real 16 KB-page devices
+      # like newer Pixels) refuses to dlopen a 4 KB-aligned .so with
+      # "program alignment (4096) cannot be smaller than system page size (16384)".
+      # fyne-custom doesn't expose -ldflags, but it invokes `go build` for the
+      # native lib, so GOFLAGS rides the linker flag in.
+      GOFLAGS: -ldflags=-extldflags=-Wl,-z,max-page-size=16384
     cmds:
       - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
