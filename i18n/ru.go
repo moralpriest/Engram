@@ -356,8 +356,6 @@ var stringsRU = map[string]string{
 	"send.optional":    "Н Е О Б Я З А Т Е Л Ь Н О",
 	"send.receiver":    "Имя или адрес получателя",
 	"send.payment_id":  "ID платежа / Сервисный порт",
-	"send.transfers":   "Переводы",
-	"send.save":        "Сохранить",
 	"send.ring_2":      "Степень анонимности: 2 (Нет)",
 	"send.ring_4":      "Степень анонимности: 4 (Низкая)",
 	"send.ring_8":      "Степень анонимности: 8 (Низкая)",

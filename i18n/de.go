@@ -356,8 +356,6 @@ var stringsDE = map[string]string{
 	"send.optional":    "O P T I O N A L",
 	"send.receiver":    "Benutzername oder Adresse",
 	"send.payment_id":  "Zahlungs-ID / Service-Port",
-	"send.transfers":   "Überweisungen",
-	"send.save":        "Speichern",
 	"send.ring_2":      "Anonymitätsstufe: 2 (Keine)",
 	"send.ring_4":      "Anonymitätsstufe: 4 (Niedrig)",
 	"send.ring_8":      "Anonymitätsstufe: 8 (Niedrig)",

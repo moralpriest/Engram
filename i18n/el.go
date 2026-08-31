@@ -444,8 +444,6 @@ var stringsEL = map[string]string{
 	"send.optional":                                  "Π Ρ Ο Α Ι Ρ Ε Τ Ι Κ Ο",
 	"send.receiver":                                  "Όνομα χρήστη ή διεύθυνση παραλήπτη",
 	"send.payment_id":                                "Payment ID / Θύρα Υπηρεσίας",
-	"send.transfers":                                 "Μεταφορές",
-	"send.save":                                      "Αποθήκευση",
 	"send.ring_2":                                    "Σύνολο Ανωνυμίας: 2 (Κανένα)",
 	"send.ring_4":                                    "Σύνολο Ανωνυμίας: 4 (Χαμηλό)",
 	"send.ring_8":                                    "Σύνολο Ανωνυμίας: 8 (Χαμηλό)",

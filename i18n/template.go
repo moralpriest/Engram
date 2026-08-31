@@ -107,6 +107,8 @@ var stringsTemplate = map[string]string{
 	"dashboard.send_money":       "",
 	"dashboard.transfer_details": "",
 	"dashboard.tela_web":         "",
+	"dashboard.tokens_title":     "",
+	"dashboard.no_tokens":        "",
 
 	"daemon_miner.heading":              "",
 	"daemon_miner.daemon":               "",
@@ -496,8 +498,6 @@ var stringsTemplate = map[string]string{
 	"send.optional":    "",
 	"send.receiver":    "",
 	"send.payment_id":  "",
-	"send.transfers":   "",
-	"send.save":        "",
 	"send.ring_2":      "",
 	"send.ring_4":      "",
 	"send.ring_8":      "",

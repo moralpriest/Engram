@@ -356,8 +356,6 @@ var stringsAR = map[string]string{
 	"send.optional":    "اختياري",
 	"send.receiver":    "المستلم",
 	"send.payment_id":  "معرف الدفع",
-	"send.transfers":   "التحويلات",
-	"send.save":        "حفظ",
 	"send.ring_2":      "حجم الحلقة: 2",
 	"send.ring_4":      "حجم الحلقة: 4",
 	"send.ring_8":      "حجم الحلقة: 8",

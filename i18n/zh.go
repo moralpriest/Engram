@@ -341,8 +341,6 @@ var stringsZH = map[string]string{
 	"send.optional":                                  "可 选",
 	"send.receiver":                                  "接收者用户名或地址",
 	"send.payment_id":                                "支付 ID / 服务端口",
-	"send.transfers":                                 "转账",
-	"send.save":                                      "保存",
 	"send.ring_2":                                    "匿名集: 2 (无)",
 	"send.ring_4":                                    "匿名集: 4 (低)",
 	"send.ring_8":                                    "匿名集: 8 (低)",

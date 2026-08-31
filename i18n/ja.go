@@ -341,8 +341,6 @@ var stringsJA = map[string]string{
 	"send.optional":                                  "オプション",
 	"send.receiver":                                  "受信者のユーザー名またはアドレス",
 	"send.payment_id":                                "支払いID / サービスポート",
-	"send.transfers":                                 "転送",
-	"send.save":                                      "保存",
 	"send.ring_2":                                    "匿名セット: 2 (なし)",
 	"send.ring_4":                                    "匿名セット: 4 (低)",
 	"send.ring_8":                                    "匿名セット: 8 (低)",

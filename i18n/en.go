@@ -69,6 +69,8 @@ var stringsEN = map[string]string{
 	"dashboard.send_money":       "Send Money",
 	"dashboard.transfer_details": "Add Transfer Details",
 	"dashboard.tela_web":         "TELA Web",
+	"dashboard.tokens_title":     "T O K E N S",
+	"dashboard.no_tokens":        "No tokens — only DERO",
 
 	"daemon_miner.heading":              "DAEMON & MINER",
 	"daemon_miner.daemon":               "DAEMON",
@@ -461,8 +463,6 @@ var stringsEN = map[string]string{
 	"send.optional":    "O P T I O N A L",
 	"send.receiver":    "Receiver username or address",
 	"send.payment_id":  "Payment ID / Service Port",
-	"send.transfers":   "Transfers",
-	"send.save":        "Save",
 	"send.ring_2":      "Anonymity Set: 2 (None)",
 	"send.ring_4":      "Anonymity Set: 4 (Low)",
 	"send.ring_8":      "Anonymity Set: 8 (Low)",

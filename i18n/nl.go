@@ -356,8 +356,6 @@ var stringsNL = map[string]string{
 	"send.optional":    "Optioneel",
 	"send.receiver":    "Ontvanger",
 	"send.payment_id":  "Betalings-ID",
-	"send.transfers":   "Transacties",
-	"send.save":        "Opslaan als concept",
 	"send.ring_2":      "Ring 2",
 	"send.ring_4":      "Ring 4",
 	"send.ring_8":      "Ring 8",

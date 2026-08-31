@@ -356,8 +356,6 @@ var stringsEO = map[string]string{
 	"send.optional":    "L A Ŭ V O L A",
 	"send.receiver":    "Ricevanta uzantnomo aŭ adreso",
 	"send.payment_id":  "Paga ID / Serva Haveno",
-	"send.transfers":   "Transigoj",
-	"send.save":        "Konservi",
 	"send.ring_2":      "Anonimeca Aro: 2 (Neniu)",
 	"send.ring_4":      "Anonimeca Aro: 4 (Malalta)",
 	"send.ring_8":      "Anonimeca Aro: 8 (Malalta)",
