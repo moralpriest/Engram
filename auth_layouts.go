@@ -904,6 +904,8 @@ func layoutNewAccount() fyne.CanvasObject {
 	session.Name = ""
 	session.Password = ""
 	session.PasswordConfirm = ""
+	session.Passphrase = ""
+	session.PassphraseConfirm = ""
 
 	languages := mnemonics.Language_List()
 	sort.Strings(languages)
@@ -915,7 +917,40 @@ func layoutNewAccount() fyne.CanvasObject {
 	btnCreate := widget.NewButton(i18n.T("create.create"), nil)
 	btnCreate.Disable()
 
+	// Forward declarations for containers referenced in back handler
+	var formSuccess *fyne.Container
+	var passphraseSetup *fyne.Container
+	var scrollBox *container.Scroll
+	var wPassphrase, wPassphraseConfirm *mobileEntry
+	var passphraseSetupError, passphraseSetupStrength *canvas.Text
+
 	btnBack := newSizedIconButton(theme.NavigateBackIcon(), func() {
+		// If passphrase setup is visible, back goes to words page, not login
+		if passphraseSetup != nil && passphraseSetup.Visible() {
+			session.Passphrase = ""
+			session.PassphraseConfirm = ""
+			if wPassphrase != nil {
+				wPassphrase.SetText("")
+			}
+			if wPassphraseConfirm != nil {
+				wPassphraseConfirm.SetText("")
+			}
+			if passphraseSetupError != nil {
+				clearFormText(passphraseSetupError)
+			}
+			if passphraseSetupStrength != nil {
+				clearFormText(passphraseSetupStrength)
+			}
+			passphraseSetup.Hide()
+			if formSuccess != nil {
+				formSuccess.Show()
+			}
+			if scrollBox != nil {
+				scrollBox.ScrollToTop()
+				scrollBox.Refresh()
+			}
+			return
+		}
 		session.Domain = "app.main"
 		session.Error = ""
 		session.LastDomain = session.Window.Content()
@@ -1178,22 +1213,89 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	btnEnter := widget.NewButtonWithIcon(i18n.T("create.enter"), theme.NavigateNextIcon(), func() {
 		fyne.Do(func() {
-			// Call login() to properly initialize wallet (network, daemon, gnomon, etc.)
-			// login() checks if engram.Disk is nil and skips wallet opening if already open
+			// Clear passphrase from session memory on enter
+			session.Passphrase = ""
+			session.PassphraseConfirm = ""
 			session.IsNewWallet = true
 			login()
-			// Password will be cleared by login() after successful initialization
 		})
 	})
 
-	formSuccess := container.NewVBox(
+	// Passphrase display row (under words) — only shown after derivation
+	passphraseDisplayHidden := true
+	passphraseApplied := ""
+	lblPassphraseValue := widget.NewLabelWithStyle("••••••••", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Monospace: true})
+	lblPassphraseValue.Wrapping = fyne.TextWrapBreak
+	lblPassphraseValue.Alignment = fyne.TextAlignCenter
+	btnTogglePassphrase := widget.NewButtonWithIcon("", theme.VisibilityIcon(), nil)
+	btnTogglePassphrase.Importance = widget.LowImportance
+	passphraseTitle := canvas.NewText(i18n.T("create.passphrase_optional"), apptheme.C.Gray)
+	passphraseTitle.Alignment = fyne.TextAlignCenter
+	passphraseTitle.TextSize = scaleFont(11)
+	passphraseRow := container.NewVBox(
+		container.NewCenter(passphraseTitle),
+		container.NewCenter(btnTogglePassphrase),
+		container.NewPadded(lblPassphraseValue),
+	)
+	passphraseRow.Hide()
+	btnTogglePassphrase.OnTapped = func() {
+		passphraseDisplayHidden = !passphraseDisplayHidden
+		if passphraseDisplayHidden {
+			btnTogglePassphrase.SetIcon(theme.VisibilityIcon())
+			lblPassphraseValue.SetText("••••••••")
+		} else {
+			btnTogglePassphrase.SetIcon(theme.VisibilityOffIcon())
+			lblPassphraseValue.SetText(passphraseApplied)
+		}
+	}
+
+	// Add Passphrase button shown on success screen
+	btnAddPassphrase := widget.NewButtonWithIcon(i18n.T("create.add_passphrase"), theme.SettingsIcon(), nil)
+	btnAddPassphrase.Importance = widget.LowImportance
+
+	// Rebuild word grid helper (used after derivation)
+	rebuildWordGrid := func(seedWords string) {
+		formatted = strings.Split(seedWords, " ")
+		wordsHidden = true
+		wordsToggleBtn.SetIcon(theme.VisibilityIcon())
+		wordsToggleBtn.Refresh()
+		grid.Objects = nil
+		wordLabels = make([]*widget.Label, len(formatted))
+		rect := canvas.NewRectangle(apptheme.C.Flint)
+		rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
+		for i := 0; i < len(formatted); i++ {
+			pos := fmt.Sprintf("%d", i+1)
+			wordLabels[i] = widget.NewLabelWithStyle("••••••••", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+			grid.Add(container.NewStack(
+				rect,
+				container.NewHBox(
+					widget.NewLabel(" "),
+					widget.NewLabelWithStyle(pos, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+					layout.NewSpacer(),
+					wordLabels[i],
+					widget.NewLabel(" "),
+				),
+			))
+		}
+		grid.Refresh()
+	}
+
+	// Remember original seed for derivation
+	var origSeedWords string
+	var origLanguageIdx int
+
+	formSuccess = container.NewVBox(
 		body,
 		wSpacer,
 		container.NewCenter(wordsToggleBtn),
 		rectSpacer,
 		container.NewCenter(grid),
 		rectSpacer,
+		passphraseRow,
+		rectSpacer,
 		container.NewCenter(btnCopySeed),
+		rectSpacer,
+		container.NewCenter(btnAddPassphrase),
 		rectSpacer,
 		errorText,
 		rectSpacer,
@@ -1211,6 +1313,202 @@ func layoutNewAccount() fyne.CanvasObject {
 
 	formSuccess.Hide()
 
+	// ---- Passphrase setup page (separate VBox, shown instead of formSuccess) ----
+	passphraseSetupError = canvas.NewText(" ", apptheme.C.Red)
+	passphraseSetupError.TextSize = scaleFont(12)
+	passphraseSetupError.Alignment = fyne.TextAlignCenter
+	passphraseSetupStrength = canvas.NewText(" ", apptheme.C.Gray)
+	passphraseSetupStrength.TextSize = scaleFont(11)
+	passphraseSetupStrength.Alignment = fyne.TextAlignCenter
+	wPassphrase = NewMobileEntry()
+	wPassphrase.Password = true
+	wPassphrase.SetPlaceHolder(i18n.T("create.passphrase_placeholder"))
+	wPassphrase.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	wPassphraseConfirm = NewMobileEntry()
+	wPassphraseConfirm.Password = true
+	wPassphraseConfirm.SetPlaceHolder(i18n.T("create.passphrase_confirm_placeholder"))
+	wPassphraseConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	btnTogglePassSetup := widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), nil)
+	btnTogglePassSetup.Importance = widget.LowImportance
+	btnTogglePassSetup.OnTapped = func() {
+		wPassphrase.Password = !wPassphrase.Password
+		wPassphraseConfirm.Password = !wPassphraseConfirm.Password
+		if wPassphrase.Password {
+			btnTogglePassSetup.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnTogglePassSetup.SetIcon(theme.VisibilityIcon())
+		}
+		wPassphrase.Refresh()
+		wPassphraseConfirm.Refresh()
+	}
+	btnConfirmPassphrase := widget.NewButton(i18n.T("create.confirm_passphrase"), nil)
+	btnConfirmPassphrase.Disable()
+	// Warning label for passphrase setup
+	passphraseWarning := widget.NewLabel(i18n.T("create.passphrase_warning"))
+	passphraseWarning.Wrapping = fyne.TextWrapWord
+	passphraseWarning.Alignment = fyne.TextAlignCenter
+	passphraseWarning.TextStyle = fyne.TextStyle{Bold: true}
+	passphraseSetup = container.NewVBox(
+		widget.NewLabelWithStyle(i18n.T("create.passphrase_title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		rectSpacer,
+		passphraseWarning,
+		rectSpacer,
+		wPassphrase,
+		wPassphraseConfirm,
+		container.NewCenter(btnTogglePassSetup),
+		passphraseSetupStrength,
+		passphraseSetupError,
+		rectSpacer,
+		container.NewCenter(wrapMobileButton(btnConfirmPassphrase)),
+	)
+	passphraseSetup.Hide()
+	updatePassphraseConfirmBtn := func() {
+		pass := wPassphrase.Text
+		confirm := wPassphraseConfirm.Text
+		ok, msg := validatePassphrasePair(pass, confirm)
+		if !ok {
+			passphraseSetupError.Text = msg
+			passphraseSetupError.Color = apptheme.C.Red
+			passphraseSetupError.Refresh()
+			btnConfirmPassphrase.Disable()
+			return
+		}
+		if pass == "" {
+			clearFormText(passphraseSetupError)
+			btnConfirmPassphrase.Disable()
+			return
+		}
+		clearFormText(passphraseSetupError)
+		btnConfirmPassphrase.Enable()
+	}
+	wPassphrase.OnChanged = func(s string) {
+		session.Passphrase = s
+		clearFormText(passphraseSetupError)
+		if len(s) > 0 {
+			strength := getPasswordStrength(s)
+			passphraseSetupStrength.Text = getPasswordStrengthText(strength)
+			passphraseSetupStrength.Color = getPasswordStrengthColor(strength)
+			passphraseSetupStrength.Refresh()
+		} else {
+			clearFormText(passphraseSetupStrength)
+		}
+		updatePassphraseConfirmBtn()
+	}
+	wPassphraseConfirm.OnChanged = func(s string) {
+		session.PassphraseConfirm = s
+		updatePassphraseConfirmBtn()
+	}
+	// Show passphrase setup instead of formSuccess
+	btnAddPassphrase.OnTapped = func() {
+		session.Passphrase = ""
+		session.PassphraseConfirm = ""
+		wPassphrase.SetText("")
+		wPassphraseConfirm.SetText("")
+		clearFormText(passphraseSetupError)
+		clearFormText(passphraseSetupStrength)
+		btnConfirmPassphrase.Disable()
+		formSuccess.Hide()
+		passphraseSetup.Show()
+		scrollBox.ScrollToTop()
+		scrollBox.Refresh()
+		safeCanvasFocus(wPassphrase)
+	}
+	btnConfirmPassphrase.OnTapped = func() {
+		pass := wPassphrase.Text
+		confirm := wPassphraseConfirm.Text
+		ok, msg := validatePassphrasePair(pass, confirm)
+		if !ok {
+			passphraseSetupError.Text = msg
+			passphraseSetupError.Color = apptheme.C.Red
+			passphraseSetupError.Refresh()
+			return
+		}
+		if pass == "" {
+			passphraseSetupError.Text = i18n.T("create.passphrase_mismatch")
+			passphraseSetupError.Color = apptheme.C.Red
+			passphraseSetupError.Refresh()
+			return
+		}
+		// Derive and recreate wallet
+		showLoadingOverlayWithText(i18n.T("creating_wallet"), i18n.T("wallet_eta"))
+		go func(passCopy string, origSeed string, langIdx int) {
+			// Language string from original selection
+			langs := mnemonics.Language_List()
+			sort.Strings(langs)
+			langStr := ""
+			if langIdx >= 0 && langIdx < len(langs) {
+				langStr = langs[langIdx]
+			} else {
+				langStr = "English"
+			}
+			// Derive
+			d, _, err := createWithPassphrase(session.Path, session.Password, passCopy, origSeed, false, langStr)
+			fyne.Do(func() {
+				removeOverlays()
+				if err != nil {
+					passphraseSetupError.Text = err.Error()
+					passphraseSetupError.Color = apptheme.C.Red
+					passphraseSetupError.Refresh()
+					return
+				}
+				// Configure network like create()
+				switch session.Network {
+				case NETWORK_TESTNET:
+					d.SetNetwork(false)
+				case NETWORK_SIMULATOR:
+					d.SetNetwork(true)
+				default:
+					d.SetNetwork(true)
+				}
+				d.SetSeedLanguage(langStr)
+				newAddress := d.GetAddress().String()
+				newSeed := d.GetSeed()
+				d.Close_Encrypted_Wallet()
+				// Update display state
+				passphraseApplied = passCopy
+				rebuildWordGrid(newSeed)
+				lblPassphraseValue.SetText("••••••••")
+				passphraseDisplayHidden = true
+				btnTogglePassphrase.SetIcon(theme.VisibilityIcon())
+				passphraseRow.Show()
+				// Update address display
+				addressStr = newAddress
+				if addressHidden {
+					lblAddress.Text = "dE...••••••••"
+				} else {
+					lblAddress.Text = newAddress[0:5] + "..." + newAddress[len(newAddress)-10:]
+				}
+				lblAddress.Refresh()
+				// Update copy to include passphrase
+				btnCopySeed.OnTapped = func() {
+					a.Clipboard().SetContent(newSeed + " " + passCopy)
+				}
+				// Also update copy btn label via tooltip? keep icon
+				btnCopySeed.Refresh()
+				// Hide passphrase setup, show success
+				passphraseSetup.Hide()
+				formSuccess.Show()
+				// Change Add Passphrase button to indicate applied
+				btnAddPassphrase.SetText(i18n.T("create.passphrase_applied"))
+				btnAddPassphrase.Disable()
+				btnAddPassphrase.Refresh()
+				errorText.Text = i18n.T("create.passphrase_applied")
+				errorText.Color = apptheme.C.Green
+				errorText.Refresh()
+				grid.Refresh()
+				passphraseRow.Refresh()
+				scrollBox.Refresh()
+				scrollBox.Offset = fyne.NewPos(0, 0)
+				session.Window.Canvas().Content().Refresh()
+				// Wipe entries
+				wPassphrase.SetText("")
+				wPassphraseConfirm.SetText("")
+				session.Passphrase = passCopy
+				session.PassphraseConfirm = passCopy
+			})
+		}(pass, origSeedWords, origLanguageIdx)
+	}
+
 	keyboardSpacer := func() fyne.CanvasObject {
 		if isMobile() {
 			return NewSpacer(0, ui.Height*0.4)
@@ -1218,12 +1516,13 @@ func layoutNewAccount() fyne.CanvasObject {
 		return layout.NewSpacer()
 	}()
 
-	scrollBox := container.NewVScroll(
+	scrollBox = container.NewVScroll(
 		container.NewHBox(
 			layout.NewSpacer(),
 			container.NewVBox(
 				form,
 				formSuccess,
+				passphraseSetup,
 				keyboardSpacer,
 			),
 			layout.NewSpacer(),
@@ -1245,10 +1544,10 @@ func layoutNewAccount() fyne.CanvasObject {
 			errorText.Text = ""
 			errorText.Refresh()
 		}
-
+		capturedLangIdx := session.Language
 		showLoadingOverlayWithText(i18n.T("creating_wallet"), i18n.T("wallet_eta"))
 
-		go func() {
+		go func(langIdx int) {
 			address, seed, err := create()
 
 			fyne.Do(func() {
@@ -1260,32 +1559,16 @@ func layoutNewAccount() fyne.CanvasObject {
 					return
 				}
 
-				formatted = strings.Split(seed, " ")
-				wordsHidden = true
-				wordsToggleBtn.SetIcon(theme.VisibilityIcon())
-				wordsToggleBtn.Refresh()
-
-				rect := canvas.NewRectangle(apptheme.C.Flint)
-				rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
-
-				grid.Objects = nil
-				wordLabels = make([]*widget.Label, len(formatted))
-
-				for i := 0; i < len(formatted); i++ {
-					pos := fmt.Sprintf("%d", i+1)
-					wordLabels[i] = widget.NewLabelWithStyle("••••••••", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-					grid.Add(container.NewStack(
-						rect,
-						container.NewHBox(
-							widget.NewLabel(" "),
-							widget.NewLabelWithStyle(pos, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-							layout.NewSpacer(),
-							wordLabels[i],
-							widget.NewLabel(" "),
-						),
-					),
-					)
-				}
+				origSeedWords = seed
+				origLanguageIdx = langIdx
+				passphraseApplied = ""
+				passphraseRow.Hide()
+				btnAddPassphrase.SetText(i18n.T("create.add_passphrase"))
+				btnAddPassphrase.Enable()
+				btnAddPassphrase.Refresh()
+				passphraseSetup.Hide()
+				clearFormText(errorText)
+				rebuildWordGrid(seed)
 
 				btnCopySeed.OnTapped = func() {
 					a.Clipboard().SetContent(seed)
@@ -1315,7 +1598,7 @@ func layoutNewAccount() fyne.CanvasObject {
 				session.Window.Canvas().Content().Refresh()
 				session.Window.Canvas().Refresh(session.Window.Content())
 			})
-		}()
+		}(capturedLangIdx)
 	}
 
 	layout := container.NewBorder(
@@ -1340,6 +1623,8 @@ func layoutRestore() fyne.CanvasObject {
 	session.Name = ""
 	session.Password = ""
 	session.PasswordConfirm = ""
+	session.Passphrase = ""
+	session.PassphraseConfirm = ""
 
 	// Cache network result to avoid repeated calls
 	cachedNetwork := getNetwork()
@@ -1971,8 +2256,131 @@ func layoutRestore() fyne.CanvasObject {
 		errorText,
 	)
 
+	// Passphrase for restore (Words/Hex) — optional 26th word
+	passphraseRestoreError := canvas.NewText(" ", apptheme.C.Red)
+	passphraseRestoreError.TextSize = scaleFont(11)
+	passphraseRestoreError.Alignment = fyne.TextAlignCenter
+	passphraseRestoreStrength := canvas.NewText(" ", apptheme.C.Gray)
+	passphraseRestoreStrength.TextSize = scaleFont(11)
+	passphraseRestoreStrength.Alignment = fyne.TextAlignCenter
+	wPassphraseRestore := NewMobileEntry()
+	wPassphraseRestore.Password = true
+	wPassphraseRestore.SetPlaceHolder(i18n.T("restore.passphrase_placeholder"))
+	wPassphraseRestore.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	wPassphraseRestoreConfirm := NewMobileEntry()
+	wPassphraseRestoreConfirm.Password = true
+	wPassphraseRestoreConfirm.SetPlaceHolder(i18n.T("restore.passphrase_confirm_placeholder"))
+	wPassphraseRestoreConfirm.Wrapping = fyne.TextWrap(fyne.TextTruncateClip)
+	btnTogglePassphraseRestore := widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), nil)
+	btnTogglePassphraseRestore.Importance = widget.LowImportance
+	btnTogglePassphraseRestore.OnTapped = func() {
+		wPassphraseRestore.Password = !wPassphraseRestore.Password
+		wPassphraseRestoreConfirm.Password = !wPassphraseRestoreConfirm.Password
+		if wPassphraseRestore.Password {
+			btnTogglePassphraseRestore.SetIcon(theme.VisibilityOffIcon())
+		} else {
+			btnTogglePassphraseRestore.SetIcon(theme.VisibilityIcon())
+		}
+		wPassphraseRestore.Refresh()
+		wPassphraseRestoreConfirm.Refresh()
+	}
+	passphraseRestoreHint := widget.NewLabel(i18n.T("restore.passphrase_hint"))
+	passphraseRestoreHint.Wrapping = fyne.TextWrapWord
+	passphraseRestoreHint.Alignment = fyne.TextAlignCenter
+	passphraseRestoreHint.TextStyle = fyne.TextStyle{Italic: true}
+	passphraseRestoreHint.Refresh()
+	// Hint must wrap — canvas.NewText never wraps and forces window wider (Theme.md §V)
+	// Use wrapping widget label instead.
+
+	passphraseRestoreInfo := container.NewVBox(
+		wPassphraseRestore,
+		wPassphraseRestoreConfirm,
+		container.NewCenter(btnTogglePassphraseRestore),
+		passphraseRestoreStrength,
+		passphraseRestoreError,
+		container.NewPadded(passphraseRestoreHint),
+	)
+	passphraseRestoreInfo.Hide() // collapsed by default — keeps recovery window 360×680 (Theme.md §IV)
+
+	// Forward declarations for toggle closure (references recoveryForm/form before definition)
+	var recoveryForm *fyne.Container
+	var form *fyne.Container
+
+	// Toggle row for optional passphrase — empty check + wrapping RichText per Theme.md window-size rule
+	passphraseToggleDesc := widget.NewRichTextFromMarkdown(i18n.T("create.passphrase_optional"))
+	passphraseToggleDesc.Wrapping = fyne.TextWrapWord
+	chkPassphraseRestore := widget.NewCheck("", func(b bool) {
+		if b {
+			passphraseRestoreInfo.Show()
+			safeCanvasFocus(wPassphraseRestore)
+		} else {
+			passphraseRestoreInfo.Hide()
+			wPassphraseRestore.SetText("")
+			wPassphraseRestoreConfirm.SetText("")
+			clearFormText(passphraseRestoreError)
+			clearFormText(passphraseRestoreStrength)
+			session.Passphrase = ""
+			session.PassphraseConfirm = ""
+		}
+		if recoveryForm != nil {
+			recoveryForm.Refresh()
+		}
+		if form != nil {
+			form.Refresh()
+		}
+		scrollBox.Refresh()
+		updateRecoveryButtonState()
+	})
+	passphraseToggleRow := container.NewHBox(chkPassphraseRestore, passphraseToggleDesc)
+	// Keep passphrase values in session for validation
+	wPassphraseRestore.OnChanged = func(s string) {
+		session.Passphrase = s
+		clearFormText(errorText)
+		clearFormText(passphraseRestoreError)
+		if len(s) > 0 {
+			strength := getPasswordStrength(s)
+			passphraseRestoreStrength.Text = getPasswordStrengthText(strength)
+			passphraseRestoreStrength.Color = getPasswordStrengthColor(strength)
+			passphraseRestoreStrength.Refresh()
+		} else {
+			clearFormText(passphraseRestoreStrength)
+		}
+		if ok, msg := validatePassphrasePair(wPassphraseRestore.Text, wPassphraseRestoreConfirm.Text); !ok {
+			passphraseRestoreError.Text = msg
+			passphraseRestoreError.Color = apptheme.C.Red
+			passphraseRestoreError.Refresh()
+		} else {
+			clearFormText(passphraseRestoreError)
+		}
+		updateRecoveryButtonState()
+	}
+	wPassphraseRestoreConfirm.OnChanged = func(s string) {
+		session.PassphraseConfirm = s
+		clearFormText(errorText)
+		if ok, msg := validatePassphrasePair(wPassphraseRestore.Text, wPassphraseRestoreConfirm.Text); !ok {
+			passphraseRestoreError.Text = msg
+			passphraseRestoreError.Color = apptheme.C.Red
+			passphraseRestoreError.Refresh()
+		} else {
+			clearFormText(passphraseRestoreError)
+		}
+		updateRecoveryButtonState()
+	}
+	// Extend btnCreate validation to include passphrase pair
+	origUpdateRecoveryBtn := updateRecoveryButtonState
+	updateRecoveryButtonState = func() {
+		origUpdateRecoveryBtn()
+		if selectedRecoveryType == 2 {
+			return
+		}
+		if ok, _ := validatePassphrasePair(wPassphraseRestore.Text, wPassphraseRestoreConfirm.Text); !ok {
+			btnCreate.Disable()
+			btnCreate.Refresh()
+		}
+	}
+
 	// Create a new form for account/password inputs
-	recoveryForm := container.NewVBox(
+	recoveryForm = container.NewVBox(
 		wLanguage,
 		rectSpacer,
 		wAccount,
@@ -1981,6 +2389,10 @@ func layoutRestore() fyne.CanvasObject {
 		wPasswordConfirm,
 		rectSpacer,
 		seedForm,
+		rectSpacer,
+		passphraseToggleRow,
+		passphraseRestoreInfo,
+		rectSpacer,
 		wrapMobileButton(btnCreate),
 	)
 
@@ -2003,7 +2415,7 @@ func layoutRestore() fyne.CanvasObject {
 		rectSpacer,
 	)
 
-	form := container.NewHBox(
+	form = container.NewHBox(
 		layout.NewSpacer(),
 		container.NewVBox(
 			recoveryTypeControl,
@@ -2388,6 +2800,18 @@ func layoutRestore() fyne.CanvasObject {
 		}
 		clearFormText(errorText)
 
+		// Validate passphrase pair before proceeding
+		if ok, msg := validatePassphrasePair(wPassphraseRestore.Text, wPassphraseRestoreConfirm.Text); !ok {
+			showFormError(errorText, msg)
+			if selectedRecoveryType != 2 {
+				passphraseRestoreError.Text = msg
+				passphraseRestoreError.Color = apptheme.C.Red
+				passphraseRestoreError.Refresh()
+			}
+			return
+		}
+		passphraseCopy := wPassphraseRestore.Text
+
 		// Perform input checks before backgrounding to report errors immediately
 		if selectedRecoveryType == 1 {
 			// Hex key recovery
@@ -2440,19 +2864,29 @@ func layoutRestore() fyne.CanvasObject {
 
 		showLoadingOverlayWithText(i18n.T("wallet.recovering"), i18n.T("wallet_eta"))
 
-		go func() {
+		go func(passCopy string) {
 			var err error
 			var language string
 			var temp *walletapi.Wallet_Disk
 
 			if selectedRecoveryType == 1 {
-				hexKey, _ := hex.DecodeString(hexEntry.Text)
-				temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
-				language = "English"
+				hexKey, _ := hex.DecodeString(strings.TrimSpace(hexEntry.Text))
+				if passCopy != "" {
+					hexStr := strings.TrimSpace(hexEntry.Text)
+					temp, language, err = createWithPassphrase(session.Path, session.Password, passCopy, hexStr, true, "English")
+				} else {
+					temp, err = walletapi.Create_Encrypted_Wallet(session.Path, session.Password, new(crypto.BNRed).SetBytes(hexKey))
+					language = "English"
+				}
 			} else {
 				words := strings.TrimSpace(seedEntry.Text)
-				language, _, _ = mnemonics.Words_To_Key(words)
-				temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
+				if passCopy != "" {
+					language, _, _ = mnemonics.Words_To_Key(words)
+					temp, language, err = createWithPassphrase(session.Path, session.Password, passCopy, words, false, language)
+				} else {
+					language, _, _ = mnemonics.Words_To_Key(words)
+					temp, err = walletapi.Create_Encrypted_Wallet_From_Recovery_Words(session.Path, session.Password, words)
+				}
 			}
 
 			fyne.Do(func() {
@@ -2521,8 +2955,14 @@ func layoutRestore() fyne.CanvasObject {
 				wPasswordConfirm.SetText("")
 				seedEntry.SetText("")
 				hexEntry.SetText("")
+				wPassphraseRestore.SetText("")
+				wPassphraseRestoreConfirm.SetText("")
+				clearFormText(passphraseRestoreError)
+				clearFormText(passphraseRestoreStrength)
 				// Password kept for login() call via Enter button
 				session.PasswordConfirm = ""
+				session.Passphrase = ""
+				session.PassphraseConfirm = ""
 
 				if errQr == nil {
 					successQR.Image = successImage
@@ -2548,7 +2988,7 @@ func layoutRestore() fyne.CanvasObject {
 				session.Window.Canvas().Content().Refresh()
 				session.Window.Canvas().Refresh(session.Window.Content())
 			})
-		}()
+		}(passphraseCopy)
 	}
 
 	header := container.NewVBox(

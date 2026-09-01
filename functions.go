@@ -42,6 +42,8 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/crypto/pbkdf2"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -137,6 +139,8 @@ type Session struct {
 	Name                string
 	Password            string
 	PasswordConfirm     string
+	Passphrase          string
+	PassphraseConfirm   string
 	DaemonHeight        uint64
 	WalletHeight        uint64
 	RPCServer           *rpcserver.RPCServer
@@ -10629,6 +10633,95 @@ func clearFormText(text *canvas.Text) {
 // validateRecoveryForm checks if the recovery form has valid account name and matching passwords
 func validateRecoveryForm(name, password, passwordConfirm string) bool {
 	return len(password) > 0 && password == passwordConfirm && name != ""
+}
+
+// validatePassphrasePair checks passphrase optional pair: empty=ok, otherwise must match and min length
+func validatePassphrasePair(pass, confirm string) (bool, string) {
+	if pass == "" && confirm == "" {
+		return true, ""
+	}
+	if pass != confirm {
+		return false, "passphrases do not match"
+	}
+	if len(pass) > 64 {
+		return false, "passphrase must be at most 64 characters"
+	}
+	if len(pass) > 0 && len(pass) < 4 {
+		return false, "passphrase must be at least 4 characters"
+	}
+	return true, ""
+}
+
+// passphraseIterations returns KDF iterations tuned for UI — 204800 on desktop, lower on mobile/js
+func passphraseIterations() int {
+	if runtime.GOOS == "js" {
+		return 32768
+	}
+	if globals.IsSimulator() {
+		return 10
+	}
+	return 204800
+}
+
+// derivePassphraseSeed derives a new BNRed from original 32B seed + passphrase via PBKDF2-HMAC-SHA256.
+// salt = originalSeedBytes (32), pass = passphrase bytes (byte-exact, no trim/NFKD), iter tuned, keyLen 32.
+// Result hashed mod bn256.Order, zero-checked (never 0). Returns nil on empty passphrase.
+func derivePassphraseSeed(passphrase string, origSeedBytes []byte) *crypto.BNRed {
+	if passphrase == "" || len(origSeedBytes) != 32 {
+		return nil
+	}
+	iterations := passphraseIterations()
+	derived := pbkdf2.Key([]byte(passphrase), origSeedBytes, iterations, 32, sha256.New)
+	// Interpret as big-endian integer and reduce mod Order
+	n := new(big.Int).SetBytes(derived)
+	order := new(big.Int).Set(bn256.Order)
+	n.Mod(n, order)
+	if n.Sign() == 0 {
+		n.SetInt64(1)
+	}
+	// Wipe derived slice
+	for i := range derived {
+		derived[i] = 0
+	}
+	return (*crypto.BNRed)(n)
+}
+
+// createWithPassphrase creates a wallet from passphrase-derived seed, overwriting the path if requested.
+// origSeedWordsOrHex: either 25-word string or 64-hex. isHex true for hex path.
+func createWithPassphrase(path, password, passphrase string, origSeedWords string, isHex bool, language string) (*walletapi.Wallet_Disk, string, error) {
+	var origBytes []byte
+	var err error
+	if isHex {
+		origBytes, err = hex.DecodeString(strings.TrimSpace(origSeedWords))
+		if err != nil || len(origBytes) != 32 {
+			return nil, language, errors.New("invalid hex seed for passphrase derivation")
+		}
+	} else {
+		_, keyBig, err2 := mnemonics.Words_To_Key(strings.TrimSpace(origSeedWords))
+		if err2 != nil {
+			return nil, language, err2
+		}
+		b := keyBig.Bytes()
+		// left-pad to 32
+		origBytes = make([]byte, 32)
+		copy(origBytes[32-len(b):], b)
+	}
+	derivedBN := derivePassphraseSeed(passphrase, origBytes)
+	if derivedBN == nil {
+		return nil, language, errors.New("invalid passphrase derivation")
+	}
+	// Remove prior file if exists
+	_ = os.Remove(path)
+	_ = os.Remove(path + ".bak")
+	d, err := walletapi.Create_Encrypted_Wallet(path, password, derivedBN)
+	if err != nil {
+		return nil, language, err
+	}
+	// language already validated externally; default English for hex
+	if language == "" {
+		language = "English"
+	}
+	return d, language, nil
 }
 
 // PasswordStrength represents the strength level of a password
