@@ -1,0 +1,45 @@
+package binres
+
+// NewMultiMipmapTable returns a resource table initialized for multiple xxxhdpi mipmap resources
+// and the list of paths to write resource data to.
+func NewMultiMipmapTable(pkgname string, iconNames []string) (*Table, []string) {
+	pkg := &Package{id: 127, name: pkgname, typePool: &Pool{}, keyPool: &Pool{}}
+
+	attr := pkg.typePool.ref("attr")
+	mipmap := pkg.typePool.ref("mipmap")
+
+	entries := make([]*Entry, len(iconNames))
+	indices := make([]uint32, len(iconNames))
+	paths := make([]string, len(iconNames))
+
+	for i, name := range iconNames {
+		pkg.keyPool.ref(name)
+		entries[i] = &Entry{values: []*Value{{data: &Data{Type: DataString}}}}
+		indices[i] = uint32(i)
+		paths[i] = "res/mipmap-xxxhdpi-v4/" + name + ".png"
+	}
+
+	typ := &Type{id: 2, indices: indices, entries: entries}
+	typ.config.screenType.density = 640
+	typ.config.version.sdk = 4
+
+	pkg.specs = append(pkg.specs,
+		&TypeSpec{
+			id: uint8(attr) + 1,
+		},
+		&TypeSpec{
+			id:         uint8(mipmap) + 1,
+			entryCount: uint32(len(iconNames)),
+			entries:    indices,
+			types:      []*Type{typ},
+		})
+
+	pkg.lastPublicType = uint32(len(pkg.typePool.strings))
+	pkg.lastPublicKey = uint32(len(pkg.keyPool.strings))
+
+	tbl := &Table{pool: &Pool{}, pkgs: []*Package{pkg}}
+	for _, p := range paths {
+		tbl.pool.ref(p)
+	}
+	return tbl, paths
+}

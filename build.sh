@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build script for Engram with size optimization
+# DEPRECATED: Use Taskfile.yml (`task build`, `task package-*`) as the canonical build entry.
+# This shim is kept for backward compatibility and will be removed. See AGENTS.md.
 # Phase 24.4: Mobile Optimizations
 
 echo "Building Engram with size optimization..."
@@ -43,4 +44,4 @@ echo "Packaging for macOS..."
 fyne package --target darwin --name Engram --app-version 0.7.0 --app-id com.engram.wallet --icon Icon.png --tags migrated_fynedo --executable engram
 
 # Fix macOS camera permissions (required for QR scanning)
-./fix_macos_permissions.sh Engram.app
+scripts/fix_macos_permissions.sh Engram.app

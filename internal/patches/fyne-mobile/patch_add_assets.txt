@@ -1,0 +1,77 @@
+func legacyAddAssets(apkw *Writer, manifestData []byte, iconPath string, target int) error {
+	hasIcons := iconPath != "" || os.Getenv("ENGAM_THEME_ICONS_DIR") != ""
+	bxml, err := binres.UnmarshalXML(bytes.NewReader(manifestData), hasIcons, target)
+	if err != nil {
+		return err
+	}
+
+	if hasIcons {
+		pkgname, err := bxml.RawValueByName("manifest", xml.Name{Local: "package"})
+		if err != nil {
+			return err
+		}
+
+		iconNames := []string{}
+		if iconPath != "" {
+			iconNames = append(iconNames, "icon")
+		}
+
+		themeIconsDir := os.Getenv("ENGAM_THEME_ICONS_DIR")
+		if themeIconsDir != "" {
+			entries, err := os.ReadDir(themeIconsDir)
+			if err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".png") {
+						resourceName := strings.TrimSuffix(entry.Name(), ".png")
+						if resourceName != "icon" {
+							iconNames = append(iconNames, resourceName)
+						}
+					}
+				}
+			}
+		}
+
+		if len(iconNames) > 0 {
+			tbl, paths := binres.NewMultiMipmapTable(pkgname, iconNames)
+
+			for i, name := range iconNames {
+				srcPath := ""
+				if name == "icon" && iconPath != "" {
+					srcPath = iconPath
+				} else if themeIconsDir != "" {
+					srcPath = filepath.Join(themeIconsDir, name+".png")
+				}
+				if srcPath != "" && i < len(paths) {
+					if err := apkwWriteFile(paths[i], srcPath, apkw); err != nil {
+						return err
+					}
+				}
+			}
+
+			w, err := apkwCreate("resources.arsc", apkw)
+			if err != nil {
+				return err
+			}
+			bin, err := tbl.MarshalBinary()
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write(bin); err != nil {
+				return err
+			}
+		}
+	}
+
+	w, err := apkwCreate("AndroidManifest.xml", apkw)
+	if err != nil {
+		return err
+	}
+	bin, err := bxml.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(bin); err != nil {
+		return err
+	}
+	return nil
+}

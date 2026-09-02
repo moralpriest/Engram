@@ -6,7 +6,7 @@
 set -e
 
 MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.0/internal/driver/mobile/app"
-VENDOR_PATH="$(dirname "$0")/internal/patches/android"
+VENDOR_PATH="$(cd "$(dirname "$0")/.." && pwd)/internal/patches/android"
 
 if [ ! -d "$VENDOR_PATH" ]; then
     echo "ERROR: Vendor path not found: $VENDOR_PATH"

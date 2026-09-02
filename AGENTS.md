@@ -1,6 +1,6 @@
 # AGENTS Guide
 
-This file is for coding agents working in `/home/priest/Projects/Engram`.
+This file is for coding agents working in this repository.
 
 ## Project Snapshot
 
@@ -196,7 +196,7 @@ This file is for coding agents working in `/home/priest/Projects/Engram`.
 - **Background backfill** runs on every first click (non-blocking) to discover TELA apps; new apps appear on the next click.
 - A healthy Gnomon DB is never wiped at startup: `isDatabaseCorrupted()` validates the bbolt store via `storage.ValidateStore` (a locked store is treated as valid, not corrupt). Do not reintroduce a gravdb-based validation — HyperGnomon is bbolt-only and the graviton handle always errors.
 - After modifying HyperGnomon code, remember to run `go mod vendor` to sync Engram's vendor directory (Engram builds against `vendor/`, not the replace path directly).
-- Dependencies point to local filesystem replaces (`replace github.com/hypergnomon/hypergnomon => ../HyperGnomon`, `replace github.com/civilware/tela => ../tela`, `replace github.com/civilware/epoch => ../epoch`). These clones live at `/home/priest/Projects/{HyperGnomon,tela,epoch}`; `git pull` there, then `go mod vendor`, then rebuild to pick up changes.
+- Dependencies point to local filesystem replaces (`replace github.com/hypergnomon/hypergnomon => ../HyperGnomon`, `replace github.com/civilware/tela => ../tela`, `replace github.com/civilware/epoch => ../epoch`). These clones live as siblings to this repo (`../HyperGnomon`, `../tela`, `../epoch`); `git pull` there, then `go mod vendor`, then rebuild to pick up changes. Example: if this repo is `~/Projects/Engram`, siblings are `~/Projects/HyperGnomon`, etc.
 - With local replaces active, builds REQUIRE the sibling clones to be present (CI/package builds outside this machine will fail without them).
 
 ## Final Notes

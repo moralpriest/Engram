@@ -97,6 +97,12 @@ tasks:
       - go mod tidy
       - go mod verify
 
+  vendor:
+    desc: Regenerate vendor directory (required after sibling replace changes)
+    cmds:
+      - go mod vendor
+      - echo "vendor/ regenerated (105M, ignored per .gitignore:30)"
+
   # ==================== Security ====================
 
   security:
@@ -172,6 +178,7 @@ tasks:
     env:
     cmds:
       - fyne package --target linux --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - mkdir -p dist
       - mv {{.APP_NAME}}.tar.xz dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
@@ -182,6 +189,7 @@ tasks:
       CC: x86_64-w64-mingw32-gcc
     cmds:
       - fyne package --target windows --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - mkdir -p dist
       - mv {{.APP_NAME}}.exe dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
@@ -192,15 +200,17 @@ tasks:
       GOOS: darwin
     cmds:
       - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
-      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
+      - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
+      - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-$(uname -m | sed 's/x86_64/amd64/').tar.gz {{.APP_NAME}}.app
       - mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app
 
   package-macos-arm64:
     desc: Package for macOS Apple Silicon (cross-compiled via osxcross)
     cmds:
-      - ./build_macos.sh arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
-      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
+      - scripts/build_macos.sh arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
+      - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz {{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz
@@ -208,8 +218,9 @@ tasks:
   package-macos-amd64:
     desc: Package for macOS Intel (cross-compiled via osxcross)
     cmds:
-      - ./build_macos.sh amd64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
-      - ./fix_macos_permissions.sh {{.APP_NAME}}.app
+      - scripts/build_macos.sh amd64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
+      - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz
@@ -227,6 +238,7 @@ tasks:
       # native lib, so GOFLAGS rides the linker flag in.
       GOFLAGS: -ldflags=-extldflags=-Wl,-z,max-page-size=16384
     cmds:
+      - mkdir -p dist
       - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
     generates:
@@ -235,14 +247,14 @@ tasks:
   build-fyne:
     desc: Build custom Fyne CLI with QR scanner support
     cmds:
-      - ./build_fyne_custom.sh
+      - scripts/build_fyne_custom.sh
     generates:
       - bin/fyne-custom
 
   patch-android:
     desc: Patch Fyne source (Module cache and Vendor if present)
     cmds:
-      - ./patch_fyne.sh
+      - scripts/patch_fyne.sh
       - |
         if [ -d "vendor/fyne.io/fyne/v2" ]; then
           echo "Patching vendor directory..."
@@ -315,6 +327,7 @@ tasks:
       - task: lint
       - task: build
       - task: test
+      - task: vendor
 
   changelog:
     desc: Generate changelog

@@ -5560,14 +5560,26 @@ func queryUsernames(address string) (result []string, err error) {
 		if !isWalletGenerationActive(generation) {
 			return nil, nil
 		}
+		// Avoid spamming logs when daemon is offline or indexer has no endpoint yet.
+		// This happens briefly at startup or when the daemon is disconnected; the
+		// live GetSCIDKeysByValue path (indexer.go:401) otherwise returns
+		// "no daemon endpoint configured" 6x in quick succession.
+		if !isDaemonConnected() && !walletapi.IsDaemonOnline() {
+			return nil, nil
+		}
 		result, _, err = gnomon.Index.GetSCIDKeysByValue(nil, "0000000000000000000000000000000000000000000000000000000000000001", address, engram.Disk.Get_Daemon_TopoHeight())
 		if !isWalletGenerationActive(generation) {
 			return nil, nil
 		}
 		if err != nil {
-			if !strings.Contains(err.Error(), "closed network connection") {
-				logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
+			// Suppress expected transient errors that occur while the daemon is
+			// offline or still handshaking. These are not actionable and were
+			// previously logged 6x at startup (see engram_debug.log 00:44:37).
+			if strings.Contains(err.Error(), "closed network connection") ||
+				strings.Contains(err.Error(), "no daemon endpoint configured") {
+				return
 			}
+			logger.Errorf("[Gnomon] Querying usernames failed: %s\n", err)
 			return
 		}
 

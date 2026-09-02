@@ -130,12 +130,17 @@ Packaging for Android requires patching the Fyne source and using a custom CLI t
 
 ### Custom Dependencies & Vendoring
 
-Engram Dev relies on optimized forks of Gnomon and TELA. These are managed via `go.mod` replacements and vendored for stability.
+Engram Dev relies on optimized forks of Gnomon and TELA. These are managed via `go.mod` `replace` directives pointing to sibling checkouts (`../HyperGnomon`, `../tela`, `../epoch`) and vendored for stability (`vendor/` is ignored per `.gitignore:30` — regenerate locally).
+
+Prerequisites for a fresh clone (outside this workstation):
+- Clone siblings as siblings to this repo: `../HyperGnomon`, `../tela`, `../epoch` (same parent directory as `Engram`), or
+- Run `go mod vendor` after cloning to populate `vendor/`; builds use `vendor/` (see `AGENTS.md`).
 
 If you modify vendored code:
 1. Make changes in the respective fork repositories.
 2. Update `go.mod` to point to the new commits.
-3. Run `go mod vendor` to synchronize the local vendor directory.
+3. Run `go mod vendor` to synchronize the local vendor directory (`task tidy` also verifies `go.mod`).
+4. Note: with local `replace`s active, CI/package builds outside this machine fail without the siblings — keep `vendor/` rebuildable via `go mod vendor`.
 
 ## CI/CD & Security
 

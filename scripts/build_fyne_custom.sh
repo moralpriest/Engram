@@ -11,7 +11,7 @@
 
 set -e
 
-ENGRAM_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENGRAM_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORK_DIR="/tmp/fyne-custom-build"
 
 # Find Android SDK

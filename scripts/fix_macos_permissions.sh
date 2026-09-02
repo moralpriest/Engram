@@ -41,7 +41,7 @@ except Exception as e:
 "
 }
 
-ENTITLEMENTS_PATH="$(dirname "$0")/Engram.entitlements"
+ENTITLEMENTS_PATH="$(cd "$(dirname "$0")/.." && pwd)/Engram.entitlements"
 
 if [ ! -f "$ENTITLEMENTS_PATH" ]; then
     echo "Warning: Engram.entitlements not found, creating temporary entitlements..."

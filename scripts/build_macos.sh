@@ -4,7 +4,7 @@
 # (the -- is optional; any args after the arch are passed to `fyne package`)
 set -euo pipefail
 
-OX="${OSXCROSS_DIR:-/home/matdero/osxcross/target}"
+OX="${OSXCROSS_DIR:-${HOME}/osxcross/target}"
 export PATH="$OX/bin:$PATH"
 export SDKROOT="$OX/SDK/MacOSX14.5.sdk"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-10.11}"

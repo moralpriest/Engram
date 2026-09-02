@@ -5,6 +5,7 @@ datashards*
 mainnet*
 testnet*
 engram_debug.log
+*.log
 engram
 
 # Build artifacts
@@ -19,28 +20,30 @@ dist/
 coverage.out
 coverage.html
 
-# IDEs
+# IDEs / AI assistants
 .cursor*
-.opencode*
+.opencode/
+.lean-ctx/
+.claude/
 
-# Build artifacts
+# Vendor (vendored deps — regenerate via `go mod vendor`)
 vendor/
 
-# Backup files
+# Backup / temp / OS files
 *.bak
+*~
+*.swp
+*.tmp
+.DS_Store
+.env
+.env.*
 
-# Root patterns to prevent accidental re-tracking
-.lean-ctx/
-.opencode/
-
-# Build logs and text artifacts
-*.txt
+# Fyne / Android build cache
 fyne-cross/
 classes.dex
 final_classes.dex
 engram_test
 engram_test_build
-.claude/
 
 # Planning notes (not for commit)
 ENGRA_UPCOMING_CHANGES.md

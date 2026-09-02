@@ -1,3 +1,5 @@
+# DEPRECATED: Use Taskfile.yml (`task build`, `task package-*`) — see AGENTS.md.
+# This Makefile is kept for backward compatibility and will be removed.
 # Go environment
 GOOS := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
