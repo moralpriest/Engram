@@ -757,6 +757,20 @@ Source: `wallet_layouts.go:67` — dashboard marquee uses `C.LightBlue`
 | Crystallina | `#38B6FF` | Sky blue |
 | Atlantis | `#E8B84B` | Ancient amber |
 
+### Sensitive Data Rows (Recovery Words / Hex Keys)
+
+Source: `account_layouts.go:914` (`layoutRecovery`), `auth_layouts.go:1268` (`layoutNewAccount` success)
+
+Seed rows use theme-aware card surface `C.Flint` with implicit `ColorNameForeground` text (`widget.Label` Bold). Both `MY ACCOUNT` (check recovery words on existing wallet) and `NEW ACCOUNT` (post-create reveal) share this token, so Crystallina and dark themes both meet contrast.
+
+| Theme | `C.Flint` bg | `Foreground` text | Contrast | Status |
+|-------|--------------|-------------------|----------|--------|
+| Crystallina | `#D8DAE6` `(216,218,230)` | `#38384A` `(56,56,74)` dark slate via `crystallinaFyneColor()` | ~9:1 | PASS |
+| Engram Classic / Derotopia / El Dorado | `#2C2C34` `(44,44,52)` | `#D0D0D0` `(208,208,208)` | ~11:1 | PASS |
+| Atlantis | `#122A2E` `(18,42,46)` | `#D0D0D0` | ~10:1 | PASS |
+
+**Rule:** Never hardcode `color.RGBA{19,25,34,255}` for seed rows — always use `apptheme.C.Flint`. Hardcoded dark `Rect` assumed light text (dark-first codebase) and broke Crystallina where `Foreground` flips to dark slate for light backgrounds (`internal/theme/theme.go:83-110`). Hex keys (`layoutRecoveryHex()`) use `RichText` + `C.Gray` labels and are unaffected.
+
 ### Globe Icon Resources
 
 Source: `browser_globe_resource.go`

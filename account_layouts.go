@@ -911,7 +911,7 @@ func layoutRecovery() fyne.CanvasObject {
 
 	formatted := strings.Split(engram.Disk.GetSeed(), " ")
 
-	rect := canvas.NewRectangle(color.RGBA{19, 25, 34, 255})
+	rect := canvas.NewRectangle(apptheme.C.Flint)
 	rect.SetMinSize(fyne.NewSize(ui.Width, scaleSize(25)))
 
 	for i := 0; i < len(formatted); i++ {
