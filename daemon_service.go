@@ -120,7 +120,7 @@ func startDaemon() {
 	}
 
 	dataDir := daemonDataDir()
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		logger.Printf("[Daemon] Failed to create data dir %s: %v", dataDir, err)
 		dmState.daemonState = dmStateError
 		return
@@ -341,7 +341,7 @@ func startEmbeddedDaemon(dataDir string) {
 	testFile := filepath.Join(dataDir, ".engram_write_test")
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		logger.Printf("[Daemon] WARNING: Cannot create data directory %s: %v", dataDir, err)
-	} else if err := os.WriteFile(testFile, []byte("ok"), 0644); err != nil {
+	} else if err := os.WriteFile(testFile, []byte("ok"), 0o600); err != nil {
 		logger.Printf("[Daemon] WARNING: Data directory %s is NOT writable: %v", dataDir, err)
 	} else {
 		os.Remove(testFile)

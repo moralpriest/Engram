@@ -1549,8 +1549,10 @@ func layoutAppSettings() fyne.CanvasObject {
 					setDaemon(DEFAULT_REMOTE_DAEMON)
 					setAuthMode("true")
 					setGnomon("1")
-					remoteAccess.RPC.user = "username"
-					remoteAccess.RPC.pass = "password"
+					remoteAccess.RPC.user = newRPCUsername()
+					remoteAccess.RPC.pass = newRPCPassword()
+					StoreValue("settings", []byte("rpc_user"), []byte(remoteAccess.RPC.user))
+					StoreValue("settings", []byte("rpc_pass"), []byte(remoteAccess.RPC.pass))
 					remoteAccess.RPC.port = fmt.Sprintf("127.0.0.1:%d", DEFAULT_WALLET_PORT)
 					setRemoteAccess(remoteAccess.RPC.port, "RPC")
 

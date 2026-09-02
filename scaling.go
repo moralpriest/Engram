@@ -18,10 +18,6 @@ func isMobile() bool {
 	return runtime.GOOS == "android" || runtime.GOOS == "ios"
 }
 
-func isDesktop() bool {
-	return !isMobile()
-}
-
 func scaleByWidth() float32 {
 	if ui.Width <= 0 {
 		return 1.0

@@ -101,7 +101,7 @@ task package-android
 Please see: https://developer.fyne.io/ for Fyne dependencies.
 
 **Important Build Tags:**
-Always use `-tags migrated_fynedo` when building manually.
+Always use `-tags "migrated_fynedo,x11"` when building on Linux (Task `task build` does this for you). Bare `go build` also works after Wayland headers are generated — run `bash scripts/gen_glfw_wayland.sh` once after `go mod vendor` (done automatically by `task build`/`task vendor`).
 
 * Install fyne cmd tools: `go install fyne.io/fyne/v2/cmd/fyne@latest`
 * Add `~/go/bin` to your `$PATH` environment variable.

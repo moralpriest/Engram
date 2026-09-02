@@ -131,49 +131,6 @@ func (o *iframe) Dragged(e *fyne.DragEvent) {
 }
 
 func (o *iframe) DragEnd() {
-	/*
-		if engram.Disk != nil {
-			if nav.CurX > nav.PosX+30 {
-				if session.Domain == "app.wallet" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutIdentity())
-				} else if session.Domain == "app.remoteaccess" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				}
-			} else if nav.CurX < nav.PosX-30 {
-				if session.Domain == "app.wallet" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutRemoteAccess())
-				} else if session.Domain == "app.Identity" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				}
-			} else if nav.CurY > nav.PosY+30 {
-				if session.Domain == "app.wallet" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutTransfers())
-				} else if session.Domain == "app.messages" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				} else if session.Domain == "app.messages.contact" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutMessages())
-				}
-			} else if nav.CurY < nav.PosY-30 {
-				if session.Domain == "app.wallet" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutMessages())
-				} else if session.Domain == "app.transfers" {
-					session.Window.SetContent(layoutTransition())
-					session.Window.SetContent(layoutDashboard())
-				}
-			}
-
-			nav.PosX = 0
-			nav.PosY = 0
-		}
-	*/
 	if engram.Disk != nil {
 		if nav.CurY > nav.PosY+30 {
 			if session.Domain == "app.messages" {

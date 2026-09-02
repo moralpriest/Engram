@@ -44,7 +44,7 @@ func getDebugLogPath() string {
 func initDebugLog() error {
 	path := getDebugLogPath()
 
-	if err := os.MkdirAll(filepath.Dir(path), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 
@@ -52,7 +52,7 @@ func initDebugLog() error {
 		return err
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func truncateDebugLogIfNeeded(path string) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func writeDebugLogHeader() {

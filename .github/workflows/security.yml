@@ -41,7 +41,6 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true # Advisory while CI hardening changes settle
     permissions:
       contents: read
     # BLOCKING: This check must pass. If it fails due to upstream Go vulnerabilities,
@@ -70,13 +69,12 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck
-        run: govulncheck -tags migrated_fynedo ./... || true
+        run: govulncheck -tags migrated_fynedo,x11 ./...
 
   gosec:
     name: Go Security Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true # Advisory while CI hardening changes settle
     permissions:
       contents: read
       security-events: write
@@ -104,13 +102,12 @@ jobs:
       - name: Install and run Gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.22.2
-          gosec -exclude=G104,G115,G602 -exclude-dir=vendor -tags migrated_fynedo ./... || true
+          gosec -exclude-dir=vendor -tags migrated_fynedo,x11 ./...
 
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true # Advisory while CI hardening changes settle
     permissions:
       security-events: write
       actions: read
@@ -142,7 +139,7 @@ jobs:
           build-mode: manual
 
       - name: Build for CodeQL
-        run: go build -tags migrated_fynedo ./... || true
+        run: go build -tags migrated_fynedo,x11 ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
@@ -153,7 +150,6 @@ jobs:
     name: Semgrep Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true # Advisory while CI hardening changes settle
     permissions:
       contents: read
       security-events: write
@@ -165,7 +161,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run Semgrep
-        run: semgrep scan --config auto --config p/golang --json --output semgrep-results.json . || true
+        run: semgrep scan --config auto --config p/golang --json --output semgrep-results.json .
 
       - name: Upload Semgrep results
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -198,7 +194,7 @@ jobs:
           scan-ref: "."
           format: "table"
           severity: "CRITICAL,HIGH"
-          exit-code: "0"
+          exit-code: "1"
           scanners: "vuln"
           trivyignores: ".trivyignore"
 
@@ -210,7 +206,7 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           severity: "CRITICAL,HIGH"
-          exit-code: "0"
+          exit-code: "1"
           scanners: "vuln"
           trivyignores: ".trivyignore"
 

@@ -10247,8 +10247,8 @@ func PatchTELAAppSourceFiles(scid string) {
 			telaPatchCacheMu.Lock()
 			telaPatchCache[scid] = struct{}{}
 			telaPatchCacheMu.Unlock()
-			_ = os.MkdirAll(getTelaPath(), 0755)
-			_ = os.WriteFile(telaShimDiskStampPath(), []byte(telaShimCurrentHash()+":"+scid), 0644)
+			_ = os.MkdirAll(getTelaPath(), 0o700)
+			_ = os.WriteFile(telaShimDiskStampPath(), []byte(telaShimCurrentHash()+":"+scid), 0o600)
 		}
 	}
 }

@@ -1,0 +1,51 @@
+# golangci-lint config for Engram — re-enables wallet-critical checks.
+# See audit: previously gosec excluded G104/G115/G602 and lint had no config.
+version: "2"
+run:
+  timeout: 5m
+  build-tags:
+    - migrated_fynedo
+    - x11
+  modules-download-mode: mod
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec
+    - misspell
+  # errcheck/gocritic/revive are intentionally not enabled yet — wallet code
+  # has ~200 unchecked errors (StoreEncryptedValue/Validate/Set) tracked for
+  # gradual fixup; enabling now would block CI. See audit follow-up.
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - copylocks # MiningStats copy is intentional (cp.mu = sync.Mutex{})
+    gosec:
+      excludes: [] # never exclude G104/G115/G602; use per-line // #nosec with justification
+
+formatters:
+  enable: []
+
+exclusions:
+  generated: lax
+  rules:
+    - linters: [gosec]
+      path: internal/dirtybird/astrobwt/*
+  paths:
+    - bundled*.go
+    - bundled_*.go
+    - vendor
+    - ^internal/patches/android/android\.go$
+
+issues:
+  max-issues-per-linter: 200
+  max-same-issues: 50
+
+output:
+  sort-results: true

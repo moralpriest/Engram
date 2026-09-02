@@ -142,7 +142,7 @@ func checkDiskSpace() float64 {
 // checkDiskIO measures approximate disk write throughput by writing a temp file.
 func checkDiskIO() (float64, string) {
 	tmpDir := filepath.Join(os.TempDir(), "engram_disk_test")
-	os.MkdirAll(tmpDir, 0755)
+	os.MkdirAll(tmpDir, 0o700)
 	defer os.RemoveAll(tmpDir)
 
 	tmpFile := filepath.Join(tmpDir, "io_test.tmp")
@@ -155,7 +155,7 @@ func checkDiskIO() (float64, string) {
 	}
 
 	start := time.Now()
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+	if err := os.WriteFile(tmpFile, data, 0o600); err != nil {
 		return 0, fmt.Sprintf("Could not test disk I/O: %v", err)
 	}
 	elapsed := time.Since(start)

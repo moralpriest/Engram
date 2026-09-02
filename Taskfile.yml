@@ -14,7 +14,7 @@ vars:
     sh: git describe --tags --always 2>/dev/null | sed 's/^v//' | sed 's/-[0-9].*//' || echo "0.0.0"
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
-  BUILD_TAGS: migrated_fynedo x11
+  BUILD_TAGS: migrated_fynedo,x11
   BINARY: engram
   LDFLAGS: -X main.versionString={{.VERSION}}
   # macOS cross-compilation toolchain (osxcross) for packaging macOS apps from Linux.
@@ -51,7 +51,7 @@ tasks:
     desc: Build the application
     deps: [generate]
     cmds:
-      - go build -v -tags {{.BUILD_TAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
+      - go build -v -tags "{{.BUILD_TAGS}}" -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
     sources:
       - "*.go"
       - go.mod
@@ -69,7 +69,7 @@ tasks:
     desc: Run tests with race detector
     deps: [generate]
     cmds:
-      - go test -v -race -tags {{.BUILD_TAGS}} -coverprofile=coverage.out ./...
+      - go test -v -race -tags "{{.BUILD_TAGS}}" -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
     generates:
       - coverage.out
@@ -88,8 +88,8 @@ tasks:
   fmt:
     desc: Format code
     cmds:
-      - gofmt -w -s $(find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*")
-      - goimports -w $(find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*")
+      - sh -c 'find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*.go" -not -name "bundled_*.go" -exec gofmt -w -s {} +'
+      - sh -c 'find . -name "*.go" -not -path "./vendor/*" -not -name "bundled*.go" -not -name "bundled_*.go" -exec goimports -w {} +'
 
   tidy:
     desc: Tidy go modules
@@ -101,7 +101,8 @@ tasks:
     desc: Regenerate vendor directory (required after sibling replace changes)
     cmds:
       - go mod vendor
-      - echo "vendor/ regenerated (105M, ignored per .gitignore:30)"
+      - bash scripts/gen_glfw_wayland.sh
+      - echo "vendor/ regenerated (105M, ignored per .gitignore:30) + Wayland headers generated"
 
   # ==================== Security ====================
 
@@ -117,12 +118,12 @@ tasks:
   govulncheck:
     desc: Check for known vulnerabilities
     cmds:
-      - govulncheck -tags {{.BUILD_TAGS}} ./...
+      - govulncheck -tags "{{.BUILD_TAGS}}" ./...
 
   gosec:
     desc: Run Go security scanner
     cmds:
-      - gosec -tags {{.BUILD_TAGS}} ./...
+      - gosec -tags "{{.BUILD_TAGS}}" ./...
 
   gitleaks:
     desc: Scan for secrets
@@ -177,7 +178,7 @@ tasks:
     desc: Package for Linux
     env:
     cmds:
-      - fyne package --target linux --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - fyne package --target linux --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - mkdir -p dist
       - mv {{.APP_NAME}}.tar.xz dist/{{.BINARY}}-{{.VERSION}}-linux-amd64.tar.xz
     generates:
@@ -188,7 +189,7 @@ tasks:
     env:
       CC: x86_64-w64-mingw32-gcc
     cmds:
-      - fyne package --target windows --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - fyne package --target windows --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - mkdir -p dist
       - mv {{.APP_NAME}}.exe dist/{{.BINARY}}-{{.VERSION}}-windows-amd64.exe
     generates:
@@ -199,16 +200,16 @@ tasks:
     env:
       GOOS: darwin
     cmds:
-      - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - fyne package --target darwin --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
       - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-$(uname -m | sed 's/x86_64/amd64/').tar.gz {{.APP_NAME}}.app
-      - mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app
+      - if [ -d ~/Applications ]; then mv {{.APP_NAME}}.app ~/Applications/{{.APP_NAME}}.app; fi
 
   package-macos-arm64:
     desc: Package for macOS Apple Silicon (cross-compiled via osxcross)
     cmds:
-      - scripts/build_macos.sh arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - scripts/build_macos.sh arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
       - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-arm64.tar.gz {{.APP_NAME}}.app
@@ -218,7 +219,7 @@ tasks:
   package-macos-amd64:
     desc: Package for macOS Intel (cross-compiled via osxcross)
     cmds:
-      - scripts/build_macos.sh amd64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - scripts/build_macos.sh amd64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - scripts/fix_macos_permissions.sh {{.APP_NAME}}.app
       - mkdir -p dist
       - tar -czvf dist/{{.BINARY}}-{{.VERSION}}-macos-amd64.tar.gz {{.APP_NAME}}.app
@@ -239,7 +240,7 @@ tasks:
       GOFLAGS: -ldflags=-extldflags=-Wl,-z,max-page-size=16384
     cmds:
       - mkdir -p dist
-      - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags {{.BUILD_TAGS}} --metadata versionString={{.VERSION}}
+      - ./bin/fyne-custom package --target android/arm64 --name {{.APP_NAME}} --appVersion {{.APP_VERSION}} --appID {{.APP_ID}} --icon assets/Icon.png --tags "{{.BUILD_TAGS}}" --metadata versionString={{.VERSION}}
       - mv {{.APP_NAME}}.apk dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk
     generates:
       - dist/{{.BINARY}}-{{.VERSION}}-android-arm64.apk

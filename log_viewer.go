@@ -52,9 +52,18 @@ func openLogInTerminal() {
 	switch runtime.GOOS {
 	case "darwin":
 		// macOS: use osascript to tell Terminal.app to run tail -f
+		// Escape single quotes for AppleScript shell string
+		sanitized := ""
+		for _, r := range path {
+			if r == '\'' {
+				sanitized += "'\\''"
+			} else {
+				sanitized += string(r)
+			}
+		}
 		script := fmt.Sprintf(
 			`tell application "Terminal" to do script "tail -f '%s'"`,
-			path,
+			sanitized,
 		)
 		cmd := exec.Command("osascript", "-e", script)
 		if err := cmd.Start(); err != nil {

@@ -660,7 +660,7 @@ func saveSectionCollapsed(key string, collapsed bool) {
 	}
 	// Async write — non-blocking for UI responsiveness
 	go func() {
-		_ = os.WriteFile(uiStatePath(), data, 0644)
+		_ = os.WriteFile(uiStatePath(), data, 0o600)
 	}()
 }
 
@@ -1414,7 +1414,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 				uiState.SectionOrder[cur], uiState.SectionOrder[cur-1] = uiState.SectionOrder[cur-1], uiState.SectionOrder[cur]
 				data, _ := json.MarshalIndent(uiState, "", "  ")
 				uiStateMu.Unlock()
-				go func() { _ = os.WriteFile(uiStatePath(), data, 0644) }()
+				go func() { _ = os.WriteFile(uiStatePath(), data, 0o600) }()
 				uiDo(func() { rebuildSectionOrder() })
 				return
 			}
@@ -1433,7 +1433,7 @@ func layoutDaemonMiner() fyne.CanvasObject {
 				uiState.SectionOrder[cur], uiState.SectionOrder[cur+1] = uiState.SectionOrder[cur+1], uiState.SectionOrder[cur]
 				data, _ := json.MarshalIndent(uiState, "", "  ")
 				uiStateMu.Unlock()
-				go func() { _ = os.WriteFile(uiStatePath(), data, 0644) }()
+				go func() { _ = os.WriteFile(uiStatePath(), data, 0o600) }()
 				uiDo(func() { rebuildSectionOrder() })
 				return
 			}

@@ -31,7 +31,8 @@ func (ct *CachedTarget) UpdateTarget(difficulty string) {
 	d := new(big.Int)
 	d.SetString(difficulty, 10)
 	if d.Cmp(bigZero) == 0 {
-		panic("difficulty can never be zero")
+		// Zero difficulty from daemon is invalid — leave previous target unchanged.
+		return
 	}
 	ct.target.Div(oneLsh256, d)
 	ct.diff = difficulty
@@ -63,7 +64,7 @@ func hashToBig(buf crypto.Hash) *big.Int {
 // convertDifficultyToBig converts a uint64 difficulty to a big.Int target (allocates).
 func convertDifficultyToBig(difficultyi uint64) *big.Int {
 	if difficultyi == 0 {
-		panic("difficulty can never be zero")
+		return new(big.Int).Set(oneLsh256)
 	}
 	difficulty := new(big.Int).SetUint64(difficultyi)
 	return new(big.Int).Div(oneLsh256, difficulty)
@@ -71,8 +72,8 @@ func convertDifficultyToBig(difficultyi uint64) *big.Int {
 
 // convertIntegerDifficultyToBig converts a big.Int difficulty to a big.Int target (allocates).
 func convertIntegerDifficultyToBig(difficultyi *big.Int) *big.Int {
-	if difficultyi.Cmp(bigZero) == 0 {
-		panic("difficulty can never be zero")
+	if difficultyi == nil || difficultyi.Cmp(bigZero) == 0 {
+		return new(big.Int).Set(oneLsh256)
 	}
 	return new(big.Int).Div(oneLsh256, difficultyi)
 }
