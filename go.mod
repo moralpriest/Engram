@@ -4,7 +4,7 @@ go 1.26.0
 
 replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
-replace github.com/hypergnomon/hypergnomon => github.com/moralpriest/HyperGnomon v1.1.1-0.20260901080659-da811049f005
+replace github.com/hypergnomon/hypergnomon => github.com/moralpriest/HyperGnomon v1.1.1-0.20260903043014-db23e538330f
 
 replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-20260901032935-f43091fd8429
 

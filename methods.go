@@ -625,23 +625,30 @@ func GetSCIDVariableDetailsAtTopoheight(ctx context.Context, p GetSCIDVariableDe
 	return
 }
 
-// GetAllSCIDVariableDetails from Gnomon's gravdb
+// GetAllSCIDVariableDetails from Gnomon's local index. HyperGnomon's
+// GetAll passes height 0 ("latest"); pinned builds treat that as empty, so
+// TELA apps (DeroBeats registry) get allVariables=null even after AutoIndex
+// stored the contract. Fall back to a live DERO.GetSC (same path DEADDROP
+// uses) and persist so a later HyperGnomon pin bump can serve from disk.
 func GetAllSCIDVariableDetails(ctx context.Context, p SCID_Param) (result GetAllSCIDVariableDetails_Result, err error) {
 	if gnomon.Index == nil {
 		err = fmt.Errorf("gnomon is not active")
 		return
 	}
 
-	var vars []*structures.SCIDVariable
-	switch gnomon.Index.DBType {
-	case "gravdb":
-		vars = gnomon.Index.GravDBBackend.GetAllSCIDVariableDetails(p.SCID)
-	case "boltdb":
-		vars = gnomon.Index.BBSBackend.GetAllSCIDVariableDetails(p.SCID)
+	vars := gnomon.GetAllSCIDVariableDetails(p.SCID)
+	if len(vars) == 0 && p.SCID != "" {
+		if sc, scErr := HandleDEROGetSC(ctx, rpc.GetSC_Params{SCID: p.SCID, Variables: true}); scErr == nil {
+			vars = parseSCVarsForIndex(&sc)
+			if len(vars) > 0 {
+				go func(scid string, v []*structures.SCIDVariable) {
+					_ = storeDependentSCID(scid, v)
+				}(p.SCID, vars)
+			}
+		}
 	}
 
 	result.AllVariables = vars
-
 	return
 }
 

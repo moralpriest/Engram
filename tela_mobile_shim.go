@@ -280,6 +280,22 @@ func stripMobileWSReconnectShim(content []byte) []byte {
 	}
 }
 
+// DeroBeats sw.js uses `new Request("ipfs://" + cid)` as a Cache API key.
+// Chromium rejects non-http(s) schemes on Cache.put, so song/artwork fetches
+// throw even after a gateway hit. Rewrite to an https URL; match/put share
+// the same key so hits still work.
+var (
+	ipfsSchemeCacheRequest = []byte(`new Request("ipfs://" + cid)`)
+	ipfsHTTPCacheRequest   = []byte(`new Request("https://ipfs.io/ipfs/" + cid)`)
+)
+
+func patchIpfsSchemeCacheKey(content []byte) ([]byte, bool) {
+	if !bytes.Contains(content, ipfsSchemeCacheRequest) {
+		return content, false
+	}
+	return bytes.ReplaceAll(content, ipfsSchemeCacheRequest, ipfsHTTPCacheRequest), true
+}
+
 // injectMobileWSReconnectShim strips any previous shim and appends a fresh copy
 // at the end of the file, returning the updated content and whether it changed.
 func injectMobileWSReconnectShim(content []byte) ([]byte, bool) {

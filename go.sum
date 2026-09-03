@@ -138,8 +138,8 @@ github.com/mattn/go-runewidth v0.0.24 h1:cpokDiIn0MGnhdHwuWnJBITySJ20QyNGnY2kR/a
 github.com/mattn/go-runewidth v0.0.24/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/minio/sha256-simd v1.0.1 h1:6kaan5IFmwTNynnKKpDHe6FWHohJOHhCPchzK49dzMM=
 github.com/minio/sha256-simd v1.0.1/go.mod h1:Pz6AKMiUdngCLpeTL/RJY1M9rUuPMYujV5xJjtbRSN8=
-github.com/moralpriest/HyperGnomon v1.1.1-0.20260901080659-da811049f005 h1:0CIr0j21DfMbm4iEKlOn9sDYb8k3O18E8RpVEkXhBzg=
-github.com/moralpriest/HyperGnomon v1.1.1-0.20260901080659-da811049f005/go.mod h1:YE5D+lRQObzt3D0EI2B3aA20OzlOkkDVbYJnAqcvUfw=
+github.com/moralpriest/HyperGnomon v1.1.1-0.20260903043014-db23e538330f h1:A0E+g4QQuZB23YldoRr6VEHWanJ5esG4C6tEJ0AwzU0=
+github.com/moralpriest/HyperGnomon v1.1.1-0.20260903043014-db23e538330f/go.mod h1:YE5D+lRQObzt3D0EI2B3aA20OzlOkkDVbYJnAqcvUfw=
 github.com/moralpriest/derohe v0.0.0-20260829042927-60072f354b51 h1:/Nx91uCXlbejyqaPTk192pPJeDcpQbx/ttcaFjkjcV8=
 github.com/moralpriest/derohe v0.0.0-20260829042927-60072f354b51/go.mod h1:EWHh1VkXRnCHvyGML98kXhngDFYebmOhk/9kZ1ATJ1c=
 github.com/moralpriest/epoch v0.0.0-20260901032935-f43091fd8429 h1:E8bxNAe3KXi+MjklnipPtU1cpq/unduIsWc5gJ8FEi0=

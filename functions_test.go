@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -386,14 +387,14 @@ func TestMergeAndFilterTelaClassCatalog(t *testing.T) {
 }
 
 func TestIsDisplayableTelaApp(t *testing.T) {
-	if isDisplayableTelaApp(tela.INDEX{DURL: "app.tela"}) {
-		t.Fatal("expected no-docs index to be hidden")
+	if isDisplayableTelaApp(tela.INDEX{}) {
+		t.Fatal("expected empty dURL to be hidden")
 	}
-	if isDisplayableTelaApp(tela.INDEX{DURL: "app" + tela.TAG_LIBRARY, DOCs: []string{"doc"}}) {
+	if isDisplayableTelaApp(tela.INDEX{DURL: "app" + tela.TAG_LIBRARY}) {
 		t.Fatal("expected library dURL to be hidden")
 	}
-	if !isDisplayableTelaApp(tela.INDEX{DURL: "app.tela", DOCs: []string{"doc"}}) {
-		t.Fatal("expected app with docs to show")
+	if !isDisplayableTelaApp(tela.INDEX{DURL: "app.tela"}) {
+		t.Fatal("expected app with dURL to show without DOCs")
 	}
 }
 
@@ -637,4 +638,58 @@ func TestWaitForHistoryRefreshAndSync(t *testing.T) {
 		wg.Wait()
 		// All goroutines completed without deadlock
 	})
+}
+
+func TestParseSCVarsForIndex(t *testing.T) {
+	if parseSCVarsForIndex(nil) != nil {
+		t.Fatal("nil result should yield nil vars")
+	}
+	if parseSCVarsForIndex(&rpc.GetSC_Result{}) != nil {
+		t.Fatal("empty GetSC should yield nil vars")
+	}
+	vars := parseSCVarsForIndex(&rpc.GetSC_Result{
+		VariableStringKeys: map[string]interface{}{"total_songs": "1", "song_0": "abcd"},
+	})
+	if len(vars) != 2 {
+		t.Fatalf("got %d vars, want 2", len(vars))
+	}
+	got := map[string]string{}
+	for _, v := range vars {
+		k, _ := v.Key.(string)
+		val, _ := v.Value.(string)
+		got[k] = val
+	}
+	if got["total_songs"] != "1" || got["song_0"] != "abcd" {
+		t.Fatalf("unexpected vars: %+v", got)
+	}
+}
+
+func TestPatchIpfsSchemeCacheKey(t *testing.T) {
+	in := []byte(`const cacheKey = new Request("ipfs://" + cid);
+cache.put(cacheKey, resp.clone());`)
+	out, ok := patchIpfsSchemeCacheKey(in)
+	if !ok {
+		t.Fatal("expected patch")
+	}
+	if bytes.Contains(out, []byte(`"ipfs://"`)) {
+		t.Fatalf("ipfs scheme remained: %s", out)
+	}
+	if !bytes.Contains(out, []byte(`new Request("https://ipfs.io/ipfs/" + cid)`)) {
+		t.Fatalf("missing https cache key: %s", out)
+	}
+	if _, again := patchIpfsSchemeCacheKey(out); again {
+		t.Fatal("patch should be idempotent")
+	}
+}
+
+func TestStripShimFromServiceWorker(t *testing.T) {
+	sw := []byte("self.addEventListener('fetch', () => {});\n")
+	injected, changed := injectMobileWSReconnectShim(sw)
+	if !changed {
+		t.Fatal("expected shim inject")
+	}
+	stripped := stripMobileWSReconnectShim(injected)
+	if bytes.Contains(stripped, []byte("__engramWsReconnect")) {
+		t.Fatal("shim remained after strip")
+	}
 }

@@ -10468,7 +10468,25 @@ func PatchTELAAppSourceFiles(scid string) {
 			// code (rive, identicon) that never touches the Engram WS; injecting
 			// 5 files (WORSE log) added 7s cold start vs golden 1 file (3s).
 			if ext == ".js" {
-				if isVillagerTelaSCID(scid) && !strings.HasSuffix(strings.ToLower(path), "main.js") {
+				if strings.EqualFold(filepath.Base(path), "sw.js") {
+					// Service workers have no `window`; the reconnect shim
+					// throws on parse and is a no-op there. Strip leftovers.
+					if stripped := stripMobileWSReconnectShim(content); !bytes.Equal(stripped, content) {
+						tmpPath := path + ".tmp"
+						err = os.WriteFile(tmpPath, stripped, info.Mode())
+						if err != nil {
+							return err
+						}
+						err = os.Rename(tmpPath, path)
+						if err != nil {
+							os.Remove(tmpPath)
+							return err
+						}
+						content = stripped
+						changed = true
+						logger.Printf("[TELA] PatchTELAAppSourceFiles: Stripped WS shim from service worker %s\n", path)
+					}
+				} else if isVillagerTelaSCID(scid) && !strings.HasSuffix(strings.ToLower(path), "main.js") {
 					// skip shim for non-main villager files
 				} else if updated, injected := injectMobileWSReconnectShim(content); injected {
 					tmpPath := path + ".tmp"
@@ -10484,6 +10502,21 @@ func PatchTELAAppSourceFiles(scid string) {
 					content = updated
 					changed = true
 					logger.Printf("[TELA] PatchTELAAppSourceFiles: Injected WS reconnect shim into %s\n", path)
+				}
+				if patched, ok := patchIpfsSchemeCacheKey(content); ok {
+					tmpPath := path + ".tmp"
+					err = os.WriteFile(tmpPath, patched, info.Mode())
+					if err != nil {
+						return err
+					}
+					err = os.Rename(tmpPath, path)
+					if err != nil {
+						os.Remove(tmpPath)
+						return err
+					}
+					content = patched
+					changed = true
+					logger.Printf("[TELA] PatchTELAAppSourceFiles: Rewrote ipfs Cache key in %s\n", path)
 				}
 			}
 
@@ -11048,9 +11081,11 @@ func isTelaLibraryDURL(durl string) bool {
 	return strings.HasSuffix(durl, tela.TAG_LIBRARY) || strings.HasSuffix(durl, tela.TAG_DOC_SHARDS) || strings.HasSuffix(durl, tela.TAG_BOOTSTRAP)
 }
 
-// isDisplayableTelaApp checks if a TELA index should be displayed in the browser
+// isDisplayableTelaApp checks if a TELA index should be displayed in the browser.
+// Class-bucket rows have Name/DURL only (FastSync NoCode skips SC code, so DOCs
+// are empty until launch). List on DURL; ServeTELA fetches INDEX on open.
 func isDisplayableTelaApp(index tela.INDEX) bool {
-	if len(index.DOCs) < 1 {
+	if strings.TrimSpace(index.DURL) == "" {
 		return false
 	}
 	return !isTelaLibraryDURL(index.DURL)
