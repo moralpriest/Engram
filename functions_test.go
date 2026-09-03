@@ -640,6 +640,34 @@ func TestWaitForHistoryRefreshAndSync(t *testing.T) {
 	})
 }
 
+func TestCleanTELALink(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"http://127.0.0.1:8082/index.html", "http://localhost:8082/index.html"},
+		{"http://localhost:8082/index.html", "http://localhost:8082/index.html"},
+		{"  http://127.0.0.1:9/x  ", "http://localhost:9/x"},
+		{"https://example.com/a", "https://example.com/a"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := cleanTELALink(tt.in); got != tt.want {
+			t.Fatalf("cleanTELALink(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestPatchVillagerOriginURL(t *testing.T) {
+	in := []byte(`url: "http://localhost:" + location.port,`)
+	out, ok := patchVillagerOriginURL(in)
+	if !ok || !bytes.Contains(out, []byte(`url: location.origin`)) {
+		t.Fatalf("patch failed: ok=%v out=%s", ok, out)
+	}
+	if _, again := patchVillagerOriginURL(out); again {
+		t.Fatal("patch should be idempotent")
+	}
+}
+
 func TestParseSCVarsForIndex(t *testing.T) {
 	if parseSCVarsForIndex(nil) != nil {
 		t.Fatal("nil result should yield nil vars")

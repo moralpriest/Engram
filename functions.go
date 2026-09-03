@@ -10151,11 +10151,21 @@ func telaStaleCloneDirFromServeErr(err error) (dir string, ok bool) {
 	return dir, true
 }
 
-// cleanTELALink ensures the TELA link is safe for the current platform.
-// We must preserve localhost on Android because the WebView Network Security
-// Policy specifically allows cleartext HTTP for localhost, but blocks 127.0.0.1.
+// cleanTELALink rewrites 127.0.0.1 to localhost. TELA binds 127.0.0.1 but
+// XSWD requires Origin == app.Url; Villager hardcodes http://localhost:PORT.
+// Android WebView also allows cleartext only for localhost, not 127.0.0.1.
 func cleanTELALink(link string) string {
-	return strings.TrimSpace(link)
+	link = strings.TrimSpace(link)
+	u, err := url.Parse(link)
+	if err != nil || u.Hostname() != "127.0.0.1" {
+		return link
+	}
+	host := "localhost"
+	if p := u.Port(); p != "" {
+		host = net.JoinHostPort(host, p)
+	}
+	u.Host = host
+	return u.String()
 }
 
 // verifyTELAServerIsUp polls the TELA server for up to 5 seconds to ensure it is ready.
@@ -10444,6 +10454,22 @@ func PatchTELAAppSourceFiles(scid string) {
 			// "Connected -> closed 1000 -> Connected" loop seen in villager
 			// (main.js:298/424). Keep localhost; the shim handles reconnect.
 			// Strip any stale 127.0.0.1 patch from previous installs.
+			if patched, ok := patchVillagerOriginURL(content); ok {
+				tmpPath := path + ".tmp"
+				err = os.WriteFile(tmpPath, patched, info.Mode())
+				if err != nil {
+					return err
+				}
+				err = os.Rename(tmpPath, path)
+				if err != nil {
+					os.Remove(tmpPath)
+					return err
+				}
+				content = patched
+				changed = true
+				logger.Printf("[TELA] PatchTELAAppSourceFiles: Villager XSWD url -> location.origin in %s\n", path)
+			}
+
 			if bytes.Contains(content, []byte("127.0.0.1:44326")) {
 				newContent := bytes.ReplaceAll(content, []byte("127.0.0.1:44326"), []byte("localhost:44326"))
 				tmpPath := path + ".tmp"

@@ -296,6 +296,21 @@ func patchIpfsSchemeCacheKey(content []byte) ([]byte, bool) {
 	return bytes.ReplaceAll(content, ipfsSchemeCacheRequest, ipfsHTTPCacheRequest), true
 }
 
+// Villager hardcodes url: "http://localhost:" + location.port. XSWD requires
+// that to equal the browser Origin header; a 127.0.0.1 page fails. DeroBeats
+// already uses location.origin. Signature covers app id only, not url.
+var (
+	villagerLocalhostURL = []byte(`url: "http://localhost:" + location.port`)
+	villagerOriginURL    = []byte(`url: location.origin`)
+)
+
+func patchVillagerOriginURL(content []byte) ([]byte, bool) {
+	if !bytes.Contains(content, villagerLocalhostURL) {
+		return content, false
+	}
+	return bytes.ReplaceAll(content, villagerLocalhostURL, villagerOriginURL), true
+}
+
 // injectMobileWSReconnectShim strips any previous shim and appends a fresh copy
 // at the end of the file, returning the updated content and whether it changed.
 func injectMobileWSReconnectShim(content []byte) ([]byte, bool) {
