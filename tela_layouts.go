@@ -1633,6 +1633,69 @@ func layoutTELA() fyne.CanvasObject {
 			fullScanReason = "height_delta"
 		}
 
+		applyClassCatalog := func() bool {
+			if restrictiveMode {
+				return false
+			}
+			catalog := filterTelaClassCatalog(telaClassCatalog(), searchExclusions, minLikes)
+			searchMu.RLock()
+			cached := make([]INDEXwithRatings, len(telaSearch))
+			copy(cached, telaSearch)
+			searchMu.RUnlock()
+			cached = filterTelaClassCatalog(cached, searchExclusions, minLikes)
+			if len(catalog) == 0 && len(cached) == 0 {
+				return false
+			}
+			merged := dedupeLaunchableTela(deduplicateTelaSearch(mergeTelaSearch(catalog, cached)))
+			if len(merged) == 0 {
+				return false
+			}
+			scids := make([]string, 0, len(merged))
+			for _, app := range merged {
+				scids = append(scids, app.SCID)
+			}
+			keepProgressVisible = false
+			cacheHitMode = "class_catalog"
+			if len(catalog) == 0 {
+				cacheHitMode = "cached_only"
+			}
+			fullScanReason = ""
+			searchMu.Lock()
+			telaSearch = merged
+			telaSCIDs = scids
+			searchMu.Unlock()
+			if err := saveTelaDisplayCache(telaDisplayCache(merged)); err != nil {
+				logger.Printf("[TELA] Failed storing display cache: %v\n", err)
+			}
+			fyne.Do(func() {
+				searchMu.Lock()
+				searching = telaSearchDisplayAll(telaSearch, sortBy, sortDescending)
+				searchMu.Unlock()
+				searchData.Set(searching)
+				searchList.Refresh()
+				searchMu.RLock()
+				results.Text = fmt.Sprintf(fmt.Sprintf("  %s", i18n.T("tela.app_count"))+"  %d", len(telaSearch))
+				searchMu.RUnlock()
+				results.Color = apptheme.StatusTextColor()
+				entrySearch.Enable()
+				entryAddSCID.Enable()
+			})
+			labelLastScan.Text = fmt.Sprintf("  %s", lastScan)
+			labelLastScan.Color = apptheme.C.Green
+			isSearching = false
+			fyne.Do(func() {
+				results.Refresh()
+				labelLastScan.Refresh()
+				hideTelaProgress()
+			})
+			logger.Printf("[TELA] Search metrics: outcome=completed elapsed_ms=%d sync_wait_s=%d stored_scids=%d candidates=%d scanned=%d version_hits=%d index_calls=%d retries=%d results=%d filtered_non_displayable=%d filtered_exclusions=%d filtered_min_likes=%d device_class=%s worker_pool=%d ui_refreshes=%d progress_writes=%d pre_dispatch_skips=%d neg_cache_skips=%d cache_hit_mode=%s height_delta=%d full_scan_reason=%s cache_integrity=%s phase_prefilter_ms=%d phase_scan_ms=%d phase_finalize_ms=%d\n", time.Since(scanStart).Milliseconds(), syncWaitSeconds, storedSCIDsCount, len(merged), atomic.LoadInt64(&scannedCandidates), versionHits, indexInfoCalls, retryCount, len(merged), atomic.LoadInt64(&filteredNonDisplayable), atomic.LoadInt64(&filteredByExclusion), atomic.LoadInt64(&filteredByMinLikes), deviceClass, workerPoolSize, atomic.LoadInt64(&uiRefreshCount), atomic.LoadInt64(&progressWriteCount), atomic.LoadInt64(&preDispatchSkips), atomic.LoadInt64(&negCacheSkips), cacheHitMode, heightDelta, fullScanReason, cacheIntegrity, phasePrefilterMs, phaseScanMs, phaseFinalizeMs)
+			return true
+		}
+
+		if applyClassCatalog() {
+			return
+		}
+
 		// Already scanned - only skip if no updates are expected
 		searchMu.RLock()
 		hasCached := len(telaSearch) > 0
@@ -1721,28 +1784,23 @@ func layoutTELA() fyne.CanvasObject {
 		}
 
 		gnomonReadyForTela := func() bool {
-			// If we have a recent JSON cache, Gnomon doesn't need to be fully synced.
-			// We already know which SCIDs are TELA candidates — skip the sync wait.
 			if hasValidTelaJSONCache() {
 				return true
 			}
 			if hasTelaCache() || len(telaSearch) > 0 {
 				return true
 			}
-			if !gnomon.telaBootstrapReady() {
-				return false
+			if !restrictiveMode && len(telaClassCatalog()) > 0 {
+				return true
 			}
-			if gnomon.Index == nil {
-				return false
-			}
-			if gnomon.Index.LastIndexedHeight <= 0 {
-				return false
-			}
-			return isGnomonCaughtUp()
+			return false
 		}
 
 		gnomonSyncStarted := false
 		for !gnomonReadyForTela() {
+			if applyClassCatalog() {
+				return
+			}
 			if !gnomonSyncStarted {
 				gnomonSyncStartTime = time.Now()
 				gnomonSyncStarted = true
@@ -1853,6 +1911,10 @@ func layoutTELA() fyne.CanvasObject {
 				entryAddSCID.Disable()
 			})
 			time.Sleep(1 * time.Second)
+		}
+
+		if applyClassCatalog() {
+			return
 		}
 
 		// Re-evaluate after the sync wait: the value captured at the start of getSearchResults
@@ -2271,9 +2333,12 @@ func layoutTELA() fyne.CanvasObject {
 				}
 
 				if !usedPrecomputedCandidates {
-					logger.Printf("[TELA-SEARCH] Fetching all indexed owners and SCIDs...\n")
-					all = gnomon.GetAllOwnersAndSCIDs()
-					logger.Printf("[TELA-SEARCH] Found %d total indexed SCIDs\n", len(all))
+					logger.Printf("[TELA-SEARCH] No class catalog or candidate cache; waiting for HyperGnomon TELA probe\n")
+					keepProgressVisible = true
+					setTelaStatus("Gnomon indexing in progress...", apptheme.StatusTextColor())
+					showInfiniteTelaProgress()
+					scheduleTelaWarmup()
+					return
 				}
 			}
 		}

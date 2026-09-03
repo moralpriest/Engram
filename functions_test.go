@@ -13,6 +13,7 @@ import (
 	"github.com/deroproject/derohe/cryptography/crypto"
 	"github.com/deroproject/derohe/rpc"
 	"github.com/deroproject/derohe/walletapi"
+	hgstructures "github.com/hypergnomon/hypergnomon/structures"
 )
 
 func TestDecodeHex(t *testing.T) {
@@ -70,6 +71,25 @@ func TestRegistrationPoWSolved(t *testing.T) {
 	}
 }
 
+func TestIsAccountUnregisteredErr(t *testing.T) {
+	tests := []struct {
+		err  error
+		want bool
+	}{
+		{err: nil, want: false},
+		{err: fmt.Errorf("Account Unregistered"), want: true},
+		{err: fmt.Errorf("account unregistered"), want: true},
+		{err: fmt.Errorf("Err Account Unregistered"), want: true},
+		{err: fmt.Errorf("timeout"), want: false},
+		{err: fmt.Errorf("connection refused"), want: false},
+	}
+	for _, tt := range tests {
+		if got := isAccountUnregisteredErr(tt.err); got != tt.want {
+			t.Fatalf("isAccountUnregisteredErr(%v) = %v, want %v", tt.err, got, tt.want)
+		}
+	}
+}
+
 // TestRegistrationETA guards the countdown number shown on the registration
 // screen: it is 2x the memoryless mean (2^bits/hashRate), i.e. the upper bound
 // of the typical window that ~86%% of runs finish by, and must be zero for a
@@ -107,7 +127,7 @@ func TestRegistrationETA(t *testing.T) {
 // 0.5s like the UI loop.
 func TestRateWindowConvergence(t *testing.T) {
 	const (
-		windowSeconds = 6.0
+		windowSeconds  = 6.0
 		minSpanSeconds = 2.0
 	)
 
@@ -317,6 +337,104 @@ func TestTelaCandidateCacheHelpers(t *testing.T) {
 	}
 	if meta := cache["valid-b"]; meta.LastCheckedHeight != 22 || meta.Result != telaCandidateValidIndex {
 		t.Fatalf("unexpected metadata stored: %+v", meta)
+	}
+}
+
+func TestIndexFromTelaClassMeta(t *testing.T) {
+	idx := indexFromTelaClassMeta("abc", &hgstructures.ClassMeta{Name: "Foo", DURL: "foo.tela", Desc: "d", IconURL: "i"})
+	if idx.SCID != "abc" || idx.NameHdr != "Foo" || idx.DURL != "foo.tela" || idx.DescrHdr != "d" || idx.IconHdr != "i" {
+		t.Fatalf("unexpected index: %+v", idx)
+	}
+	idx = indexFromTelaClassMeta("abc", &hgstructures.ClassMeta{DURL: "foo.tela"})
+	if idx.NameHdr != "foo.tela" {
+		t.Fatalf("expected DURL fallback for name, got %q", idx.NameHdr)
+	}
+}
+
+func TestIsTelaLibraryDURL(t *testing.T) {
+	if !isTelaLibraryDURL("app" + tela.TAG_LIBRARY) {
+		t.Fatal("expected library dURL to be filtered")
+	}
+	if isTelaLibraryDURL("app.tela") {
+		t.Fatal("did not expect normal dURL to be filtered")
+	}
+}
+
+func TestMergeAndFilterTelaClassCatalog(t *testing.T) {
+	cached := []INDEXwithRatings{{
+		ratings: tela.Rating_Result{Likes: 8, Average: 4},
+		INDEX:   tela.INDEX{SCID: "a", DURL: "keep.tela", Headers: tela.Headers{NameHdr: "Old"}, DOCs: []string{"doc"}},
+	}}
+	catalog := []INDEXwithRatings{{
+		INDEX: tela.INDEX{SCID: "a", DURL: "keep.tela", Headers: tela.Headers{NameHdr: "New"}, DOCs: []string{"doc"}},
+	}, {
+		INDEX: tela.INDEX{SCID: "b", DURL: "new.tela", Headers: tela.Headers{NameHdr: "B"}, DOCs: []string{"doc"}},
+	}, {
+		INDEX: tela.INDEX{SCID: "c", DURL: "bad-exclude.tela", Headers: tela.Headers{NameHdr: "C"}, DOCs: []string{"doc"}},
+	}}
+	merged := mergeTelaSearch(catalog, cached)
+	if len(merged) != 3 {
+		t.Fatalf("expected 3 merged apps, got %d", len(merged))
+	}
+	if merged[0].NameHdr != "New" || merged[0].ratings.Likes != 8 || len(merged[0].DOCs) != 1 {
+		t.Fatalf("catalog should win name and keep cached ratings/docs: %+v", merged[0])
+	}
+	filtered := filterTelaClassCatalog(merged, "exclude", 0)
+	if len(filtered) != 2 {
+		t.Fatalf("expected exclusion to drop one app, got %d", len(filtered))
+	}
+}
+
+func TestIsDisplayableTelaApp(t *testing.T) {
+	if isDisplayableTelaApp(tela.INDEX{DURL: "app.tela"}) {
+		t.Fatal("expected no-docs index to be hidden")
+	}
+	if isDisplayableTelaApp(tela.INDEX{DURL: "app" + tela.TAG_LIBRARY, DOCs: []string{"doc"}}) {
+		t.Fatal("expected library dURL to be hidden")
+	}
+	if !isDisplayableTelaApp(tela.INDEX{DURL: "app.tela", DOCs: []string{"doc"}}) {
+		t.Fatal("expected app with docs to show")
+	}
+}
+
+func TestTelaJunk(t *testing.T) {
+	if !telaJunk("App", "") {
+		t.Fatal("empty dURL is junk")
+	}
+	if !telaJunk("logo", "app.tela") {
+		t.Fatal("logo in name is junk")
+	}
+	if !telaJunk("App", "icon.png") {
+		t.Fatal("file-like dURL is junk")
+	}
+	if !telaJunk("index", "index.tela") {
+		t.Fatal("bare index is junk")
+	}
+	if telaJunk("DeroBeats", "derobeats.tela") {
+		t.Fatal("normal app should not be junk")
+	}
+}
+
+func TestDedupeLaunchableTela(t *testing.T) {
+	apps := []INDEXwithRatings{
+		{INDEX: tela.INDEX{SCID: "aaa", DURL: "same.tela", Headers: tela.Headers{NameHdr: "SameApp"}}, installHeight: 10},
+		{INDEX: tela.INDEX{SCID: "bbb", DURL: "same.tela", Headers: tela.Headers{NameHdr: "SameApp"}}, installHeight: 20},
+		{INDEX: tela.INDEX{SCID: "ccc", DURL: "other.tela", Headers: tela.Headers{NameHdr: "Other"}}, installHeight: 1},
+	}
+	got := dedupeLaunchableTela(apps)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 after name dedupe, got %d", len(got))
+	}
+	if got[0].SCID != "bbb" {
+		t.Fatalf("expected newer install bbb, got %s", got[0].SCID)
+	}
+}
+
+func TestHydrateTelaIndexFromCodeEmpty(t *testing.T) {
+	idx := tela.INDEX{SCID: "x", DURL: "x.tela"}
+	got := hydrateTelaIndexFromCode(idx, "")
+	if len(got.DOCs) != 0 {
+		t.Fatal("empty code should not invent docs")
 	}
 }
 

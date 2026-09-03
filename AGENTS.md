@@ -189,11 +189,11 @@ This file is for coding agents working in this repository.
 - Build Android APK: `task package-android`
 
 ## TELA Performance Notes
-- There is **no pre-seeded/embedded SCID list** — `tela_embedded.go` was removed by design. TELA candidates come only from real discovery:
-  - HyperGnomon's `telacandidates` bbolt bucket (`GetTelaCandidates()` → `BackfillTelaCandidates()`)
-  - The plain JSON cache `datashards/tela_scid_cache.json` (24h freshness, written after a successful prefilter) — this is what makes repeat clicks fast
-  - The encrypted TELA caches, then a full prefilter as last resort
-- **Background backfill** runs on every first click (non-blocking) to discover TELA apps; new apps appear on the next click.
+- There is **no pre-seeded/embedded SCID list** — `tela_embedded.go` was removed by design. TELA listing prefers HyperGnomon's local class bucket:
+  - Fast path: `GetClassInstalls("TELA-INDEX-1")` (same API tokens already use) — no daemon RPC on click
+  - Fallback: HyperGnomon's `telacandidates` bucket (`GetTelaCandidates()`), then `datashards/tela_scid_cache.json` (24h), then encrypted TELA caches
+  - Do **not** `GetAllOwnersAndSCIDs` + prefilter thousands of SCIDs on a remote daemon; wait for the class bucket to fill
+- New blocks must not force a full rescan — the class bucket is the live list.
 - A healthy Gnomon DB is never wiped at startup: `isDatabaseCorrupted()` validates the bbolt store via `storage.ValidateStore` (a locked store is treated as valid, not corrupt). Do not reintroduce a gravdb-based validation — HyperGnomon is bbolt-only and the graviton handle always errors.
 - After modifying fork code, commit and push in the fork repo, bump the `go.mod` version pin, run `go mod tidy`, then `go mod vendor` to sync Engram's vendor directory.
 - Dependencies are pinned via public version-to-version `replace`s only — never filesystem paths (`=> ../...`) or `go.work`. Fresh clones must build with an empty parent directory.

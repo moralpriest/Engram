@@ -61,6 +61,8 @@ import (
 	"github.com/hypergnomon/hypergnomon/pkg/gnomes/indexer"
 	"github.com/hypergnomon/hypergnomon/pkg/gnomes/structures"
 	"github.com/hypergnomon/hypergnomon/rpc/rwc"
+	hgstorage "github.com/hypergnomon/hypergnomon/storage"
+	hgstructures "github.com/hypergnomon/hypergnomon/structures"
 	"mvdan.cc/xurls/v2"
 
 	"github.com/deroproject/derohe/config"
@@ -210,7 +212,8 @@ type RemoteAccess struct {
 }
 
 type INDEXwithRatings struct {
-	ratings tela.Rating_Result
+	ratings       tela.Rating_Result
+	installHeight int64
 	tela.INDEX
 }
 
@@ -2610,7 +2613,11 @@ func login() {
 				return
 			}
 
-			needsReg, regDone := checkRegistrationWithTimeout(10 * time.Second)
+			regTimeout := 30 * time.Second
+			if session.IsRecovery {
+				regTimeout = 60 * time.Second
+			}
+			needsReg, regDone := checkRegistrationWithTimeout(regTimeout)
 			if !isWalletGenerationActive(generation) {
 				return
 			}
@@ -2699,17 +2706,37 @@ func waitForWalletSync(timeout time.Duration) {
 	}
 }
 
-// checkRegistrationWithTimeout checks if account registration is needed
+func isAccountUnregisteredErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "account unregistered")
+}
+
+func walletRegistrationKnown() bool {
+	return engram.Disk != nil && (engram.Disk.IsRegistered() || engram.Disk.Get_Registration_TopoHeight() >= 1)
+}
+
+// checkRegistrationWithTimeout asks the daemon whether this address is already
+// registered. A recovered wallet file has no local registration height, so
+// height 0 must not be treated as "needs PoW" — only an explicit
+// "Account Unregistered" from the daemon starts mining.
 func checkRegistrationWithTimeout(timeout time.Duration) (needsRegistration bool, canProceed bool) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if engram.Disk == nil || !session.WalletOpen {
 			return false, false
 		}
-
-		height := engram.Disk.Get_Registration_TopoHeight()
-		if height >= 1 {
+		if walletRegistrationKnown() {
 			return false, true
+		}
+
+		err := engram.Disk.Sync_Wallet_Memory_With_Daemon()
+		if walletRegistrationKnown() {
+			return false, true
+		}
+		if isAccountUnregisteredErr(err) {
+			return true, false
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -2717,12 +2744,11 @@ func checkRegistrationWithTimeout(timeout time.Duration) (needsRegistration bool
 	if engram.Disk == nil || !session.WalletOpen {
 		return false, false
 	}
-
-	height := engram.Disk.Get_Registration_TopoHeight()
-	if height < 1 {
-		return true, false
+	if walletRegistrationKnown() {
+		return false, true
 	}
-	return false, true
+	logger.Printf("[Registration] Daemon did not confirm registration status within %s — not starting PoW\n", timeout)
+	return false, false
 }
 
 // updateDashboardAfterLogin updates dashboard UI elements after background operations complete
@@ -6163,6 +6189,253 @@ func (g *Gnomon) GetTelaCandidates() []string {
 		return nil
 	}
 	return g.Index.GetTelaCandidates()
+}
+
+func hyperGnomonInner() *hgstorage.BboltStore {
+	if gnomon.BBolt != nil && gnomon.BBolt.Inner() != nil {
+		return gnomon.BBolt.Inner()
+	}
+	if gnomon.Index != nil && gnomon.Index.BBSBackend != nil && gnomon.Index.BBSBackend.Inner() != nil {
+		return gnomon.Index.BBSBackend.Inner()
+	}
+	return nil
+}
+
+func indexFromTelaClassMeta(scid string, meta *hgstructures.ClassMeta) tela.INDEX {
+	var name, durl, desc, icon string
+	if meta != nil {
+		name = meta.Name
+		durl = meta.DURL
+		desc = meta.Desc
+		icon = meta.IconURL
+	}
+	if name == "" {
+		name = durl
+	}
+	return tela.INDEX{
+		SCID: scid,
+		DURL: durl,
+		Headers: tela.Headers{
+			NameHdr:  name,
+			DescrHdr: desc,
+			IconHdr:  icon,
+		},
+	}
+}
+
+func hydrateTelaIndexFromCode(idx tela.INDEX, code string) tela.INDEX {
+	if code == "" {
+		return idx
+	}
+	sc, version, err := tela.ValidINDEXVersion(decodeHex(code), idx.Mods)
+	if err != nil {
+		return idx
+	}
+	idx.SC = sc
+	idx.SCVersion = &version
+	idx.DOCs = parseINDEXDOCs(sc)
+	return idx
+}
+
+func telaClassCatalog() []INDEXwithRatings {
+	store := hyperGnomonInner()
+	if store == nil {
+		return nil
+	}
+	installs, err := store.GetClassInstalls("TELA-INDEX-1", 0)
+	if err != nil || len(installs) == 0 {
+		return nil
+	}
+	out := make([]INDEXwithRatings, 0, len(installs))
+	for _, inst := range installs {
+		if inst.SCID == "" {
+			continue
+		}
+		idx := indexFromTelaClassMeta(inst.SCID, inst.Meta)
+		if isTelaLibraryDURL(idx.DURL) {
+			continue
+		}
+		if codeEnt, err := store.GetSCCode(inst.SCID); err == nil && codeEnt != nil {
+			idx = hydrateTelaIndexFromCode(idx, codeEnt.Code)
+		}
+		if !isDisplayableTelaApp(idx) || telaJunk(idx.NameHdr, idx.DURL) {
+			continue
+		}
+		var ratings tela.Rating_Result
+		if sum, err := store.GetRatingSummary(inst.SCID, 0); err == nil && sum != nil {
+			ratings.Likes = sum.Likes
+			ratings.Dislikes = sum.Dislikes
+		}
+		out = append(out, INDEXwithRatings{ratings: ratings, installHeight: inst.InstallHeight, INDEX: idx})
+	}
+	return out
+}
+
+func filterTelaClassCatalog(apps []INDEXwithRatings, searchExclusions string, minLikes float64) []INDEXwithRatings {
+	if len(apps) == 0 {
+		return nil
+	}
+	out := make([]INDEXwithRatings, 0, len(apps))
+	for _, app := range apps {
+		if !isDisplayableTelaApp(app.INDEX) || telaJunk(app.NameHdr, app.DURL) {
+			continue
+		}
+		if err := telaFilterSearchExclusions(app.DURL, searchExclusions); err != nil {
+			continue
+		}
+		total := float64(app.ratings.Likes + app.ratings.Dislikes)
+		ratio := 50.0
+		if total > 0 {
+			ratio = (float64(app.ratings.Likes) / total) * 100
+		}
+		if ratio < minLikes {
+			continue
+		}
+		out = append(out, app)
+	}
+	return out
+}
+
+func telaJunk(name, durl string) bool {
+	if strings.TrimSpace(durl) == "" {
+		return true
+	}
+	d := strings.ToLower(durl)
+	n := strings.ToLower(name)
+	if isTelaLibraryDURL(durl) || strings.HasSuffix(d, ".library") || strings.HasSuffix(d, ".shard") {
+		return true
+	}
+	if strings.Contains(n, "logo") || strings.Contains(d, "logo") {
+		return true
+	}
+	return telaFileLike(n) || telaFileLike(d)
+}
+
+func telaFileLike(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for _, ext := range []string{".html", ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json", ".txt", ".md"} {
+		if strings.HasSuffix(s, ext) {
+			return true
+		}
+	}
+	base := s
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	switch strings.TrimSuffix(base, ".tela") {
+	case "index", "favicon", "style", "main":
+		return true
+	}
+	return false
+}
+
+func telaCanon(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimSuffix(s, ".tela")
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func telaGroupKey(name, durl string) string {
+	if n := telaCanon(name); len(n) >= 4 {
+		return n
+	}
+	return telaCanon(durl)
+}
+
+func telaPrefer(a, b INDEXwithRatings) bool {
+	if a.installHeight != b.installHeight {
+		return a.installHeight > b.installHeight
+	}
+	if a.ratings.Average != b.ratings.Average {
+		return a.ratings.Average > b.ratings.Average
+	}
+	return a.SCID < b.SCID
+}
+
+func dedupeLaunchableTela(apps []INDEXwithRatings) []INDEXwithRatings {
+	if len(apps) == 0 {
+		return nil
+	}
+	seenSCID := make(map[string]struct{}, len(apps))
+	groups := make(map[string]INDEXwithRatings, len(apps))
+	order := make([]string, 0, len(apps))
+	for _, app := range apps {
+		scid := strings.ToLower(app.SCID)
+		if scid == "" {
+			continue
+		}
+		if _, ok := seenSCID[scid]; ok {
+			continue
+		}
+		seenSCID[scid] = struct{}{}
+		key := telaGroupKey(app.NameHdr, app.DURL)
+		if key == "" {
+			key = scid
+		}
+		prev, ok := groups[key]
+		if !ok {
+			groups[key] = app
+			order = append(order, key)
+			continue
+		}
+		if telaPrefer(app, prev) {
+			groups[key] = app
+		}
+	}
+	out := make([]INDEXwithRatings, 0, len(order))
+	for _, k := range order {
+		out = append(out, groups[k])
+	}
+	return out
+}
+
+func mergeTelaSearch(catalog, cached []INDEXwithRatings) []INDEXwithRatings {
+	by := make(map[string]INDEXwithRatings, len(catalog)+len(cached))
+	order := make([]string, 0, len(catalog)+len(cached))
+	put := func(e INDEXwithRatings, overwrite bool) {
+		if e.SCID == "" {
+			return
+		}
+		prev, ok := by[e.SCID]
+		if !ok {
+			order = append(order, e.SCID)
+			by[e.SCID] = e
+			return
+		}
+		if !overwrite {
+			return
+		}
+		if e.ratings.Likes == 0 && e.ratings.Dislikes == 0 && e.ratings.Average == 0 {
+			e.ratings = prev.ratings
+		}
+		if e.NameHdr == "" {
+			e.NameHdr = prev.NameHdr
+		}
+		if e.DURL == "" {
+			e.DURL = prev.DURL
+		}
+		if len(e.DOCs) == 0 {
+			e.DOCs = prev.DOCs
+		}
+		by[e.SCID] = e
+	}
+	for _, e := range cached {
+		put(e, false)
+	}
+	for _, e := range catalog {
+		put(e, true)
+	}
+	out := make([]INDEXwithRatings, 0, len(order))
+	for _, scid := range order {
+		out = append(out, by[scid])
+	}
+	return out
 }
 
 // Method of Gnomon GetAllSCIDVariableDetails() where DB type is defined by Indexer.DBType
@@ -10771,15 +11044,14 @@ func normalizeTelaSearch(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+func isTelaLibraryDURL(durl string) bool {
+	return strings.HasSuffix(durl, tela.TAG_LIBRARY) || strings.HasSuffix(durl, tela.TAG_DOC_SHARDS) || strings.HasSuffix(durl, tela.TAG_BOOTSTRAP)
+}
+
 // isDisplayableTelaApp checks if a TELA index should be displayed in the browser
 func isDisplayableTelaApp(index tela.INDEX) bool {
 	if len(index.DOCs) < 1 {
 		return false
 	}
-
-	if strings.HasSuffix(index.DURL, tela.TAG_LIBRARY) || strings.HasSuffix(index.DURL, tela.TAG_DOC_SHARDS) || strings.HasSuffix(index.DURL, tela.TAG_BOOTSTRAP) {
-		return false
-	}
-
-	return true
+	return !isTelaLibraryDURL(index.DURL)
 }
