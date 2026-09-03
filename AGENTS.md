@@ -195,9 +195,8 @@ This file is for coding agents working in this repository.
   - The encrypted TELA caches, then a full prefilter as last resort
 - **Background backfill** runs on every first click (non-blocking) to discover TELA apps; new apps appear on the next click.
 - A healthy Gnomon DB is never wiped at startup: `isDatabaseCorrupted()` validates the bbolt store via `storage.ValidateStore` (a locked store is treated as valid, not corrupt). Do not reintroduce a gravdb-based validation — HyperGnomon is bbolt-only and the graviton handle always errors.
-- After modifying HyperGnomon code, remember to run `go mod vendor` to sync Engram's vendor directory (Engram builds against `vendor/`, not the replace path directly).
-- Dependencies point to local filesystem replaces (`replace github.com/hypergnomon/hypergnomon => ../HyperGnomon`, `replace github.com/civilware/tela => ../tela`, `replace github.com/civilware/epoch => ../epoch`). These clones live as siblings to this repo (`../HyperGnomon`, `../tela`, `../epoch`); `git pull` there, then `go mod vendor`, then rebuild to pick up changes. Example: if this repo is `~/Projects/Engram`, siblings are `~/Projects/HyperGnomon`, etc.
-- With local replaces active, builds REQUIRE the sibling clones to be present (CI/package builds outside this machine will fail without them).
+- After modifying fork code, commit and push in the fork repo, bump the `go.mod` version pin, run `go mod tidy`, then `go mod vendor` to sync Engram's vendor directory.
+- Dependencies are pinned via public version-to-version `replace`s only — never filesystem paths (`=> ../...`) or `go.work`. Fresh clones must build with an empty parent directory.
 
 ## Final Notes
 

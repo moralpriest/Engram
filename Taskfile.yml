@@ -42,14 +42,8 @@ tasks:
     generates:
       - bin/dero-miner-{{.OS}}-{{.ARCH}}
 
-  generate:
-    desc: Regenerate GLFW Wayland protocol headers (run after go mod vendor)
-    cmds:
-      - bash scripts/gen_glfw_wayland.sh
-
   build:
     desc: Build the application
-    deps: [generate]
     cmds:
       - go build -v -tags "{{.BUILD_TAGS}}" -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
     sources:
@@ -61,13 +55,12 @@ tasks:
 
   run:
     desc: Build and run the application
-    deps: [generate, build]
+    deps: [build]
     cmds:
       - ./bin/{{.BINARY}}
 
   test:
     desc: Run tests with race detector
-    deps: [generate]
     cmds:
       - go test -v -race -tags "{{.BUILD_TAGS}}" -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
@@ -98,11 +91,10 @@ tasks:
       - go mod verify
 
   vendor:
-    desc: Regenerate vendor directory (required after sibling replace changes)
+    desc: Regenerate vendor directory (required after dependency pin changes)
     cmds:
       - go mod vendor
-      - bash scripts/gen_glfw_wayland.sh
-      - echo "vendor/ regenerated (105M, ignored per .gitignore:30) + Wayland headers generated"
+      - echo "vendor/ regenerated (105M, ignored per .gitignore:30)"
 
   # ==================== Security ====================
 
@@ -260,7 +252,7 @@ tasks:
         if [ -d "vendor/fyne.io/fyne/v2" ]; then
           echo "Patching vendor directory..."
           cp internal/patches/android/* vendor/fyne.io/fyne/v2/internal/driver/mobile/app/
-          # fyne 2.8.0 renders AppTabs labels at caption size on mobile;
+          # fyne 2.8.x renders AppTabs labels at caption size on mobile;
           # restore the normal text size (pre-2.8.0 behavior).
           perl -0pi -e 's/\tif isMobile\(r\.button\.tabs\) \{\n\t\tr\.label\.TextSize = th\.Size\(theme\.SizeNameCaptionText\)\n\t\}\n//g' vendor/fyne.io/fyne/v2/container/tabs.go
           echo "✅ Vendor directory patched."

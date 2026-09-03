@@ -5,7 +5,7 @@
 
 set -e
 
-MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.0/internal/driver/mobile/app"
+MODULE_PATH="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.1/internal/driver/mobile/app"
 VENDOR_PATH="$(cd "$(dirname "$0")/.." && pwd)/internal/patches/android"
 
 if [ ! -d "$VENDOR_PATH" ]; then
@@ -35,16 +35,16 @@ cp "$VENDOR_PATH/GoNativeActivity.java"       "$MODULE_PATH/GoNativeActivity.jav
 cp "$VENDOR_PATH/XSWDForegroundService.java"  "$MODULE_PATH/XSWDForegroundService.java"
 cp "$VENDOR_PATH/android.c"                   "$MODULE_PATH/android.c"
 cp "$VENDOR_PATH/android.go"                  "$MODULE_PATH/android.go"
-# FyneNotificationReceiver.java is a pristine upstream 2.8.0 file; keep it in
+# FyneNotificationReceiver.java is a pristine upstream 2.8.1 file; keep it in
 # the module cache too so the javac step in build_fyne_custom.sh stays
 # self-contained when the fyne CLI compiles from the patches dir.
 cp "$VENDOR_PATH/FyneNotificationReceiver.java" "$MODULE_PATH/FyneNotificationReceiver.java"
 
-# Restore the mobile AppTabs label size. fyne 2.8.0 renders tab text at
+# Restore the mobile AppTabs label size. fyne 2.8.x renders tab text at
 # caption size (theme.SizeNameCaptionText) on mobile, shrinking it from the
 # normal text size (15px -> 11px with Engram's theme). Removing that branch
 # restores the pre-2.8.0 behavior where tabs always use SizeNameText.
-TABS_DIR="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.0/container"
+TABS_DIR="$HOME/go/pkg/mod/fyne.io/fyne/v2@v2.8.1/container"
 TABS_FILE="$TABS_DIR/tabs.go"
 if [ -f "$TABS_FILE" ]; then
     chmod -R u+w "$TABS_DIR"

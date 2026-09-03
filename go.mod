@@ -4,13 +4,13 @@ go 1.26.0
 
 replace github.com/creachadair/jrpc2 => github.com/creachadair/jrpc2 v0.35.5
 
-replace github.com/hypergnomon/hypergnomon => ../HyperGnomon
+replace github.com/hypergnomon/hypergnomon => github.com/moralpriest/HyperGnomon v1.1.1-0.20260901080659-da811049f005
 
-replace github.com/civilware/epoch => ../epoch
+replace github.com/civilware/epoch => github.com/moralpriest/epoch v0.0.0-20260901032935-f43091fd8429
 
 require (
-	fyne.io/fyne/v2 v2.8.0
-	fyne.io/systray v1.12.2
+	fyne.io/fyne/v2 v2.8.1
+	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
 	fyne.io/x/fyne v0.0.0-20260219123538-e09698d18b34
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cespare/xxhash v1.1.0
@@ -54,7 +54,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/fredbi/uri v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
@@ -105,6 +104,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/civilware/tela => ../tela
+replace github.com/civilware/tela => github.com/moralpriest/tela v0.0.0-20260820060748-5d3c880b9248
 
 replace github.com/deroproject/derohe v0.0.0-20260829042927-60072f354b51 => github.com/moralpriest/derohe v0.0.0-20260829042927-60072f354b51

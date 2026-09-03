@@ -101,7 +101,7 @@ task package-android
 Please see: https://developer.fyne.io/ for Fyne dependencies.
 
 **Important Build Tags:**
-Always use `-tags "migrated_fynedo,x11"` when building on Linux (Task `task build` does this for you). Bare `go build` also works after Wayland headers are generated — run `bash scripts/gen_glfw_wayland.sh` once after `go mod vendor` (done automatically by `task build`/`task vendor`).
+Always use `-tags "migrated_fynedo,x11"` when building on Linux (Task `task build` does this for you). Bare `go build`/`go run .` also compiles since fyne v2.8.1 vendors the GLFW Wayland headers.
 
 * Install fyne cmd tools: `go install fyne.io/fyne/v2/cmd/fyne@latest`
 * Add `~/go/bin` to your `$PATH` environment variable.
@@ -130,17 +130,12 @@ Packaging for Android requires patching the Fyne source and using a custom CLI t
 
 ### Custom Dependencies & Vendoring
 
-Engram Dev relies on optimized forks of Gnomon and TELA. These are managed via `go.mod` `replace` directives pointing to sibling checkouts (`../HyperGnomon`, `../tela`, `../epoch`) and vendored for stability (`vendor/` is ignored per `.gitignore:30` — regenerate locally).
+Engram Dev relies on optimized forks of Gnomon and TELA. These are pinned via public version-to-version `replace` directives in `go.mod` (e.g. `github.com/civilware/tela => github.com/moralpriest/tela <version>`). A fresh clone needs only Go 1.26 and the Fyne system dependencies — no sibling checkouts, no local-path replaces.
 
-Prerequisites for a fresh clone (outside this workstation):
-- Clone siblings as siblings to this repo: `../HyperGnomon`, `../tela`, `../epoch` (same parent directory as `Engram`), or
-- Run `go mod vendor` after cloning to populate `vendor/`; builds use `vendor/` (see `AGENTS.md`).
-
-If you modify vendored code:
-1. Make changes in the respective fork repositories.
-2. Update `go.mod` to point to the new commits.
-3. Run `go mod vendor` to synchronize the local vendor directory (`task tidy` also verifies `go.mod`).
-4. Note: with local `replace`s active, CI/package builds outside this machine fail without the siblings — keep `vendor/` rebuildable via `go mod vendor`.
+If you modify fork code:
+1. Commit and push in the respective fork repository.
+2. Bump the pin: `go get github.com/moralpriest/<fork>@<new-sha>` (or edit the `replace` version) then `go mod tidy`.
+3. Run `go mod vendor` to synchronize the local vendor directory (`vendor/` is ignored per `.gitignore:30` — regenerate locally).
 
 ## CI/CD & Security
 
